@@ -80,13 +80,50 @@ def test_vercel_observability_is_built_and_loaded_globally():
 def test_removed_routes_and_assets_stay_removed():
     vercel = json.loads((ROOT / "vercel.json").read_text())
     redirect_sources = {item["source"]: item["destination"] for item in vercel.get("redirects", [])}
-    assert redirect_sources["/explore"] == "/dashboard"
+    assert redirect_sources["/explore"] == "/forecasting"
+    assert redirect_sources["/indicators"] == "/forecasting"
     assert redirect_sources["/profile"] == "/account"
     assert redirect_sources["/u/:path*"] == "/account"
     assert redirect_sources["/tools/fx"] == "/forecasting"
     assert not (PUBLIC / "explore.html").exists()
     assert not (PUBLIC / "profile.html").exists()
     assert not (PAGES / "tools/fx.html").exists()
+
+
+def test_meta_prophet_is_the_only_forecast_indicator_workspace_and_ai_is_opt_in():
+    forecasting = (PAGES / "forecasting.html").read_text()
+    screener = (PAGES / "screener.html").read_text()
+    client = (PUBLIC / "app.js").read_text()
+    backend = (ROOT / "functions_explore" / "src" / "index.ts").read_text()
+    analysis = (ROOT / "functions_explore" / "src" / "forecastAnalysis.ts").read_text()
+
+    assert "Meta Prophet Forecast" in forecasting
+    assert 'id="technical-indicators"' in forecasting
+    assert 'id="forecast-ai-host"' in forecasting
+    assert 'data-panel="indicators"' not in forecasting
+    assert 'data-panel-target="indicators"' not in forecasting
+    assert '/forecasting#technical-indicators' in screener
+
+    assert "buildForecastWorkspaceContext" in client
+    assert "((target - market.currentPrice) / market.currentPrice) * 100" in client
+    assert 'fetch("/api/forecast-analysis"' in client
+    assert 'data-action="forecast-ai-generate"' in client
+    assert client.count("runForecastAiAnalysis({") == 1
+    assert "runForecastAutoSummary" not in client
+    assert "buildLocalIndicatorAnalysis" not in client
+    assert 'fetch("/api/indicators/analyze"' in client
+
+    assert 'ROUTES.post("/forecast-analysis"' in backend
+    assert "FORECAST_ANALYSIS_SYSTEM_PROMPT" in analysis
+
+
+def test_explore_surface_and_generated_content_are_retired():
+    client = (PUBLIC / "app.js").read_text().lower()
+    assert "explore feed" not in client
+    assert not (PAGES / "explore.html").exists()
+    assert not (PAGES / "blog" / "topics" / "explore-workflows.html").exists()
+    manifest = (PAGES / "blog" / "posts.manifest.json").read_text().lower()
+    assert '"explore-workflows"' not in manifest
 
 
 def test_data_integration_surfaces_are_present():
@@ -126,9 +163,10 @@ def test_pricing_describes_platform_features_without_generic_model_pricing():
 def test_prediction_csv_analysis_is_available_from_forecast_foundry():
     forecasting = (PAGES / "forecasting.html").read_text()
     client = (PUBLIC / "app.js").read_text()
-    assert '<option value="prediction_csv">Prediction quantile CSV</option>' in forecasting
+    assert 'id="foundry-source-kind" name="sourceKind" type="hidden" value="prediction_csv"' in forecasting
+    assert "Download business-day CSV" not in forecasting
     assert 'id="foundry-file-help"' in forecasting
-    assert "P50 95% Statistical Anomaly Band" in forecasting
+    assert "P50 95% Statistical Anomaly Band" in client
     for marker in [
         "forecast-summary-card",
         "p50Anomalies",
@@ -136,6 +174,49 @@ def test_prediction_csv_analysis_is_available_from_forecast_foundry():
         "Extended P10 Buy Bias",
     ]:
         assert marker in client
+
+
+def test_historical_data_supports_alpaca_yahoo_and_no_start_date():
+    forecasting = (PAGES / "forecasting.html").read_text()
+    client = (PUBLIC / "data-integrations.js").read_text()
+    assert 'id="market-history-source"' in forecasting
+    assert 'value="auto" selected>Automatic — Alpaca, then Yahoo Finance' in forecasting
+    assert 'value="alpaca">Alpaca' in forecasting
+    assert 'value="yahoo">Yahoo Finance' in forecasting
+    assert 'id="options-market-source"' in forecasting
+    assert 'id="alpaca-start"' not in forecasting
+    assert 'source: byId("market-history-source")?.value || "auto"' in client
+
+
+def test_notifications_page_has_functional_inbox_and_delivery_controls():
+    dashboard = (PAGES / "dashboard.html").read_text()
+    client = (PUBLIC / "app.js").read_text()
+    for marker in [
+        'id="notifications-items"',
+        'id="notifications-unread-count"',
+        'id="notifications-mark-all"',
+        'data-notification-filter="unread"',
+        'id="notifications-enable"',
+        'id="notifications-send-test"',
+        'id="notifications-privacy-host"',
+    ]:
+        assert marker in dashboard
+    assert "loadNotificationFeed" in client
+    assert "markAllNotificationsRead" in client
+    assert "MODEL_COUNCIL_OUTPUT_DISCLAIMER" not in client
+
+
+def test_blog_index_lists_every_current_generated_post():
+    import json
+    from datetime import date
+
+    manifest = json.loads((PAGES / "blog" / "posts.manifest.json").read_text())
+    index = (PAGES / "blog" / "index.html").read_text()
+    assert manifest["count"] == len(manifest["posts"])
+    assert manifest["count"] >= 77
+    assert manifest["posts"][0]["dateIso"] <= date.today().isoformat()
+    for post in manifest["posts"]:
+        assert f'/blog/posts/{post["slug"]}' in index
 
 
 def test_quantitative_screener_surface_replaces_manual_prophet_dispatch():

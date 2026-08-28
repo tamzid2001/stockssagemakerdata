@@ -94,7 +94,6 @@
     "Contact",
     "Purchase",
   ]);
-  const MODEL_COUNCIL_OUTPUT_DISCLAIMER = "LLMs can sometimes make mistakes.";
   const MODEL_COUNCIL_PROMPT_VISIBLE_COUNT = 3;
   const MODEL_COUNCIL_PROMPT_SUGGESTIONS = Object.freeze([
     "What is the strongest bullish and bearish case for {ticker} over the next 3 months?",
@@ -107,7 +106,7 @@
     "Create an entry plan for {ticker} with invalidation and risk controls.",
     "What does the options market imply about {ticker} volatility into the next event?",
     "Estimate whether recent price action in {ticker} is momentum or mean-reversion likely.",
-    "Give a 7-day watchlist checklist for {ticker} before making a decision.",
+    "Give a 7-day research checklist for {ticker} before making a decision.",
     "What macro variables are most likely to move {ticker} this quarter?",
     "Should {ticker} be considered a compounder, cyclical trade, or event-driven setup?",
     "Summarize analyst sentiment changes on {ticker} and what matters most.",
@@ -124,10 +123,6 @@
   const POLYMARKET_SEARCH_DEBOUNCE_MS = 400;
   const DEFAULT_NOTIFICATION_PREFS = Object.freeze({
     global: true,
-    following: true,
-    tickers: true,
-    watchlist: true,
-    explore: true,
     earnings: true,
     ipos: true,
     daily: true,
@@ -136,8 +131,6 @@
   });
   const NOTIFICATION_PREF_DEFS = Object.freeze([
     { key: "global", label: "Global notifications", hint: "Master switch for all outbound notifications." },
-    { key: "watchlist", label: "Watchlist alerts", hint: "Price and watchlist-trigger updates." },
-    { key: "explore", label: "Explore feed", hint: "Relevant public posts and activity updates." },
     { key: "earnings", label: "Earnings calendar", hint: "Company earnings date updates." },
     { key: "ipos", label: "IPO updates", hint: "New IPO calendar changes." },
     { key: "daily", label: "Daily reminders", hint: "Daily activity reminders." },
@@ -485,11 +478,6 @@
   const SESSION_DEFAULT_TICKER =
     POPULAR_TICKER_POOL[Math.floor(Math.random() * POPULAR_TICKER_POOL.length)] || "AAPL";
   const FEATURE_VOTE_KEYS = new Set(["uploads", "autopilot"]);
-  const DEFAULT_AUTO_PUBLISH_PREFS = Object.freeze({
-    autoPublishForecasts: true,
-    autoPublishIndicators: true,
-    autoPublishModelCouncilConvos: true,
-  });
   const ANON_USERNAME_ADJECTIVES = Object.freeze([
     "alpha",
     "amber",
@@ -874,19 +862,17 @@
       signin_manage_notifications: "Sign in to manage notifications",
       account: "Account",
       leaderboard_profile: "Public profile",
-      sidebar_forecast: "Forecast",
-      sidebar_indicators: "Indicators",
+      sidebar_forecast: "Meta Prophet Forecast",
       sidebar_trending: "Trending",
       sidebar_news_data: "Historical Data Download",
       sidebar_corporate_events: "Earnings calendar",
       sidebar_market_headlines: "Market headlines",
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Options",
-      sidebar_learn_more: "Learn more",
+      sidebar_learn_more: "Forecast guide",
       sidebar_screener: "Screener",
-      sidebar_watchlist_alerts: "Watchlist and alerts",
-      panel_forecast_title: "Forecast",
-      panel_forecast_subtitle: "Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.",
+      panel_forecast_title: "Meta Prophet Forecast",
+      panel_forecast_subtitle: "Generate the full forecast distribution, inspect technical confirmation, compare signed scenarios, and request balanced AI interpretation only when you choose.",
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.",
       panel_ticker_query_title: "Forecast Review",
@@ -934,8 +920,7 @@
       signin_manage_notifications: "Inicia sesion para gestionar notificaciones",
       account: "Cuenta",
       leaderboard_profile: "Perfil publico",
-      sidebar_forecast: "Pronostico",
-      sidebar_indicators: "Indicadores",
+      sidebar_forecast: "Meta Prophet Pronostico",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
       sidebar_corporate_events: "Calendario de resultados",
@@ -944,8 +929,7 @@
       sidebar_options: "Opciones",
       sidebar_learn_more: "Mas informacion",
       sidebar_screener: "Screener",
-      sidebar_watchlist_alerts: "Lista y alertas",
-      panel_forecast_title: "Pronostico",
+      panel_forecast_title: "Meta Prophet Pronostico",
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
       panel_market_headlines_subtitle: "Titulares RSS atribuidos con seleccion de proveedor, enlaces de fuente y espacios publicitarios nativos entre grupos de articulos.",
@@ -994,8 +978,7 @@
       signin_manage_notifications: "Connectez-vous pour gerer les notifications",
       account: "Compte",
       leaderboard_profile: "Profil public",
-      sidebar_forecast: "Prevision",
-      sidebar_indicators: "Indicateurs",
+      sidebar_forecast: "Meta Prophet Prevision",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
       sidebar_corporate_events: "Calendrier des resultats",
@@ -1004,8 +987,7 @@
       sidebar_options: "Options",
       sidebar_learn_more: "En savoir plus",
       sidebar_screener: "Screener",
-      sidebar_watchlist_alerts: "Watchlist et alertes",
-      panel_forecast_title: "Prevision",
+      panel_forecast_title: "Meta Prophet Prevision",
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
       panel_market_headlines_subtitle: "Titres RSS attribues avec selection du fournisseur, liens source et emplacements publicitaires natifs entre groupes d articles.",
@@ -1054,8 +1036,7 @@
       signin_manage_notifications: "Zum Verwalten von Benachrichtigungen anmelden",
       account: "Konto",
       leaderboard_profile: "Offentliches Profil",
-      sidebar_forecast: "Forecast",
-      sidebar_indicators: "Indikatoren",
+      sidebar_forecast: "Meta Prophet Forecast",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
       sidebar_corporate_events: "Ergebnis-Kalender",
@@ -1064,8 +1045,7 @@
       sidebar_options: "Optionen",
       sidebar_learn_more: "Mehr erfahren",
       sidebar_screener: "Screener",
-      sidebar_watchlist_alerts: "Watchlist und Alarme",
-      panel_forecast_title: "Forecast",
+      panel_forecast_title: "Meta Prophet Forecast",
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
       panel_market_headlines_subtitle: "Zugeordnete RSS-Marktschlagzeilen mit Anbieterauswahl, Quellenlinks und nativen Anzeigenplatzen zwischen Artikelgruppen.",
@@ -1114,8 +1094,7 @@
       signin_manage_notifications: "سجل الدخول لادارة الاشعارات",
       account: "الحساب",
       leaderboard_profile: "الملف العام",
-      sidebar_forecast: "التوقع",
-      sidebar_indicators: "المؤشرات",
+      sidebar_forecast: "Meta Prophet التوقع",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
       sidebar_corporate_events: "تقويم الأرباح",
@@ -1124,8 +1103,7 @@
       sidebar_options: "الخيارات",
       sidebar_learn_more: "اعرف المزيد",
       sidebar_screener: "الفلتر",
-      sidebar_watchlist_alerts: "قائمة المراقبة والتنبيهات",
-      panel_forecast_title: "التوقع",
+      panel_forecast_title: "Meta Prophet التوقع",
       panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
       panel_market_headlines_title: "ابرز عناوين السوق",
       panel_market_headlines_subtitle: "عناوين RSS منسوبة مع اختيار المزود وروابط المصدر ومواضع اعلانات اصلية بين مجموعات المقالات.",
@@ -1174,8 +1152,7 @@
       signin_manage_notifications: "নোটিফিকেশন পরিচালনা করতে সাইন ইন করুন",
       account: "অ্যাকাউন্ট",
       leaderboard_profile: "পাবলিক প্রোফাইল",
-      sidebar_forecast: "ফোরকাস্ট",
-      sidebar_indicators: "ইন্ডিকেটর",
+      sidebar_forecast: "Meta Prophet ফোরকাস্ট",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
       sidebar_corporate_events: "আর্নিংস ক্যালেন্ডার",
@@ -1184,8 +1161,7 @@
       sidebar_options: "অপশন",
       sidebar_learn_more: "আরও জানুন",
       sidebar_screener: "স্ক্রিনার",
-      sidebar_watchlist_alerts: "ওয়াচলিস্ট ও অ্যালার্ট",
-      panel_forecast_title: "ফোরকাস্ট",
+      panel_forecast_title: "Meta Prophet ফোরকাস্ট",
       panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
       panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
       panel_market_headlines_subtitle: "অ্যাট্রিবিউটেড RSS মার্কেট হেডলাইন, প্রোভাইডার নির্বাচন, সোর্স লিংক এবং আর্টিকেল গ্রুপের মাঝে নেটিভ অ্যাড স্লট।",
@@ -1223,7 +1199,6 @@
     leaderboard_profile: [".profile-settings > summary"],
     open_dashboard: ['.sidebar-card a[href="/dashboard"] span'],
     sidebar_forecast: ['[data-panel-target="forecast"] span'],
-    sidebar_indicators: ['[data-panel-target="indicators"] span'],
     sidebar_trending: ['[data-panel-target="trending"] span'],
     sidebar_news_data: ['[data-panel-target="news"] span'],
     sidebar_market_headlines: ['[data-panel-target="market-headlines"] span'],
@@ -1231,9 +1206,8 @@
     sidebar_options: ['[data-panel-target="options"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
     sidebar_screener: ['[data-panel-target="screener"] span', 'a[href="/screener"] span'],
-    sidebar_watchlist_alerts: ['a[href="/watchlist"] span'],
-    panel_forecast_title: ['[data-panel="forecast"] .panel-header h2'],
-    panel_forecast_subtitle: ['[data-panel="forecast"] .panel-header p.small'],
+    panel_forecast_title: ['[data-panel="forecast"] > .panel-header h2'],
+    panel_forecast_subtitle: ['[data-panel="forecast"] > .panel-header p.small'],
     panel_market_headlines_title: ['[data-panel="market-headlines"] .panel-header h2'],
     panel_market_headlines_subtitle: ['[data-panel="market-headlines"] .panel-header p.small'],
     panel_ticker_query_title: ['[data-panel="ticker-query"] .panel-header h2'],
@@ -1776,6 +1750,8 @@
     forecastForm: document.getElementById("forecast-form"),
     forecastTicker: document.getElementById("forecast-ticker"),
     forecastOutput: document.getElementById("forecast-output"),
+    forecastScenarioHost: document.getElementById("forecast-scenario-host"),
+    forecastAiHost: document.getElementById("forecast-ai-host"),
     forecastLoadSelect: document.getElementById("forecast-load-select"),
     forecastLoadButton: document.getElementById("forecast-load-button"),
     forecastLoadStatus: document.getElementById("forecast-load-status"),
@@ -1849,18 +1825,6 @@
     screenerGithubHistoryStatus: document.getElementById("screener-github-history-status"),
     screenerGithubHistoryList: document.getElementById("screener-github-history-list"),
     myRequestsPanels: Array.from(document.querySelectorAll("[data-my-requests-panel]")),
-	    watchlistForm: document.getElementById("watchlist-form"),
-	    watchlistTicker: document.getElementById("watchlist-ticker"),
-	    watchlistNotes: document.getElementById("watchlist-notes"),
-	    watchlistList: document.getElementById("watchlist-list"),
-    alertForm: document.getElementById("alert-form"),
-    alertTicker: document.getElementById("alert-ticker"),
-    alertCondition: document.getElementById("alert-condition"),
-    alertPrice: document.getElementById("alert-price"),
-    alertNotes: document.getElementById("alert-notes"),
-    alertsList: document.getElementById("alerts-list"),
-    alertsStatus: document.getElementById("alerts-status"),
-    alertsCheck: document.getElementById("alerts-check"),
     predictionsForm: document.getElementById("predictions-upload-form"),
     predictionsTicker: document.getElementById("predictions-ticker"),
     predictionsOutput: document.getElementById("predictions-output"),
@@ -2153,6 +2117,7 @@
       forecastRequestId: "",
       forecastDoc: null,
 	      indicatorOverlays: [],
+	      indicatorData: null,
 	      forecastTablePage: 0,
       forecastAiSummary: null,
       forecastCacheMeta: null,
@@ -2250,8 +2215,6 @@
     aiUsageTierKey: "free",
     selectedScreenerModel: "gpt-5-mini",
     aiDefaultsSeededWorkspaceId: "",
-    recentWatchlistItems: [],
-    volatilityMonitorTimer: null,
     clients: {
       auth: null,
       db: null,
@@ -2286,8 +2249,6 @@
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
 	    unsubscribeTasks: null,
-	    unsubscribeWatchlist: null,
-	    unsubscribeAlerts: null,
 	    unsubscribeScreenerRuns: null,
       unsubscribeAIAgents: null,
       unsubscribeAIFollows: null,
@@ -2300,7 +2261,6 @@
 	    messagingBound: false,
 	    remoteConfigLoaded: false,
     remoteFlags: {
-	      watchlistEnabled: true,
 	      forecastProphetEnabled: true,
 	      forecastCanvasEnabled: true,
         enableSocialLeaderboard: true,
@@ -2391,7 +2351,6 @@
     myRequestsLoading: false,
     myRequestsLoadedAt: 0,
     myRequestsPanelState: {},
-    publishPrefs: { ...DEFAULT_AUTO_PUBLISH_PREFS },
     sharedWorkspaces: [],
     unsubscribeSharedWorkspaces: null,
     authStateBootstrapped: false,
@@ -3140,14 +3099,19 @@
       backdrop?.classList.add("hidden");
       document.body.classList.remove("mobile-nav-lock");
       links.style.removeProperty("top");
+      links.style.removeProperty("max-height");
       actions.style.removeProperty("top");
+      actions.style.removeProperty("max-height");
     };
     const syncOverlayPositions = () => {
       if (window.innerWidth > 980) return;
       const baseTop = Math.round(header.getBoundingClientRect().height + 8);
       links.style.top = `${baseTop}px`;
+      const availableHeight = Math.max(300, window.innerHeight - baseTop - 24);
+      links.style.maxHeight = `${Math.max(170, availableHeight - 164)}px`;
       const linksHeight = Math.round(links.getBoundingClientRect().height || 0);
       actions.style.top = `${baseTop + linksHeight + 10}px`;
+      actions.style.maxHeight = `${Math.max(116, availableHeight - linksHeight - 10)}px`;
     };
     const open = () => {
       header.classList.add("nav-open");
@@ -3203,13 +3167,11 @@
           "/dashboard",
           "/dashboard/orders",
           "/dashboard/profile",
-          "/dashboard/watchlist",
           "/dashboard/productivity",
           "/dashboard/collaboration",
           "/dashboard/uploads",
           "/dashboard/notifications",
           "/account",
-          "/watchlist",
           "/productivity",
           "/collaboration",
           "/uploads",
@@ -3264,11 +3226,11 @@
     };
 
     const preferredByRouter = {
-      terminal: ["forecast", "/forecasting", "indicators", "/indicators", "options", "/options"],
-      dashboard: ["orders", "profile", "watchlist", "productivity", "notifications"],
+      terminal: ["forecast", "/forecasting", "options", "/options", "news"],
+      dashboard: ["orders", "profile", "productivity", "collaboration", "notifications"],
     };
     const preferredByPath = {
-      "/screener": ["/forecasting", "/indicators", "/screener", "/research"],
+      "/screener": ["/forecasting", "/screener", "/research", "/historical-data"],
     };
     const preferredPanels = preferredByPath[path] || preferredByRouter[routerName] || [];
     const selected = preferredPanels
@@ -3307,7 +3269,6 @@
         const label = String(link.textContent || "").trim();
         const compactLabelMap = {
           "Forecast Review": "Council",
-          "Watchlist and alerts": "Watchlist",
           "News and data": "History",
           "Historical Data Download": "History",
           "Earnings calendar": "Earnings",
@@ -3766,7 +3727,6 @@
 	      }
 	          rc.defaultConfig = {
 	            welcome_message: "",
-	            watchlist_enabled: true,
 	            forecast_prophet_enabled: true,
 	            forecast_canvas_enabled: true,
               enable_social_leaderboard: true,
@@ -3860,7 +3820,6 @@
           rc.settings.minimumFetchIntervalMillis = minFetchIntervalMillis;
           rc.defaultConfig = {
             welcome_message: "",
-            watchlist_enabled: true,
             forecast_prophet_enabled: true,
             forecast_canvas_enabled: true,
             enable_social_leaderboard: true,
@@ -3960,7 +3919,6 @@
       };
 		    return {
           welcomeMessage: getString("welcome_message", ""),
-		      watchlistEnabled: getBool("watchlist_enabled", true),
 		      forecastProphetEnabled: getBool("forecast_prophet_enabled", true),
 		      forecastCanvasEnabled: getBool("forecast_canvas_enabled", true),
           enableSocialLeaderboard: getBool("enable_social_leaderboard", true),
@@ -3984,12 +3942,6 @@
 
   const applyRemoteFlags = (flags) => {
       updateWelcomeMessageBanner();
-	    document.querySelectorAll('[data-panel-target="watchlist"]').forEach((el) => {
-	      el.classList.toggle("hidden", !flags.watchlistEnabled);
-	    });
-	    document.querySelectorAll('[data-panel="watchlist"]').forEach((el) => {
-	      if (!flags.watchlistEnabled) el.classList.add("hidden");
-	    });
       document.querySelectorAll('[data-panel-target="notifications"]').forEach((el) => {
         el.classList.toggle("hidden", !flags.pushEnabled);
       });
@@ -4142,8 +4094,7 @@
       }
       const badge = `${Number(promo.discountPercent || 50)}% off`;
       const headline = String(promo.headline || "Limited-time promotional offer");
-      const details = String(promo.body || `Use code ${promo.code || "QUANTURA50"} on checkout.`);
-      const code = String(promo.code || "QUANTURA50").toUpperCase();
+      const details = String(promo.body || "Enter your email to receive updates and reveal the promotional code.");
       const countdown = formatPromoCountdown(remaining);
       const html = `
         <div class="promo-inner">
@@ -4152,12 +4103,11 @@
             <div class="promo-title">${escapeHtml(headline)}</div>
             <div class="small muted">${escapeHtml(details)}</div>
             <div class="small" style="margin-top:6px;">
-              Code <strong>${escapeHtml(code)}</strong> · Ends in
-              <span id="promo-countdown">${escapeHtml(countdown)}</span>
+              Offer ends in <span id="promo-countdown">${escapeHtml(countdown)}</span>
             </div>
           </div>
           <div class="promo-actions">
-            <a class="cta small" href="/pricing" data-action="promo-view-plans">Claim offer</a>
+            <button class="cta small" type="button" data-action="promo-view-plans">Get promo code</button>
             <button class="cta secondary small" type="button" data-action="promo-dismiss-banner">Dismiss</button>
           </div>
         </div>
@@ -4176,7 +4126,8 @@
       const bannerNode = document.getElementById("server-promo-banner");
       bannerNode?.querySelector('[data-action="promo-dismiss-banner"]')?.addEventListener("click", dismissPromoBanner);
       bannerNode?.querySelector('[data-action="promo-view-plans"]')?.addEventListener("click", () => {
-        logEvent("promo_banner_clicked", { code });
+        showPromoModal();
+        logEvent("promo_banner_clicked", {});
       });
       clearPromoTimer();
       state.promoTimer = window.setInterval(() => {
@@ -4211,15 +4162,23 @@
       modal.innerHTML = `
         <div class="modal-backdrop" data-action="close-promo-modal"></div>
         <div class="modal-card card" role="dialog" aria-modal="true" aria-label="Quantura promotional offer">
-          <h3>Unlock Quantura at ${escapeHtml(String(Number(promo.discountPercent || 50)))}% off</h3>
-          <p class="small">
-            You have started active usage. Use code <strong>${escapeHtml(String(promo.code || "QUANTURA50").toUpperCase())}</strong>
-            for a limited-time discount.
-          </p>
-          <div class="small muted">Offer timer is synced to server time for consistency across devices.</div>
-          <div class="modal-actions">
-            <button class="cta secondary" type="button" data-action="close-promo-modal">Not now</button>
-            <a class="cta" href="/pricing" data-action="promo-modal-cta">Claim 50% off</a>
+          <div id="promo-claim-content">
+            <div class="eyebrow">Quantura updates</div>
+            <h3>Stay up to date and receive ${escapeHtml(String(Number(promo.discountPercent || 50)))}% off</h3>
+            <p class="small">Enter your email to receive Quantura product and research updates. Your promotional code appears only after the email is accepted.</p>
+            <form id="promo-email-form" class="auth-form" novalidate>
+              <label class="label" for="promo-email">Email address</label>
+              <input id="promo-email" name="email" type="email" autocomplete="email" placeholder="you@domain.com" required />
+              <label class="notification-consent-item promo-consent">
+                <input id="promo-email-consent" type="checkbox" required />
+                <span class="notification-consent-copy"><span class="notification-consent-title">Send me Quantura product and research updates.</span></span>
+              </label>
+              <p class="small" id="promo-claim-status" role="status" aria-live="polite"></p>
+              <div class="modal-actions">
+                <button class="cta secondary" type="button" data-action="close-promo-modal">Not now</button>
+                <button class="cta" type="submit">Reveal promo code</button>
+              </div>
+            </form>
           </div>
         </div>
       `;
@@ -4231,9 +4190,55 @@
           logEvent("promo_modal_dismissed", {});
         });
       });
-      modal.querySelector('[data-action="promo-modal-cta"]')?.addEventListener("click", () => {
-        safeLocalStorageSet(PROMO_MODAL_DISMISSED_KEY, "1");
-        logEvent("promo_modal_clicked", { code: String(promo.code || "QUANTURA50").toUpperCase() });
+      modal.querySelector("#promo-email-form")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const email = String(form.querySelector("#promo-email")?.value || "").trim();
+        const consent = Boolean(form.querySelector("#promo-email-consent")?.checked);
+        const statusNode = form.querySelector("#promo-claim-status");
+        const submit = form.querySelector('button[type="submit"]');
+        if (!email || !form.querySelector("#promo-email")?.checkValidity()) {
+          if (statusNode) statusNode.textContent = "Enter a valid email address.";
+          return;
+        }
+        if (!consent) {
+          if (statusNode) statusNode.textContent = "Confirm that you want to receive Quantura updates.";
+          return;
+        }
+        if (submit) {
+          submit.disabled = true;
+          submit.textContent = "Saving email…";
+        }
+        try {
+          const response = await fetch("/api/promo/claim", {
+            method: "POST",
+            headers: { Accept: "application/json", "Content-Type": "application/json" },
+            credentials: "omit",
+            body: JSON.stringify({ email, consent: true }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(String(payload?.message || "Unable to claim the promotional code."));
+          const code = String(payload?.promo?.code || "").trim().toUpperCase();
+          if (!code) throw new Error("The promotional code could not be loaded.");
+          state.promoStatus.code = code;
+          modal.querySelector("#promo-claim-content").innerHTML = `
+            <div class="promo-claim-success">
+              <div class="eyebrow">Email saved</div>
+              <h3>Your promotional code</h3>
+              <div class="promo-code-reveal" aria-label="Promotional code">${escapeHtml(code)}</div>
+              <p class="small muted">Use this code during checkout before the offer expires.</p>
+              <div class="modal-actions"><button class="cta secondary" type="button" data-action="close-promo-modal">Close</button><a class="cta" href="/pricing">View plans</a></div>
+            </div>`;
+          modal.querySelector('[data-action="close-promo-modal"]')?.addEventListener("click", closePromoModal);
+          safeLocalStorageSet(PROMO_MODAL_DISMISSED_KEY, "1");
+          logEvent("promo_email_claimed", { promo_id: String(promo.id || "promo") });
+        } catch (error) {
+          if (statusNode) statusNode.textContent = error?.message || "Unable to claim the promotional code.";
+          if (submit) {
+            submit.disabled = false;
+            submit.textContent = "Reveal promo code";
+          }
+        }
       });
       state.promoModalShown = true;
       logEvent("promo_modal_shown", {
@@ -4259,7 +4264,7 @@
 
     const loadServerPromoStatus = async () => {
       try {
-        const response = await fetch("/api/explore/promo/status", { method: "GET", credentials: "omit" });
+        const response = await fetch("/api/promo/status", { method: "GET", credentials: "omit" });
         if (!response.ok) return;
         const payload = await response.json().catch(() => ({}));
         const promo = payload?.promo && typeof payload.promo === "object" ? payload.promo : null;
@@ -4271,7 +4276,6 @@
         state.promoStatus = {
           id: String(promo.id || "promo"),
           active: Boolean(promo.active),
-          code: String(promo.code || "QUANTURA50"),
           discountPercent: Number(promo.discountPercent || 50),
           headline: String(promo.headline || "Limited-time promotional offer"),
           body: String(promo.body || ""),
@@ -4444,7 +4448,6 @@
 	    subscribeRemoteConfigUpdates(rc);
 	    startRemoteConfigRefreshLoop(rc);
 	    logEvent("remote_config_loaded", {
-	      watchlist: state.remoteFlags.watchlistEnabled,
 	      prophet: state.remoteFlags.forecastProphetEnabled,
 	      canvas: state.remoteFlags.forecastCanvasEnabled,
 	    });
@@ -4785,8 +4788,6 @@
     }
     state.notificationPrefs = nextPrefs;
     if (!state.notificationPrefs.global) {
-      state.notificationPrefs.watchlist = false;
-      state.notificationPrefs.explore = false;
       state.notificationPrefs.earnings = false;
       state.notificationPrefs.ipos = false;
       state.notificationPrefs.daily = false;
@@ -4885,6 +4886,7 @@
       return;
     }
     const anchor =
+      document.getElementById("notifications-privacy-host") ||
       ui.notificationsToken?.closest(".notice") ||
       ui.notificationsStatus;
     const wrap = document.createElement("div");
@@ -4939,7 +4941,11 @@
       </div>
       <p id="notifications-privacy-status" class="small muted" style="margin-top:8px;"></p>
     `;
-    anchor.insertAdjacentElement("afterend", wrap);
+    if (anchor.id === "notifications-privacy-host") {
+      anchor.appendChild(wrap);
+    } else {
+      anchor.insertAdjacentElement("afterend", wrap);
+    }
     refreshNotificationPrivacyRefs();
     syncNotificationPrivacyControls();
   };
@@ -5025,8 +5031,6 @@
         global: Boolean(state.notificationPrefs.global),
         following: Boolean(state.notificationPrefs.following),
         tickers: Boolean(state.notificationPrefs.tickers),
-        watchlist: Boolean(state.notificationPrefs.watchlist),
-        explore: Boolean(state.notificationPrefs.explore),
         earnings: Boolean(state.notificationPrefs.earnings),
         ipos: Boolean(state.notificationPrefs.ipos),
         daily: Boolean(state.notificationPrefs.daily),
@@ -5976,8 +5980,6 @@
 	            startUserForecasts(db, resolved);
               startScreenerRuns(db, resolved);
 	            startWorkspaceTasks(db, resolved);
-	            startWatchlist(db, resolved);
-	            startPriceAlerts(db, resolved);
               fetchMyRequestsList({ force: true }).then(() => {
                 renderMyRequestsPanels();
               });
@@ -6900,7 +6902,7 @@
     const adUnitId = String(detail.adUnitId || ad?.adUnitId || "").trim();
     const headline = String(ad?.headline || "Sponsored insight").trim();
     const body = String(ad?.body || "This section is sponsored.").trim();
-    const cta = String(ad?.callToAction || "Learn more").trim();
+    const cta = String(ad?.callToAction || "View details").trim();
     const advertiser = String(ad?.advertiser || ad?.store || "Sponsored").trim();
     const iconUrl = toNativeInlineAdImage(ad?.iconDataUrl || ad?.iconUrl || "");
     const mediaUrl = toNativeInlineAdImage(ad?.mediaDataUrl || ad?.mediaUrl || "");
@@ -7011,7 +7013,7 @@
       ad: {
         headline: String(sourceAd.headline || sourceAd.title || "Sponsored insight").trim(),
         body: String(sourceAd.body || sourceAd.description || "Sponsored content from our advertising partner.").trim(),
-        callToAction: String(sourceAd.callToAction || sourceAd.cta || "Learn more").trim(),
+        callToAction: String(sourceAd.callToAction || sourceAd.cta || "View details").trim(),
         advertiser: String(sourceAd.advertiser || sourceAd.brand || sourceAd.store || "Sponsored").trim(),
         destinationUrl: String(sourceAd.destinationUrl || sourceAd.clickUrl || "").trim(),
         iconUrl: String(iconUrl || "").trim(),
@@ -7079,7 +7081,6 @@
       "ticker-output",
       "ticker-predictions-output",
       "screener-output",
-      "watchlist-list",
       "alerts-list",
       "notifications-items",
       "saved-forecasts-list",
@@ -8769,268 +8770,6 @@
 	      );
 	  };
 
-	  const renderWatchlist = (items, workspaceId) => {
-	    if (!ui.watchlistList) return;
-	    const editable = canWriteWorkspace(workspaceId);
-	    const list = Array.isArray(items) ? items : [];
-	    if (!list.length) {
-	      ui.watchlistList.innerHTML = `<div class="small muted">No watchlist items yet.</div>`;
-	      return;
-	    }
-
-	    ui.watchlistList.innerHTML = list
-	      .map((item) => {
-	        const ticker = normalizeTicker(item.ticker || item.id || "");
-	        if (!ticker) return "";
-	        const notes = escapeHtml(item.notes || "");
-	        const addedBy = escapeHtml(item.addedBy?.email || item.addedByEmail || "");
-	        const metaParts = [addedBy ? `Added by ${addedBy}` : "", item.updatedAt ? `Updated ${formatTimestamp(item.updatedAt)}` : ""].filter(Boolean);
-	        const meta = metaParts.length ? `<div class="small muted">${metaParts.join(" · ")}</div>` : "";
-	        const actions = editable
-	          ? `
-	            <div class="task-actions">
-	              <button class="task-chip danger" type="button" data-action="watchlist-remove" data-ticker="${escapeHtml(ticker)}">Remove</button>
-	            </div>
-	          `
-	          : "";
-	        return `
-	          <div class="watchlist-item">
-	            <div>
-	              <button class="ticker-pill" type="button" data-action="pick-ticker" data-ticker="${escapeHtml(ticker)}">${escapeHtml(ticker)}</button>
-	              ${meta}
-	              ${notes ? `<div class="small">${notes}</div>` : ""}
-	            </div>
-	            ${actions}
-	          </div>
-	        `;
-	      })
-	      .join("");
-	  };
-
-  const getConfiguredVolatilityThreshold = () => {
-    const raw = Number(state.remoteFlags?.volatilityThreshold);
-    if (!Number.isFinite(raw)) return DEFAULT_VOLATILITY_THRESHOLD;
-    return Math.max(0.01, Math.min(0.5, raw));
-  };
-
-  const startWatchlist = (db, workspaceId) => {
-    if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
-    if (!workspaceId || !ui.watchlistList || !state.remoteFlags.watchlistEnabled) return;
-    ui.watchlistList.innerHTML = `<div class="small muted">Loading watchlist...</div>`;
-	    state.unsubscribeWatchlist = db
-	      .collection("users")
-	      .doc(workspaceId)
-	      .collection("watchlist")
-	      .orderBy("createdAt", "desc")
-	      .limit(250)
-      .onSnapshot(
-        (snapshot) => {
-          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-          state.recentWatchlistItems = items;
-          renderWatchlist(items, workspaceId);
-          ensureVolatilityAlertsForWatchlist({ db, workspaceId, items }).catch(() => {});
-        },
-        () => {
-          if (ui.watchlistList) ui.watchlistList.innerHTML = `<div class="small muted">Unable to load watchlist.</div>`;
-        }
-      );
-  };
-
-  const ensureVolatilityAlertsForWatchlist = async ({ db, workspaceId, items }) => {
-    if (!workspaceId || !state.user) return;
-    const threshold = getConfiguredVolatilityThreshold();
-    const list = Array.isArray(items) ? items : [];
-    for (const item of list) {
-      const ticker = normalizeTicker(item?.ticker || item?.id || "");
-      if (!ticker) continue;
-      const alertId = `volatility_${ticker}`;
-      const ref = db.collection("users").doc(workspaceId).collection("price_alerts").doc(alertId);
-      const snap = await ref.get();
-      if (snap.exists) continue;
-      await ref.set(
-        {
-          ticker,
-          condition: "volatility",
-          thresholdPercent: threshold,
-          baselinePrice: null,
-          active: true,
-          status: "active",
-          isDefault: true,
-          createdByUid: state.user.uid,
-          createdByEmail: state.user.email || "",
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          notes: `Default volatility alert (±${Math.round(threshold * 100)}%) for followed assets.`,
-          meta: buildMeta(),
-        },
-        { merge: true }
-      );
-    }
-  };
-
-  const runVolatilityAlertsCheck = async ({ db, functions, workspaceId, sendPush = true }) => {
-    if (!workspaceId || !state.user) return { checked: 0, triggered: 0 };
-    const querySnap = await db
-      .collection("users")
-      .doc(workspaceId)
-      .collection("price_alerts")
-      .where("condition", "==", "volatility")
-      .where("active", "==", true)
-      .get();
-    if (querySnap.empty) return { checked: 0, triggered: 0 };
-
-    const sendTestNotification = functions.httpsCallable("send_test_notification");
-    let checked = 0;
-    let triggered = 0;
-
-    const today = new Date();
-    const start = new Date(today);
-    start.setDate(start.getDate() - 14);
-    const startKey = start.toISOString().slice(0, 10);
-    const endKey = today.toISOString().slice(0, 10);
-
-    for (const doc of querySnap.docs) {
-      const alertId = doc.id;
-      const data = doc.data() || {};
-      const ticker = normalizeTicker(data.ticker || "");
-      if (!ticker) continue;
-      checked += 1;
-
-      try {
-        const rows = await apiFetchTickerHistory({ ticker, interval: "1d", start: startKey, end: endKey });
-        const current = rows.length ? extractCloseFromHistoryRow(rows[rows.length - 1]) : null;
-        if (current === null || current <= 0) continue;
-
-        const threshold = toFiniteOrNull(data.thresholdPercent) ?? getConfiguredVolatilityThreshold();
-        const baseline = toFiniteOrNull(data.baselinePrice);
-        if (baseline === null || baseline <= 0) {
-          await doc.ref.set(
-            {
-              baselinePrice: current,
-              lastPrice: current,
-              lastCheckedAt: firebase.firestore.FieldValue.serverTimestamp(),
-              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-          continue;
-        }
-
-        const change = (current - baseline) / baseline;
-        const hit = Math.abs(change) >= threshold;
-        await doc.ref.set(
-          {
-            lastPrice: current,
-            percentChange: change,
-            lastCheckedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            status: hit ? "triggered" : "active",
-            triggeredAt: hit ? firebase.firestore.FieldValue.serverTimestamp() : null,
-            baselinePrice: hit ? current : baseline,
-          },
-          { merge: true }
-        );
-        if (!hit) continue;
-
-        triggered += 1;
-        if (sendPush) {
-          try {
-            const direction = change >= 0 ? "up" : "down";
-            await sendTestNotification({
-              title: `Volatility alert: ${ticker}`,
-              body: `${ticker} moved ${formatPercent(change * 100, { signed: true, digits: 2 })} (${direction}) from baseline.`,
-              meta: buildMeta(),
-            });
-          } catch (error) {
-            // Ignore push failures.
-          }
-        }
-      } catch (error) {
-        // Ignore per-ticker failures so one feed issue does not block the loop.
-      }
-    }
-    return { checked, triggered };
-  };
-
-  const startVolatilityMonitor = (db, functions, workspaceId) => {
-    if (state.volatilityMonitorTimer) {
-      window.clearInterval(state.volatilityMonitorTimer);
-      state.volatilityMonitorTimer = null;
-    }
-    if (!workspaceId || !state.user) return;
-    state.volatilityMonitorTimer = window.setInterval(() => {
-      runVolatilityAlertsCheck({ db, functions, workspaceId, sendPush: true }).catch(() => {});
-    }, 15 * 60 * 1000);
-  };
-
-  const renderAlerts = (items, workspaceId) => {
-	    if (!ui.alertsList) return;
-	    const editable = canWriteWorkspace(workspaceId);
-	    const list = Array.isArray(items) ? items : [];
-	    if (!list.length) {
-	      ui.alertsList.innerHTML = `<div class="small muted">No alerts yet.</div>`;
-	      return;
-	    }
-
-	    ui.alertsList.innerHTML = list
-	      .map((item) => {
-	        const ticker = normalizeTicker(item.ticker || "");
-        const condition = String(item.condition || "above");
-        const target = Number(item.targetPrice ?? item.target ?? item.price);
-        const active = Boolean(item.active);
-        const status = String(item.status || (active ? "active" : "disabled"));
-	        const createdBy = escapeHtml(item.createdByEmail || item.createdBy?.email || "");
-	        const lastPrice = typeof item.lastPrice === "number" ? `$${item.lastPrice.toFixed(2)}` : "";
-	        const lastChecked = item.lastCheckedAt ? `Checked ${formatTimestamp(item.lastCheckedAt)}` : "";
-	        const triggeredAt = item.triggeredAt ? `Triggered ${formatTimestamp(item.triggeredAt)}` : "";
-	        const metaParts = [createdBy ? `By ${createdBy}` : "", lastChecked, lastPrice, triggeredAt].filter(Boolean);
-	        const meta = metaParts.length ? `<div class="small muted">${metaParts.join(" · ")}</div>` : "";
-	        const title = condition === "volatility"
-	          ? `${escapeHtml(ticker)} volatility ±${Math.round((toFiniteOrNull(item.thresholdPercent) ?? getConfiguredVolatilityThreshold()) * 100)}%`
-	          : `${escapeHtml(ticker)} ${condition === "below" ? "below" : "above"} ${Number.isFinite(target) ? `$${target.toFixed(2)}` : "—"}`;
-	        const actions = editable
-	          ? `
-	            <div class="task-actions">
-	              <button class="task-chip" type="button" data-action="alert-toggle" data-alert-id="${escapeHtml(item.id)}" data-active="${active ? "1" : "0"}">
-	                ${active ? "Disable" : "Enable"}
-	              </button>
-	              <button class="task-chip danger" type="button" data-action="alert-delete" data-alert-id="${escapeHtml(item.id)}">Delete</button>
-	            </div>
-	          `
-	          : "";
-	        return `
-	          <div class="alert-item" data-status="${escapeHtml(status)}">
-	            <div class="alert-title"><strong>${title}</strong> <span class="pill">${escapeHtml(status)}</span></div>
-	            ${meta}
-	            ${item.notes ? `<div class="small">${escapeHtml(item.notes)}</div>` : ""}
-	            ${actions}
-	          </div>
-	        `;
-	      })
-	      .join("");
-	  };
-
-	  const startPriceAlerts = (db, workspaceId) => {
-	    if (state.unsubscribeAlerts) state.unsubscribeAlerts();
-	    if (!workspaceId || !ui.alertsList || !state.remoteFlags.watchlistEnabled) return;
-	    ui.alertsList.innerHTML = `<div class="small muted">Loading alerts...</div>`;
-	    state.unsubscribeAlerts = db
-	      .collection("users")
-	      .doc(workspaceId)
-	      .collection("price_alerts")
-	      .orderBy("createdAt", "desc")
-	      .limit(250)
-	      .onSnapshot(
-	        (snapshot) => {
-	          const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-	          renderAlerts(items, workspaceId);
-	        },
-	        () => {
-	          if (ui.alertsList) ui.alertsList.innerHTML = `<div class="small muted">Unable to load alerts.</div>`;
-	        }
-	      );
-	  };
-
   const startAutopilotRequests = (db, user) => {
     if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
     if (!user || !ui.autopilotOutput) return;
@@ -9120,24 +8859,6 @@
   };
 
   const cloneDefaultProfileSocialLinks = () => ({ ...DEFAULT_PROFILE_SOCIAL_LINKS });
-
-  const normalizeAutoPublishPrefs = (source = null) => {
-    const raw = source && typeof source === "object" ? source : {};
-    return {
-      autoPublishForecasts:
-        raw.autoPublishForecasts !== undefined
-          ? Boolean(raw.autoPublishForecasts)
-          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishForecasts,
-      autoPublishIndicators:
-        raw.autoPublishIndicators !== undefined
-          ? Boolean(raw.autoPublishIndicators)
-          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishIndicators,
-      autoPublishModelCouncilConvos:
-        raw.autoPublishModelCouncilConvos !== undefined
-          ? Boolean(raw.autoPublishModelCouncilConvos)
-          : DEFAULT_AUTO_PUBLISH_PREFS.autoPublishModelCouncilConvos,
-    };
-  };
 
   const shouldAutoPublishForType = (requestType) => {
     return false;
@@ -9316,7 +9037,6 @@
 
   const loadUserProfile = async (db, user) => {
     if (!db || !user) {
-      state.publishPrefs = normalizeAutoPublishPrefs(null);
       state.userProfile = {
         username: "",
         socialLinks: cloneDefaultProfileSocialLinks(),
@@ -9333,14 +9053,12 @@
     try {
       const snap = await db.collection("users").doc(user.uid).get();
       const doc = snap.exists ? snap.data() || {} : {};
-      state.publishPrefs = normalizeAutoPublishPrefs(doc);
       const rawProfile = doc.profile && typeof doc.profile === "object" ? doc.profile : {};
       if (!rawProfile.stripeConnectAccountId && doc?.stripeConnectAccountId) {
         rawProfile.stripeConnectAccountId = doc.stripeConnectAccountId;
       }
       renderProfileForm(rawProfile, user);
     } catch (error) {
-      state.publishPrefs = normalizeAutoPublishPrefs(null);
       renderProfileForm({ username: getDefaultProfileUsername(user) }, user);
     }
   };
@@ -9362,8 +9080,6 @@
     const stripeConnectAccountId = String(
       existingProfile.stripeConnectAccountId || existing?.stripeConnectAccountId || ""
     ).trim();
-    const autopublishDefaults = normalizeAutoPublishPrefs(existing);
-
     await userRef.set(
       {
         email: user.email,
@@ -9382,7 +9098,6 @@
           publicEmailOptIn,
           stripeConnectAccountId,
         },
-        ...autopublishDefaults,
         metadata: buildMeta(),
       },
       { merge: true }
@@ -9674,18 +9389,17 @@
         forecast: "/forecasting",
         autopilot: "/autopilot",
         "sports-autopilot": "/sports-forecasting",
-        indicators: "/indicators",
         news: "/historical-data",
         "market-headlines": "/market-headlines",
         options: "/options",
         screener: "/forecasting",
-        learn: "/studio",
       },
       pathAliases: {
         "/autopilot": "autopilot",
         "/uploads": "autopilot",
         "/dashboard/uploads": "autopilot",
         "/sports-forecasting": "sports-autopilot",
+        "/indicators": "forecast",
         "/news": "news",
         "/historical-prices": "news",
         "/trending": "forecast",
@@ -9696,7 +9410,6 @@
       panelToPath: {
         orders: "/dashboard",
         profile: "/dashboard",
-        watchlist: "/watchlist",
         productivity: "/productivity",
         collaboration: "/collaboration",
         notifications: "/notifications",
@@ -9705,7 +9418,6 @@
       pathAliases: {
         "/dashboard/orders": "orders",
         "/dashboard/profile": "profile",
-        "/dashboard/watchlist": "watchlist",
         "/dashboard/productivity": "productivity",
         "/dashboard/collaboration": "collaboration",
       },
@@ -9714,6 +9426,7 @@
 
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
+    if (panel === "indicators") return "forecast";
     if (panel === "ticker-query") return "forecast";
     if (panel === "predictions") return "forecast";
     if (panel === "macro") return "forecast";
@@ -9866,6 +9579,10 @@
     });
   };
 
+  const removeWebsiteFootnotes = () => {
+    document.querySelectorAll(".footer-terms, .legal-copy").forEach((node) => node.remove());
+  };
+
   const normalizeHeaderBranding = () => {
     const brandIcon = QUANTURA_ICON_URL;
     document.querySelectorAll(".header .logo").forEach((logo) => {
@@ -9881,6 +9598,19 @@
       iconImg.alt = "";
       iconImg.setAttribute("aria-hidden", "true");
       logo.prepend(iconImg);
+    });
+    document.querySelectorAll(".footer .logo").forEach((logo) => {
+      if (!(logo instanceof HTMLElement) || logo.querySelector("img.logo-img")) return;
+      const label = String(logo.textContent || "QUANTURA").trim() || "QUANTURA";
+      logo.textContent = "";
+      const iconImg = document.createElement("img");
+      iconImg.className = "logo-img";
+      iconImg.src = brandIcon;
+      iconImg.alt = "";
+      iconImg.setAttribute("aria-hidden", "true");
+      const text = document.createElement("span");
+      text.textContent = label;
+      logo.append(iconImg, text);
     });
     const faviconHref = QUANTURA_FAVICON_URL;
     let favicon = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
@@ -10047,7 +9777,6 @@
                   </ol>`
                 : ""
             }
-            ${entry.personalized ? `<div class="small muted">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</div>` : ""}
             <div class="small muted">Source: ${source}</div>
           </article>
         `;
@@ -10058,10 +9787,6 @@
   const notificationCategoryLabel = (category) => {
     const key = String(category || "").trim().toLowerCase();
     switch (key) {
-      case "watchlist":
-        return "Watchlist";
-      case "explore":
-        return "Explore Feed";
       case "ipo":
         return "IPO";
       case "earnings":
@@ -11211,8 +10936,6 @@
     "intel-ticker",
     "options-ticker",
     "ticker-query-ticker",
-    "watchlist-ticker",
-    "alert-ticker",
     "autopilot-ticker",
     "predictions-ticker",
   ]);
@@ -14611,7 +14334,6 @@
       </div>
       ${renderOutputPublishControlsMarkup({ requestId: requestDocId, requestType: "modelCouncil" })}
       ${shareUrl ? `<div class="small muted">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(shareUrl)}</a></div>` : ""}
-      <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
       <div class="small muted" style="margin-top:10px;">
         ${sector ? `Sector: ${sector}` : ""}${industry ? ` · Industry: ${industry}` : ""}${exchange ? ` · Exchange: ${exchange}` : ""}
       </div>
@@ -14666,7 +14388,6 @@
             </button>`
           : ""
       }
-      <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
     `;
   };
 
@@ -15141,7 +14862,7 @@
         input: payload.input && typeof payload.input === "object" ? payload.input : {},
         outputsMeta: payload.outputsMeta && typeof payload.outputsMeta === "object" ? payload.outputsMeta : {},
         sourceRef: payload.sourceRef && typeof payload.sourceRef === "object" ? payload.sourceRef : {},
-        published: Boolean(payload.published),
+        published: false,
       }),
     });
     const body = await response.json().catch(() => ({}));
@@ -15170,21 +14891,6 @@
     const request = body?.request && typeof body.request === "object" ? body.request : null;
     if (request) {
       upsertMyRequestInState(request);
-    } else if (target.endsWith("/publish") || target.endsWith("/unpublish")) {
-      const existing = getMyRequestById(id);
-      if (existing) {
-        const nextPublished = target.endsWith("/publish");
-        upsertMyRequestInState({
-          ...existing,
-          published: nextPublished,
-          publishedAtMs: nextPublished ? Date.now() : null,
-          explorePostId: nextPublished
-            ? String(body?.post?.id || body?.explorePostId || existing.explorePostId || "").trim()
-            : "",
-          updatedAtMs: Date.now(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
     } else if (method === "DELETE" || body?.deleted) {
       removeMyRequestFromState(id);
     }
@@ -16838,214 +16544,6 @@
     });
   };
 
-  const buildIndicatorLatestMap = (latest = []) => {
-    const map = {};
-    (Array.isArray(latest) ? latest : []).forEach((entry) => {
-      const key = String(entry?.name || "").trim().toUpperCase();
-      const value = Number(entry?.value);
-      if (!key || !Number.isFinite(value)) return;
-      map[key] = value;
-    });
-    return map;
-  };
-
-  const indicatorUses = (selected = [], code = "") =>
-    (Array.isArray(selected) ? selected : []).map((item) => String(item || "").trim().toUpperCase()).includes(String(code || "").trim().toUpperCase());
-
-  const computeIndicatorHistoryContext = (rows = [], fallbackLastClose = NaN) => {
-    const series = Array.isArray(rows) ? rows : [];
-    const closes = series.map((row) => extractCloseFromHistoryRow(row)).filter((value) => Number.isFinite(value));
-    const highs = series.map((row) => Number(row?.High ?? row?.high ?? row?.Close ?? row?.close)).filter((value) => Number.isFinite(value));
-    const lows = series.map((row) => Number(row?.Low ?? row?.low ?? row?.Close ?? row?.close)).filter((value) => Number.isFinite(value));
-    const lastClose = closes.length ? closes[closes.length - 1] : Number(fallbackLastClose);
-    const recentCloses = closes.slice(-21);
-    const returns = [];
-    for (let idx = 1; idx < recentCloses.length; idx += 1) {
-      const current = recentCloses[idx];
-      const previous = recentCloses[idx - 1];
-      if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) continue;
-      returns.push(Math.log(current / previous));
-    }
-    const mean = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
-    const variance = returns.length
-      ? returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / returns.length
-      : 0;
-    const realizedVol20 = returns.length ? Math.sqrt(variance) : null;
-    const recentHighs = highs.slice(-20);
-    const recentLows = lows.slice(-20);
-    const recentRangePct20 =
-      Number.isFinite(lastClose) && lastClose > 0 && recentHighs.length && recentLows.length
-        ? (Math.max(...recentHighs) - Math.min(...recentLows)) / lastClose
-        : null;
-    return {
-      lastClose: Number.isFinite(lastClose) ? lastClose : null,
-      realizedVol20,
-      recentRangePct20,
-    };
-  };
-
-  const buildLocalIndicatorAnalysis = async ({ data = {}, payload = {}, functions }) => {
-    const selectedIndicators = Array.isArray(data?.selectedIndicators) && data.selectedIndicators.length
-      ? data.selectedIndicators.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
-      : Array.isArray(payload?.indicators)
-        ? payload.indicators.map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)
-        : [];
-    const latestMap = buildIndicatorLatestMap(data?.latest || []);
-    const ticker = normalizeTicker(data?.ticker || payload?.ticker || "");
-    const interval = String(data?.interval || payload?.interval || "1d").trim().toLowerCase() === "1h" ? "1h" : "1d";
-    let historyRows =
-      ticker &&
-      normalizeTicker(state.tickerContext.ticker || "") === ticker &&
-      String(state.tickerContext.interval || "1d").trim().toLowerCase() === interval &&
-      Array.isArray(state.tickerContext.rows) &&
-      state.tickerContext.rows.length
-        ? state.tickerContext.rows
-        : [];
-    if (!historyRows.length && ticker) {
-      historyRows = await loadTickerHistory(functions, ticker, interval).catch(() => []);
-    }
-    const history = computeIndicatorHistoryContext(historyRows, Number(data?.meta?.lastClose));
-    const lastClose = Number.isFinite(Number(data?.meta?.lastClose)) ? Number(data.meta.lastClose) : history.lastClose;
-    const rsi = Number(latestMap.RSI_14);
-    const macdHist = Number(latestMap.MACD_HIST);
-    const macdLine = Number(latestMap.MACD_LINE);
-    const macdSignal = Number(latestMap.MACD_SIGNAL);
-    const atr = Number(latestMap.ATR_14);
-    const adx = Number(latestMap.ADX_14);
-    const plusDi = Number(latestMap.PLUS_DI_14);
-    const minusDi = Number(latestMap.MINUS_DI_14);
-
-    let bullish = 0;
-    let bearish = 0;
-    if (indicatorUses(selectedIndicators, "RSI") && Number.isFinite(rsi)) {
-      if (rsi <= 30) bullish += 1.1;
-      else if (rsi >= 70) bearish += 1.1;
-      else if (rsi < 45) bearish += 0.45;
-      else if (rsi > 55) bullish += 0.45;
-    }
-    if (indicatorUses(selectedIndicators, "MACD") && Number.isFinite(macdHist)) {
-      const histPct = Number.isFinite(lastClose) && lastClose > 0 ? Math.abs(macdHist / lastClose) * 100 : 0;
-      const weight = Math.min(1.8, 0.9 + histPct * 8);
-      if (macdHist > 0) bullish += weight;
-      else if (macdHist < 0) bearish += weight;
-    }
-    if (indicatorUses(selectedIndicators, "ADX") && Number.isFinite(adx) && Number.isFinite(plusDi) && Number.isFinite(minusDi)) {
-      const weight = Math.min(1.2, Math.max(0.3, adx / 30));
-      if (plusDi > minusDi) bullish += weight;
-      else if (minusDi > plusDi) bearish += weight;
-    }
-
-    const total = bullish + bearish;
-    const conviction = total > 0 ? Math.min(1, Math.abs(bullish - bearish) / total) : 0;
-    const direction =
-      conviction < 0.18 ? "neutral" : bullish > bearish ? "bullish" : bearish > bullish ? "bearish" : "neutral";
-    const confidence = conviction >= 0.65 && total >= 2.2 ? "high" : conviction >= 0.32 && total >= 1.2 ? "medium" : "low";
-    const trendSelected = ["EMA", "SMA", "ADX", "BBANDS"].filter((code) => indicatorUses(selectedIndicators, code)).length;
-    const oscillatorSelected = ["RSI", "MACD", "CCI", "MFI", "STOCH", "WILLR", "ROC"].filter((code) => indicatorUses(selectedIndicators, code)).length;
-    let timelineDays = interval === "1h" ? 4 : 9;
-    if (trendSelected > oscillatorSelected) timelineDays += interval === "1h" ? 2 : 4;
-    if (oscillatorSelected > trendSelected) timelineDays -= interval === "1h" ? 1 : 1;
-    if (conviction >= 0.7) timelineDays += interval === "1h" ? 1 : 3;
-    if (conviction <= 0.25) timelineDays -= interval === "1h" ? 1 : 2;
-    timelineDays = Math.max(interval === "1h" ? 1 : 3, Math.min(interval === "1h" ? 10 : 30, Math.round(timelineDays)));
-
-    const atrPct = Number.isFinite(atr) && Number.isFinite(lastClose) && lastClose > 0 ? atr / lastClose : 0;
-    const realizedVol = Number.isFinite(history.realizedVol20) ? Number(history.realizedVol20) : 0;
-    const recentRangePct = Number.isFinite(history.recentRangePct20) ? Number(history.recentRangePct20) : 0;
-    const perStepVolPct = Math.max(atrPct, realizedVol * 1.35, recentRangePct > 0 ? recentRangePct / 10 : 0, interval === "1h" ? 0.0035 : 0.006);
-    const projectedMovePct = Math.max(
-      interval === "1h" ? 0.003 : 0.005,
-      Math.min(interval === "1h" ? 0.12 : 0.2, perStepVolPct * Math.sqrt(Math.max(1, timelineDays)) * (0.9 + conviction * 0.9))
-    );
-    const signedMove =
-      direction === "bullish" ? projectedMovePct : direction === "bearish" ? -projectedMovePct : 0;
-    const targetPrice = Number.isFinite(lastClose) && lastClose > 0 ? Number((lastClose * (1 + signedMove)).toFixed(2)) : null;
-
-    const keySignals = [];
-    if (indicatorUses(selectedIndicators, "RSI") && Number.isFinite(rsi)) {
-      keySignals.push(
-        `RSI(14) ${rsi.toFixed(2)} ${
-          rsi <= 30
-            ? "is oversold and can support a reflex bounce if momentum stabilizes."
-            : rsi >= 70
-              ? "is overbought and vulnerable to mean reversion."
-              : rsi >= 55
-                ? "leans bullish."
-                : rsi <= 45
-                  ? "leans bearish."
-                  : "is neutral."
-        }`
-      );
-    }
-    if (indicatorUses(selectedIndicators, "MACD") && Number.isFinite(macdHist)) {
-      keySignals.push(
-        `MACD histogram ${macdHist.toFixed(4)} while MACD line ${Number.isFinite(macdLine) ? macdLine.toFixed(4) : "—"} vs signal ${
-          Number.isFinite(macdSignal) ? macdSignal.toFixed(4) : "—"
-        } means ${macdHist > 0 ? "momentum is improving above the signal line." : macdHist < 0 ? "momentum remains below the signal line." : "momentum is flat."}`
-      );
-    }
-    if (indicatorUses(selectedIndicators, "ATR") && Number.isFinite(atr)) {
-      keySignals.push(
-        `ATR(14) is ${atr.toFixed(2)}${atrPct > 0 ? `, about ${(atrPct * 100).toFixed(2)}% of price` : ""}, which frames the current swing size.`
-      );
-    }
-    if (indicatorUses(selectedIndicators, "ADX") && Number.isFinite(adx)) {
-      keySignals.push(
-        `ADX(14) is ${adx.toFixed(2)}${
-          Number.isFinite(plusDi) && Number.isFinite(minusDi)
-            ? plusDi > minusDi
-              ? " with +DI above -DI"
-              : minusDi > plusDi
-                ? " with -DI above +DI"
-                : " with DI lines balanced"
-            : ""
-        }, so trend strength is ${adx >= 25 ? "confirmed." : "modest."}`
-      );
-    }
-    if (keySignals.length < 3) {
-      keySignals.push(
-        `Recent price context shows ${
-          Number.isFinite(history.realizedVol20) ? `${(Number(history.realizedVol20) * 100).toFixed(2)}%` : "n/a"
-        } realized 20-bar volatility${
-          Number.isFinite(history.recentRangePct20) ? ` and a ${(Number(history.recentRangePct20) * 100).toFixed(2)}% 20-bar high-low range` : ""
-        }.`
-      );
-    }
-
-    const summary = `Computed ${Array.isArray(data?.latest) ? data.latest.length : 0} indicator values for ${ticker || "the active ticker"}. Selected indicators lean ${direction}, with a ${timelineDays}-day tactical horizon.`;
-    const prediction = {
-      direction,
-      targetPrice,
-      timeline: `${timelineDays} trading days`,
-      timelineDays,
-      confidence,
-    };
-    const text = [
-      `Setup: ${summary}`,
-      Number.isFinite(lastClose) ? `As of ${String(data?.meta?.asOf || new Date().toISOString())}, last close was $${Number(lastClose).toFixed(2)} on the ${interval} interval.` : "",
-      "Signal stack:",
-      ...keySignals.slice(0, 6).map((item) => `- ${item}`),
-      `Path: ${direction} bias toward ${Number.isFinite(targetPrice) ? `$${Number(targetPrice).toFixed(2)}` : "the current price area"} over ${timelineDays} trading days with ${confidence} confidence.`,
-      direction === "bullish"
-        ? "Risk frame: bullish conviction weakens if momentum rolls over or price loses short-term trend support."
-        : direction === "bearish"
-          ? "Risk frame: bearish conviction weakens if momentum turns up or price reclaims short-term trend support."
-          : "Risk frame: signals are mixed, so avoid over-weighting any single indicator reading.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    return {
-      summary,
-      keySignals: keySignals.slice(0, 6),
-      prediction,
-      text,
-      provider: String(data?.analysis?.provider || "quantura"),
-      model: String(data?.analysis?.model || "indicator_local_repair"),
-      disclaimer: String(data?.analysis?.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER),
-    };
-  };
-
   const parseCsvTable = (csvText, { maxRows = 5000 } = {}) => {
     const text = String(csvText || "").replace(/^\uFEFF/, "");
     if (!text.trim()) throw new Error("CSV file is empty.");
@@ -18186,21 +17684,19 @@
   };
 
   const syncFoundrySourceFields = () => {
-    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
-    const historyMode = sourceKind === "history";
-    const fileMode = sourceKind === "historical_csv" || sourceKind === "prediction_csv";
+    const sourceKind = String(ui.foundrySourceKind?.value || "prediction_csv").trim();
     const predictionMode = sourceKind === "prediction_csv";
     ui.foundryModelMetricsBlock?.classList.toggle("hidden", !predictionMode);
-    ui.foundryHistoryFields?.classList.toggle("hidden", !historyMode);
-    ui.foundryFileField?.classList.toggle("hidden", !fileMode);
-    ui.foundryUploadActions?.classList.toggle("hidden", !predictionMode);
+    ui.foundryHistoryFields?.classList.add("hidden");
+    ui.foundryFileField?.classList.remove("hidden");
+    ui.foundryUploadActions?.classList.add("hidden");
     ui.foundryPriceAlertConfig?.classList.toggle("hidden", !predictionMode);
-    ui.foundryAutopilotControls?.classList.toggle("hidden", predictionMode);
-    ui.foundryPrimaryActions?.classList.toggle("hidden", predictionMode);
+    ui.foundryAutopilotControls?.classList.add("hidden");
+    ui.foundryPrimaryActions?.classList.toggle("hidden", !predictionMode);
     if (ui.foundryFileHelp) {
       ui.foundryFileHelp.textContent = predictionMode
         ? "Prediction CSVs must include a date/timestamp and P50 or median. P10, P90, other quantiles, ticker, actual price, and explicit 95% interval columns are optional."
-        : "Historical CSVs must resolve to item, timestamp/date, and closing-price columns.";
+        : "Forecast Foundry accepts prediction quantile CSV files only.";
     }
     const uploadButtonLabel = ui.foundryUploadPrepareButton?.querySelector("span");
     if (uploadButtonLabel) uploadButtonLabel.textContent = predictionMode ? "Analyze prediction CSV" : "Prepare source";
@@ -18210,7 +17706,6 @@
         control.disabled = !predictionMode || !ui.foundryPriceAlertEnabled?.checked;
       });
     }
-    if (historyMode) syncFoundryDateDefaults();
     updateFoundryInstanceLimitUi();
   };
 
@@ -18282,7 +17777,7 @@
     `;
   };
 
-  const getFoundryRequestId = (run) => String(run?.exploreRequestId || "").trim();
+  const getFoundryRequestId = (run) => String(run?.workspaceRequestId || run?.requestRecordId || "").trim();
 
   const updateFoundryRunInState = (run) => {
     if (!run || typeof run !== "object") return;
@@ -18326,7 +17821,7 @@
         ui.foundryInstanceLimit.textContent = `Concurrent instance limit: ${activeConcurrentRuns} of ${maxConcurrentRuns} active.`;
       }
     }
-    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const sourceKind = String(ui.foundrySourceKind?.value || "prediction_csv").trim();
     const predictionMode = sourceKind === "prediction_csv";
     const requiresFullAccount = !hasFullAccount();
     const limitReached = hasFullAccount() && activeConcurrentRuns >= maxConcurrentRuns;
@@ -18668,7 +18163,7 @@
       if (ui.foundryBusinessDaysButton) ui.foundryBusinessDaysButton.classList.add("hidden");
       renderForecastPriceAlertStatus(null);
       ui.foundryRunMeta.innerHTML = `<div class="small muted">Select a foundry run to inspect it.</div>`;
-      if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a source is prepared.</div>`;
+      if (ui.foundryPublishHost) ui.foundryPublishHost.innerHTML = `<div class="small muted">Private workspace sync details appear here after a source is prepared.</div>`;
       renderFoundryChartLauncher({
         available: false,
         title: "Forecast Foundry chart",
@@ -18900,7 +18395,10 @@
     if (!hasFullAccount()) {
       throw new Error("Sign in with a full account to use Forecast Foundry.");
     }
-    const sourceKind = String(ui.foundrySourceKind?.value || "history").trim();
+    const sourceKind = String(ui.foundrySourceKind?.value || "prediction_csv").trim();
+    if (sourceKind !== "prediction_csv") {
+      throw new Error("Forecast Foundry accepts prediction quantile CSV files only. Use Historical Data for market downloads.");
+    }
     const ticker = normalizeTicker(ui.foundryTicker?.value || "");
     const interval = "1d";
     const notes = String(ui.foundryNotes?.value || "").trim();
@@ -18910,45 +18408,22 @@
 
     setFoundryStatus("Preparing Forecast Foundry source...");
     let payload = null;
-    if (sourceKind === "history") {
-      const end = String(ui.foundryEnd?.value || "").trim();
-      const requestedRowLimit = String(ui.foundryRowLimit?.value || "500").trim().toLowerCase();
-      const useAllHistory = requestedRowLimit === "all";
-      const parsedRowLimit = Number.parseInt(requestedRowLimit, 10);
-      const rowLimit = useAllHistory || ![500, 1000, 1500, 2000].includes(parsedRowLimit) ? 500 : parsedRowLimit;
-      if (!ticker || !end) {
-        throw new Error("Ticker and end date are required for historical downloader imports.");
-      }
-      payload = await callFoundryApi("POST", "/api/autopilot/datasets/history", {
-        ticker,
-        interval,
-        start: "",
-        end,
-        useAllHistory,
-        rowLimit: useAllHistory ? "all" : rowLimit,
-        notes,
-        modelMetrics,
-        workspaceId,
-        persist: true,
-      });
-    } else {
-      const file = ui.foundryFile?.files?.[0];
-      if (!file) throw new Error("Select a CSV file first.");
-      const csvText = await file.text();
-      payload = await callFoundryApi("POST", "/api/autopilot/datasets/upload", {
-        csvText,
-        fileName: String(file?.name || "upload.csv")
-          .replace(/[^A-Za-z0-9._-]/g, "_")
-          .trim(),
-        ticker,
-        interval,
-        notes,
-        modelMetrics,
-        priceAlert,
-        workspaceId,
-      });
-      if (ui.foundryFile) ui.foundryFile.value = "";
-    }
+    const file = ui.foundryFile?.files?.[0];
+    if (!file) throw new Error("Select a prediction CSV file first.");
+    const csvText = await file.text();
+    payload = await callFoundryApi("POST", "/api/autopilot/datasets/upload", {
+      csvText,
+      fileName: String(file?.name || "predictions.csv")
+        .replace(/[^A-Za-z0-9._-]/g, "_")
+        .trim(),
+      ticker,
+      interval,
+      notes,
+      modelMetrics,
+      priceAlert,
+      workspaceId,
+    });
+    if (ui.foundryFile) ui.foundryFile.value = "";
 
     const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
     if (!run) throw new Error("Forecast Foundry did not return a saved run.");
@@ -19080,7 +18555,7 @@
     if (!hasFullAccount()) throw new Error("Sign in with a full account to share Forecast Foundry runs.");
     const run = state.foundryContext.activeRun;
     const requestId = getFoundryRequestId(run);
-    if (!requestId) throw new Error("Prepare a source first so Quantura can create a private Explore record.");
+    if (!requestId) throw new Error("Prepare a source first so Quantura can create a private workspace record.");
     const body = await updateMyRequest(
       requestId,
       { visibility: "unlisted" },
@@ -19120,7 +18595,7 @@
         summary,
         markdown,
       },
-      exploreRequestId: String(request?.id || "").trim(),
+      workspaceRequestId: String(request?.id || "").trim(),
       files: {},
     };
     const run = sharedRun && typeof sharedRun === "object" ? {
@@ -19160,7 +18635,7 @@
     if (ui.foundryPublishHost) {
       ui.foundryPublishHost.innerHTML = `
         <div class="small muted">
-          Legacy prediction uploads stay read-only here. Prepare a new Forecast Foundry source to create a private Explore record and publish/share controls.
+          Legacy prediction uploads stay read-only here. Prepare a new Forecast Foundry source to create a private workspace record and share controls.
         </div>
       `;
     }
@@ -19189,7 +18664,7 @@
     ui.sportsFoundryStatus.dataset.variant = String(variant || "").trim();
   };
 
-  const getSportsFoundryRequestId = (run) => String(run?.exploreRequestId || "").trim();
+  const getSportsFoundryRequestId = (run) => String(run?.workspaceRequestId || run?.requestRecordId || "").trim();
 
   const updateSportsFoundryRunInState = (run) => {
     if (!run || typeof run !== "object") return;
@@ -19530,7 +19005,7 @@
     if (!run || typeof run !== "object") {
       ui.sportsFoundryRunMeta.innerHTML = `<div class="small muted">Select a sports run to inspect it.</div>`;
       if (ui.sportsFoundryPublishHost) {
-        ui.sportsFoundryPublishHost.innerHTML = `<div class="small muted">Private Explore sync and publish controls appear here after a sports run is saved.</div>`;
+        ui.sportsFoundryPublishHost.innerHTML = `<div class="small muted">Private workspace sync details appear here after a sports run is saved.</div>`;
       }
       if (ui.sportsFoundryAnalysis) ui.sportsFoundryAnalysis.innerHTML = `<div class="small muted">Sports forecast analysis will appear here.</div>`;
       if (ui.sportsFoundryChart) ui.sportsFoundryChart.innerHTML = `<div class="small muted">Historical and prediction chart will appear here once a forecast is ready.</div>`;
@@ -19980,7 +19455,7 @@
       status: String(outputsMeta?.analysisStatus || outputsMeta?.status || "shared").trim(),
       sourceType: "sports_timeseries",
       sourceGroup: "sports",
-      exploreRequestId: String(request?.id || "").trim(),
+      workspaceRequestId: String(request?.id || "").trim(),
       sports: {
         leagueLabel: String(outputsMeta?.leagueLabel || input?.leagueLabel || input?.league || "").trim(),
         team: {
@@ -21060,7 +20535,7 @@
   const renderAiPortfolioSummary = (runDoc) => {
     const portfolio = runDoc?.aiPortfolio && typeof runDoc.aiPortfolio === "object" ? runDoc.aiPortfolio : null;
     if (!portfolio) {
-      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Quantura Horizon and publish an Explore-ready AI Agent.</div>`;
+      return `<div class="small muted">Generate an AI Portfolio to score long-term growth with Quantura Horizon and save the analysis privately.</div>`;
     }
     const holdings = Array.isArray(portfolio.holdings) ? portfolio.holdings : [];
     const chips = holdings
@@ -21151,7 +20626,7 @@
       });
 
     if (!ranked.length) {
-      container.innerHTML = `<div class="small muted">No AI Agents for this filter yet. Generate one from the latest screen to publish to Explore.</div>`;
+      container.innerHTML = `<div class="small muted">No saved analyses match this filter yet. Generate one from the latest screen.</div>`;
       return;
     }
 
@@ -21835,7 +21310,7 @@
     const canEditRun = !sharedReadOnly;
     const actionButtons = [];
     const visibilityLabel = isPublished
-      ? "Published to Explore"
+      ? "Saved to workspace"
       : status === "queued" || status === "running"
       ? "Private until completion"
       : "Private";
@@ -21898,7 +21373,7 @@
         ? `<div class="notice" style="margin-top:12px;">
             <strong>${status === "queued" ? "Queued in GitHub Actions" : "GitHub Actions is still running"}</strong>
             <div class="small" style="margin-top:6px;">${escapeHtml(
-              serviceMessage || "Quantura is waiting for the workflow artifact so it can publish the saved run to Explore."
+              serviceMessage || "Quantura is waiting for the workflow artifact so it can finish saving the run."
             )}</div>
           </div>`
         : "";
@@ -22464,7 +21939,7 @@
     if (refreshed.exists) {
       renderScreenerRunOutput({ id: refreshed.id, ...(refreshed.data() || {}) });
     }
-    showToast("AI Portfolio generated and published to Explore.");
+    showToast("AI Portfolio generated and saved privately.");
   };
 
   const startAIAgentSocial = (db, workspaceId) => {
@@ -22907,14 +22382,14 @@
       traces.push({
         type: "scatter",
         mode: "lines",
-        name: "Forecast (yhat)",
+        name: "P50 Median",
         x: medianSeries.map((point) => point.x),
         y: medianSeries.map((point) => point.y),
         line: {
           width: 2.2,
           color: forecastColor,
         },
-        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>yhat=$%{y:.2f}<extra></extra>`,
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>P50=$%{y:.2f}<extra></extra>`,
         legendrank: 40,
       });
     }
@@ -23036,172 +22511,228 @@
     };
   };
 
-  const buildForecastAutoSummaryContext = (forecastDoc = {}) => {
-    const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || []);
-    const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
-    const keyLevels = extractForecastKeyLevels(rows);
-    const recentClose = Number(metrics.lastClose);
-    const finalMedian = Number(keyLevels.median);
-    const delta = Number.isFinite(recentClose) && Number.isFinite(finalMedian) ? finalMedian - recentClose : null;
-    const deltaPct =
-      Number.isFinite(delta) && Number.isFinite(recentClose) && recentClose > 0 ? (delta / recentClose) * 100 : null;
+  const calculateForecastQuantileSummary = (rows, key) => {
+    if (!key) return null;
+    const series = rows
+      .map((row) => ({ date: String(row?.ds || "").trim(), value: Number(row?.[key]) }))
+      .filter((point) => point.date && Number.isFinite(point.value));
+    if (!series.length || series.length !== rows.length) return null;
+    const values = series.map((point) => point.value);
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const variance = values.reduce((sum, value) => sum + (value - average) ** 2, 0) / values.length;
+    const standardDeviation = Math.sqrt(variance);
+    const lowerBoundary = average - 1.96 * standardDeviation;
+    const upperBoundary = average + 1.96 * standardDeviation;
     return {
-      ticker: normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || ""),
-      interval: String(forecastDoc.interval || state.tickerContext.interval || "1d"),
-      horizon: Number(forecastDoc.horizon || metrics.horizon || rows.length || 0) || rows.length || 0,
-      service: String(forecastDoc.service || "prophet"),
-      quantiles: Array.isArray(forecastDoc.quantiles) ? forecastDoc.quantiles : [],
-      rowCount: rows.length,
-      recentClose: Number.isFinite(recentClose) ? recentClose : null,
-      finalMedian: Number.isFinite(finalMedian) ? finalMedian : null,
-      support: keyLevels.support,
-      resistance: keyLevels.resistance,
-      bandWidth: keyLevels.bandWidth,
-      bandWidthPct: keyLevels.bandWidthPct,
-      medianDelta: Number.isFinite(delta) ? delta : null,
-      medianDeltaPct: Number.isFinite(deltaPct) ? deltaPct : null,
-      mae: Number.isFinite(Number(metrics.mae)) ? Number(metrics.mae) : null,
-      coverage10_90: Number.isFinite(Number(metrics.coverage10_90)) ? Number(metrics.coverage10_90) : null,
-      volatility: Number.isFinite(Number(metrics.volatility)) ? Number(metrics.volatility) : null,
-      drift: Number.isFinite(Number(metrics.drift)) ? Number(metrics.drift) : null,
+      key,
+      series,
+      average,
+      minimum: Math.min(...values),
+      maximum: Math.max(...values),
+      final: values[values.length - 1],
+      standardDeviation,
+      lowerBoundary,
+      upperBoundary,
+      unusual: series.filter((point) => point.value < lowerBoundary || point.value > upperBoundary),
     };
   };
 
-  const syncForecastAiSummaryToMyRequest = async ({ requestId = "", summary = null } = {}) => {
-    if (!hasSessionUser()) return;
-    const reqId = String(requestId || "").trim();
-    if (!reqId) return;
-    const myRequestId = `forecast__${reqId}`;
-    const existing = getMyRequestById(myRequestId);
-    if (!existing) return;
-    const outputsMeta = existing.outputsMeta && typeof existing.outputsMeta === "object" ? existing.outputsMeta : {};
-    const nextOutputsMeta = {
-      ...outputsMeta,
-      aiSummary: String(summary?.text || "").trim().slice(0, 1600),
-      aiProvider: String(summary?.provider || "").trim(),
-      aiModel: String(summary?.model || "").trim(),
-      aiLatencyMs: Number(summary?.latencyMs || 0) || 0,
-      aiGeneratedAt: Date.now(),
+  const getLatestForecastMarketPoint = (forecastDoc = {}) => {
+    const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
+    const directPrice = Number(metrics.lastClose ?? forecastDoc.currentPrice);
+    const history = Array.isArray(forecastDoc.historicalRows) && forecastDoc.historicalRows.length
+      ? forecastDoc.historicalRows
+      : state.tickerContext.rows;
+    const latest = Array.isArray(history) && history.length ? history[history.length - 1] : null;
+    const historyPrice = latest ? extractCloseFromHistoryRow(latest) : null;
+    const currentPrice = Number.isFinite(directPrice) && directPrice > 0 ? directPrice : Number(historyPrice);
+    const rawTimestamp =
+      metrics.lastMarketDataTimestamp ||
+      metrics.lastDataTimestamp ||
+      metrics.lastDataDate ||
+      forecastDoc.marketDataTimestamp ||
+      (latest ? extractDateFromHistoryRow(latest) : null);
+    const parsedTimestamp = rawTimestamp instanceof Date ? rawTimestamp : rawTimestamp ? new Date(rawTimestamp) : null;
+    return {
+      currentPrice: Number.isFinite(currentPrice) && currentPrice > 0 ? currentPrice : null,
+      marketDataTimestamp:
+        parsedTimestamp instanceof Date && !Number.isNaN(parsedTimestamp.getTime()) ? parsedTimestamp.toISOString() : "",
     };
-    await upsertMyRequest({
-      type: "forecast",
-      requestId: myRequestId,
-      title: String(existing.title || ""),
-      input: existing.input && typeof existing.input === "object" ? existing.input : {},
-      outputsMeta: nextOutputsMeta,
-      sourceRef: existing.sourceRef && typeof existing.sourceRef === "object" ? existing.sourceRef : { collection: "forecast_requests", id: reqId },
-      published: Boolean(existing.published),
-    }).catch(() => {});
   };
 
-  const runForecastAutoSummary = async ({ forecastDoc = null, requestId = "", notify = false } = {}) => {
+  const buildForecastWorkspaceContext = (forecastDoc = {}) => {
+    const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || forecastDoc.forecastPreview || []).sort((left, right) =>
+      String(left?.ds || "").localeCompare(String(right?.ds || ""))
+    );
+    const keys = extractQuantileKeys(rows);
+    const p10 = calculateForecastQuantileSummary(rows, keys.find((key) => Number(key.slice(1)) === 10));
+    const p50 = calculateForecastQuantileSummary(rows, keys.find((key) => Number(key.slice(1)) === 50));
+    const p90 = calculateForecastQuantileSummary(rows, keys.find((key) => Number(key.slice(1)) === 90));
+    const market = getLatestForecastMarketPoint(forecastDoc);
+    const ticker = normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || "");
+    if (!ticker || !rows.length || !p10 || !p50 || !p90 || !market.currentPrice) {
+      return {
+        valid: false,
+        error: !market.currentPrice
+          ? "Latest actual price is unavailable, so scenario percentages and AI analysis cannot be calculated."
+          : "Complete P10, P50, and P90 forecast series are required.",
+        ticker,
+        rows,
+        currentPrice: market.currentPrice,
+      };
+    }
+    const percentChange = (target) => ((target - market.currentPrice) / market.currentPrice) * 100;
+    const startDate = String(rows[0]?.ds || "").trim();
+    const endDate = String(rows[rows.length - 1]?.ds || "").trim();
+    const uncertaintySeries = rows.map((row) => ({
+      date: String(row.ds || ""),
+      range: Number(row[p90.key]) - Number(row[p10.key]),
+    }));
+    const startRange = uncertaintySeries[0].range;
+    const finalRange = uncertaintySeries[uncertaintySeries.length - 1].range;
+    const uncertaintyChangePercent = startRange > 0 ? ((finalRange - startRange) / startRange) * 100 : 0;
+    const uncertaintyDirection = uncertaintyChangePercent > 5 ? "expanding" : uncertaintyChangePercent < -5 ? "contracting" : "stable";
+    const scenarios = {
+      bear: { label: "Bear", quantile: "P10", target: p10.final, percentChange: percentChange(p10.final), forecastEndDate: endDate },
+      base: { label: "Base", quantile: "P50", target: p50.final, percentChange: percentChange(p50.final), forecastEndDate: endDate },
+      bull: { label: "Bull", quantile: "P90", target: p90.final, percentChange: percentChange(p90.final), forecastEndDate: endDate },
+    };
+    const storedIndicatorData = state.tickerContext.indicatorData && typeof state.tickerContext.indicatorData === "object"
+      ? state.tickerContext.indicatorData
+      : null;
+    const indicatorData = storedIndicatorData && normalizeTicker(storedIndicatorData.ticker || "") === ticker
+      ? storedIndicatorData
+      : {};
+    const indicatorDirectionRaw = String(indicatorData?.analysis?.prediction?.direction || "neutral").toLowerCase();
+    const indicatorDirection = ["bullish", "bearish"].includes(indicatorDirectionRaw) ? indicatorDirectionRaw : "neutral";
+    const forecastDirection = scenarios.base.percentChange > 0.5 ? "bullish" : scenarios.base.percentChange < -0.5 ? "bearish" : "neutral";
+    const rsiEntry = (Array.isArray(indicatorData.latest) ? indicatorData.latest : []).find((item) => /^RSI/i.test(String(item?.name || "")));
+    const rsi = Number(rsiEntry?.value);
+    const exhaustionConflict =
+      (forecastDirection === "bullish" && Number.isFinite(rsi) && rsi >= 70) ||
+      (forecastDirection === "bearish" && Number.isFinite(rsi) && rsi <= 30);
+    const agreementStatus =
+      forecastDirection === "neutral" || indicatorDirection === "neutral"
+        ? "mixed"
+        : forecastDirection !== indicatorDirection
+          ? "conflict"
+          : exhaustionConflict
+            ? "mixed"
+            : "confirm";
+    return {
+      valid: true,
+      ticker,
+      rows,
+      currentPrice: market.currentPrice,
+      marketDataTimestamp: market.marketDataTimestamp,
+      interval: String(forecastDoc.interval || state.tickerContext.interval || "1d").toLowerCase() === "1h" ? "1h" : "1d",
+      startDate,
+      endDate,
+      horizon: rows.length,
+      quantiles: { P10: p10, P50: p50, P90: p90 },
+      scenarios,
+      uncertainty: {
+        series: uncertaintySeries,
+        startRange,
+        finalRange,
+        averageRange: uncertaintySeries.reduce((sum, item) => sum + item.range, 0) / uncertaintySeries.length,
+        finalRangePercentOfCurrent: (finalRange / market.currentPrice) * 100,
+        changePercent: uncertaintyChangePercent,
+        direction: uncertaintyDirection,
+      },
+      indicatorData,
+      indicatorAgreement: {
+        status: agreementStatus,
+        forecastDirection,
+        indicatorDirection,
+        explanation:
+          agreementStatus === "confirm"
+            ? "The indicator stack and final P50 scenario point in the same direction."
+            : agreementStatus === "conflict"
+              ? "The indicator direction conflicts with the final P50 scenario."
+              : exhaustionConflict
+                ? "Direction agrees, but an extreme RSI reading creates exhaustion risk."
+                : "The forecast or indicator stack is neutral, so confirmation is mixed.",
+      },
+      apiInput: {
+        ticker,
+        currentPrice: market.currentPrice,
+        marketDataTimestamp: market.marketDataTimestamp,
+        interval: String(forecastDoc.interval || state.tickerContext.interval || "1d"),
+        forecastRows: rows,
+        indicators: indicatorData,
+      },
+    };
+  };
+
+  const runForecastAiAnalysis = async ({ forecastDoc = null, requestId = "", regenerate = false, notify = false } = {}) => {
     const doc = forecastDoc && typeof forecastDoc === "object" ? forecastDoc : null;
     const targetId = String(requestId || doc?.id || state.tickerContext.forecastId || "").trim();
     if (!doc || !targetId) return null;
-    const rows = normalizeForecastSeriesRows(doc.forecastRows || []);
-    if (!rows.length) return null;
-
+    const context = buildForecastWorkspaceContext(doc);
+    if (!context.valid) {
+      if (notify) showToast(context.error, "warn");
+      return null;
+    }
     const requestToken = `forecast_ai_${targetId}_${Date.now()}`;
     state.tickerContext.forecastAiSummary = {
       requestId: targetId,
       loading: true,
       text: "",
-      provider: normalizeModelCouncilProviderId(state.tickerContext.tickerQueryProvider || "openai"),
-      model: normalizeAiModelId(state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini",
+      provider: "openai",
+      model: "gpt-5.6-luna",
+      cached: false,
       latencyMs: null,
-      usage: {},
-      responseId: "",
-      shareUrl: "",
-      feedback: "",
       error: "",
       requestToken,
     };
-    if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
-      renderForecastDetails(state.tickerContext.forecastDoc);
-    }
-
-    const context = buildForecastAutoSummaryContext(doc);
-    const provider = normalizeModelCouncilProviderId(state.tickerContext.tickerQueryProvider || "openai");
-    const model = normalizeAiModelId(state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
-    const startedAt = Date.now();
+    renderForecastDetails(doc);
     try {
       const headers = await buildApiAuthHeaders({ includeJson: true });
-      const providerPath = normalizeModelCouncilProviderId(provider || "openai") || "openai";
-      const response = await fetch(`/api/llm/${encodeURIComponent(providerPath)}`, {
+      const response = await fetch("/api/forecast-analysis", {
         method: "POST",
         headers,
         credentials: "same-origin",
-        body: JSON.stringify({
-          provider: providerPath,
-          model,
-          fallbackProviders: ["openai", "claude", "gemini", "deepseek", "mistral", "perplexity", "qwen", "amazon_nova", "other"],
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are Quantura Forecast Review. Write a concise analyst narrative with sections: Thesis, Risk frame, Key levels, Next steps. Mention uncertainty clearly.",
-            },
-            {
-              role: "user",
-              content: `Forecast context (JSON):\n${JSON.stringify(context)}\n\nWrite a practical summary in under 180 words.`,
-            },
-          ],
-          params: {
-            temperature: 0.2,
-            maxTokens: 360,
-            webSearch: false,
-            stream: false,
-            background: false,
-          },
-        }),
+        body: JSON.stringify({ ...context.apiInput, regenerate: Boolean(regenerate) }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(String(payload?.error || payload?.message || "Unable to generate AI forecast summary right now.").trim());
+        const message = String(payload?.message || payload?.detail || payload?.error || "AI analysis is unavailable right now.").trim();
+        throw new Error(message);
       }
       const nextSummary = {
         requestId: targetId,
         loading: false,
-        text: String(payload?.text || "").trim() || "No summary returned.",
-        provider: normalizeModelCouncilProviderId(payload?.provider || provider),
-        model: normalizeAiModelId(payload?.model || model) || model,
-        latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : Date.now() - startedAt,
-        usage: payload?.usage && typeof payload.usage === "object" ? payload.usage : {},
-        responseId: String(payload?.responseId || "").trim(),
-        shareUrl: "",
-        feedback: "",
+        text: String(payload?.markdown || "").trim(),
+        sections: payload?.sections && typeof payload.sections === "object" ? payload.sections : {},
+        context: payload?.context && typeof payload.context === "object" ? payload.context : null,
+        provider: String(payload?.provider || "openai").trim(),
+        model: String(payload?.model || "gpt-5.6-luna").trim(),
+        cached: Boolean(payload?.cached),
+        latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
         error: "",
         requestToken,
       };
-      if (String(state.tickerContext.forecastAiSummary?.requestToken || "") !== requestToken) {
-        return nextSummary;
-      }
+      if (String(state.tickerContext.forecastAiSummary?.requestToken || "") !== requestToken) return nextSummary;
       state.tickerContext.forecastAiSummary = nextSummary;
-      if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
-        renderForecastDetails(state.tickerContext.forecastDoc);
-      }
-      syncForecastAiSummaryToMyRequest({ requestId: targetId, summary: nextSummary }).catch(() => {});
+      renderForecastDetails(doc);
+      if (notify) showToast(nextSummary.cached ? "Cached AI analysis loaded." : "AI forecast analysis ready.");
       return nextSummary;
     } catch (error) {
-      const message = String(error?.message || "Unable to generate AI forecast summary right now.").trim();
+      const message = String(error?.message || "AI analysis is unavailable right now. The forecast remains usable.").trim();
       if (String(state.tickerContext.forecastAiSummary?.requestToken || "") === requestToken) {
         state.tickerContext.forecastAiSummary = {
           requestId: targetId,
           loading: false,
           text: "",
-          provider,
-          model,
+          provider: "openai",
+          model: "gpt-5.6-luna",
+          cached: false,
           latencyMs: null,
-          usage: {},
-          responseId: "",
-          shareUrl: "",
-          feedback: "",
           error: message,
           requestToken,
         };
-        if (state.tickerContext.forecastDoc && String(state.tickerContext.forecastDoc.id || "") === targetId) {
-          renderForecastDetails(state.tickerContext.forecastDoc);
-        }
+        renderForecastDetails(doc);
       }
       if (notify) showToast(message, "warn");
       return null;
@@ -23210,71 +22741,45 @@
 
   const renderForecastAiSummaryMarkup = (forecastDoc) => {
     const forecastId = String(forecastDoc?.id || state.tickerContext.forecastId || "").trim();
-    const requestDocId = forecastId ? `forecast__${forecastId}` : "";
+    const context = buildForecastWorkspaceContext(forecastDoc || {});
     const summary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
       ? state.tickerContext.forecastAiSummary
       : null;
     const isCurrent = summary && String(summary.requestId || "").trim() === forecastId;
-    const latencyMs = Number(isCurrent ? summary?.latencyMs : NaN);
-    const responseId = String(isCurrent ? summary?.responseId || "" : "").trim();
-    const shareUrl = String(isCurrent ? summary?.shareUrl || "" : "").trim();
-    const feedback = String(isCurrent ? summary?.feedback || "" : "").trim().toLowerCase();
-    const loading = Boolean(isCurrent && summary?.loading);
-    const error = String(isCurrent ? summary?.error || "" : "").trim();
-    const answer = String(isCurrent ? summary?.text || "" : "").trim();
-    const disabled = !forecastId;
-    const providerId = normalizeModelCouncilProviderId(
-      isCurrent ? summary?.provider : state.tickerContext.tickerQueryProvider || "openai"
-    ) || "openai";
-    const modelId =
-      normalizeAiModelId(isCurrent ? summary?.model : state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
-    const modelMeta = getModelMeta(modelId);
-    const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || providerId || "AI").trim();
-    const modelLabel = String(modelMeta?.label || modelId).trim();
-    const statusLine = loading
-      ? "Generating Forecast Review summary..."
-      : error
-        ? error
-        : answer
-          ? `Summary ready${Number.isFinite(latencyMs) && latencyMs >= 0 ? ` · ${Math.round(latencyMs)}ms` : ""}`
-          : "Run a forecast to generate an AI narrative.";
+    const loading = Boolean(isCurrent && summary.loading);
+    const error = String(isCurrent ? summary.error || "" : "").trim();
+    const answer = String(isCurrent ? summary.text || "" : "").trim();
+    const model = String(isCurrent ? summary.model || "gpt-5.6-luna" : "gpt-5.6-luna").trim();
+    const latencyMs = Number(isCurrent ? summary.latencyMs : NaN);
+    const buttonLabel = answer ? "Regenerate Analysis" : "Generate AI Analysis";
     return `
-      <div class="results-panel forecast-ai-summary-panel">
-        <h3>AI summary</h3>
-        <div class="small muted">${escapeHtml(statusLine)}</div>
-        <div class="small muted" style="margin-top:4px;">Model used: ${escapeHtml(`${providerLabel} · ${modelLabel} (${modelId})`)}</div>
-        <div class="panel-output small" style="margin-top:8px;">
+      <section class="results-panel forecast-ai-summary-panel" aria-labelledby="forecast-ai-heading">
+        <div class="forecast-section-heading">
+          <div>
+            <div class="eyebrow">Optional interpretation</div>
+            <h3 id="forecast-ai-heading">AI Forecast Analysis</h3>
+          </div>
+          <span class="small muted">Powered by ${escapeHtml(model === "gpt-5.6-luna" ? "GPT-5.6 Luna" : model)}</span>
+        </div>
+        <div class="panel-output small forecast-ai-output" aria-live="polite">
           ${
             loading
-              ? skeletonHtml(2)
+              ? `<div class="forecast-ai-loading">${skeletonHtml(2)}<strong>Analyzing forecast...</strong></div>`
               : error
-                ? `<div class="small muted">${escapeHtml(error)}</div>`
+                ? `<div class="alert warning"><strong>AI analysis unavailable.</strong> ${escapeHtml(error)} The forecast, scenarios, and indicators above remain available.</div>`
                 : answer
-                  ? `<div class="markdown-output">${renderMarkdown(answer, { fallback: "No AI narrative generated yet." })}</div>`
-                  : `<div class="small muted">No AI narrative generated yet.</div>`
+                  ? `<div class="markdown-output">${renderMarkdown(answer, { fallback: "No AI analysis returned." })}</div>`
+                  : `<div class="forecast-ai-empty">Generate an AI interpretation of the forecast, indicators, quantiles, and bull/bear scenarios. Nothing is sent until you choose to generate it.</div>`
           }
         </div>
-        <div class="task-chip-row" style="margin-top:10px;">
-          <button class="task-chip${feedback === "like" ? " active" : ""}" type="button" data-action="forecast-ai-like" data-forecast-id="${escapeHtml(
-            forecastId
-          )}" ${disabled ? "disabled" : ""}>Like</button>
-          <button class="task-chip${feedback === "dislike" ? " active" : ""}" type="button" data-action="forecast-ai-dislike" data-forecast-id="${escapeHtml(
-            forecastId
-          )}" ${disabled ? "disabled" : ""}>Dislike</button>
-          <button class="task-chip" type="button" data-action="forecast-ai-share" data-forecast-id="${escapeHtml(
-            forecastId
-          )}" data-response-id="${escapeHtml(responseId)}" ${disabled || (!answer && !shareUrl) ? "disabled" : ""}>${icon("share-ios")}<span>Share link</span></button>
+        <div class="forecast-ai-actions">
+          <button class="cta primary" type="button" data-action="forecast-ai-generate" data-regenerate="${answer ? "true" : "false"}" ${
+            loading || !forecastId || !context.valid ? "disabled" : ""
+          }>${loading ? "Analyzing forecast..." : buttonLabel}</button>
+          ${answer && isCurrent ? `<span class="small muted">${summary.cached ? "Cached for this forecast version" : "Generated now"}${Number.isFinite(latencyMs) ? ` · ${Math.round(latencyMs)}ms` : ""}</span>` : ""}
         </div>
-        ${renderOutputPublishControlsMarkup({ requestId: requestDocId, requestType: "forecast" })}
-        ${
-          shareUrl
-            ? `<div class="small muted" style="margin-top:8px;">Shared: <a href="${escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
-                shareUrl
-              )}</a></div>`
-            : ""
-        }
-        <p class="small muted solve-now-disclaimer">${escapeHtml(MODEL_COUNCIL_OUTPUT_DISCLAIMER)}</p>
-      </div>
+        ${!context.valid ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(context.error || "Complete forecast data is required.")}</div>` : ""}
+      </section>
     `;
   };
 
@@ -23284,6 +22789,8 @@
     const quantKeys = extractQuantileKeys(rows);
     if (!rows.length) {
       setOutputReady(ui.forecastOutput);
+      if (ui.forecastScenarioHost) ui.forecastScenarioHost.innerHTML = "";
+      if (ui.forecastAiHost) ui.forecastAiHost.innerHTML = renderForecastAiSummaryMarkup(forecastDoc);
       const source = String(forecastDoc.chartSeriesSource || "").trim();
       const message =
         source === "missing"
@@ -23293,8 +22800,8 @@
             : "No forecast rows are available for this run.";
       ui.forecastOutput.innerHTML = `
         <div class="small muted">${escapeHtml(message)}</div>
-        ${renderForecastAiSummaryMarkup(forecastDoc)}
       `;
+      if (ui.forecastAiHost) ui.forecastAiHost.innerHTML = renderForecastAiSummaryMarkup(forecastDoc);
       return;
     }
 
@@ -23313,6 +22820,7 @@
     const quantileLabel = describeForecastBands(quantKeys);
     const metrics = forecastDoc.metrics && typeof forecastDoc.metrics === "object" ? forecastDoc.metrics : {};
     const interval = String(forecastDoc.interval || state.tickerContext.interval || "1d");
+    const workspace = buildForecastWorkspaceContext(forecastDoc);
 
     const formatFractionPercent = (value, digits = 1) => {
       const num = typeof value === "number" ? value : Number(value);
@@ -23428,19 +22936,104 @@
 
     const tradeRationale = String(forecastDoc.tradeRationale || "").trim();
     const serviceMessage = String(forecastDoc.serviceMessage || "").trim();
+    const snapshotMarkup = workspace.valid
+      ? `
+        <section class="forecast-workspace-block" aria-labelledby="market-snapshot-heading">
+          <div class="forecast-section-heading">
+            <div><div class="eyebrow">Forecast overview</div><h3 id="market-snapshot-heading">Market Snapshot</h3></div>
+            <span class="small muted">Market data: ${escapeHtml(workspace.marketDataTimestamp ? formatIsoDate(workspace.marketDataTimestamp) : "timestamp unavailable")}</span>
+          </div>
+          <div class="forecast-snapshot-grid">
+            ${[
+              ["Current Price", formatUsd(workspace.currentPrice)],
+              ["P10", formatUsd(workspace.quantiles.P10.final)],
+              ["P50", formatUsd(workspace.quantiles.P50.final)],
+              ["P90", formatUsd(workspace.quantiles.P90.final)],
+              ["Median Change", formatPercent(workspace.scenarios.base.percentChange, { signed: true })],
+              ["Forecast Horizon", `${workspace.horizon} ${workspace.interval === "1h" ? "hours" : "trading days"}`],
+            ]
+              .map(([label, value]) => `<div class="forecast-snapshot-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
+              .join("")}
+          </div>
+          <div class="forecast-date-line small muted">
+            <span><strong>Ticker:</strong> ${escapeHtml(workspace.ticker)}</span>
+            <span><strong>Forecast start:</strong> ${escapeHtml(formatIsoDate(workspace.startDate))}</span>
+            <span><strong>Forecast end:</strong> ${escapeHtml(formatIsoDate(workspace.endDate))}</span>
+          </div>
+        </section>`
+      : `<div class="alert warning">${escapeHtml(workspace.error || "Complete forecast context is unavailable.")}</div>`;
+    const quantileStatisticsMarkup = workspace.valid
+      ? `
+        <section class="forecast-workspace-block" aria-labelledby="quantile-statistics-heading">
+          <div class="forecast-section-heading"><div><div class="eyebrow">Distribution</div><h3 id="quantile-statistics-heading">Quantile Statistics</h3></div></div>
+          <div class="table-wrap">
+            <table class="data-table forecast-statistics-table">
+              <thead><tr><th>Quantile</th><th>Minimum</th><th>Maximum</th><th>Average</th><th>Horizon target</th><th>Unusual values</th></tr></thead>
+              <tbody>
+                ${["P10", "P50", "P90"].map((name) => {
+                  const stats = workspace.quantiles[name];
+                  return `<tr><td><strong>${name}</strong></td><td>${formatUsd(stats.minimum)}</td><td>${formatUsd(stats.maximum)}</td><td>${formatUsd(stats.average)}</td><td>${formatUsd(stats.final)}</td><td>${stats.unusual.length}</td></tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          </div>
+          <p class="small muted">Unusual values use the quantile series mean ± 1.96 population standard deviations as a statistical anomaly band.</p>
+        </section>`
+      : "";
+    const scenarioMarkup = workspace.valid
+      ? `
+        <section class="forecast-workspace-block" aria-labelledby="forecast-scenarios-heading">
+          <div class="forecast-section-heading">
+            <div><div class="eyebrow">End-of-horizon outcomes</div><h3 id="forecast-scenarios-heading">Forecast Scenarios</h3></div>
+            <span class="small muted">Targets for ${escapeHtml(formatIsoDate(workspace.endDate))}</span>
+          </div>
+          <div class="forecast-scenario-grid">
+            ${Object.entries(workspace.scenarios).map(([key, scenario]) => `
+              <article class="forecast-scenario-card ${escapeHtml(key)}">
+                <span class="scenario-label">${escapeHtml(scenario.label)} Case · ${escapeHtml(scenario.quantile)}</span>
+                <strong>${formatUsd(scenario.target)}</strong>
+                <span class="scenario-change ${scenario.percentChange > 0 ? "positive" : scenario.percentChange < 0 ? "negative" : "neutral"}">${formatPercent(scenario.percentChange, { signed: true })}</span>
+                <small>from current ${formatUsd(workspace.currentPrice)}</small>
+              </article>`).join("")}
+          </div>
+          <div class="forecast-uncertainty-card">
+            <strong>P10–P90 uncertainty: ${formatUsd(workspace.uncertainty.finalRange)}</strong>
+            <span>${formatPercent(workspace.uncertainty.finalRangePercentOfCurrent)} of current price · ${escapeHtml(workspace.uncertainty.direction)}</span>
+            <small>Range changed ${formatPercent(workspace.uncertainty.changePercent, { signed: true })} from the start of the forecast horizon.</small>
+          </div>
+          <p class="small muted">Formula: ((horizon target − latest actual price) / latest actual price) × 100. Signs are never changed to fit the scenario label.</p>
+        </section>`
+      : "";
+    const technicalAgreementMarkup = workspace.valid
+      ? `
+        <section class="forecast-workspace-block forecast-confirmation-block" aria-labelledby="technical-confirmation-heading">
+          <div class="forecast-section-heading">
+            <div><div class="eyebrow">Technical confirmation</div><h3 id="technical-confirmation-heading">Indicator vs Forecast Agreement</h3></div>
+            <span class="status-pill ${escapeHtml(workspace.indicatorAgreement.status)}">${escapeHtml(titleCaseLabel(workspace.indicatorAgreement.status))}</span>
+          </div>
+          <p class="small">${escapeHtml(workspace.indicatorAgreement.explanation)}</p>
+          <p class="small muted">Forecast direction: ${escapeHtml(titleCaseLabel(workspace.indicatorAgreement.forecastDirection))} · Indicator direction: ${escapeHtml(titleCaseLabel(workspace.indicatorAgreement.indicatorDirection))}</p>
+          ${Object.keys(workspace.indicatorData || {}).length ? "" : `<a class="cta secondary small" href="#technical-indicators">Calculate technical indicators</a>`}
+        </section>`
+      : "";
 
     setOutputReady(ui.forecastOutput);
     ui.forecastOutput.innerHTML = `
       <div class="output-stack quantura-horizon-widget">
-        ${summary}
+        ${snapshotMarkup}
+        <details class="learn-more forecast-run-details"><summary>Run details</summary><div class="forecast-run-meta">${summary}</div></details>
         ${serviceMessage ? `<div class="small muted">${escapeHtml(serviceMessage)}</div>` : ""}
-        <div class="forecast-chart-shell">
+        <section class="forecast-workspace-block" aria-labelledby="forecast-chart-heading">
+          <div class="forecast-section-heading"><div><div class="eyebrow">Prophet forecast</div><h3 id="forecast-chart-heading">Forecast Chart</h3></div></div>
+          <div class="forecast-chart-shell">
           <div class="forecast-output-plot" data-forecast-detail-chart aria-label="Interactive forecast chart"></div>
-        </div>
+          </div>
+        </section>
+        ${quantileStatisticsMarkup}
         ${metricsStrip}
         ${
           tradeRationale
-            ? `<div class="horizon-rationale"><strong>AI Trade Rationale:</strong> ${escapeHtml(tradeRationale)}</div>`
+            ? `<div class="horizon-rationale"><strong>Model rationale:</strong> ${escapeHtml(tradeRationale)}</div>`
             : ""
         }
         ${metricsTable}
@@ -23482,14 +23075,17 @@
           </table>
         </div>
         <details class="learn-more">
-          <summary>Learn more</summary>
+          <summary>Saved-run storage</summary>
           <p class="small">
             Forecast rows are saved with the source run so saved requests can be reloaded across devices. Client cache is still used when available for faster chart rendering.
           </p>
         </details>
-        ${renderForecastAiSummaryMarkup(forecastDoc)}
       </div>
     `;
+    if (ui.forecastScenarioHost) {
+      ui.forecastScenarioHost.innerHTML = `${technicalAgreementMarkup}${scenarioMarkup}`;
+    }
+    if (ui.forecastAiHost) ui.forecastAiHost.innerHTML = renderForecastAiSummaryMarkup(forecastDoc);
     renderForecastOutputChart({ ...forecastDoc, historicalRows }).catch((error) => {
       const host = ui.forecastOutput?.querySelector("[data-forecast-detail-chart]");
       if (host) {
@@ -23500,7 +23096,8 @@
 
   const loadTickerHistory = async (functions, ticker, interval) => {
     const start = computeHistoryStart(interval);
-    const rows = await apiFetchTickerHistory({ ticker, interval, start, end: "" });
+    const end = new Date().toISOString().slice(0, 10);
+    const rows = await apiFetchTickerHistory({ ticker, interval, start, end });
     return Array.isArray(rows) ? rows : [];
   };
 
@@ -23596,18 +23193,6 @@
       setTerminalStatus(`Plotted forecast ${forecastId}.`);
     }
     renderForecastDetails(doc);
-    const currentSummary = state.tickerContext.forecastAiSummary && typeof state.tickerContext.forecastAiSummary === "object"
-      ? state.tickerContext.forecastAiSummary
-      : null;
-    const shouldRequestSummary =
-      Array.isArray(doc.forecastRows) &&
-      doc.forecastRows.length > 0 &&
-      (!currentSummary ||
-        String(currentSummary.requestId || "").trim() !== String(forecastId || "").trim() ||
-        (!currentSummary.loading && !String(currentSummary.text || "").trim() && !String(currentSummary.error || "").trim()));
-    if (shouldRequestSummary) {
-      runForecastAutoSummary({ forecastDoc: doc, requestId: forecastId, notify: false }).catch(() => {});
-    }
     return doc;
   };
 
@@ -23616,7 +23201,7 @@
     if (isSportsAutopilotMyRequest(request)) return "sports-autopilot";
     if (isAutopilotMyRequest(request)) return "autopilot";
     if (normalized === "screener") return "screener";
-    if (normalized === "indicator") return "indicators";
+    if (normalized === "indicator") return "forecast";
     if (normalized === "modelCouncil") return "ticker-query";
     return "forecast";
   };
@@ -24789,6 +24374,7 @@
       normalizeTopNavigation();
       normalizeFooterSocialLinks();
       normalizeFooterContactInfo();
+      removeWebsiteFootnotes();
       initPricingBillingToggle();
       bindSolveNowModalTriggers();
       removeHeaderSolveNowCta();
@@ -25566,42 +25152,10 @@
               return;
             }
 
-            if (action === "my-request-unpublish") {
-              await updateMyRequest(
-                requestId,
-                {},
-                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/unpublish` }
-              );
-              await fetchMyRequestsList({ force: true });
-              renderMyRequestsPanels();
-              showToast("Request unpublished from Explore.");
-              logEvent("my_request_unpublished", {
-                request_id: requestId,
-                type: normalizeMyRequestType(request?.type || ""),
-              });
-              return;
-            }
-
-            if (action === "my-request-publish") {
-              await updateMyRequest(
-                requestId,
-                {},
-                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/publish` }
-              );
-              await fetchMyRequestsList({ force: true });
-              renderMyRequestsPanels();
-              showToast("Request published to Explore.");
-              logEvent("my_request_published", {
-                request_id: requestId,
-                type: normalizeMyRequestType(request?.type || ""),
-              });
-              return;
-            }
-
             if (action === "my-request-delete") {
               const confirmed = await openConfirmModal({
                 title: "Delete request?",
-                message: "This removes the request from your list and unpublishes it from Explore.",
+                message: "This permanently removes the request from your private list.",
                 confirmLabel: "Delete",
                 danger: true,
               });
@@ -25618,75 +25172,6 @@
             showToast(error.message || "Unable to update request.", "warn");
           } finally {
             button.disabled = previousDisabled;
-          }
-        });
-
-        document.addEventListener("click", async (event) => {
-          const publishBtn = event.target.closest('[data-action="output-publish"], [data-action="output-unpublish"]');
-          if (!publishBtn) return;
-          event.preventDefault();
-          const requestId = String(publishBtn.dataset.requestId || "").trim();
-          const requestType = normalizeMyRequestType(publishBtn.dataset.requestType || "");
-          if (!requestId) return;
-
-          try {
-            await ensureSessionUser({
-              reason: "output_publish_requires_session",
-              message: "Sign in to publish outputs to Explore.",
-            });
-          } catch (error) {
-            showToast(error?.message || "Unable to start guest session.", "warn");
-            return;
-          }
-
-          publishBtn.disabled = true;
-          try {
-            const nextPublished = publishBtn.dataset.action === "output-publish";
-            const body = await updateMyRequest(
-              requestId,
-              {},
-              {
-                method: "POST",
-                path: `/api/my-requests/${encodeURIComponent(requestId)}/${nextPublished ? "publish" : "unpublish"}`,
-              }
-            );
-            const refreshedRequest =
-              body?.request && typeof body.request === "object"
-                ? body.request
-                : getMyRequestById(requestId);
-            if (refreshedRequest && typeof refreshedRequest === "object") {
-              upsertMyRequestInState(refreshedRequest);
-            }
-            const host = publishBtn.closest("[data-output-publish-controls]");
-            if (host) {
-              host.outerHTML = renderOutputPublishControlsMarkup({ requestId, requestType });
-            }
-            if (requestType === "forecast" && state.tickerContext.forecastDoc) {
-              renderForecastDetails(state.tickerContext.forecastDoc);
-            } else if (requestType === "screener" && ui.screenerOutput) {
-              const runId = String(requestId.split("__").slice(1).join("__") || "").trim();
-              if (runId) {
-                fetchAndRenderScreenerRun(runId).catch(() => {});
-              }
-            } else if (requestType === "modelCouncil") {
-              renderTickerQueryResult({
-                ...(state.tickerContext.tickerQueryLastResponse || {}),
-                requestDocId: requestId,
-              });
-            } else if (requestType === "indicator" && ui.technicalsOutput) {
-              const indicatorHost = ui.technicalsOutput.querySelector("[data-output-publish-controls]");
-              if (indicatorHost) {
-                indicatorHost.outerHTML = renderOutputPublishControlsMarkup({
-                  requestId,
-                  requestType: "indicator",
-                });
-              }
-            }
-            showToast(nextPublished ? "Published to Explore." : "Unpublished from Explore.");
-          } catch (error) {
-            showToast(error?.message || "Unable to update publish status.", "warn");
-          } finally {
-            publishBtn.disabled = false;
           }
         });
 
@@ -25945,7 +25430,7 @@
             const current = state.aiAgents.find((agent) => String(agent.id || "") === agentId);
             const nextName = await openPromptModal({
               title: "Rename AI Agent",
-              message: "Update the custom name shown in Explore.",
+              message: "Update the custom name shown in your private workspace.",
               label: "Agent name",
               placeholder: "Quantura Horizon",
               initialValue: String(current?.name || "").trim(),
@@ -26069,39 +25554,6 @@
               showToast(error.message || "Unable to open subscription checkout.", "warn");
             } finally {
               agentSubscribe.disabled = false;
-            }
-            return;
-          }
-
-          const toggleScreenerPublic = event.target.closest('[data-action="toggle-screener-public"]');
-          if (toggleScreenerPublic) {
-            event.preventDefault();
-            if (!hasFullAccount()) {
-              showToast("Sign in to update screener visibility.", "warn");
-              return;
-            }
-            const runId = String(toggleScreenerPublic.dataset.runId || "").trim();
-            if (!runId) return;
-            const requestId = buildSourceRequestId("screener", runId);
-            const request = getMyRequestById(requestId) || (await fetchMyRequestById(requestId).catch(() => null));
-            const currentlyPublic = Boolean(request?.published);
-            const nextValue = !currentlyPublic;
-            toggleScreenerPublic.disabled = true;
-            try {
-              await updateMyRequest(
-                requestId,
-                {},
-                { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestId)}/${nextValue ? "publish" : "unpublish"}` }
-              );
-              await fetchAndRenderScreenerRun(runId).catch(async () => {
-                const fresh = await db.collection("screener_runs").doc(runId).get();
-                if (fresh.exists) renderScreenerRunOutput({ id: fresh.id, ...(fresh.data() || {}) });
-              });
-              showToast(nextValue ? "Screener is now public." : "Screener is now private.");
-            } catch (error) {
-              showToast(error.message || "Unable to update screener visibility.", "warn");
-            } finally {
-              toggleScreenerPublic.disabled = false;
             }
             return;
           }
@@ -26464,8 +25916,6 @@
 		      startUserForecasts(db, next);
           startScreenerRuns(db, next);
 		      startWorkspaceTasks(db, next);
-		      startWatchlist(db, next);
-		      startPriceAlerts(db, next);
           startAIAgents(db, next);
           startVolatilityMonitor(db, functions, next);
           seedDefaultAIAgents(db, next).catch(() => {});
@@ -26651,124 +26101,6 @@
 	      }
 	    });
 
-	    ui.watchlistForm?.addEventListener("submit", async (event) => {
-	      event.preventDefault();
-	      if (!hasFullAccount()) {
-	        showToast("Sign in to manage your watchlist.", "warn");
-	        return;
-	      }
-	      const workspaceId = state.activeWorkspaceId || state.user.uid;
-	      if (!canWriteWorkspace(workspaceId)) {
-	        showToast("Editor access required to update this workspace watchlist.", "warn");
-	        return;
-	      }
-	      const formData = new FormData(ui.watchlistForm);
-	      const ticker = normalizeTicker(formData.get("ticker"));
-	      const notes = String(formData.get("notes") || "").trim().slice(0, 2400);
-	      if (!ticker) {
-	        showToast("Enter a ticker.", "warn");
-	        return;
-	      }
-	      try {
-	        await db
-	          .collection("users")
-	          .doc(workspaceId)
-	          .collection("watchlist")
-	          .doc(ticker)
-	          .set(
-	            {
-	              ticker,
-	              notes,
-	              addedBy: { uid: state.user.uid, email: state.user.email || "" },
-	              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-	              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-	              meta: buildMeta(),
-	            },
-	            { merge: true }
-	          );
-          await ensureVolatilityAlertsForWatchlist({ db, workspaceId, items: [{ ticker }] });
-	        if (ui.watchlistNotes) ui.watchlistNotes.value = "";
-          const defaultVol = Math.round(getConfiguredVolatilityThreshold() * 100);
-	        showToast(`${ticker} added to watchlist. Default ±${defaultVol}% volatility alert enabled.`);
-	        logEvent("watchlist_added", { ticker, workspace_id: workspaceId });
-	      } catch (error) {
-	        showToast(error.message || "Unable to update watchlist.", "warn");
-	      }
-	    });
-
-	    ui.alertForm?.addEventListener("submit", async (event) => {
-	      event.preventDefault();
-	      if (!hasFullAccount()) {
-	        showToast("Sign in to create alerts.", "warn");
-	        return;
-	      }
-	      const workspaceId = state.activeWorkspaceId || state.user.uid;
-	      if (!canWriteWorkspace(workspaceId)) {
-	        showToast("Editor access required to create alerts in this workspace.", "warn");
-	        return;
-	      }
-	      const formData = new FormData(ui.alertForm);
-	      const ticker = normalizeTicker(formData.get("ticker"));
-	      const condition = String(formData.get("condition") || "above").trim().toLowerCase();
-	      const targetPrice = Number(formData.get("target"));
-	      const notes = String(formData.get("notes") || "").trim().slice(0, 2000);
-	      if (!ticker) {
-	        showToast("Enter a ticker.", "warn");
-	        return;
-	      }
-	      if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
-	        showToast("Enter a valid target price.", "warn");
-	        return;
-	      }
-	      try {
-	        await db
-	          .collection("users")
-	          .doc(workspaceId)
-	          .collection("price_alerts")
-	          .add({
-	            ticker,
-	            condition: condition === "below" ? "below" : "above",
-	            targetPrice,
-	            notes,
-	            active: true,
-	            status: "active",
-	            createdByUid: state.user.uid,
-	            createdByEmail: state.user.email || "",
-	            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-	            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-	            meta: buildMeta(),
-	          });
-	        if (ui.alertNotes) ui.alertNotes.value = "";
-	        showToast("Alert created.");
-	        logEvent("alert_created", { ticker, condition, workspace_id: workspaceId });
-	      } catch (error) {
-	        showToast(error.message || "Unable to create alert.", "warn");
-	      }
-	    });
-
-	    ui.alertsCheck?.addEventListener("click", async () => {
-	      if (!hasFullAccount()) {
-	        showToast("Sign in first.", "warn");
-	        return;
-	      }
-	      if (ui.alertsStatus) ui.alertsStatus.textContent = "Checking alerts...";
-	      try {
-	        const workspaceId = state.activeWorkspaceId || state.user.uid;
-          const vol = await runVolatilityAlertsCheck({ db, functions, workspaceId, sendPush: true });
-	        const check = functions.httpsCallable("check_price_alerts");
-	        const result = await check({ workspaceId, meta: buildMeta() });
-	        const data = result.data || {};
-	        const triggered = Number(data.triggered || 0) + Number(vol.triggered || 0);
-	        const checked = Number(data.checked || 0) + Number(vol.checked || 0);
-	        if (ui.alertsStatus) ui.alertsStatus.textContent = triggered ? `${triggered} alert(s) triggered (checked ${checked}).` : `No alerts triggered (checked ${checked}).`;
-	        showToast(triggered ? `${triggered} alert(s) triggered.` : "No alerts triggered.");
-	        logEvent("alert_scan", { checked, triggered, workspace_id: workspaceId });
-	      } catch (error) {
-	        if (ui.alertsStatus) ui.alertsStatus.textContent = error.message || "Unable to check alerts.";
-	        showToast(error.message || "Unable to check alerts.", "warn");
-	      }
-	    });
-
 	    document.addEventListener("click", async (event) => {
 	      const edit = event.target.closest('[data-action="task-edit"]');
 	      if (edit) {
@@ -26843,88 +26175,6 @@
 	        showToast(error.message || "Unable to delete task.", "warn");
 	      } finally {
 	        del.disabled = false;
-	      }
-	    });
-
-	    document.addEventListener("click", async (event) => {
-	      const remove = event.target.closest('[data-action="watchlist-remove"]');
-	      if (remove) {
-	        if (!hasFullAccount()) return;
-	        const workspaceId = state.activeWorkspaceId || state.user.uid;
-	        if (!canWriteWorkspace(workspaceId)) {
-	          showToast("Editor access required to update this workspace.", "warn");
-	          return;
-	        }
-	        const ticker = normalizeTicker(remove.dataset.ticker || "");
-	        if (!ticker) return;
-	        remove.disabled = true;
-	        try {
-	          await db.collection("users").doc(workspaceId).collection("watchlist").doc(ticker).delete();
-            await db.collection("users").doc(workspaceId).collection("price_alerts").doc(`volatility_${ticker}`).delete().catch(() => {});
-	          showToast(`${ticker} removed.`);
-	          logEvent("watchlist_removed", { ticker, workspace_id: workspaceId });
-	        } catch (error) {
-	          showToast(error.message || "Unable to remove ticker.", "warn");
-	        } finally {
-	          remove.disabled = false;
-	        }
-	        return;
-	      }
-
-	      const toggle = event.target.closest('[data-action="alert-toggle"]');
-	      if (toggle) {
-	        if (!hasFullAccount()) return;
-	        const workspaceId = state.activeWorkspaceId || state.user.uid;
-	        if (!canWriteWorkspace(workspaceId)) {
-	          showToast("Editor access required to update alerts.", "warn");
-	          return;
-	        }
-	        const alertId = toggle.dataset.alertId || "";
-	        if (!alertId) return;
-	        const active = toggle.dataset.active === "1";
-	        toggle.disabled = true;
-	        try {
-	          await db
-	            .collection("users")
-	            .doc(workspaceId)
-	            .collection("price_alerts")
-	            .doc(alertId)
-	            .set(
-	              {
-	                active: !active,
-	                status: !active ? "active" : "disabled",
-	                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-	              },
-	              { merge: true }
-	            );
-	          logEvent("alert_toggled", { active: !active, workspace_id: workspaceId });
-	        } catch (error) {
-	          showToast(error.message || "Unable to update alert.", "warn");
-	        } finally {
-	          toggle.disabled = false;
-	        }
-	        return;
-	      }
-
-	      const delAlert = event.target.closest('[data-action="alert-delete"]');
-	      if (!delAlert) return;
-	      if (!hasFullAccount()) return;
-	      const workspaceId = state.activeWorkspaceId || state.user.uid;
-	      if (!canWriteWorkspace(workspaceId)) {
-	        showToast("Editor access required to delete alerts.", "warn");
-	        return;
-	      }
-	      const alertId = delAlert.dataset.alertId || "";
-	      if (!alertId) return;
-	      delAlert.disabled = true;
-	      try {
-	        await db.collection("users").doc(workspaceId).collection("price_alerts").doc(alertId).delete();
-	        showToast("Alert deleted.");
-	        logEvent("alert_deleted", { workspace_id: workspaceId });
-	      } catch (error) {
-	        showToast(error.message || "Unable to delete alert.", "warn");
-	      } finally {
-	        delAlert.disabled = false;
 	      }
 	    });
 
@@ -27793,32 +27043,29 @@
 
 			      try {
 			        setOutputLoading(ui.forecastOutput, "Generating forecast...");
-              state.tickerContext.forecastAiSummary = {
-                requestId: "",
-                loading: false,
-                text: "",
-                provider: "",
-                model: "",
-                latencyMs: null,
-                usage: {},
-                responseId: "",
-                shareUrl: "",
-                feedback: "",
-                error: "",
-              };
+              state.tickerContext.forecastAiSummary = null;
 			        const data = await apiRunForecast(payload);
 			        const requestId = String(data.requestId || "").trim();
 			        if (!requestId) {
 			          throw new Error("Forecast run did not return a request ID.");
 			        }
               const responseRows = normalizeForecastSeriesRows(data.forecastSeries || data.forecastRows || []);
-              const historyRows =
+              let historyLoadMessage = "";
+              let historyRows =
                 Array.isArray(state.tickerContext.rows) &&
                 state.tickerContext.rows.length &&
                 normalizeTicker(state.tickerContext.ticker || "") === ticker &&
                 String(state.tickerContext.interval || "1d") === String(payload.interval || "1d")
                   ? state.tickerContext.rows
-                  : await loadTickerHistory(functions, ticker, String(payload.interval || "1d"));
+                  : [];
+              if (!historyRows.length) {
+                try {
+                  historyRows = await loadTickerHistory(functions, ticker, String(payload.interval || "1d"));
+                } catch (historyError) {
+                  historyRows = [];
+                  historyLoadMessage = "Historical price overlay is unavailable for this deployment; forecast quantiles and scenario math remain available.";
+                }
+              }
               const alignedRows = alignForecastRowsWithHistory({
                 forecastRows: responseRows,
                 historyRows,
@@ -27854,7 +27101,7 @@
                 service: String(payload.service || "prophet"),
                 engine: String(data.engine || ""),
                 status: String(data.status || "completed"),
-                serviceMessage: String(data.serviceMessage || "").trim(),
+                serviceMessage: [String(data.serviceMessage || "").trim(), historyLoadMessage].filter(Boolean).join(" "),
                 metrics:
                   data.metrics && typeof data.metrics === "object"
                     ? data.metrics
@@ -27918,10 +27165,8 @@
                   state.tickerContext.rows = Array.isArray(historyRows) ? historyRows : [];
                   state.tickerContext.interval = String(payload.interval || "1d");
 			            renderForecastDetails(forecastDocLocal);
-			          }
-                runForecastAutoSummary({ forecastDoc: forecastDocLocal, requestId, notify: false }).catch(() => {});
-				        } catch (plotError) {
-                runForecastAutoSummary({ forecastDoc: forecastDocLocal, requestId, notify: false }).catch(() => {});
+			        }
+			        } catch (plotError) {
 			          setOutputReady(ui.forecastOutput);
 			          if (ui.forecastOutput) {
 			            ui.forecastOutput.innerHTML = `
@@ -27974,311 +27219,148 @@
 	          }
 	        });
 
-        if (ui.forecastOutput && ui.forecastOutput.dataset.bound !== "1") {
-          ui.forecastOutput.addEventListener("click", async (event) => {
-            const likeBtn = event.target.closest('[data-action="forecast-ai-like"]');
-            if (likeBtn) {
-              event.preventDefault();
-              const forecastId = String(likeBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
-              if (!forecastId) return;
-              const summary = state.tickerContext.forecastAiSummary || {};
-              state.tickerContext.forecastAiSummary = { ...summary, requestId: forecastId, feedback: "like" };
-              const responseId = String(summary.responseId || "").trim();
-              if (responseId) {
-                await submitModelCouncilFeedback({ responseId, action: "like" });
-              }
-              if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
-              showToast("Feedback saved.");
+        if (ui.forecastAiHost && ui.forecastAiHost.dataset.bound !== "1") {
+          ui.forecastAiHost.addEventListener("click", async (event) => {
+            const button = event.target.closest('[data-action="forecast-ai-generate"]');
+            if (!button) return;
+            event.preventDefault();
+            const forecastDoc = state.tickerContext.forecastDoc;
+            const forecastId = String(forecastDoc?.id || state.tickerContext.forecastId || "").trim();
+            if (!forecastDoc || !forecastId) {
+              showToast("Generate or load a forecast first.", "warn");
               return;
             }
-
-            const dislikeBtn = event.target.closest('[data-action="forecast-ai-dislike"]');
-            if (dislikeBtn) {
-              event.preventDefault();
-              const forecastId = String(dislikeBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
-              if (!forecastId) return;
-              const summary = state.tickerContext.forecastAiSummary || {};
-              state.tickerContext.forecastAiSummary = { ...summary, requestId: forecastId, feedback: "dislike" };
-              const responseId = String(summary.responseId || "").trim();
-              if (responseId) {
-                await submitModelCouncilFeedback({ responseId, action: "dislike" });
-              }
-              if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
-              showToast("Feedback saved.");
-              return;
-            }
-
-            const shareBtn = event.target.closest('[data-action="forecast-ai-share"]');
-            if (shareBtn) {
-              event.preventDefault();
-              const forecastId = String(shareBtn.dataset.forecastId || state.tickerContext.forecastId || "").trim();
-              if (!forecastId) return;
-              shareBtn.disabled = true;
-              try {
-                const summary = state.tickerContext.forecastAiSummary || {};
-                const responseId = String(shareBtn.dataset.responseId || summary.responseId || "").trim();
-                let shareUrl = String(summary.shareUrl || "").trim();
-                if (!shareUrl && responseId) {
-                  try {
-                    shareUrl = await createModelCouncilShareLink(responseId);
-                    await submitModelCouncilFeedback({ responseId, action: "share" });
-                  } catch (error) {
-                    shareUrl = "";
-                  }
-                }
-                if (!shareUrl && hasFullAccount()) {
-                  const requestDocId = `forecast__${forecastId}`;
-                  try {
-                    const body = await updateMyRequest(
-                      requestDocId,
-                      { visibility: "unlisted" },
-                      { method: "POST", path: `/api/my-requests/${encodeURIComponent(requestDocId)}/share` }
-                    );
-                    shareUrl = String(body?.share?.shareUrl || "").trim();
-                  } catch (error) {
-                    shareUrl = "";
-                  }
-                }
-                if (!shareUrl) {
-                  shareUrl = `${window.location.origin}/forecasting?forecastId=${encodeURIComponent(forecastId)}`;
-                }
-                state.tickerContext.forecastAiSummary = {
-                  ...summary,
-                  requestId: forecastId,
-                  shareUrl,
-                  responseId: responseId || String(summary.responseId || "").trim(),
-                };
-                if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
-                await performShare({
-                  url: shareUrl,
-                  title: "Quantura forecast summary",
-                  text: String(summary.text || "Forecast narrative generated by Forecast Review.").slice(0, 220),
-                });
-                showToast("Share link copied.");
-              } catch (error) {
-                showToast(error.message || "Unable to share forecast summary.", "warn");
-              } finally {
-                shareBtn.disabled = false;
-              }
-            }
+            await runForecastAiAnalysis({
+              forecastDoc,
+              requestId: forecastId,
+              regenerate: String(button.dataset.regenerate || "") === "true",
+              notify: true,
+            });
           });
-          ui.forecastOutput.dataset.bound = "1";
+          ui.forecastAiHost.dataset.bound = "1";
         }
 
     ui.technicalsForm?.addEventListener("submit", async (event) => {
-	      event.preventDefault();
-        try {
-          await ensureSessionUser({
-            reason: "indicator_requires_session",
-            message: "Sign in to save indicator runs and publish them to Explore.",
-          });
-        } catch (error) {
-          showToast(error?.message || "Unable to start guest session.", "warn");
-          return;
-        }
-	      const formData = new FormData(ui.technicalsForm);
-	      const indicators = formData.getAll("indicators");
-	      const includeSeries = Boolean(ui.indicatorChart || ui.tickerChart);
-      const selectedProvider =
-        normalizeModelCouncilProviderId(ui.tickerQueryProvider?.value || state.tickerContext.tickerQueryProvider || "openai") || "openai";
-      const selectedModel =
-        normalizeAiModelId(ui.tickerQueryModel?.value || state.tickerContext.tickerQueryModel || "gpt-5-mini") || "gpt-5-mini";
+      event.preventDefault();
+      try {
+        await ensureSessionUser({
+          reason: "indicator_requires_session",
+          message: "Sign in to sync indicator runs across devices.",
+        });
+      } catch (error) {
+        showToast(error?.message || "Unable to start guest session.", "warn");
+        return;
+      }
+      const formData = new FormData(ui.technicalsForm);
+      const indicators = formData.getAll("indicators").map((item) => String(item || "").trim().toUpperCase()).filter(Boolean);
+      if (!indicators.length) {
+        showToast("Select at least one technical indicator.", "warn");
+        return;
+      }
+      const ticker = normalizeTicker(formData.get("ticker") || state.tickerContext.ticker || "");
+      if (!ticker) {
+        showToast("Enter or load a ticker first.", "warn");
+        return;
+      }
+      const interval = String(formData.get("interval") || "1d") === "1h" ? "1h" : "1d";
       const payload = {
-        ticker: formData.get("ticker"),
-        interval: formData.get("interval"),
+        ticker,
+        interval,
         lookback: Number(formData.get("lookback")),
         indicators,
-        includeSeries,
-        maxPoints: formData.get("interval") === "1h" ? 240 : 260,
-        provider: selectedProvider,
-        model: selectedModel,
+        includeSeries: true,
+        maxPoints: interval === "1h" ? 240 : 260,
         meta: buildMeta(),
-	      };
-
-        const rewardApproved = await maybeShowNativeRewardGate({
-          reason: "indicator_llm",
-          title: "Watch a rewarded ad to unlock indicator AI output?",
-          message: "Indicator calculations and AI narrative can require a rewarded video in native apps.",
+      };
+      try {
+        syncTickerInputs(ticker, { source: "technicals_form" });
+        setOutputLoading(ui.technicalsOutput, "Computing technical indicators...");
+        const headers = await buildApiAuthHeaders({ includeJson: true });
+        const response = await fetch("/api/indicators/analyze", {
+          method: "POST",
+          headers,
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
         });
-        if (!rewardApproved) return;
-
-	      try {
-          const activeTicker = normalizeTicker(payload.ticker || state.tickerContext.ticker || "");
-          if (activeTicker) {
-            payload.ticker = activeTicker;
-            syncTickerInputs(activeTicker, { source: "technicals_form" });
-          }
-	        setOutputLoading(ui.technicalsOutput, "Computing indicators...");
-          const headers = await buildApiAuthHeaders({ includeJson: true });
-          const response = await fetch("/api/indicators/analyze", {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload),
-          });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            const detail = String(data?.detail || data?.error || `HTTP ${response.status}`).trim();
-            throw new Error(detail || "indicator_analysis_failed");
-          }
-	        const rows = data.latest || [];
-          const analysis = await buildLocalIndicatorAnalysis({
-            data,
-            payload,
-            functions,
-          });
-          const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
-          const targetPrice = Number(prediction.targetPrice);
-          const lastClose = Number(data?.meta?.lastClose);
-          const upsidePct =
-            Number.isFinite(targetPrice) && Number.isFinite(lastClose) && lastClose > 0
-              ? ((targetPrice - lastClose) / lastClose) * 100
-              : null;
-          const indicatorSourceId = `ind_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-          const indicatorRequestId = buildSourceRequestId("indicator", indicatorSourceId);
-          const indicatorAutoPublish = shouldAutoPublishForType("indicator");
-	        if (ui.technicalsOutput) {
-	          setOutputReady(ui.technicalsOutput);
-		          if (!rows.length) {
-		            ui.technicalsOutput.textContent = "No indicator data returned.";
-		          } else {
-                const providerId = normalizeModelCouncilProviderId(String(analysis.provider || "quantura").trim());
-                const providerLabel = String(MODEL_PROVIDER_LABEL[providerId] || titleCaseLabel(analysis.provider || "quantura")).trim() || "Quantura";
-                const modelId = normalizeAiModelId(analysis.model || "indicator_local_repair") || "indicator_local_repair";
-                const modelLabel = String(getModelMeta(modelId)?.label || modelId).trim() || modelId;
-                const keySignals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 6) : [];
-                const summaryText = String(analysis.summary || "").trim();
-                const narrativeText = String(analysis.text || "").trim();
-		            ui.technicalsOutput.innerHTML = `
-                  <div class="table-wrap">
-		                <table class="data-table">
-	                    <thead><tr><th>Indicator</th><th>Value</th></tr></thead>
-	                    <tbody>
-	                      ${rows
-                          .map((row) => {
-                            const name = escapeHtml(String(row?.name || "").trim());
-                            const value = escapeHtml(String(row?.display ?? row?.value ?? "—").trim() || "—");
-                            return `<tr><td>${name}</td><td>${value}</td></tr>`;
-                          })
-                          .join("")}
-	                    </tbody>
-	                  </table>
-                  </div>
-                  ${
-                    summaryText || narrativeText
-                      ? `<div class="results-panel" style="margin-top: 12px;">
-                          <h3>AI indicator analysis</h3>
-                          <div class="small muted" style="margin-top:4px;">Model used: ${escapeHtml(
-                            `${providerLabel} · ${modelLabel} (${modelId})`
-                          )}</div>
-                          ${summaryText ? `<div class="small markdown-output" style="margin-top:8px;">${renderMarkdown(summaryText, { fallback: "" })}</div>` : ""}
-                          <div class="form-grid" style="margin-top:10px;">
-                            <div class="profile-item"><span class="label">Direction</span><span class="value">${escapeHtml(
-                              String(prediction.direction || "neutral")
-                            )}</span></div>
-                            <div class="profile-item"><span class="label">Target price</span><span class="value">${
-                              Number.isFinite(targetPrice) ? formatUsd(targetPrice, 2) : "—"
-                            }</span></div>
-                            <div class="profile-item"><span class="label">Timeline</span><span class="value">${escapeHtml(
-                              String(prediction.timeline || `${prediction.timelineDays || "—"} trading days`)
-                            )}</span></div>
-                            <div class="profile-item"><span class="label">Confidence</span><span class="value">${escapeHtml(
-                              String(prediction.confidence || "medium")
-                            )}</span></div>
-                            <div class="profile-item"><span class="label">Implied move</span><span class="value">${
-                              Number.isFinite(upsidePct) ? formatPercent(upsidePct, { signed: true, digits: 2 }) : "—"
-                            }</span></div>
-                          </div>
-                          ${
-                            keySignals.length
-                              ? `<ul class="small" style="margin:10px 0 0 16px;">${keySignals
-                                  .map((signal) => `<li>${escapeHtml(String(signal || "").trim())}</li>`)
-                                  .join("")}</ul>`
-                              : ""
-                          }
-                          ${narrativeText ? `<div class="small markdown-output" style="margin-top:10px;">${renderMarkdown(narrativeText, { fallback: "" })}</div>` : ""}
-                          <div class="small muted" data-indicator-publish-placeholder style="margin-top:10px;">Saving indicator run and publishing it to Explore...</div>
-                          <p class="small muted solve-now-disclaimer" style="margin-top:10px;">${escapeHtml(
-                            String(analysis.disclaimer || MODEL_COUNCIL_OUTPUT_DISCLAIMER)
-                          )}</p>
-                        </div>`
-                      : ""
-                  }
-	            `;
-	          }
-	        }
-
-        if (includeSeries && data.series) {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(String(data?.detail || data?.error || ("Indicator request failed (" + response.status + ").")).trim());
+        }
+        const rows = Array.isArray(data.latest) ? data.latest : [];
+        const analysis = data.analysis && typeof data.analysis === "object" ? data.analysis : {};
+        const prediction = analysis.prediction && typeof analysis.prediction === "object" ? analysis.prediction : {};
+        const signals = Array.isArray(analysis.keySignals) ? analysis.keySignals.slice(0, 8) : [];
+        state.tickerContext.indicatorData = {
+          ticker,
+          interval,
+          selectedIndicators: Array.isArray(data.selectedIndicators) ? data.selectedIndicators : indicators,
+          latest: rows,
+          context: data.context && typeof data.context === "object" ? data.context : {},
+          analysis,
+          meta: data.meta && typeof data.meta === "object" ? data.meta : {},
+        };
+        state.tickerContext.forecastAiSummary = null;
+        setOutputReady(ui.technicalsOutput);
+        if (ui.technicalsOutput) {
+          const summaryMarkup = [
+            ["Direction", titleCaseLabel(prediction.direction || "neutral")],
+            ["Confidence", titleCaseLabel(prediction.confidence || "low")],
+            ["As of", data?.meta?.asOf ? formatIsoDate(data.meta.asOf) : "Unavailable"],
+          ].map((entry) => '<div class="forecast-snapshot-item"><span>' + escapeHtml(entry[0]) + '</span><strong>' + escapeHtml(entry[1]) + '</strong></div>').join("");
+          const rowMarkup = rows.map((row) => '<tr><td>' + escapeHtml(String(row?.name || "")) + '</td><td>' + escapeHtml(String(row?.display ?? row?.value ?? "—")) + '</td></tr>').join("");
+          const signalMarkup = signals.length
+            ? '<div class="indicator-signal-list"><strong>Deterministic signal notes</strong><ul>' + signals.map((signal) => '<li>' + escapeHtml(String(signal || "")) + '</li>').join("") + '</ul></div>'
+            : "";
+          ui.technicalsOutput.innerHTML = rows.length
+            ? '<div class="indicator-summary-grid">' + summaryMarkup + '</div>' +
+              '<div class="table-wrap" style="margin-top:12px;"><table class="data-table"><thead><tr><th>Indicator</th><th>Latest value</th></tr></thead><tbody>' + rowMarkup + '</tbody></table></div>' +
+              signalMarkup +
+              '<p class="small muted">These calculations do not call GPT. They become structured context only if you later choose Generate AI Analysis.</p>'
+            : '<div class="empty-state">No indicator data was returned for this ticker and range.</div>';
+        }
+        if (data.series) {
           await renderIndicatorChart(data.series);
           state.tickerContext.indicatorOverlays = buildIndicatorOverlays(data.series);
-          const ticker = normalizeTicker(payload.ticker);
-          if (ticker && ui.tickerChart && state.tickerContext.rows.length && getActiveTicker() === ticker) {
+          if (ui.tickerChart && state.tickerContext.rows.length && getActiveTicker() === ticker) {
             const forecastOverlays =
               state.tickerContext.forecastDoc && normalizeTicker(state.tickerContext.forecastDoc.ticker) === ticker
                 ? buildForecastOverlays(state.tickerContext.forecastDoc.forecastRows || [])
                 : [];
-            await renderTickerChart(state.tickerContext.rows, ticker, payload.interval, [
+            await renderTickerChart(state.tickerContext.rows, ticker, interval, [
               ...forecastOverlays,
-              ...(state.tickerContext.indicatorOverlays || []),
+              ...state.tickerContext.indicatorOverlays,
             ]);
           }
         }
-	        logEvent("technicals_request", { ticker: payload.ticker });
+        if (state.tickerContext.forecastDoc) renderForecastDetails(state.tickerContext.forecastDoc);
+        const indicatorSourceId = "ind_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
         const savedIndicatorRequest = await upsertMyRequest({
           type: "indicator",
-          requestId: indicatorRequestId,
-          title: `${normalizeTicker(payload.ticker || "") || "Ticker"} indicators`,
-          input: {
-            ticker: normalizeTicker(payload.ticker || ""),
-            interval: String(payload.interval || "1d"),
-            lookback: Number(payload.lookback || 0) || null,
-            indicators: Array.isArray(indicators) ? indicators.map((entry) => String(entry || "").trim().toUpperCase()) : [],
-          },
+          requestId: buildSourceRequestId("indicator", indicatorSourceId),
+          title: ticker + " technical indicators",
+          input: { ticker, interval, lookback: Number(payload.lookback || 0) || null, indicators },
           outputsMeta: {
-            ...buildIndicatorPublishMeta({
-              ticker: payload.ticker,
-              analysis,
-              prediction,
-              rows,
-              selectedIndicators: indicators,
-              targetPrice,
-              upsidePct,
-            }),
-            latestCount: Array.isArray(rows) ? rows.length : 0,
-            prediction: prediction?.direction ? String(prediction.direction) : "",
+            summary: String(analysis.summary || "").trim(),
+            direction: String(prediction.direction || "neutral"),
+            confidence: String(prediction.confidence || "low"),
+            latestCount: rows.length,
+            asOf: String(data?.meta?.asOf || ""),
           },
-          sourceRef: {
-            collection: "indicator_runs",
-            id: indicatorSourceId,
-          },
-          published: indicatorAutoPublish,
+          sourceRef: { collection: "indicator_runs", id: indicatorSourceId },
+          published: false,
         }).catch(() => null);
         state.tickerContext.indicatorRequestId = String(savedIndicatorRequest?.id || "").trim();
-        const indicatorPublishHost = ui.technicalsOutput?.querySelector?.("[data-output-publish-controls]");
-        const indicatorPublishPlaceholder = ui.technicalsOutput?.querySelector?.("[data-indicator-publish-placeholder]");
-        const publishMarkup = state.tickerContext.indicatorRequestId
-          ? renderOutputPublishControlsMarkup({
-              requestId: state.tickerContext.indicatorRequestId,
-              requestType: "indicator",
-            })
-          : `<div class="small muted">Indicator run saved locally, but Explore publishing is unavailable until the request sync finishes.</div>`;
-        if (indicatorPublishHost) {
-          indicatorPublishHost.outerHTML = publishMarkup;
-        } else if (indicatorPublishPlaceholder) {
-          indicatorPublishPlaceholder.outerHTML = publishMarkup;
-        }
         await fetchMyRequestsList({ force: true }).catch(() => {});
-        showToast(
-          state.tickerContext.indicatorRequestId
-            ? indicatorAutoPublish
-              ? "Indicator run saved and published to Explore."
-              : "Indicator run saved."
-            : "Indicator output is ready, but request sync is still catching up.",
-          state.tickerContext.indicatorRequestId ? "ok" : "warn"
-        );
-	      } catch (error) {
-	        showToast(error.message || "Unable to run indicators.", "warn");
-	      }
-	    });
+        logEvent("technicals_request", { ticker, interval, indicator_count: indicators.length });
+        showToast("Technical indicators calculated and saved privately.");
+      } catch (error) {
+        setOutputReady(ui.technicalsOutput);
+        if (ui.technicalsOutput) {
+          ui.technicalsOutput.innerHTML = '<div class="alert warning">' + escapeHtml(error?.message || "Unable to calculate indicators.") + '</div>';
+        }
+        showToast(error?.message || "Unable to calculate indicators.", "warn");
+      }
+    });
 
     ui.downloadForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -28895,7 +27977,7 @@
             .catch(() => {});
           await fetchMyRequestsList({ force: true }).catch(() => {});
           renderMyRequestsPanels();
-          showToast("GitHub Actions screener queued. Quantura will publish it to Explore when it completes.");
+          showToast("GitHub Actions screener queued. Quantura will save the completed scan to your workspace.");
           logEvent("screener_request", { min_market_cap: minMarketCap, workflow: "github_actions" });
 
           const finalRun = await pollScreenerRunUntilSettled(runId, { delayMs: 3500, maxAttempts: 90 }).catch(() => null);
@@ -28919,7 +28001,7 @@
                 : 0;
               showToast(
                 finalCount > 0
-                  ? "Screener completed and published to Explore."
+                  ? "Screener completed and saved to your workspace."
                   : "Screener completed. No active signals cleared the market-cap floor."
               );
             } else if (normalizeScreenerRunStatus(finalRun.status) === "failed") {
@@ -29794,7 +28876,6 @@
             state.tickerContext.tickerHistory = readTickerHistory();
             renderTickerHistory();
             setAuthUi(null);
-            state.publishPrefs = { ...DEFAULT_AUTO_PUBLISH_PREFS };
             setUserId(null);
             if (!state.anonymousBootstrapInFlight) {
               state.anonymousBootstrapInFlight = true;
@@ -29850,7 +28931,7 @@
 
             await ensureUserProfile(db, user);
             await loadUserProfile(db, user);
-            setProfileStatus("Profile is used when publishing AI agents in Explore.");
+            setProfileStatus("Profile settings are private to your account.");
             setAuthUi(user);
 
 		      if (!hasFullAccount(user)) {
@@ -29895,9 +28976,6 @@
             syncSportsFoundryWorkflowUi();
             setSportsFoundryStatus("Sign in with a full account to use sports forecasting.");
             renderRequestList([], ui.predictionsOutput, "No uploads yet.");
-		        if (ui.watchlistList) ui.watchlistList.textContent = "Sign in to manage your watchlist.";
-		        if (ui.alertsList) ui.alertsList.textContent = "Sign in to manage your alerts.";
-	        if (ui.alertsStatus) ui.alertsStatus.textContent = "";
 		        ui.adminSection?.classList.add("hidden");
 		        ui.navAdmin?.classList.add("hidden");
                 setFeatureVoteSummaryPolling(functions, false);
@@ -29945,17 +29023,11 @@
 				        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
 				        if (state.unsubscribePredictions) state.unsubscribePredictions();
 				        if (state.unsubscribeTasks) state.unsubscribeTasks();
-				        if (state.unsubscribeWatchlist) state.unsubscribeWatchlist();
-				        if (state.unsubscribeAlerts) state.unsubscribeAlerts();
                 if (state.unsubscribeScreenerRuns) state.unsubscribeScreenerRuns();
                 if (state.unsubscribeAIAgents) state.unsubscribeAIAgents();
                 if (state.unsubscribeAIFollows) state.unsubscribeAIFollows();
                 if (state.unsubscribeAILikes) state.unsubscribeAILikes();
 		        if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
-            if (state.volatilityMonitorTimer) {
-              window.clearInterval(state.volatilityMonitorTimer);
-              state.volatilityMonitorTimer = null;
-            }
             state.aiAgents = [];
             state.aiFollowSet = new Set();
             state.aiLikeSet = new Set();
@@ -30027,12 +29099,9 @@
           }
           loadScreenerUsageToday(db);
           startWorkspaceTasks(db, activeWorkspaceId);
-			      startWatchlist(db, activeWorkspaceId);
-			      startPriceAlerts(db, activeWorkspaceId);
           await seedDefaultAIAgents(db, activeWorkspaceId).catch(() => {});
           await seedAdminPresetScreenerRuns(db, activeWorkspaceId).catch(() => {});
           startAIAgents(db, activeWorkspaceId);
-          startVolatilityMonitor(db, functions, activeWorkspaceId);
 	      refreshCollaboration(functions);
 
         const pendingShare = String(getPendingShareId() || "").trim();

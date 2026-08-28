@@ -60,6 +60,7 @@ export type IndicatorAnalyzeResponse = {
     };
   };
   analysis: IndicatorAnalysis;
+  context: Record<string, unknown>;
   meta: {
     asOf: string;
     historyPoints: number;
@@ -75,30 +76,6 @@ export type IndicatorAnalyzeInput = {
   lookback?: unknown;
   indicators?: unknown;
   maxPoints?: unknown;
-  provider?: unknown;
-  model?: unknown;
-  fallbackProviders?: unknown;
-  userTier?: unknown;
-};
-
-export type IndicatorAnalyzeOptions = {
-  openAiApiKey: string;
-  defaultModel: string;
-  timeoutMs: number;
-  invokeLlm?: (payload: {
-    provider: string;
-    model: string;
-    fallbackProviders?: string[];
-    userTier?: string;
-    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-    params?: Record<string, unknown>;
-    jsonSchema?: unknown;
-  }) => Promise<{
-    provider: string;
-    model: string;
-    text: string;
-    usage?: Record<string, unknown>;
-  }>;
 };
 
 type CandlePoint = {
@@ -200,28 +177,6 @@ function normalizeTicker(value: unknown): string {
 function normalizeInterval(value: unknown): "1d" | "1h" {
   const raw = sanitizeText(value, 8).toLowerCase();
   return raw === "1h" ? "1h" : "1d";
-}
-
-function normalizeLlmProvider(value: unknown): string {
-  const raw = sanitizeText(value, 40).toLowerCase().replace(/[^a-z0-9_-]/g, "");
-  if (raw === "anthropic") return "claude";
-  if (raw === "amazon-nova" || raw === "nova") return "amazon_nova";
-  if (raw) return raw;
-  return "openai";
-}
-
-function normalizeLlmModel(value: unknown, fallback = "gpt-5-mini"): string {
-  return sanitizeText(value, 120) || sanitizeText(fallback, 120) || "gpt-5-mini";
-}
-
-function normalizeFallbackProviders(value: unknown): string[] {
-  const rows = Array.isArray(value) ? value : [];
-  return Array.from(new Set(rows.map((item) => normalizeLlmProvider(item)).filter(Boolean)));
-}
-
-function normalizeLlmTier(value: unknown): string {
-  const raw = sanitizeText(value, 40).toLowerCase();
-  return raw === "premium" || raw === "pro" || raw === "business" ? "premium" : "free";
 }
 
 function normalizeLookback(value: unknown): number {
@@ -1113,29 +1068,6 @@ function scoreIndicatorDirection(
   return { direction, conviction, confidence };
 }
 
-function parseJsonObject(text: string): Record<string, unknown> | null {
-  const raw = String(text || "").trim();
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-  } catch {
-    // fall through
-  }
-  const first = raw.indexOf("{");
-  const last = raw.lastIndexOf("}");
-  if (first >= 0 && last > first) {
-    const slice = raw.slice(first, last + 1);
-    try {
-      const parsed = JSON.parse(slice);
-      if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 function buildIndicatorPromptContext(computed: IndicatorComputation): Record<string, unknown> {
   const snapshot = deriveCoreIndicatorSnapshot(computed);
   const lastClose = roundFinite(computed.lastClose, 4);
@@ -1181,60 +1113,6 @@ function buildIndicatorPromptContext(computed: IndicatorComputation): Record<str
   return context;
 }
 
-function extractResponsesOutputText(payload: Record<string, unknown>): string {
-  const direct = sanitizeText((payload as any).output_text, 24000);
-  if (direct) return direct;
-  const directParsed = (payload as any)?.output_parsed ?? (payload as any)?.parsed;
-  if (directParsed && typeof directParsed === "object") {
-    const serialized = JSON.stringify(directParsed);
-    const text = sanitizeText(serialized, 24000);
-    if (text) return text;
-  }
-  const output = Array.isArray((payload as any)?.output) ? ((payload as any).output as any[]) : [];
-  const chunks: string[] = [];
-  output.forEach((item) => {
-    if (item?.parsed && typeof item.parsed === "object") {
-      const serialized = sanitizeText(JSON.stringify(item.parsed), 24000);
-      if (serialized) chunks.push(serialized);
-    }
-    const content = Array.isArray(item?.content) ? item.content : [];
-    content.forEach((part: any) => {
-      if (part?.parsed && typeof part.parsed === "object") {
-        const serialized = sanitizeText(JSON.stringify(part.parsed), 24000);
-        if (serialized) chunks.push(serialized);
-      }
-      if (part?.json && typeof part.json === "object") {
-        const serialized = sanitizeText(JSON.stringify(part.json), 24000);
-        if (serialized) chunks.push(serialized);
-      }
-      const text = sanitizeText(part?.text?.value ?? part?.text ?? part?.output_text ?? "", 24000);
-      if (text) chunks.push(text);
-    });
-  });
-  return sanitizeText(chunks.join("\n").trim(), 24000);
-}
-
-function extractFunctionCalls(payload: Record<string, unknown>): Array<{ callId: string; name: string; args: Record<string, unknown> }> {
-  const output = Array.isArray((payload as any)?.output) ? ((payload as any).output as any[]) : [];
-  const calls: Array<{ callId: string; name: string; args: Record<string, unknown> }> = [];
-  const pushCall = (raw: any) => {
-    const name = sanitizeText(raw?.name, 120);
-    const callId = sanitizeText(raw?.call_id || raw?.id, 180);
-    if (!name || !callId) return;
-    const rawArgs = typeof raw?.arguments === "string" ? raw.arguments : JSON.stringify(raw?.arguments || {});
-    const args = parseJsonObject(rawArgs) || {};
-    calls.push({ callId, name, args });
-  };
-  output.forEach((item) => {
-    if (item?.type === "function_call") pushCall(item);
-    const content = Array.isArray(item?.content) ? item.content : [];
-    content.forEach((part: any) => {
-      if (part?.type === "function_call") pushCall(part);
-    });
-  });
-  return calls;
-}
-
 function buildHeuristicAnalysis(computed: IndicatorComputation): IndicatorAnalysis {
   const snapshot = deriveCoreIndicatorSnapshot(computed);
   const lastClose = computed.lastClose;
@@ -1271,66 +1149,6 @@ function buildHeuristicAnalysis(computed: IndicatorComputation): IndicatorAnalys
   };
 }
 
-function clampIndicatorTargetPrice(
-  targetPrice: number,
-  direction: IndicatorPrediction["direction"],
-  computed: IndicatorComputation,
-  fallbackTarget: number
-): number {
-  const lastClose = Number(computed.lastClose);
-  if (!Number.isFinite(lastClose) || lastClose <= 0) {
-    return Number.isFinite(targetPrice) && targetPrice > 0 ? Number(targetPrice.toFixed(2)) : Number(fallbackTarget.toFixed(2));
-  }
-  const snapshot = deriveCoreIndicatorSnapshot(computed);
-  const bandPct = Math.max(
-    computed.interval === "1h" ? 0.05 : 0.08,
-    Math.min(
-      computed.interval === "1h" ? 0.18 : 0.25,
-      estimateIndicatorMovePct(computed, snapshot, indicatorTimelineBounds(computed.interval).max, 0.85) * 1.75
-    )
-  );
-  const lower = lastClose * (1 - bandPct);
-  const upper = lastClose * (1 + bandPct);
-  let bounded = Number.isFinite(targetPrice) && targetPrice > 0 ? targetPrice : fallbackTarget;
-  bounded = Math.min(upper, Math.max(lower, bounded));
-  if (direction === "bullish" && bounded < lastClose) bounded = lastClose;
-  if (direction === "bearish" && bounded > lastClose) bounded = lastClose;
-  return Number(bounded.toFixed(2));
-}
-
-function normalizeIndicatorKeySignals(raw: unknown, fallback: string[]): string[] {
-  const candidate = Array.isArray(raw)
-    ? raw.map((item) => sanitizeText(item, 180)).filter(Boolean)
-    : [];
-  if (candidate.length >= 3) return candidate.slice(0, 6);
-  const merged = [...candidate, ...fallback.map((item) => sanitizeText(item, 180)).filter(Boolean)];
-  return Array.from(new Set(merged)).slice(0, 6);
-}
-
-function indicatorSignalMentionsUnselectedIndicator(text: string, computed: IndicatorComputation): boolean {
-  const normalized = sanitizeText(text, 220).toUpperCase();
-  if (!normalized) return false;
-  const indicatorLabels: Array<{ code: IndicatorCode; tokens: string[] }> = [
-    { code: "RSI", tokens: ["RSI"] },
-    { code: "MACD", tokens: ["MACD"] },
-    { code: "SMA", tokens: ["SMA"] },
-    { code: "EMA", tokens: ["EMA"] },
-    { code: "BBANDS", tokens: ["BOLLINGER", "BBANDS"] },
-    { code: "ATR", tokens: ["ATR"] },
-    { code: "ADX", tokens: ["ADX", "+DI", "-DI"] },
-    { code: "CCI", tokens: ["CCI"] },
-    { code: "MFI", tokens: ["MFI"] },
-    { code: "OBV", tokens: ["OBV"] },
-    { code: "ROC", tokens: ["ROC"] },
-    { code: "STOCH", tokens: ["STOCHASTIC", "STOCH"] },
-    { code: "WILLR", tokens: ["WILLR", "WILLIAMS %R", "WILLIAMS"] },
-  ];
-  return indicatorLabels.some(
-    (entry) =>
-      !hasSelectedIndicator(computed, entry.code) && entry.tokens.some((token) => normalized.includes(token))
-  );
-}
-
 function buildIndicatorNarrative(
   summary: string,
   keySignals: string[],
@@ -1355,423 +1173,7 @@ function indicatorTimelineBounds(interval: "1d" | "1h"): { min: number; max: num
   return interval === "1h" ? { min: 1, max: 10 } : { min: 3, max: 30 };
 }
 
-function hasStructuredIndicatorNarrative(text: string): boolean {
-  const normalized = sanitizeText(text, 8000);
-  if (!normalized) return false;
-  return /setup:/i.test(normalized) && /risk frame:/i.test(normalized);
-}
-
-function narrativeMentionsUnselectedIndicators(text: string, computed: IndicatorComputation): boolean {
-  const lines = String(text || "")
-    .split(/\n+/)
-    .map((line) => sanitizeText(line, 240))
-    .filter(Boolean);
-  return lines.some((line) => indicatorSignalMentionsUnselectedIndicator(line, computed));
-}
-
-function normalizeIndicatorAnalysisPayload(
-  parsed: Record<string, unknown>,
-  rawText: string,
-  computed: IndicatorComputation,
-  model: string,
-  provider = "openai"
-): IndicatorAnalysis {
-  const heuristic = buildHeuristicAnalysis(computed);
-  const summary = sanitizeText(parsed.summary, 800) || heuristic.summary;
-  const llmSignals = Array.isArray(parsed.keySignals)
-    ? parsed.keySignals
-        .map((item) => sanitizeText(item, 180))
-        .filter(Boolean)
-        .filter((item) => !indicatorSignalMentionsUnselectedIndicator(item, computed))
-    : [];
-  const keySignals = normalizeIndicatorKeySignals(llmSignals, heuristic.keySignals);
-  const prediction = coercePrediction((parsed.prediction as Record<string, unknown>) || {}, computed.lastClose, computed.interval);
-  prediction.targetPrice = clampIndicatorTargetPrice(
-    Number(prediction.targetPrice || 0),
-    prediction.direction,
-    computed,
-    Number(heuristic.prediction.targetPrice || computed.lastClose)
-  );
-  const textCandidate = sanitizeText(parsed.text || rawText, 8000);
-  const text = hasStructuredIndicatorNarrative(textCandidate) && !narrativeMentionsUnselectedIndicators(textCandidate, computed)
-    ? textCandidate
-    : buildIndicatorNarrative(summary, keySignals, prediction, computed);
-  return {
-    summary,
-    keySignals,
-    prediction,
-    text,
-    provider,
-    model,
-    disclaimer: LLM_DISCLAIMER,
-  };
-}
-
-async function postResponses(
-  apiKey: string,
-  timeoutMs: number,
-  body: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Math.max(5000, Math.min(timeoutMs, 120000)));
-  try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) {
-      const detail = sanitizeText((payload as any)?.error?.message || payload?.error || "", 220);
-      throw new Error(detail || `OpenAI Responses failed (${response.status}).`);
-    }
-    return payload;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function buildIndicatorAnalysisRequest(computed: IndicatorComputation): {
-  heuristic: IndicatorAnalysis;
-  systemPrompt: string;
-  userPayload: Record<string, unknown>;
-  responseSchema: Record<string, unknown>;
-} {
-  const promptContext = buildIndicatorPromptContext(computed);
-  const heuristic = buildHeuristicAnalysis(computed);
-  const timelineBounds = indicatorTimelineBounds(computed.interval);
-  const timelineMin = timelineBounds.min;
-  const timelineMax = timelineBounds.max;
-  const lastClose = Number(computed.lastClose);
-  const atrValue = Number(computed.latestNumeric.ATR_14 || 0);
-  const atrPct = Number.isFinite(atrValue) && Number.isFinite(lastClose) && lastClose > 0 ? atrValue / lastClose : 0;
-  const targetBandPct = Math.max(
-    computed.interval === "1h" ? 0.05 : 0.1,
-    Math.min(computed.interval === "1h" ? 0.18 : 0.3, atrPct > 0 ? atrPct * 4 : computed.interval === "1h" ? 0.05 : 0.1)
-  );
-  const targetBand = {
-    lower: Number((lastClose * (1 - targetBandPct)).toFixed(2)),
-    upper: Number((lastClose * (1 + targetBandPct)).toFixed(2)),
-  };
-
-  const responseSchema = {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      summary: {
-        type: "string",
-        minLength: 1,
-        maxLength: 800,
-      },
-      keySignals: {
-        type: "array",
-        minItems: 3,
-        maxItems: 6,
-        items: {
-          type: "string",
-          minLength: 1,
-          maxLength: 180,
-        },
-      },
-      prediction: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          direction: {
-            type: "string",
-            enum: ["bullish", "bearish", "neutral"],
-          },
-          targetPrice: {
-            type: "number",
-          },
-          timeline: {
-            type: "string",
-            minLength: 1,
-            maxLength: 80,
-          },
-          timelineDays: {
-            type: "integer",
-            minimum: timelineMin,
-            maximum: timelineMax,
-          },
-          confidence: {
-            type: "string",
-            enum: ["low", "medium", "high"],
-          },
-        },
-        required: ["direction", "targetPrice", "timeline", "timelineDays", "confidence"],
-      },
-      text: {
-        type: "string",
-        minLength: 1,
-        maxLength: 8000,
-      },
-    },
-    required: ["summary", "keySignals", "prediction", "text"],
-  } as const;
-
-  const systemPrompt = [
-    "You are Quantura Horizon's technical-indicator analyst.",
-    "Use only the provided market context.",
-    "Only cite indicators that were explicitly selected for this request, plus directly derived price context such as last close or realized range.",
-    "Do not invent catalysts, fundamentals, news, support zones, or macro drivers that were not supplied.",
-    "This is tactical decision support, not investment advice or a guarantee.",
-    "Return valid JSON only with exact keys:",
-    '{"summary":"string","keySignals":["string"],"prediction":{"direction":"bullish|bearish|neutral","targetPrice":0,"timeline":"string","timelineDays":0,"confidence":"low|medium|high"},"text":"string"}',
-    "Rules:",
-    "- summary: 1 or 2 concise sentences grounded in the indicator stack.",
-    "- keySignals: 3 to 6 items, each must cite a selected indicator and what it implies.",
-    "- prediction.direction: use bullish or bearish only when multiple signals align; otherwise neutral.",
-    `- prediction.timelineDays: integer between ${timelineMin} and ${timelineMax}.`,
-    `- prediction.targetPrice: numeric and realistic, staying near the current regime. Keep it inside ${targetBand.lower} to ${targetBand.upper} unless the context explicitly justifies a tighter bound.`,
-    "- prediction.confidence: high only if momentum and trend strength confirm each other; low if signals conflict.",
-    "- text: concise markdown-safe narrative with sections named Setup, Signal stack, Path, and Risk frame.",
-    "- Never mention ATR or ADX unless ATR or ADX was selected for this run.",
-    "- Avoid guaranteed language, buy/sell directives, and exaggerated certainty.",
-  ].join(" ");
-
-  const userPayload = {
-    task: "Analyze the selected technical indicators and provide a tactical scenario update.",
-    ticker: computed.ticker,
-    interval: computed.interval,
-    lookback: computed.lookback,
-    selectedIndicators: computed.selectedIndicators,
-    marketContext: promptContext,
-    guardrails: {
-      timelineDaysRange: [timelineMin, timelineMax],
-      targetPriceRange: targetBand,
-      fallbackPrediction: heuristic.prediction,
-    },
-  };
-
-  return {
-    heuristic,
-    systemPrompt,
-    userPayload,
-    responseSchema,
-  };
-}
-
-async function runSharedIndicatorAnalysis(
-  computed: IndicatorComputation,
-  input: IndicatorAnalyzeInput,
-  opts: IndicatorAnalyzeOptions
-): Promise<IndicatorAnalysis> {
-  if (typeof opts.invokeLlm !== "function") {
-    return runOpenAiIndicatorAnalysis(computed, opts);
-  }
-
-  const provider = normalizeLlmProvider(input.provider);
-  const model = normalizeLlmModel(input.model, opts.defaultModel);
-  const fallbackProviders = normalizeFallbackProviders(input.fallbackProviders).filter((item) => item !== provider);
-  const userTier = normalizeLlmTier(input.userTier);
-  const { heuristic, systemPrompt, userPayload, responseSchema } = buildIndicatorAnalysisRequest(computed);
-
-  try {
-    const result = await opts.invokeLlm({
-      provider,
-      model,
-      fallbackProviders,
-      userTier,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: JSON.stringify(userPayload) },
-      ],
-      params: {
-        temperature: 0.2,
-        maxTokens: 900,
-        webSearch: false,
-        background: false,
-      },
-      jsonSchema: {
-        name: "indicator_analysis",
-        schema: responseSchema,
-      },
-    });
-    const text = sanitizeText(result?.text, 24000);
-    const parsed = parseJsonObject(text);
-    const actualProvider = normalizeLlmProvider(result?.provider || provider);
-    const actualModel = normalizeLlmModel(result?.model, model);
-    if (!parsed) {
-      return {
-        ...heuristic,
-        text: hasStructuredIndicatorNarrative(text) ? text : heuristic.text,
-        provider: actualProvider,
-        model: actualModel,
-      };
-    }
-    return normalizeIndicatorAnalysisPayload(parsed, text, computed, actualModel, actualProvider);
-  } catch (_error) {
-    if (provider === "openai") {
-      return runOpenAiIndicatorAnalysis(computed, {
-        ...opts,
-        defaultModel: model,
-      });
-    }
-    return {
-      ...heuristic,
-      provider,
-      model,
-    };
-  }
-}
-
-function coercePrediction(
-  payload: Record<string, unknown>,
-  lastClose: number,
-  interval: "1d" | "1h"
-): IndicatorPrediction {
-  const timelineBounds = indicatorTimelineBounds(interval);
-  const raw = asString(payload.direction).trim().toLowerCase();
-  const direction: IndicatorPrediction["direction"] = raw === "bullish" || raw === "bearish" || raw === "neutral" ? (raw as any) : "neutral";
-  const timelineDays = Math.max(
-    timelineBounds.min,
-    Math.min(timelineBounds.max, Math.floor(asFinite(payload.timelineDays, interval === "1h" ? 5 : 10)))
-  );
-  const timeline = sanitizeText(payload.timeline, 80) || `${timelineDays} trading days`;
-  const confidenceRaw = asString(payload.confidence).trim().toLowerCase();
-  const confidence: IndicatorPrediction["confidence"] =
-    confidenceRaw === "low" || confidenceRaw === "medium" || confidenceRaw === "high" ? (confidenceRaw as any) : "medium";
-  const targetRaw = asFinite(payload.targetPrice, NaN);
-  const targetPrice = Number.isFinite(targetRaw) && targetRaw > 0 ? Number(targetRaw.toFixed(2)) : Number(lastClose.toFixed(2));
-  return {
-    direction,
-    targetPrice,
-    timeline,
-    timelineDays,
-    confidence,
-  };
-}
-
-async function runOpenAiIndicatorAnalysis(
-  computed: IndicatorComputation,
-  opts: IndicatorAnalyzeOptions
-): Promise<IndicatorAnalysis> {
-  if (!opts.openAiApiKey) return buildHeuristicAnalysis(computed);
-
-  const model = sanitizeText(opts.defaultModel, 120) || "gpt-5-mini";
-  const { heuristic, systemPrompt, userPayload, responseSchema } = buildIndicatorAnalysisRequest(computed);
-  const toolDef = {
-    type: "function",
-    name: "finta_calculate_indicators",
-    description:
-      "Calculate selected technical indicators from OHLCV time-series using finta-style formulas and return latest numeric values.",
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        ticker: { type: "string" },
-        interval: { type: "string", enum: ["1d", "1h"] },
-        lookback: { type: "integer", minimum: 30, maximum: 5000 },
-        indicators: { type: "array", items: { type: "string" } },
-      },
-      required: ["ticker", "interval", "indicators"],
-    },
-  } as const;
-  const responseFormat = {
-    format: {
-      type: "json_schema",
-      name: "indicator_analysis",
-      strict: true,
-      schema: responseSchema,
-    },
-  } as const;
-
-  let responsePayload = await postResponses(opts.openAiApiKey, opts.timeoutMs, {
-    model,
-    input: [
-      {
-        role: "system",
-        content: [{ type: "input_text", text: systemPrompt }],
-      },
-      {
-        role: "user",
-        content: [{ type: "input_text", text: JSON.stringify(userPayload) }],
-      },
-    ],
-    tools: [toolDef],
-    tool_choice: "required",
-    text: responseFormat,
-    max_output_tokens: 900,
-    background: false,
-    stream: false,
-    metadata: {
-      quantura_workflow: "indicator_analysis",
-      quantura_prompt_caching: "enabled",
-    },
-  });
-
-  let loopCount = 0;
-  while (loopCount < 3) {
-    const calls = extractFunctionCalls(responsePayload).filter((item) => item.name === "finta_calculate_indicators");
-    if (!calls.length) break;
-
-    const outputs = calls.map((item) => {
-      const requestedIndicators = normalizeIndicators(item.args.indicators);
-      const allowed = requestedIndicators.length
-        ? computed.latestRows.filter((entry) => requestedIndicators.some((code) => entry.name.startsWith(code) || entry.name.includes(code)))
-        : computed.latestRows;
-      const result = {
-        ticker: computed.ticker,
-        interval: computed.interval,
-        asOf: computed.asOf,
-        lastClose: computed.lastClose,
-        previousClose: computed.previousClose,
-        selectedIndicators: computed.selectedIndicators,
-        latest: (allowed.length ? allowed : computed.latestRows).map((entry) => ({
-          name: entry.name,
-          value: entry.value,
-          display: entry.display,
-        })),
-      };
-      return {
-        type: "function_call_output",
-        call_id: item.callId,
-        output: JSON.stringify(result),
-      };
-    });
-
-    const previousResponseId = sanitizeText((responsePayload as any).id, 200);
-    if (!previousResponseId) break;
-
-    responsePayload = await postResponses(opts.openAiApiKey, opts.timeoutMs, {
-      model,
-      previous_response_id: previousResponseId,
-      input: outputs,
-      text: responseFormat,
-      max_output_tokens: 900,
-      background: false,
-      stream: false,
-      metadata: {
-        quantura_workflow: "indicator_analysis",
-        quantura_prompt_caching: "enabled",
-      },
-    });
-    loopCount += 1;
-  }
-
-  const outputText = extractResponsesOutputText(responsePayload);
-  const parsed = parseJsonObject(outputText);
-  if (!parsed) {
-    const fallback = buildHeuristicAnalysis(computed);
-    return {
-      ...fallback,
-      text: hasStructuredIndicatorNarrative(outputText) ? outputText : fallback.text,
-      provider: "openai",
-      model,
-    };
-  }
-  return normalizeIndicatorAnalysisPayload(parsed, outputText, computed, model);
-}
-
-export async function runIndicatorAnalysis(
-  input: IndicatorAnalyzeInput,
-  opts: IndicatorAnalyzeOptions
-): Promise<IndicatorAnalyzeResponse> {
+export async function runIndicatorAnalysis(input: IndicatorAnalyzeInput): Promise<IndicatorAnalyzeResponse> {
   const ticker = normalizeTicker(input.ticker);
   if (!ticker) throw new Error("Ticker is required.");
   const interval = normalizeInterval(input.interval);
@@ -1798,7 +1200,7 @@ export async function runIndicatorAnalysis(
     throw new Error("Unable to compute indicators for this ticker and interval.");
   }
 
-  const analysis = await runSharedIndicatorAnalysis(computed, input, opts);
+  const analysis = buildHeuristicAnalysis(computed);
   const priceCandles = computed.candles.slice(-computed.dates.length);
 
   return {
@@ -1819,6 +1221,7 @@ export async function runIndicatorAnalysis(
       },
     },
     analysis,
+    context: buildIndicatorPromptContext(computed),
     meta: {
       asOf: computed.asOf,
       historyPoints: computed.candles.length,

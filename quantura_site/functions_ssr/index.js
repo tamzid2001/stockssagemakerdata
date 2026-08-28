@@ -115,7 +115,6 @@ const resolveTemplate = (pathname) => {
     "/market-headlines",
     "/options",
     "/saved-forecasts",
-    "/studio",
     "/forecast",
     "/terminal",
     "/gpt-5",
@@ -127,7 +126,6 @@ const resolveTemplate = (pathname) => {
   const dashboardAliases = new Set([
     "/dashboard",
     "/account",
-    "/watchlist",
     "/productivity",
     "/collaboration",
     "/notifications",
@@ -311,7 +309,16 @@ const ssrHandler = async (req, res) => {
     return;
   }
 
-  if (REMOVED_TERMINAL_ROUTES.has(normalizePath(req.path || "/"))) {
+  const requestPath = normalizePath(req.path || "/");
+  if (requestPath === "/studio") {
+    res.redirect(308, "/research");
+    return;
+  }
+  if (requestPath === "/watchlist") {
+    res.redirect(308, "/notifications");
+    return;
+  }
+  if (REMOVED_TERMINAL_ROUTES.has(requestPath)) {
     res.redirect(308, "/forecasting");
     return;
   }
