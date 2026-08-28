@@ -645,6 +645,7 @@ def _reserve_send_quota(db: Any, desired: int) -> dict[str, int]:
 
 def _load_newsletter_subscribers(db: Any, *, max_candidates: int) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
+    seen: set[str] = set()
     query = db.collection("users").select(["email", "emailVerified", "isAnonymous", "emailPrefs"]).limit(max_candidates)
     for snap in query.stream():
         doc = snap.to_dict() or {}
@@ -661,6 +662,18 @@ def _load_newsletter_subscribers(db: Any, *, max_candidates: int) -> list[dict[s
         if prefs.get("newsletter") is False:
             continue
         out.append({"uid": snap.id, "email": email})
+        seen.add(email)
+    remaining = max(0, max_candidates - len(out))
+    if remaining:
+        leads = db.collection("promo_subscribers").where("consent", "==", True).limit(remaining)
+        for snap in leads.stream():
+            doc = snap.to_dict() or {}
+            email = _normalize_email(doc.get("email"))
+            prefs = doc.get("emailPrefs") if isinstance(doc.get("emailPrefs"), dict) else {}
+            if not email or email in seen or prefs.get("newsletter") is False:
+                continue
+            out.append({"uid": f"lead:{snap.id}", "email": email})
+            seen.add(email)
     return out
 
 

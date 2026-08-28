@@ -21,9 +21,8 @@ const TOPICS = [
   { slug: "technical-risk", label: "Technical Risk", description: "Momentum, structure, and risk trigger design for decision-ready execution." },
   { slug: "forecasting-workflows", label: "Forecasting Workflows", description: "From quantiles to scenario envelopes and execution checkpoints." },
   { slug: "market-narratives", label: "Market Narratives", description: "Narrative tracking before consensus reprices and liquidity rotates." },
-  { slug: "watchlists-alerts", label: "Watchlists & Alerts", description: "Operational playbooks for watchlists, alerting, and action routing." },
-  { slug: "explore-workflows", label: "Explore Workflows", description: "Public research pipelines, publishing workflows, and feedback loops." },
-  { slug: "model-council", label: "Model Council", description: "Multi-model verification, citations, and guardrail-first decision support." },
+  { slug: "forecast-alerts", label: "Forecast Alerts", description: "Date-aware quantile crossing, delivery controls, and notification operations." },
+  { slug: "ai-forecast-analysis", label: "AI Forecast Analysis", description: "Optional balanced interpretation, structured context, citations, and guardrails." },
   { slug: "build-notes", label: "Build Notes", description: "Engineering notes for Firebase, Cloud Functions, and native shells." },
   { slug: "data-validation", label: "Data Validation", description: "Data quality controls, source cross-checking, and governance practices." },
   { slug: "portfolio-playbooks", label: "Portfolio Playbooks", description: "Portfolio process, position sizing, and review cadences." },
@@ -41,7 +40,7 @@ const CATEGORY_SPECS = {
       "Track rates, credit spreads, and USD direction in one dashboard.",
       "Define hard regime thresholds before discussing single-name conviction.",
       "Pre-write response actions for risk-on, mixed, and risk-off states.",
-      "Re-rank watchlist names by macro sensitivity every week.",
+      "Re-rank screener candidates by macro sensitivity every week.",
     ],
   },
   "technical-risk": {
@@ -77,42 +76,31 @@ const CATEGORY_SPECS = {
       "Escalate narrative breaks into explicit risk review.",
     ],
   },
-  "watchlists-alerts": {
-    tags: ["watchlist", "alerts", "ops", "execution"],
+  "forecast-alerts": {
+    tags: ["forecast-boundaries", "alerts", "ops", "execution"],
     code: `const alert = {\n  symbol,\n  trigger: close >= level ? "above" : "below",\n  urgency: atrPct > 0.035 ? "high" : "normal",\n};\nqueueNotification(alert);`,
-    why: "Watchlists fail when they become passive archives. Alerting should be an operations discipline with explicit ownership and follow-through.",
+    why: "Forecast alerts fail when they trigger continuously instead of detecting a true crossing. Monitoring should be date-aware, stateful, and auditable.",
     checklist: [
-      "Limit watchlists to names with a current thesis.",
-      "Attach an owner and a review cadence to each alert.",
+      "Monitor only quantile boundaries tied to a current prediction horizon.",
+      "Persist the previous side of each boundary before deciding a crossing occurred.",
       "Distinguish informational alerts from action-required alerts.",
-      "Archive stale names aggressively to keep signal density high.",
+      "Expire monitoring when the forecast horizon ends.",
     ],
   },
-  "explore-workflows": {
-    tags: ["explore", "publishing", "community", "workflow"],
-    code: `const publishPayload = {\n  requestId,\n  visibility: autoPublish ? "public" : "unlisted",\n  preview: summarizeOutput(output),\n};\npostToExploreFeed(publishPayload);`,
-    why: "Explore-style research loops create measurable accountability. Publishing assumptions improves model quality and team learning velocity.",
-    checklist: [
-      "Publish concise previews with explicit assumptions.",
-      "Link every post back to source requests for auditability.",
-      "Track engagement as a feedback channel, not a vanity metric.",
-      "Unpublish stale theses when invalidation criteria are met.",
-    ],
-  },
-  "model-council": {
+  "ai-forecast-analysis": {
     tags: ["llm", "verification", "citations", "guardrails"],
     code: `const draft = improvePromptEnabled ? rewritePrompt(prompt) : prompt;\nconst answer = await runProvider({ provider, model, prompt: draft });\nconst verified = verifyAgainstData(answer, modules);\nreturn { draft, answer, verified };`,
-    why: "Model outputs are powerful but brittle without verification. A council approach improves reliability by combining structured context and explicit checks.",
+    why: "Language-model interpretation is useful only when it receives structured source data and is evaluated as an optional second layer after deterministic analysis.",
     checklist: [
-      "Enable prompt improvement for ambiguous requests.",
+      "Require explicit user action before spending AI resources.",
       "Require source-linked citations for factual claims.",
       "Store like/dislike signals to tune future prompts.",
-      "Run post-answer validation against market data modules.",
+      "Require bull, bear, base, technical, and uncertainty sections in every response.",
     ],
   },
   "build-notes": {
     tags: ["engineering", "firebase", "gcloud", "native"],
-    code: `gcloud functions deploy quanturaExploreApi \\\n  --gen2 --runtime=nodejs24 --region=us-central1 \\\n  --source=functions_explore --entry-point=quanturaExploreApi --trigger-http\n\nfirebase deploy --only hosting`,
+    code: `npm test\nnpm run build\n./deploy.sh`,
     why: "Execution quality depends on deployment determinism. Documented build paths reduce incident frequency and rollback uncertainty.",
     checklist: [
       "Pin runtimes and deployment commands in one script.",
@@ -161,9 +149,9 @@ const TITLE_LIBRARY = [
   "When Momentum Confirmation Fails at the Worst Time",
   "Scenario Bands for Operators, Not Spectators",
   "Narrative Drift Detection Before Consensus Reprices",
-  "Watchlist Alert Design That Actually Gets Used",
-  "Publishing Research to Explore Without Creating Noise",
-  "Model Council Verification Workflow for High-Impact Calls",
+  "Forecast Boundary Alert Design That Actually Gets Used",
+  "Private Research Notes Without Workflow Noise",
+  "Balanced AI Forecast Verification for High-Impact Calls",
   "Deployment Discipline for Fast, Safe Market Releases",
   "Data Validation Rules That Prevent Silent Forecast Breaks",
   "Portfolio Sizing Under Uncertain Macro Backdrops",
@@ -173,8 +161,8 @@ const TITLE_LIBRARY = [
   "Forecast Review Rituals That Improve Decision Quality",
   "Catalyst Mapping with Explicit Invalidation Levels",
   "Alert Escalation Ladders for Small Teams",
-  "Explore Feed Governance: Publish, Review, Unpublish",
-  "Prompt Rewrites That Improve Model Council Precision",
+  "Forecast Governance: Review, Validate, Archive",
+  "Structured Prompts That Improve Forecast Analysis Precision",
   "Cloud Function Rollouts with Measurable Blast Radius",
   "Cross-Source Data Reconciliation for Live Pipelines",
   "Risk Budget Allocation Across Correlated Themes",
@@ -183,8 +171,8 @@ const TITLE_LIBRARY = [
   "Structure Breaks Versus False Breakouts in Practice",
   "From Quantiles to Orders: Closing the Workflow Gap",
   "Narrative Compression Signals Ahead of Event Windows",
-  "Turning Watchlists into Action Queues",
-  "Explore Publishing Metrics That Matter",
+  "Turning Screener Results into Research Queues",
+  "Forecast Review Metrics That Matter",
   "Citation-First LLM Output Standards",
   "SSR + Hosting Route Checks for Production Reliability",
   "Data Freshness SLAs for Forecast Credibility",
@@ -194,8 +182,8 @@ const TITLE_LIBRARY = [
   "Trend + Volatility Filters for Cleaner Signal Intake",
   "Forecast Error Decomposition for Better Retraining",
   "Narrative-to-Trade Translation Without Overfitting",
-  "Alert Fatigue Reduction in Active Watchlists",
-  "Explore Post Templates for Reproducible Research",
+  "Alert Fatigue Reduction in Forecast Monitoring",
+  "Private Templates for Reproducible Research",
   "Guardrails for Multi-Provider Model Routing",
   "Release Checklists for Native + Web Shells",
   "Input Validation Patterns for Market Data APIs",
@@ -205,22 +193,49 @@ const TITLE_LIBRARY = [
   "Momentum Exhaustion Signals and Risk Tapering",
   "Forecast Confidence Intervals in Position Reviews",
   "Narrative Contradictions and Tactical Repositioning",
-  "Watchlist Ownership Models for Team Execution",
-  "Explore Audit Trails for Institutional Compliance",
-  "Model Council Escalation Paths for High Uncertainty",
+  "Forecast Review Ownership Models for Team Execution",
+  "Forecast Audit Trails for Institutional Compliance",
+  "AI Analysis Escalation Paths for High Uncertainty",
   "SageMaker Canvas Governance: Leakage, Drift, and Audit",
+  "SageMaker Canvas Time-Series Schema for Quantura Exports",
+  "Alpaca and Yahoo Finance Fallback Without Silent Source Changes",
+  "Options Chain Reconciliation Across Market-Data Providers",
+  "Prediction CSV Validation Before Quantile Analysis",
+  "P50 Statistical Anomaly Bands Without False Confidence Claims",
+  "Last-Two-P10 Signals and Business-Day Horizon Logic",
+  "True Forecast-Boundary Crossings Without Email Spam",
+  "Regular and Extended-Hours Price Monitoring by Design",
+  "Full-Universe Screener Coverage and Degraded Scan Detection",
+  "Chunked Nasdaq Screening With Checkpoints and Retries",
+  "Quantile Distance Filters for Cross-Sectional Research",
+  "Earnings-Date Caching Without Fabricated Calendar Events",
+  "Polymarket US MLB Pregame Data at One-Minute Fidelity",
+  "Preparing MLB Probability Series for SageMaker Canvas",
+  "Private IAM Roles for User-Billed SageMaker Execution",
+  "Least-Privilege AWS Trust Policies for Forecast Workflows",
+  "Meta Prophet Scenarios With Mathematically Honest Signs",
+  "Technical Indicators in Independent Chart Panes",
+  "Optional GPT Analysis With Full P10 P50 P90 Context",
+  "Balanced Bull Bear and Base Forecast Interpretation",
+  "Forecast Uncertainty Expansion and Contraction Over Time",
+  "Yahoo Finance Options History as an Availability Fallback",
+  "Chronological CSV Exports That Open Cleanly in Spreadsheets",
+  "Notification Centers That Separate Inbox Delivery and Email",
+  "Mobile Navigation for Dense Quantitative Workspaces",
+  "Quantura and SageMaker Canvas: The Complete Research Loop",
 ];
 
 const TOPIC_SEQUENCE = [
-  "macro-signals","technical-risk","forecasting-workflows","market-narratives","watchlists-alerts","explore-workflows","model-council","build-notes","data-validation","portfolio-playbooks","sagemaker-canvas",
-  "macro-signals","technical-risk","forecasting-workflows","market-narratives","watchlists-alerts","sagemaker-canvas","model-council","build-notes","data-validation","portfolio-playbooks","macro-signals",
-  "technical-risk","forecasting-workflows","sagemaker-canvas","market-narratives","watchlists-alerts","explore-workflows","model-council","build-notes","data-validation","portfolio-playbooks",
-  "sagemaker-canvas","macro-signals","technical-risk","forecasting-workflows","market-narratives","watchlists-alerts","explore-workflows","model-council","build-notes","data-validation",
-  "portfolio-playbooks","macro-signals","technical-risk","forecasting-workflows","market-narratives","watchlists-alerts","explore-workflows","model-council","sagemaker-canvas","sagemaker-canvas",
+  "macro-signals","technical-risk","forecasting-workflows","market-narratives","forecast-alerts","forecasting-workflows","ai-forecast-analysis","build-notes","data-validation","portfolio-playbooks","sagemaker-canvas",
+  "macro-signals","technical-risk","forecasting-workflows","market-narratives","forecast-alerts","sagemaker-canvas","ai-forecast-analysis","build-notes","data-validation","portfolio-playbooks","macro-signals",
+  "technical-risk","forecasting-workflows","sagemaker-canvas","market-narratives","forecast-alerts","forecasting-workflows","ai-forecast-analysis","build-notes","data-validation","portfolio-playbooks",
+  "sagemaker-canvas","macro-signals","technical-risk","forecasting-workflows","market-narratives","forecast-alerts","forecasting-workflows","ai-forecast-analysis","build-notes","data-validation",
+  "portfolio-playbooks","macro-signals","technical-risk","forecasting-workflows","market-narratives","forecast-alerts","forecasting-workflows","ai-forecast-analysis","sagemaker-canvas","sagemaker-canvas",
+  "sagemaker-canvas","data-validation","data-validation","data-validation","forecasting-workflows","forecasting-workflows","forecast-alerts","forecast-alerts","data-validation","build-notes","forecasting-workflows","data-validation","forecasting-workflows","sagemaker-canvas","sagemaker-canvas","sagemaker-canvas","forecasting-workflows","technical-risk","ai-forecast-analysis","ai-forecast-analysis","forecasting-workflows","data-validation","data-validation","forecast-alerts","build-notes","sagemaker-canvas",
 ];
 
-if (TOPIC_SEQUENCE.length !== 52 || TITLE_LIBRARY.length !== 52) {
-  throw new Error("Topic/title libraries must include exactly 52 entries.");
+if (TOPIC_SEQUENCE.length !== TITLE_LIBRARY.length) {
+  throw new Error("Topic/title libraries must contain the same number of entries.");
 }
 
 const FILLER_PARAGRAPHS = [
@@ -240,7 +255,7 @@ const EXTENDED_PARAGRAPHS = [
   "Execution speed should not be measured by how quickly an order is sent. It should be measured by how quickly the team can move from a new signal to a verified action plan with known downside boundaries. This includes data validation, scenario refresh, and communication quality. The most expensive delays often come from ambiguous ownership, not slow models.",
   "Market environments can change faster than model retraining cycles. Because of that mismatch, every model-driven process needs a regime override policy. The override policy should define exactly when human operators can down-weight or ignore model output, and how that override is recorded. Over time, these overrides become valuable training data for process improvements.",
   "Institutional consistency also depends on presentation quality. A dense, reproducible template helps decision committees compare opportunities without being distracted by formatting differences. Quantura outputs should include a short thesis, a quantified risk envelope, a catalyst map, and a status line that states whether conditions are improving, deteriorating, or unchanged.",
-  "Signal quality degrades quickly when watchlists grow without ownership constraints. Enforce explicit owner assignments and review dates per symbol. If a symbol has no owner or no next review date, it should not remain in active workflow. This is a simple operational rule that materially improves focus and reduces false urgency.",
+  "Signal quality degrades quickly when research queues grow without ownership constraints. Enforce explicit owner assignments and review dates per symbol. If a symbol has no owner or next review date, archive it until the thesis is active again. This materially improves focus and reduces false urgency.",
   "Another common failure mode is over-optimization to recent data. Teams should pair each advanced model with at least one conservative baseline and track performance spread between them. When spread widens unexpectedly, that is a warning that process assumptions may be drifting. Treat these divergences as triggers for validation, not as immediate proof of superior alpha.",
   "Decision-ready output requires clear narrative discipline. Every thesis should include one paragraph for the base case, one for upside, and one for downside, each tied to measurable evidence. Ambiguous narrative language should be removed. This practice not only improves decision quality but also makes retrospective learning far easier.",
 ];
@@ -251,7 +266,7 @@ const METRIC_FRAMES = [
   "Time-to-escalation from alert trigger to owner action",
   "Thesis invalidation frequency by sector",
   "Cross-source discrepancy rate for critical fields",
-  "Model council answer revision rate after verification",
+  "AI forecast answer revision rate after verification",
   "Scenario plan adherence versus realized market path",
   "Average decision latency from signal intake to action",
 ];
@@ -317,7 +332,7 @@ function buildBody({ title, topic, tags, dateIso, weekIndex }) {
     `Load context in <a href=\"/terminal\">Terminal</a> and collect structured modules that support or reject the thesis.`,
     `Run scenario framing in <a href=\"/forecasting\">Forecast</a> and record quantile boundaries with expected catalysts.`,
     `Cross-check signal quality with <a href=\"/research\">Research</a> and inspect narrative divergence before escalation.`,
-    `Publish a concise note to <a href=\"/explore\">Explore Feed</a> and route unresolved uncertainty to <a href=\"/model-council\">Model Council</a>.`,
+    `Save a concise private research note with the forecast inputs, contradictory evidence, and review status.`,
     `Convert approved actions into alert thresholds and assign owner-level accountability.`,
   ];
 
@@ -342,7 +357,7 @@ function buildBody({ title, topic, tags, dateIso, weekIndex }) {
         <li><strong>Evaluate rigorously:</strong> include directional accuracy, error distribution, and stability by regime.</li>
         <li><strong>Export predictions:</strong> include symbol, horizon, model version, and confidence fields.</li>
         <li><strong>Visualize in Quantura:</strong> overlay forecasts with market structure and live narrative signals.</li>
-        <li><strong>Operationalize:</strong> convert outputs into watchlist actions and alert ownership.</li>
+        <li><strong>Operationalize:</strong> convert outputs into assigned research actions and measurable review triggers.</li>
       </ol>
       <p>
         The practical constraint is governance: even no-code workflows must satisfy reproducibility, traceability,
@@ -404,7 +419,7 @@ function buildBody({ title, topic, tags, dateIso, weekIndex }) {
       ${extD}
     </p>
     <p>
-      If you rely on no-code outputs in SageMaker Canvas or model-assisted drafting in Model Council, keep a strict separation
+      If you rely on no-code outputs in SageMaker Canvas or optional AI forecast interpretation, keep a strict separation
       between exploratory notes and decision-authorized notes. Exploratory artifacts can move quickly; decision artifacts must be reproducible.
     </p>
 
@@ -412,7 +427,7 @@ function buildBody({ title, topic, tags, dateIso, weekIndex }) {
     <ul>
       <li>${metricA}</li>
       <li>${metricB}</li>
-      <li>Owner response time for watchlist alerts tagged as high urgency</li>
+      <li>Owner response time for high-urgency forecast-boundary events</li>
       <li>Percent of published notes with explicit invalidation rules</li>
       <li>Share of decisions that include documented downside and scenario response</li>
     </ul>
@@ -539,10 +554,10 @@ function blogPostHtml(meta) {
           <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
         </div>
         <div class="small">
-          <strong>Explore</strong>
+          <strong>Research</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/terminal">Terminal</a></div>
-          <div><a href="/explore">Explore Feed</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
           <div><a href="/pricing">Pricing</a></div>
@@ -564,7 +579,7 @@ function siteHeaderHtml() {
           <span>QUANTURA</span>
         </a>
         <nav class="nav-links">
-          <a href="/explore" data-analytics="nav_explore"><i class="iconoir-binocular" aria-hidden="true"></i><span>Explore</span></a>
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Forecasting</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
@@ -580,15 +595,15 @@ function siteHeaderHtml() {
 }
 
 function blogIndexHtml(posts) {
-  const latest = posts.slice(0, 12);
+  const latest = posts;
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Blog | Institutional Research Workflows</title>
-    <meta name="description" content="Institutional-grade research notes on macro signals, forecasting workflows, and execution playbooks." />
-    <meta name="keywords" content="quantura blog, market research blog, forecasting workflows, model council, institutional investing" />
+    <title>Quantura Blog | Quantitative Research Workflows</title>
+    <meta name="description" content="Current research notes on market data, forecasting, SageMaker Canvas, quantile analysis, and execution workflows." />
+    <meta name="keywords" content="quantura blog, market research, forecasting workflows, SageMaker Canvas, quantile analysis" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="${SITE_URL}/blog" />
     <meta property="og:title" content="Quantura Blog" />
@@ -617,8 +632,8 @@ function blogIndexHtml(posts) {
         <div class="container content-grid">
           <div>
             <div class="eyebrow">Quantura Blog</div>
-            <h1>Institutional workflow, simplified.</h1>
-            <p>From signal → scenario → decision-ready output, with weekly notes on execution, controls, and model operations.</p>
+            <h1>Quantitative research, documented clearly.</h1>
+            <p>Current notes on market-data sources, forecast quantiles, SageMaker Canvas, technical confirmation, and research operations.</p>
           </div>
           <div class="card">
             <h3>Popular topics</h3>
@@ -632,8 +647,8 @@ function blogIndexHtml(posts) {
       <section class="section">
         <div class="container">
           <div class="section-title">
-            <h2>Latest posts</h2>
-            <p class="small">52 scheduled weekly posts across one year.</p>
+            <h2>All research notes</h2>
+            <p class="small">${posts.length} weekly notes, newest first, through ${humanDate(new Date(`${posts[0].dateIso}T00:00:00.000Z`))}.</p>
           </div>
           <div class="grid-3">
             ${latest.map((post) => `
@@ -654,7 +669,7 @@ function blogIndexHtml(posts) {
 
 function topicPageHtml(topicSlug, posts) {
   const topic = TOPIC_BY_SLUG.get(topicSlug);
-  const filtered = posts.filter((post) => post.topic === topicSlug).slice(0, 52);
+  const filtered = posts.filter((post) => post.topic === topicSlug);
   const topicKeywords = `quantura, ${topic.slug}, ${topic.label.toLowerCase()}, institutional research, market workflows`;
   return `<!doctype html>
 <html lang="en">
@@ -715,7 +730,7 @@ function topicPageHtml(topicSlug, posts) {
 }
 
 function rssXml(posts) {
-  const items = posts.slice(0, 52).map((post) => {
+  const items = posts.map((post) => {
     const link = `${SITE_URL}/blog/posts/${post.slug}`;
     return `
     <item>
@@ -749,17 +764,21 @@ async function ensureCleanDir(dir) {
 
 async function writeFile(p, content) {
   await fs.mkdir(path.dirname(p), { recursive: true });
-  await fs.writeFile(p, content, "utf8");
+  const normalized = String(content).replace(/[\t ]+$/gm, "");
+  await fs.writeFile(p, normalized, "utf8");
 }
 
 async function main() {
   const start = new Date("2025-03-06T00:00:00.000Z");
+  const publishCutoff = new Date();
+  publishCutoff.setUTCHours(23, 59, 59, 999);
   const posts = [];
   const usedSlugs = new Set();
 
-  for (let i = 0; i < 52; i += 1) {
+  for (let i = 0; i < TITLE_LIBRARY.length; i += 1) {
     const date = new Date(start);
     date.setUTCDate(start.getUTCDate() + i * 7);
+    if (date.getTime() > publishCutoff.getTime()) break;
     const dateIso = fmtDate(date);
     const topic = TOPIC_SEQUENCE[i];
     const rawTitle = TITLE_LIBRARY[i];

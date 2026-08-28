@@ -26,15 +26,15 @@ quantura_site/
 
 - public home, pricing, blog, research, and legal pages
 - dashboard, account, notifications, productivity, collaboration, and admin
-- Forecast Foundry and historical-data workflows
-- Explore publishing and comments
+- prediction-CSV Forecast Foundry and separate historical-data workflows
+- private collaboration, saved analyses, and assigned workspace tasks
 - market headlines, screening, charting, and research surfaces
 - GitHub Actions social publishing sourced from site content and logged in Firestore
 
 ## Source of truth
 
 - Edit page markup in `pages/`
-- Edit client behavior in `public/app.js`, `public/explore.js`, and related assets
+- Edit client behavior in `public/app.js` and related assets
 - Edit styling in `public/styles.css` and page-specific CSS files
 - Edit API behavior in `functions_explore/src/`
 - Edit SSR behavior in `functions_ssr/index.js`
@@ -80,7 +80,7 @@ firebase deploy --only functions:ssr
 ## Notes for contributors
 
 - If you change `pages/`, make sure SSR templates stay in sync.
-- If you change dashboard or Explore behavior, test both logged-out and logged-in states.
+- If you change dashboard or collaboration behavior, test both logged-out and logged-in states.
 - If you touch app-side copy or workflow behavior, update the relevant docs and screenshots when appropriate.
 - If you change social publishing behavior or channel constraints, also update `quantura_site/docs/social_media_setup.md` and `scripts/lib/social/config/channels/`.
 - Never commit secrets, service-account JSON files, or production mobile config files.

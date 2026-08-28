@@ -82,7 +82,7 @@
             "name": "What is the difference between Starter and paid plans?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Starter provides curated watchlist intelligence. Paid plans add higher model limits, broader model access, collaboration seats, and ad-free usage."
+              "text": "Free access covers core research workflows. Paid plans add higher analysis limits, advanced exports, collaboration seats, and additional forecasting capabilities described on the Pricing page."
             }
           },
           {
@@ -131,7 +131,7 @@
 
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
   </head>
   <body class="home-page">
@@ -349,13 +349,6 @@
               <a class="cta" href="/forecasting" data-analytics="home_terminal_open"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open forecasting studio</span></a>
               <a class="cta secondary" href="/pricing" data-analytics="home_pricing_open"><i class="iconoir-wallet" aria-hidden="true"></i><span>View plans</span></a>
             </div>
-            <details class="learn-more">
-              <summary>Learn more</summary>
-              <p class="small">
-                Quantura is designed for weekly execution. Start with discovery in the Screener, validate with Indicators + News,
-                then store forecasts and deliverables in your Dashboard. Invite collaborators when you want a shared workspace.
-              </p>
-            </details>
           </div>
 
           <div class="card media-card">
@@ -368,9 +361,6 @@
               playsinline
               preload="metadata"
             ></video>
-            <div class="small muted" style="margin-top: 10px;">
-              Live market context loop illustrating multi-session volatility and cross-asset regime shifts.
-            </div>
           </div>
         </div>
       </section>
@@ -413,38 +403,35 @@
       <section class="section">
         <div class="container">
           <div class="section-title">
-            <h2>Watchlists and Portfolios</h2>
-            <p class="small">Track, visualize, and personalize in one place.</p>
+            <h2>Collaborative research workspaces</h2>
+            <p class="small">Move from a market signal to a documented team decision without losing context.</p>
           </div>
           <div class="insight-grid">
             <div class="card">
-              <h3>Track and Watch in One Place</h3>
+              <h3>Keep analysis together</h3>
               <p>
-                Our portfolio adapts to you: track trades or watchlist picks.
-                Start with a watchlist, then evolve to transaction-level tracking as needed.
+                Save prediction analyses, forecast runs, screener results, and review notes in the active private workspace.
               </p>
             </div>
             <div class="card">
-              <h3>Visualize Your Portfolio</h3>
+              <h3>Assign the next step</h3>
               <p>
-                Workspace your investments with an interactive map and allocation lens.
-                Gain faster insight into sector concentration and portfolio performance.
+                Turn research into due-dated tasks, assign collaborators, and track work across the workspace Kanban board and calendar.
               </p>
             </div>
             <div class="card">
-              <h3>Personalize Your News Feed</h3>
+              <h3>Review with shared context</h3>
               <p>
-                Get news tailored to your stocks and active positions.
-                Stay ahead of market shifts with updates tied directly to your investment universe.
+                Invite viewers or editors so the team can inspect the same quantiles, scenarios, files, and saved research state.
               </p>
             </div>
           </div>
           <div class="hero-actions" style="margin-top: 22px;">
-            <a class="cta" href="/dashboard" data-analytics="home_watchlists_dashboard">
-              <i class="iconoir-dashboard" aria-hidden="true"></i><span>Open dashboard</span>
+            <a class="cta" href="/collaboration" data-analytics="home_collaboration_open">
+              <i class="iconoir-group" aria-hidden="true"></i><span>Open collaboration</span>
             </a>
-            <a class="cta secondary" href="/forecasting" data-analytics="home_watchlists_terminal">
-              <i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span>
+            <a class="cta secondary" href="/productivity" data-analytics="home_productivity_open">
+              <i class="iconoir-check-circle" aria-hidden="true"></i><span>Open productivity</span>
             </a>
           </div>
         </div>
@@ -456,8 +443,7 @@
             <h2>Why serious investors choose Quantura</h2>
             <p>
               The Quantura process fuses data, market structure, and operator instincts. We maintain a
-              deep watchlist, re-rank weekly, and reserve intensive modeling for the highest conviction
-              opportunities.
+              prioritized research queue, re-rank it weekly, and reserve intensive modeling for the highest-conviction opportunities.
             </p>
 	            <div class="testimonial">
 	              “Quantura is the first research partner to give us demand-level clarity without the fluff.”
@@ -587,8 +573,8 @@
             <details class="faq-item">
               <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h7v2H5v14h14V12h2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Zm12-2h2v4h4v2h-4v4h-2V9h-4V7h4V3Zm-9 9.5 2.8 3.4L11 13l3.5 4.2H6Z" fill="currentColor"/></svg><span>Can I download historical market data?</span></summary>
               <p class="small faq-answer">
-                Yes. Choose a ticker, timeframe, date range, trading-session policy, adjustment, and entitled Alpaca feed.
-                Preview the returned bars before generating a chronologically ordered CSV.
+                Yes. Choose Alpaca, Yahoo Finance, or automatic fallback, then select a ticker, timeframe, end date, row count,
+                trading-session policy, and adjustment. Preview the returned bars before generating a chronological CSV.
               </p>
             </details>
             <details class="faq-item">
@@ -600,8 +586,8 @@
             <details class="faq-item">
               <summary><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Do alerts and notifications run in real time?</span></summary>
               <p class="small faq-answer">
-                Watchlists and price alerts are continuously evaluated from connected feeds. Delivery depends on device permissions
-                and network conditions, and events are recorded in workspace history for traceability.
+                Prediction-boundary alerts run on a schedule and notify only when the latest eligible market price actually crosses
+                a date-aware P10, P50, or P90 boundary. Browser and email delivery depend on user settings and provider availability.
               </p>
             </details>
             <details class="faq-item">

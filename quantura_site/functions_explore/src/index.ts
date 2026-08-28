@@ -56,6 +56,13 @@ import {
   type ForecastBoundaryScheduleRow,
 } from "./forecastPriceAlerts";
 import { ResendForecastAlertEmailProvider } from "./forecastAlertEmail";
+import {
+  buildForecastAgentRequest,
+  buildForecastAnalysisContext,
+  forecastAnalysisHash,
+  parseForecastAgentSections,
+  renderForecastAgentMarkdown,
+} from "./forecastAnalysis";
 export { shopApi } from "./shopApi";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require("adm-zip");
@@ -171,7 +178,7 @@ type PostDoc = {
   lastEngagedAt: admin.firestore.Timestamp;
 };
 
-type ExploreCursor = {
+type LegacyFeedCursor = {
   id: string;
   createdAtMs: number;
   score?: number;
@@ -211,6 +218,8 @@ const GITHUB_SCREENER_WORKFLOW = asString(process.env.GITHUB_SCREENER_WORKFLOW, 
 const GITHUB_ACTIONS_BRANCH = asString(process.env.GITHUB_ACTIONS_BRANCH, "main").trim() || "main";
 const GITHUB_ACTIONS_API_BASE = `https://api.github.com/repos/${encodeURIComponent(GITHUB_REPO_OWNER)}/${encodeURIComponent(GITHUB_REPO_NAME)}`;
 const DEFAULT_LLM_MODEL = asString(process.env.DEFAULT_LLM_MODEL, "gpt-5-mini").trim();
+const FORECAST_ANALYSIS_MODEL = asString(process.env.FORECAST_ANALYSIS_MODEL, "gpt-5.6-luna").trim() || "gpt-5.6-luna";
+const FORECAST_ANALYSIS_COLLECTION = "forecast_ai_analyses";
 const LLM_TIMEOUT_MS = Math.max(5000, Math.min(120000, Math.floor(asFinite(process.env.LLM_TIMEOUT_MS, 30000))));
 const PROMO_ID = asString(process.env.PROMO_ID, "quantura_generic_50_off").trim();
 const PROMO_CODE = asString(process.env.PROMO_CODE, "QUANTURA50").trim().toUpperCase();
@@ -259,14 +268,13 @@ type SystemFolderConfig = {
   flag: "liked" | "reposted" | "saved" | "shared";
 };
 
-type NotificationCategory = "watchlist" | "explore" | "earnings" | "ipo" | "daily" | "weekly" | "inactive";
+type NotificationCategory = "watchlist" | "earnings" | "ipo" | "daily" | "weekly" | "inactive";
 
 type NotificationPrefs = {
   global: boolean;
   following: boolean;
   tickers: boolean;
   watchlist: boolean;
-  explore: boolean;
   earnings: boolean;
   ipos: boolean;
   daily: boolean;
@@ -387,7 +395,6 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   following: true,
   tickers: true,
   watchlist: true,
-  explore: true,
   earnings: true,
   ipos: true,
   daily: true,
@@ -640,7 +647,7 @@ registerAwsIntegrationRoutes(ROUTES, { db, auth });
 
 // Retired public-social and currency endpoints. Keep an explicit response for
 // old clients while ensuring none of the legacy handlers below can execute.
-ROUTES.all(["/fx/convert", "/explore", "/explore/*", "/posts/*", "/profile/handle/*", "/profile/*/posts", "/predictions", "/predictions/*", "/model-council", "/model-council/*", "/my-requests/:requestId/publish", "/my-requests/:requestId/unpublish"], (_req, res) => {
+ROUTES.all(["/fx/convert", "/predictions", "/predictions/*", "/model-council", "/model-council/*", "/my-requests/:requestId/publish", "/my-requests/:requestId/unpublish"], (_req, res) => {
   res.status(410).json({ error: "feature_removed", message: "This feature has been retired." });
 });
 
@@ -1376,7 +1383,7 @@ async function fetchJsonWithTimeout(url: string, timeoutMs = 7500): Promise<unkn
         Pragma: "no-cache",
         Referer: "https://quantura.studio/",
         "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 QuanturaExploreApi/1.0",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 QuanturaApi/1.0",
       },
     });
     if (!response.ok) {
@@ -1642,13 +1649,12 @@ function normalizeShareId(value: unknown): string {
 function normalizeNotificationCategory(value: unknown): NotificationCategory {
   const raw = sanitizeText(value, 40).toLowerCase();
   if (raw === "watchlist") return "watchlist";
-  if (raw === "explore") return "explore";
   if (raw === "earnings") return "earnings";
   if (raw === "ipo" || raw === "ipos") return "ipo";
   if (raw === "daily") return "daily";
   if (raw === "weekly") return "weekly";
   if (raw === "inactive" || raw === "inactive_user") return "inactive";
-  return "explore";
+  return "daily";
 }
 
 function normalizeNotificationDeepLink(value: unknown): string {
@@ -1679,7 +1685,6 @@ function normalizeNotificationPrefs(
     following: asBoolean(resolved.following, DEFAULT_NOTIFICATION_PREFS.following),
     tickers: asBoolean(resolved.tickers, DEFAULT_NOTIFICATION_PREFS.tickers),
     watchlist: asBoolean(resolved.watchlist, DEFAULT_NOTIFICATION_PREFS.watchlist),
-    explore: asBoolean(resolved.explore, DEFAULT_NOTIFICATION_PREFS.explore),
     earnings: asBoolean(resolved.earnings, DEFAULT_NOTIFICATION_PREFS.earnings),
     ipos: asBoolean(resolved.ipos, DEFAULT_NOTIFICATION_PREFS.ipos),
     daily: asBoolean(resolved.daily, DEFAULT_NOTIFICATION_PREFS.daily),
@@ -1690,7 +1695,6 @@ function normalizeNotificationPrefs(
 
 function isNotificationCategoryEnabled(prefs: NotificationPrefs, category: NotificationCategory): boolean {
   if (category === "watchlist") return prefs.watchlist && prefs.tickers;
-  if (category === "explore") return prefs.explore && prefs.following;
   if (category === "earnings") return prefs.earnings;
   if (category === "ipo") return prefs.ipos;
   if (category === "daily") return prefs.daily;
@@ -1701,7 +1705,6 @@ function isNotificationCategoryEnabled(prefs: NotificationPrefs, category: Notif
 
 function notificationCategoryLabel(category: NotificationCategory): string {
   if (category === "watchlist") return "Watchlist";
-  if (category === "explore") return "Explore Feed";
   if (category === "earnings") return "Earnings";
   if (category === "ipo") return "IPO";
   if (category === "daily") return "Daily";
@@ -1884,7 +1887,7 @@ function trimOutputsMeta(input: unknown): Record<string, unknown> {
   return out;
 }
 
-function buildMyRequestExploreBody(type: MyRequestType, outputsMeta: Record<string, unknown>): string {
+function buildMyRequestBody(type: MyRequestType, outputsMeta: Record<string, unknown>): string {
   if (!outputsMeta || typeof outputsMeta !== "object") return "";
   const preferredValue =
     outputsMeta.bodyMarkdown ||
@@ -3344,198 +3347,6 @@ async function readMyRequestForOwner(uid: string, requestId: string): Promise<{ 
   return { id: snap.id, data };
 }
 
-function requestPostType(type: MyRequestType): PostType {
-  if (type === "forecast") return "forecast";
-  if (type === "screener") return "screener";
-  return "agent";
-}
-
-function deriveMyRequestExplorePostId(requestId: string, data: Record<string, unknown>): string {
-  const existing = sanitizeText(data.explorePostId, 220);
-  if (existing) return existing;
-
-  const type = normalizeMyRequestType(data.type) || "forecast";
-  const sourceRef = asPlainObject(data.sourceRef);
-  const sourceCollection = sanitizeText(sourceRef.collection, 80);
-  const sourceId = sanitizeText(sourceRef.id, 220);
-  if (type === "forecast" && sourceCollection === "forecast_requests" && sourceId) return `forecast_${sourceId}`;
-  if (type === "forecast" && sourceCollection === "autopilot_requests" && sourceId) return `autopilot_${sourceId}`;
-  if (type === "screener" && sourceCollection === "screener_runs" && sourceId) return `screener_${sourceId}`;
-  if (type === "modelCouncil" && sourceId) return `model_council_${sourceId}`;
-  if (type === "indicator" && sourceId) return `indicator_${sourceId}`;
-  return `request_${normalizeMyRequestId(requestId)}`;
-}
-
-function buildMyRequestTargetUrl(requestId: string, data: Record<string, unknown>): string {
-  const type = normalizeMyRequestType(data.type) || "forecast";
-  const sourceRef = asPlainObject(data.sourceRef);
-  const sourceCollection = sanitizeText(sourceRef.collection, 80);
-  const sourceId = sanitizeText(sourceRef.id, 220);
-  const input = normalizeMyRequestInput(data.input);
-  const outputsMeta = trimOutputsMeta(data.outputsMeta);
-
-  if (type === "forecast") {
-    if (sourceCollection === "autopilot_requests" && sourceId) {
-      const sportsPanel =
-        sanitizeText(input.panel || outputsMeta.panel, 80).toLowerCase() === "sports-autopilot" ||
-        sanitizeText(input.sourceGroup || outputsMeta.sourceGroup, 40).toLowerCase() === "sports";
-      if (sportsPanel) {
-        return `/dashboard?panel=sports-autopilot&runId=${encodeURIComponent(sourceId)}`;
-      }
-      return `/autopilot?runId=${encodeURIComponent(sourceId)}`;
-    }
-    if (sourceCollection === "forecast_requests" && sourceId) {
-      return `/forecasting?forecastId=${encodeURIComponent(sourceId)}`;
-    }
-    if (sourceCollection === "autopilot_requests") {
-      const sportsPanel =
-        sanitizeText(input.panel || outputsMeta.panel, 80).toLowerCase() === "sports-autopilot" ||
-        sanitizeText(input.sourceGroup || outputsMeta.sourceGroup, 40).toLowerCase() === "sports";
-      if (sportsPanel) {
-        return `/dashboard?panel=sports-autopilot&requestId=${encodeURIComponent(requestId)}`;
-      }
-      return `/autopilot?requestId=${encodeURIComponent(requestId)}`;
-    }
-    return `/forecasting?requestId=${encodeURIComponent(requestId)}`;
-  }
-  if (type === "screener") {
-    if (sourceCollection === "screener_runs" && sourceId) {
-      return `/screener?runId=${encodeURIComponent(sourceId)}`;
-    }
-    return `/screener?requestId=${encodeURIComponent(requestId)}`;
-  }
-  if (type === "indicator") {
-    return `/indicators?requestId=${encodeURIComponent(requestId)}`;
-  }
-  if (sourceCollection === MODEL_COUNCIL_RESPONSE_COLLECTION && sourceId) {
-    return `/model-council?responseId=${encodeURIComponent(sourceId)}`;
-  }
-  return `/model-council?requestId=${encodeURIComponent(requestId)}`;
-}
-
-async function upsertExplorePostFromMyRequest(
-  ownerUid: string,
-  requestId: string,
-  requestData: Record<string, unknown>,
-  visibility: Visibility
-): Promise<string> {
-  const type = normalizeMyRequestType(requestData.type) || "forecast";
-  const input = normalizeMyRequestInput(requestData.input);
-  const outputsMeta = trimOutputsMeta(requestData.outputsMeta);
-  const sourceRef = asPlainObject(requestData.sourceRef);
-  const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
-  const title = sanitizeText(requestData.title, 180) || defaultMyRequestTitle(type, input);
-  const caption = buildMyRequestExploreCaption(type, title, input, outputsMeta, ticker);
-  const postId = deriveMyRequestExplorePostId(requestId, requestData);
-  const postType = requestPostType(type);
-  const body = buildMyRequestExploreBody(type, outputsMeta);
-  const sourceCollection = sanitizeText(sourceRef.collection, 80);
-  const sourceId = sanitizeText(sourceRef.id, 220);
-  const topSymbols = Array.isArray(outputsMeta.topSymbols) ? outputsMeta.topSymbols : [];
-  const tickers = Array.from(
-    new Set(
-      [ticker, ...topSymbols.map((item) => normalizeTicker(item))]
-        .map((item) => normalizeTicker(item))
-        .filter(Boolean)
-    )
-  ).slice(0, 8) as string[];
-  const tags = Array.from(new Set([type.toLowerCase(), ...tickers.map((item) => item.toLowerCase())]))
-    .filter(Boolean)
-    .slice(0, 12);
-  const targetUrl = buildMyRequestTargetUrl(requestId, requestData);
-  const { handle, photoURL } = await readAuthorProfile(ownerUid);
-  const postRef = db.collection("posts").doc(postId);
-  const existingSnap = await postRef.get();
-  const existingData = existingSnap.exists ? ((existingSnap.data() || {}) as Record<string, unknown>) : {};
-  const existingCounts = normalizeCounts(existingData.counts);
-  const publishTimestamp = admin.firestore.FieldValue.serverTimestamp();
-  const createdAt = existingData.createdAt || publishTimestamp;
-  const updatedAt = publishTimestamp;
-  const createdAtMsForScore = existingData.createdAt ? getTimestampMs(existingData.createdAt) : Date.now();
-  const mergedPreviewMetrics = {
-    ...buildMyRequestPreviewMetrics({ ...input, ...outputsMeta }, postType),
-    ...compactPreviewMetrics(asPlainObject(outputsMeta.metrics)),
-  };
-  const preview = extractPreview(
-    {
-      ...input,
-      ...outputsMeta,
-      metrics: Object.keys(mergedPreviewMetrics).length ? mergedPreviewMetrics : outputsMeta.metrics,
-      summary: caption,
-    },
-    postType
-  );
-
-  const postPatch: Record<string, unknown> = {
-    id: postId,
-    type: postType,
-    authorUid: ownerUid,
-    authorHandle: handle,
-    authorPhotoURL: photoURL,
-    title,
-    caption,
-    tickers,
-    tags,
-    preview,
-    targetUrl,
-    visibility,
-    updatedAt,
-    createdAt,
-    counts: existingCounts,
-    score: Number.isFinite(asFinite(existingData.score, NaN))
-      ? asFinite(existingData.score, 0)
-      : computeScore(existingCounts, createdAtMsForScore),
-    lastEngagedAt: publishTimestamp,
-  };
-  if (body) {
-    postPatch.body = body;
-    postPatch.bodyFormat = "markdown";
-  }
-  if (sourceCollection || sourceId) {
-    postPatch.sourceRef = {
-      collection: sourceCollection,
-      id: sourceId,
-    };
-  }
-
-  await postRef.set(postPatch, { merge: true });
-
-  return postId;
-}
-
-async function ensurePublishedMyRequestExplorePost(
-  ownerUid: string,
-  requestId: string,
-  requestData: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  const published = asBoolean(requestData.published, false);
-  const explorePostId = sanitizeText(requestData.explorePostId, 220);
-  const visibility = normalizeMyRequestVisibility(requestData.visibility, "private");
-  if (!published || (explorePostId && visibility === "public")) {
-    return requestData;
-  }
-
-  const postId = await upsertExplorePostFromMyRequest(
-    ownerUid,
-    requestId,
-    { ...requestData, visibility: "public" },
-    "public"
-  );
-  const requestRef = db.collection("users").doc(ownerUid).collection("requests").doc(requestId);
-  await requestRef.set(
-    {
-      published: true,
-      publishedAt: requestData.publishedAt || admin.firestore.FieldValue.serverTimestamp(),
-      explorePostId: postId,
-      visibility: "public",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-  const refreshed = await requestRef.get();
-  return (refreshed.data() || requestData) as Record<string, unknown>;
-}
-
 function isAnonymousDecodedUser(user: admin.auth.DecodedIdToken | null): boolean {
   return sanitizeText(user?.firebase?.sign_in_provider, 40) === "anonymous";
 }
@@ -4029,11 +3840,8 @@ async function upsertOwnedMyRequestFromSystem(
     id: sanitizeText(seed.sourceRef.id, 220),
   };
   const ticker = firstTickerFromRequest(input, sourceRef, outputsMeta);
-  const published =
-    typeof seed.published === "boolean" ? asBoolean(seed.published, false) : asBoolean(existing.published, false);
-  const visibility = published
-    ? "public"
-    : normalizeMyRequestVisibility(existing.visibility, normalizeMyRequestVisibility(share.visibility, "private"));
+  const published = false;
+  const visibility = normalizeMyRequestVisibility(existing.visibility, normalizeMyRequestVisibility(share.visibility, "private"));
 
   const payload: Record<string, unknown> = {
     type,
@@ -4045,8 +3853,8 @@ async function upsertOwnedMyRequestFromSystem(
     sourceRef,
     searchText: buildMyRequestSearchText(title, type, ticker, input, outputsMeta),
     published,
-    publishedAt: published ? existing.publishedAt || admin.firestore.FieldValue.serverTimestamp() : null,
-    explorePostId: published ? sanitizeText(existing.explorePostId, 220) : "",
+    publishedAt: null,
+    explorePostId: "",
     deleted: asBoolean(existing.deleted, false),
     share: {
       visibility: normalizeMyRequestVisibility(share.visibility, "private"),
@@ -4059,30 +3867,11 @@ async function upsertOwnedMyRequestFromSystem(
   };
 
   await requestRef.set(payload, { merge: true });
-  if (published) {
-    const merged = { ...existing, ...payload };
-    const postId = await upsertExplorePostFromMyRequest(ownerUid, requestId, merged, "public");
-    await requestRef.set(
-      {
-        published: true,
-        publishedAt: existing.publishedAt || admin.firestore.FieldValue.serverTimestamp(),
-        explorePostId: postId,
-        visibility: "public",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-  }
   return requestId;
 }
 
 async function syncAutopilotMyRequest(ownerUid: string, runId: string, data: Record<string, unknown>): Promise<string> {
   const requestId = buildMyRequestDocId("forecast", runId);
-  const shouldAutoPublishSportsRun =
-    isSportsAutopilotData(data) &&
-    asBoolean(data.autoPublishToExplore, true) &&
-    (sanitizeText(data.status, 60).toLowerCase() === "completed" ||
-      sanitizeText(asPlainObject(data.analysis).status, 40).toLowerCase() === "ok");
   await upsertOwnedMyRequestFromSystem(ownerUid, {
     requestId,
     type: "forecast",
@@ -4093,7 +3882,7 @@ async function syncAutopilotMyRequest(ownerUid: string, runId: string, data: Rec
       collection: "autopilot_requests",
       id: runId,
     },
-    published: shouldAutoPublishSportsRun,
+    published: false,
   });
   return requestId;
 }
@@ -4153,7 +3942,7 @@ async function toAutopilotRunResponse(docId: string, data: Record<string, unknow
     workspaceId: sanitizeText(data.workspaceId, 220),
     notes: sanitizeText(data.notes, 2000),
     modelMetrics: buildFoundryModelMetricsDisplay(data.modelMetrics),
-    exploreRequestId: sanitizeText(data.exploreRequestId, 220),
+    workspaceRequestId: sanitizeText(data.workspaceRequestId || data.exploreRequestId, 220),
     createdAtMs,
     updatedAtMs,
     createdAt: createdAtMs ? new Date(createdAtMs).toISOString() : "",
@@ -4504,22 +4293,22 @@ async function reconcileAutopilotRunDocument(
 
   if (currentStatus === "completed" && files.predictionsCsv && asPlainObject(existingData.analysis).status === "ok") {
     const requestId = await syncAutopilotMyRequest(ownerUid, runId, existingData);
-    if (sanitizeText(existingData.exploreRequestId, 220) !== requestId) {
-      nextPatch.exploreRequestId = requestId;
+    if (sanitizeText(existingData.workspaceRequestId, 220) !== requestId) {
+      nextPatch.workspaceRequestId = requestId;
       await db.collection("autopilot_requests").doc(runId).set(
         {
-          exploreRequestId: requestId,
+          workspaceRequestId: requestId,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
       await syncAutomationRunProjection(runId, {
         ...existingData,
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
       });
       return {
         ...existingData,
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
       };
     }
     await syncAutomationRunProjection(runId, existingData);
@@ -4662,21 +4451,21 @@ async function reconcileAutopilotRunDocument(
   const refreshedSnap = await db.collection("autopilot_requests").doc(runId).get();
   const refreshedData = (refreshedSnap.data() || { ...existingData, ...nextPatch }) as Record<string, unknown>;
   const requestId = await syncAutopilotMyRequest(ownerUid, runId, refreshedData);
-  if (sanitizeText(refreshedData.exploreRequestId, 220) !== requestId) {
+  if (sanitizeText(refreshedData.workspaceRequestId, 220) !== requestId) {
     await db.collection("autopilot_requests").doc(runId).set(
       {
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
     await syncAutomationRunProjection(runId, {
       ...refreshedData,
-      exploreRequestId: requestId,
+      workspaceRequestId: requestId,
     });
     return {
       ...refreshedData,
-      exploreRequestId: requestId,
+      workspaceRequestId: requestId,
     };
   }
   await syncAutomationRunProjection(runId, refreshedData);
@@ -5209,7 +4998,7 @@ async function startAutomationForecastRun(
   const requestId = await syncAutopilotMyRequest(ownerUid, runRef.id, refreshedData);
   await runRef.set(
     {
-      exploreRequestId: requestId,
+      workspaceRequestId: requestId,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     },
     { merge: true }
@@ -5326,20 +5115,20 @@ function computeScore(counts: PostCounts, createdAtMs: number, nowMs = Date.now(
   return Number(score.toFixed(6));
 }
 
-function encodeCursor(cursor: ExploreCursor | null): string | null {
+function encodeCursor(cursor: LegacyFeedCursor | null): string | null {
   if (!cursor) return null;
   const json = JSON.stringify(cursor);
   return Buffer.from(json, "utf8").toString("base64url");
 }
 
-function decodeCursor(raw: unknown): ExploreCursor | null {
+function decodeCursor(raw: unknown): LegacyFeedCursor | null {
   if (!raw || typeof raw !== "string") return null;
   try {
     const decoded = Buffer.from(raw, "base64url").toString("utf8");
-    const parsed = JSON.parse(decoded) as Partial<ExploreCursor>;
+    const parsed = JSON.parse(decoded) as Partial<LegacyFeedCursor>;
     if (!parsed || typeof parsed !== "object") return null;
     if (!parsed.id || !Number.isFinite(parsed.createdAtMs)) return null;
-    const cursor: ExploreCursor = {
+    const cursor: LegacyFeedCursor = {
       id: String(parsed.id),
       createdAtMs: Number(parsed.createdAtMs),
     };
@@ -5432,7 +5221,7 @@ async function sendTopicNotification(topic: string, post: PostDoc, title: string
       },
     });
   } catch (error) {
-    console.warn(`[Explore] Topic notification failed for ${topic}:`, error);
+    console.warn(`[API] Topic notification failed for ${topic}:`, error);
   }
 }
 
@@ -5510,7 +5299,7 @@ function buildMyRequestPreviewMetrics(payload: Record<string, unknown>, postType
   return compactPreviewMetrics(fallback);
 }
 
-function buildMyRequestExploreCaption(
+function buildMyRequestCaption(
   type: MyRequestType,
   title: string,
   input: Record<string, unknown>,
@@ -5577,13 +5366,13 @@ function buildTargetUrl(postType: PostType, sourceDocId: string): string {
     case "forecast":
       return `/forecasting?forecastId=${encodeURIComponent(sourceDocId)}`;
     case "backtest":
-      return `/indicators?runId=${encodeURIComponent(sourceDocId)}`;
+      return `/forecasting?runId=${encodeURIComponent(sourceDocId)}`;
     case "screener":
       return `/screener?runId=${encodeURIComponent(sourceDocId)}`;
     case "agent":
       return `/ticker-query?agentRunId=${encodeURIComponent(sourceDocId)}`;
     default:
-      return "/explore";
+      return "/forecasting";
   }
 }
 
@@ -5646,7 +5435,7 @@ async function publishAutoPost(post: PostDoc): Promise<void> {
 async function createPostFromResult(postType: PostType, sourceDocId: string, payload: Record<string, unknown>): Promise<void> {
   const authorUid = sanitizeText(payload.authorUid || payload.userId || payload.uid || payload.ownerUid, 120);
   if (!authorUid) {
-    console.warn(`[Explore] Skip ${postType}/${sourceDocId}: missing author uid`);
+    console.warn(`[API] Skip ${postType}/${sourceDocId}: missing author uid`);
     return;
   }
 
@@ -6092,7 +5881,7 @@ type ModelCouncilModelView = {
 const LLM_PROVIDER_POLICY: Record<LlmProviderId, LlmProviderPolicy> = {
   openai: {
     freeModels: ["gpt-5-nano", "gpt-5-mini", "gpt-4o-mini"],
-    premiumModels: ["gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4", "gpt-5.4-pro", "gpt-4.1"],
+    premiumModels: ["gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4", "gpt-5.4-pro", "gpt-5.6-luna", "gpt-4.1"],
   },
   claude: {
     freeModels: ["claude-haiku*", "claude-3-haiku*"],
@@ -6312,6 +6101,7 @@ const MODEL_COUNCIL_MODELS: Record<LlmProviderId, ModelCouncilModelView[]> = {
     { id: "gpt-5-mini", label: "GPT-5 Mini", provider: "openai", group: "Balanced", hint: "Best default for most prompts." },
     { id: "gpt-5", label: "GPT-5", provider: "openai", group: "Reasoning", hint: "High-depth reasoning and synthesis." },
     { id: "gpt-5.4", label: "GPT-5.4", provider: "openai", group: "Research", hint: "Premium research-grade analysis." },
+    { id: "gpt-5.6-luna", label: "GPT-5.6 Luna", provider: "openai", group: "Research", hint: "Balanced quantitative scenario analysis." },
   ],
   claude: [
     { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", provider: "claude", group: "Fast", hint: "Lower-latency Claude path." },
@@ -7396,7 +7186,7 @@ async function resolvePostBody(postId: string, post: Record<string, unknown>): P
       const requestData = (requestDoc.data() || {}) as Record<string, unknown>;
       const type = normalizeMyRequestType(requestData.type) || "forecast";
       const outputsMeta = trimOutputsMeta(requestData.outputsMeta);
-      const requestBody = buildMyRequestExploreBody(type, outputsMeta);
+      const requestBody = buildMyRequestBody(type, outputsMeta);
       if (requestBody) {
         return {
           body: requestBody,
@@ -7434,7 +7224,7 @@ function toPostResponse(
     tickers: Array.isArray(data.tickers) ? data.tickers : [],
     tags: Array.isArray(data.tags) ? data.tags : [],
     preview: data.preview || { kind: "summary" },
-    targetUrl: asString(data.targetUrl, "/explore"),
+    targetUrl: asString(data.targetUrl, "/forecasting"),
     visibility: asString(data.visibility, "public"),
     hasBody: postSupportsExpandedBody(snap.id, data),
     bodyFormat: sanitizeText(data.bodyFormat, 20).toLowerCase() === "text" ? "text" : "markdown",
@@ -7496,8 +7286,8 @@ async function fetchViewerEngagement(
   return engagement;
 }
 
-function buildNextCursor(item: Record<string, unknown>, includeScore: boolean): ExploreCursor {
-  const cursor: ExploreCursor = {
+function buildNextCursor(item: Record<string, unknown>, includeScore: boolean): LegacyFeedCursor {
+  const cursor: LegacyFeedCursor = {
     id: asString(item.id),
     createdAtMs: asFinite(item.createdAtMs, Date.now()),
   };
@@ -7508,7 +7298,7 @@ function buildNextCursor(item: Record<string, unknown>, includeScore: boolean): 
 async function listFollowingPosts(
   viewerUid: string,
   limit: number,
-  cursor: ExploreCursor | null,
+  cursor: LegacyFeedCursor | null,
   tickerFilter: string,
   queryText: string
 ): Promise<{ posts: admin.firestore.QueryDocumentSnapshot[]; nextCursor: string | null }> {
@@ -7628,12 +7418,10 @@ async function syncTopicsForUser(uid: string): Promise<void> {
   if (tokenSnap.empty) return;
 
   const prefs = normalizeNotificationPrefs({}, (((userSnap.data() || {}) as any).notificationPrefs || {}) as Record<string, unknown>);
-  const enableGlobal = prefs.global;
   const enableFollowing = prefs.following;
   const enableTickers = prefs.tickers;
 
   const desiredTopics = new Set<string>();
-  if (enableGlobal) desiredTopics.add("explore-global");
   if (enableFollowing) {
     followsSnap.docs.forEach((doc) => {
       desiredTopics.add(`author-${doc.id}`);
@@ -7658,7 +7446,7 @@ async function syncTopicsForUser(uid: string): Promise<void> {
       try {
         await messaging.subscribeToTopic([token], topic);
       } catch (error) {
-        console.warn(`[Explore] subscribeToTopic failed (${topic})`, error);
+        console.warn(`[API] subscribeToTopic failed (${topic})`, error);
       }
     }
 
@@ -7666,7 +7454,7 @@ async function syncTopicsForUser(uid: string): Promise<void> {
       try {
         await messaging.unsubscribeFromTopic([token], topic);
       } catch (error) {
-        console.warn(`[Explore] unsubscribeFromTopic failed (${topic})`, error);
+        console.warn(`[API] unsubscribeFromTopic failed (${topic})`, error);
       }
     }
 
@@ -7987,10 +7775,10 @@ function buildPostSavedItem(postId: string, data: Record<string, unknown>): Reco
     itemType: "post",
     sourceId: postId,
     itemId: `post__${postId}`,
-    title: asString(data.title, "Explore post"),
+    title: asString(data.title, "Saved research"),
     subtitle: asString(data.caption, ""),
     ticker: asString(tickers[0] || ""),
-    targetUrl: `/explore?post=${encodeURIComponent(postId)}`,
+    targetUrl: "/forecasting",
     createdAtMs,
     updatedAtMs,
     visibility: asString(data.visibility, "public"),
@@ -8107,7 +7895,7 @@ function matchesSearchQuery(item: Record<string, unknown>, query: string): boole
 }
 
 ROUTES.get("/health", (_req, res) => {
-  res.status(200).json({ ok: true, service: "quantura-explore-api", ts: new Date().toISOString() });
+  res.status(200).json({ ok: true, service: "quantura-api", ts: new Date().toISOString() });
 });
 
 ROUTES.post("/forecast/run", async (req, res) => {
@@ -8173,14 +7961,6 @@ ROUTES.post("/forecast/run", async (req, res) => {
       meta: trimOutputsMeta(body.meta),
     };
     await docRef.set(payload, { merge: false });
-    try {
-      await createPostFromResult("forecast", docRef.id, {
-        ...payload,
-        createdAt: admin.firestore.Timestamp.now(),
-      });
-    } catch (postError) {
-      console.error("[Forecast] post creation failed", { requestId: docRef.id, postError });
-    }
 
     await upsertOwnedMyRequestFromSystem(user.uid, {
       requestId: buildMyRequestDocId("forecast", docRef.id),
@@ -8292,7 +8072,7 @@ ROUTES.post("/screener/run", async (req, res) => {
     const body = asPlainObject(req.body);
     const marketCapValue = body.minMarketCap ?? body.minCap ?? asPlainObject(body.marketCapFilter).value;
     const minMarketCap = Math.max(0, Math.floor(asFinite(marketCapValue, 100_000_000_000)));
-    const autoPublishRequested = asBoolean(body.autoPublish, true);
+    const autoPublishRequested = false;
     const createdAt = admin.firestore.FieldValue.serverTimestamp();
     const docRef = db.collection("screener_runs").doc();
     const runKey = buildScreenerWorkflowRunKey(docRef.id);
@@ -8329,14 +8109,6 @@ ROUTES.post("/screener/run", async (req, res) => {
       meta: trimOutputsMeta(body.meta),
     };
     await docRef.set(payload, { merge: false });
-    try {
-      await createPostFromResult("screener", docRef.id, {
-        ...payload,
-        createdAt: admin.firestore.Timestamp.now(),
-      });
-    } catch (postError) {
-      console.error("[Screener] post creation failed", { runId: docRef.id, postError });
-    }
 
     let requestResponse = await syncScreenerMyRequestFromRun(user.uid, docRef.id, { ...payload, id: docRef.id }, false);
 
@@ -9231,30 +9003,7 @@ ROUTES.post("/indicators/analyze", async (req, res) => {
       }
       payload.userTier = normalizeLlmTier(payload.userTier);
     }
-    const result = await runIndicatorAnalysis(payload, {
-      openAiApiKey: await getOpenAiApiKey(),
-      defaultModel: sanitizeText(payload.model, 120) || DEFAULT_LLM_MODEL,
-      timeoutMs: LLM_TIMEOUT_MS,
-      invokeLlm: async (llmPayload) => {
-        const llmResult = await invokeLlmWithFallback({
-          provider: llmPayload.provider,
-          model: llmPayload.model,
-          fallbackProviders: Array.isArray(llmPayload.fallbackProviders) ? llmPayload.fallbackProviders : [],
-          userTier: llmPayload.userTier,
-          messages: llmPayload.messages,
-          params: {
-            ...(llmPayload.params || {}),
-            jsonSchema: llmPayload.jsonSchema,
-          },
-        });
-        return {
-          provider: llmResult.provider,
-          model: llmResult.model,
-          text: llmResult.text,
-          usage: llmResult.usage,
-        };
-      },
-    });
+    const result = await runIndicatorAnalysis(payload);
     res.status(200).json({
       ok: true,
       ...result,
@@ -9271,6 +9020,138 @@ ROUTES.post("/indicators/analyze", async (req, res) => {
       return;
     }
     res.status(500).json({ error: "indicator_analysis_failed", detail });
+  }
+});
+
+ROUTES.post("/forecast-analysis", async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const payload = asPlainObject(req.body);
+    let viewer: admin.auth.DecodedIdToken | null = null;
+    try {
+      viewer = await verifyRequestUser(req, false);
+    } catch (error: any) {
+      if (String(error?.message || "") === "invalid_token") {
+        res.status(401).json({ error: "invalid_token", message: "Sign in again before generating AI analysis." });
+        return;
+      }
+    }
+
+    let userTier: LlmUserTier = "free";
+    try {
+      userTier = await resolveLlmTierForRequest(req, payload);
+    } catch (error: any) {
+      if (String(error?.message || "") === "invalid_token") {
+        res.status(401).json({ error: "invalid_token", message: "Sign in again before generating AI analysis." });
+        return;
+      }
+    }
+
+    const context = buildForecastAnalysisContext(payload);
+    const contextHash = forecastAnalysisHash(context);
+    const regenerate = asBoolean(payload.regenerate, false);
+    const cacheId = viewer?.uid
+      ? crypto.createHash("sha256").update(`${viewer.uid}:${contextHash}`).digest("hex")
+      : "";
+    const cacheRef = cacheId ? db.collection(FORECAST_ANALYSIS_COLLECTION).doc(cacheId) : null;
+
+    if (cacheRef && !regenerate) {
+      const cached = await cacheRef.get();
+      const data = cached.exists ? asPlainObject(cached.data()) : {};
+      if (
+        cached.exists &&
+        sanitizeText(data.userId, 220) === viewer?.uid &&
+        sanitizeText(data.contextHash, 80) === contextHash &&
+        asPlainObject(data.sections).forecastSummary
+      ) {
+        res.status(200).json({
+          ok: true,
+          cached: true,
+          contextHash,
+          context,
+          sections: data.sections,
+          markdown: sanitizeText(data.markdown, 12000),
+          provider: sanitizeText(data.provider, 80),
+          model: sanitizeText(data.model, 120),
+          latencyMs: 0,
+        });
+        return;
+      }
+    }
+
+    const request = buildForecastAgentRequest(context);
+    const llm = await invokeLlmWithFallback({
+      provider: "openai",
+      model: FORECAST_ANALYSIS_MODEL,
+      fallbackProviders: [],
+      userTier,
+      messages: [
+        { role: "system", content: request.systemPrompt },
+        { role: "user", content: JSON.stringify(request.userPayload) },
+      ],
+      params: {
+        temperature: 0.2,
+        maxTokens: 1800,
+        webSearch: false,
+        stream: false,
+        background: false,
+        jsonSchema: {
+          name: "meta_prophet_forecast_analysis",
+          schema: request.responseSchema,
+        },
+      },
+    });
+    const sections = parseForecastAgentSections(llm.text);
+    const markdown = renderForecastAgentMarkdown(sections);
+
+    if (cacheRef && viewer?.uid) {
+      await cacheRef.set({
+        userId: viewer.uid,
+        ticker: context.ticker,
+        contextHash,
+        forecastStartDate: context.forecast.startDate,
+        forecastEndDate: context.forecast.endDate,
+        provider: llm.provider,
+        model: llm.model,
+        sections,
+        markdown,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
+    res.status(200).json({
+      ok: true,
+      cached: false,
+      contextHash,
+      context,
+      sections,
+      markdown,
+      provider: llm.provider,
+      model: llm.model,
+      usage: llm.usage,
+      latencyMs: Number.isFinite(Number(llm.latencyMs)) ? Number(llm.latencyMs) : Date.now() - startedAt,
+    });
+  } catch (error: any) {
+    const message = sanitizeText(error?.message || error, 300) || "forecast_analysis_failed";
+    const lower = message.toLowerCase();
+    if (/ticker|required|quantile|current price|forecast row|out of order/.test(lower)) {
+      res.status(400).json({ error: "invalid_forecast_context", message });
+      return;
+    }
+    if (/rate|429|quota/.test(lower)) {
+      res.status(429).json({ error: "rate_limited", message: "AI analysis is temporarily rate limited. Please retry shortly." });
+      return;
+    }
+    if (/abort|timeout/.test(lower)) {
+      res.status(504).json({ error: "forecast_analysis_timeout", message: "AI analysis timed out. The quantitative forecast remains available; please retry." });
+      return;
+    }
+    if (/not configured|api key|secret/.test(lower)) {
+      res.status(503).json({ error: "ai_unavailable", message: "AI analysis is not configured for this deployment. The quantitative forecast remains available." });
+      return;
+    }
+    res.status(502).json({ error: "forecast_analysis_failed", message: "AI analysis could not be generated. The quantitative forecast remains available; please retry." });
   }
 });
 
@@ -10553,862 +10434,6 @@ ROUTES.post("/admob/reward", async (req, res) => {
   await handleAdmobRewardWebhook(req, res);
 });
 
-ROUTES.get("/explore/suggestions", async (req, res) => {
-  try {
-    const query = sanitizeText(req.query.query, 32).toUpperCase();
-    const viewer = await verifyRequestUser(req, false).catch(() => null);
-
-    const popSnap = await db
-      .collection("posts")
-      .where("visibility", "==", "public")
-      .orderBy("createdAt", "desc")
-      .limit(120)
-      .get();
-
-    const counts = new Map<string, number>();
-    popSnap.docs.forEach((doc) => {
-      const tickers = Array.isArray(doc.data().tickers) ? (doc.data().tickers as string[]) : [];
-      tickers.forEach((ticker) => {
-        const clean = normalizeTicker(ticker);
-        if (!clean) return;
-        counts.set(clean, (counts.get(clean) || 0) + 1);
-      });
-    });
-
-    if (viewer?.uid) {
-      const watchSnap = await db.collection("users").doc(viewer.uid).collection("watchTickers").limit(100).get();
-      watchSnap.docs.forEach((doc) => {
-        const clean = normalizeTicker(doc.id || doc.data().ticker);
-        if (!clean) return;
-        counts.set(clean, (counts.get(clean) || 0) + 20);
-      });
-    }
-
-    const suggestions = Array.from(counts.entries())
-      .filter(([ticker]) => (query ? ticker.startsWith(query) : true))
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, 15)
-      .map(([ticker]) => ticker);
-
-    res.status(200).json({ suggestions });
-  } catch (error) {
-    console.error("[Explore] suggestions failed", error);
-    res.status(500).json({ error: "suggestions_failed" });
-  }
-});
-
-ROUTES.get("/explore", async (req, res) => {
-  try {
-    const modeRaw = sanitizeText(req.query.mode, 24).toLowerCase();
-    const mode: "trending" | "latest" | "following" | "tickers" =
-      modeRaw === "latest" || modeRaw === "following" || modeRaw === "tickers" ? (modeRaw as any) : "trending";
-
-    const limit = parseLimit(req.query.limit);
-    const cursor = decodeCursor(req.query.cursor);
-    const tickerFilter = normalizeTicker(req.query.ticker);
-    const queryText = sanitizeText(req.query.q, 80);
-
-    const viewer = await verifyRequestUser(req, false).catch((err) => {
-      if (String(err?.message) === "invalid_token") {
-        throw new Error("invalid_token");
-      }
-      return null;
-    });
-
-    if (mode === "following" && !viewer?.uid) {
-      res.status(401).json({ error: "auth_required_for_following" });
-      return;
-    }
-
-    let docs: admin.firestore.QueryDocumentSnapshot[] = [];
-    let nextCursor: string | null = null;
-
-    if (mode === "following" && viewer?.uid) {
-      const followingPage = await listFollowingPosts(viewer.uid, limit, cursor, tickerFilter, queryText);
-      docs = followingPage.posts;
-      nextCursor = followingPage.nextCursor;
-    } else {
-      const searchMode = queryText.startsWith("#")
-        ? "tag"
-        : queryText.startsWith("@")
-        ? "author"
-        : /^[A-Za-z.\-]{1,12}$/.test(queryText)
-        ? "ticker"
-        : "none";
-
-      let queryRef: admin.firestore.Query = db.collection("posts").where("visibility", "==", "public");
-
-      if (mode === "tickers") {
-        if (tickerFilter) {
-          queryRef = queryRef.where("tickers", "array-contains", tickerFilter);
-        }
-      } else if (searchMode === "ticker") {
-        queryRef = queryRef.where("tickers", "array-contains", normalizeTicker(queryText));
-      } else if (searchMode === "tag") {
-        const tag = normalizeHandle(queryText.slice(1));
-        if (tag) queryRef = queryRef.where("tags", "array-contains", tag);
-      } else if (searchMode === "author") {
-        const handle = normalizeHandle(queryText.slice(1));
-        if (handle) queryRef = queryRef.where("authorHandle", "==", handle);
-      } else if (tickerFilter) {
-        queryRef = queryRef.where("tickers", "array-contains", tickerFilter);
-      }
-
-      const usingTrending = mode === "trending";
-      if (usingTrending) {
-        queryRef = queryRef
-          .orderBy("score", "desc")
-          .orderBy("createdAt", "desc")
-          .orderBy(admin.firestore.FieldPath.documentId(), "desc");
-
-        if (cursor) {
-          queryRef = queryRef.startAfter(
-            asFinite(cursor.score, 0),
-            timestampFromMs(cursor.createdAtMs),
-            cursor.id
-          );
-        }
-      } else {
-        queryRef = queryRef
-          .orderBy("createdAt", "desc")
-          .orderBy(admin.firestore.FieldPath.documentId(), "desc");
-
-        if (cursor) {
-          queryRef = queryRef.startAfter(timestampFromMs(cursor.createdAtMs), cursor.id);
-        }
-      }
-
-      const snap = await queryRef.limit(limit + 1).get();
-      const pageDocs = snap.docs.slice(0, limit);
-      const hasMore = snap.docs.length > limit;
-      docs = pageDocs;
-
-      if (hasMore && pageDocs.length) {
-        const last = pageDocs[pageDocs.length - 1];
-        const postData = toPostResponse(last);
-        nextCursor = encodeCursor(buildNextCursor(postData, usingTrending));
-      }
-    }
-
-    const visibleDocs = docs.filter((doc) => isPostVisibleToViewer(doc.data() as Record<string, unknown>, viewer?.uid || null));
-    const postIds = visibleDocs.map((doc) => doc.id);
-    const engagement = await fetchViewerEngagement(postIds, viewer?.uid || null);
-
-    const posts = visibleDocs.map((doc) => {
-      const viewerState = engagement.get(doc.id) || { liked: false, reposted: false, saved: false };
-      return toPostResponse(doc, viewerState);
-    });
-
-    res.status(200).json({
-      mode,
-      count: posts.length,
-      cursor: nextCursor,
-      posts,
-    });
-  } catch (error: any) {
-    if (String(error?.message) === "invalid_token") {
-      res.status(401).json({ error: "invalid_token" });
-      return;
-    }
-    console.error("[Explore] list failed", error);
-    res.status(500).json({ error: "explore_fetch_failed" });
-  }
-});
-
-ROUTES.get("/posts/:postId", async (req, res) => {
-  try {
-    const postId = sanitizeText(req.params.postId, 180);
-    if (!postId) {
-      res.status(400).json({ error: "invalid_post_id" });
-      return;
-    }
-
-    const viewer = await verifyRequestUser(req, false).catch(() => null);
-    const postSnap = await db.collection("posts").doc(postId).get();
-    if (!postSnap.exists) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-
-    const data = (postSnap.data() || {}) as Record<string, unknown>;
-    if (!isPostVisibleToViewer(data, viewer?.uid || null)) {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
-
-    const [commentsSnap, engagement] = await Promise.all([
-      db.collection("posts").doc(postId).collection("comments").orderBy("createdAt", "desc").limit(100).get(),
-      fetchViewerEngagement([postId], viewer?.uid || null),
-    ]);
-
-    const comments = commentsSnap.docs.map((commentDoc) => {
-      const comment = commentDoc.data() || {};
-      const createdAtMs = getTimestampMs(comment.createdAt);
-      return {
-        id: commentDoc.id,
-        authorUid: asString(comment.authorUid),
-        authorHandle: asString(comment.authorHandle),
-        text: asString(comment.text),
-        createdAt: new Date(createdAtMs).toISOString(),
-        createdAtMs,
-      };
-    });
-
-    const viewerState = engagement.get(postId) || { liked: false, reposted: false, saved: false };
-    const postResponse = toPostResponse(postSnap, viewerState);
-    const resolvedBody = await resolvePostBody(postId, data);
-    if (resolvedBody.body) {
-      postResponse.body = resolvedBody.body;
-      postResponse.bodyFormat = resolvedBody.bodyFormat;
-    }
-    postResponse.hasBody = resolvedBody.hasBody;
-
-    res.status(200).json({
-      post: postResponse,
-      comments,
-    });
-  } catch (error) {
-    console.error("[Explore] detail failed", error);
-    res.status(500).json({ error: "post_detail_failed" });
-  }
-});
-
-ROUTES.post("/posts/:postId/like", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-    if (!user || !postId) {
-      res.status(400).json({ error: "invalid_request" });
-      return;
-    }
-
-    const likeRef = db.collection("postLikes").doc(postId).collection("users").doc(user.uid);
-
-    const result = await updatePostEngagement(postId, async (tx, postRef, postData) => {
-      const likeSnap = await tx.get(likeRef);
-      const counts = normalizeCounts(postData.counts);
-      const createdAtMs = getTimestampMs(postData.createdAt);
-
-      let liked = false;
-      if (likeSnap.exists) {
-        tx.delete(likeRef);
-        counts.likes = Math.max(0, counts.likes - 1);
-      } else {
-        liked = true;
-        tx.set(likeRef, {
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        counts.likes += 1;
-      }
-
-      const score = computeScore(counts, createdAtMs);
-      tx.set(
-        postRef,
-        {
-          counts,
-          score,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          lastEngagedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      return {
-        liked,
-        counts,
-        score,
-      };
-    });
-
-    await upsertSavedPostState(user.uid, postId, { liked: asBoolean((result as any).liked, false) });
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    if (code === "not_found") {
-      res.status(404).json({ error: code });
-      return;
-    }
-    if (code === "gone") {
-      res.status(410).json({ error: code });
-      return;
-    }
-    console.error("[Explore] like failed", error);
-    res.status(500).json({ error: "like_failed" });
-  }
-});
-
-ROUTES.post("/posts/:postId/repost", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-    if (!user || !postId) {
-      res.status(400).json({ error: "invalid_request" });
-      return;
-    }
-
-    const repostRef = db.collection("postReposts").doc(postId).collection("users").doc(user.uid);
-
-    const result = await updatePostEngagement(postId, async (tx, postRef, postData) => {
-      const repostSnap = await tx.get(repostRef);
-      const counts = normalizeCounts(postData.counts);
-      const createdAtMs = getTimestampMs(postData.createdAt);
-
-      let reposted = false;
-      if (repostSnap.exists) {
-        tx.delete(repostRef);
-        counts.reposts = Math.max(0, counts.reposts - 1);
-      } else {
-        reposted = true;
-        tx.set(repostRef, {
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        counts.reposts += 1;
-      }
-
-      const score = computeScore(counts, createdAtMs);
-      tx.set(
-        postRef,
-        {
-          counts,
-          score,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          lastEngagedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      return {
-        reposted,
-        counts,
-        score,
-      };
-    });
-
-    await upsertSavedPostState(user.uid, postId, { reposted: asBoolean((result as any).reposted, false) });
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    if (code === "not_found") {
-      res.status(404).json({ error: code });
-      return;
-    }
-    if (code === "gone") {
-      res.status(410).json({ error: code });
-      return;
-    }
-    console.error("[Explore] repost failed", error);
-    res.status(500).json({ error: "repost_failed" });
-  }
-});
-
-ROUTES.post("/posts/:postId/share", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, false);
-    const postId = sanitizeText(req.params.postId, 180);
-    if (!postId) {
-      res.status(400).json({ error: "invalid_post_id" });
-      return;
-    }
-
-    const shareEventRef = db.collection("postShareEvents").doc();
-
-    const result = await updatePostEngagement(postId, async (tx, postRef, postData) => {
-      const counts = normalizeCounts(postData.counts);
-      const createdAtMs = getTimestampMs(postData.createdAt);
-      counts.shares += 1;
-      const score = computeScore(counts, createdAtMs);
-
-      tx.set(
-        postRef,
-        {
-          counts,
-          score,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          lastEngagedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      tx.set(shareEventRef, {
-        postId,
-        uid: user?.uid || null,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        source: sanitizeText((req.body || {}).source, 80) || "web",
-      });
-
-      return {
-        shared: true,
-        counts,
-        score,
-      };
-    });
-
-    if (user?.uid) {
-      await upsertSavedPostState(user.uid, postId, { shared: true });
-    }
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "not_found") {
-      res.status(404).json({ error: code });
-      return;
-    }
-    if (code === "gone") {
-      res.status(410).json({ error: code });
-      return;
-    }
-    console.error("[Explore] share failed", error);
-    res.status(500).json({ error: "share_failed" });
-  }
-});
-
-ROUTES.post("/posts/:postId/save", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-    if (!user || !postId) {
-      res.status(400).json({ error: "invalid_post_id" });
-      return;
-    }
-
-    const postSnap = await db.collection("posts").doc(postId).get();
-    if (!postSnap.exists) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-    const postData = (postSnap.data() || {}) as Record<string, unknown>;
-    if (!isPostVisibleToViewer(postData, user.uid)) {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
-
-    const stateRef = db.collection("users").doc(user.uid).collection("saved_post_state").doc(postId);
-    const stateSnap = await stateRef.get();
-    const currentSaved = asBoolean((stateSnap.data() || {}).saved, false);
-    const explicit = (req.body || {}).save;
-    const nextSaved = typeof explicit === "boolean" ? explicit : !currentSaved;
-
-    await upsertSavedPostState(user.uid, postId, { saved: nextSaved });
-    res.status(200).json({ ok: true, saved: nextSaved });
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    console.error("[Explore] save post failed", error);
-    res.status(500).json({ error: "save_post_failed" });
-  }
-});
-
-ROUTES.post("/posts/:postId/comment", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-    const text = sanitizeText((req.body || {}).text, 500);
-
-    if (!user || !postId || !text) {
-      res.status(400).json({ error: "invalid_comment" });
-      return;
-    }
-
-    const profile = await readAuthorProfile(user.uid);
-    const commentRef = db.collection("posts").doc(postId).collection("comments").doc();
-
-    const result = await updatePostEngagement(postId, async (tx, postRef, postData) => {
-      const counts = normalizeCounts(postData.counts);
-      const createdAtMs = getTimestampMs(postData.createdAt);
-
-      tx.set(commentRef, {
-        authorUid: user.uid,
-        authorHandle: profile.handle,
-        text,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      counts.comments += 1;
-      const score = computeScore(counts, createdAtMs);
-
-      tx.set(
-        postRef,
-        {
-          counts,
-          score,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          lastEngagedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      return {
-        commentId: commentRef.id,
-        counts,
-        score,
-      };
-    });
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    if (code === "not_found") {
-      res.status(404).json({ error: code });
-      return;
-    }
-    if (code === "gone") {
-      res.status(410).json({ error: code });
-      return;
-    }
-    console.error("[Explore] comment failed", error);
-    res.status(500).json({ error: "comment_failed" });
-  }
-});
-
-ROUTES.delete("/posts/:postId/comment/:commentId", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-    const commentId = sanitizeText(req.params.commentId, 180);
-
-    if (!user || !postId || !commentId) {
-      res.status(400).json({ error: "invalid_request" });
-      return;
-    }
-
-    const postRef = db.collection("posts").doc(postId);
-    const commentRef = postRef.collection("comments").doc(commentId);
-
-    const result = await db.runTransaction(async (tx) => {
-      const [postSnap, commentSnap] = await Promise.all([tx.get(postRef), tx.get(commentRef)]);
-
-      if (!postSnap.exists) throw new Error("not_found");
-      if (!commentSnap.exists) throw new Error("comment_not_found");
-
-      const postData = (postSnap.data() || {}) as Record<string, unknown>;
-      const commentData = (commentSnap.data() || {}) as Record<string, unknown>;
-
-      if (asString(commentData.authorUid) !== user.uid) {
-        throw new Error("forbidden");
-      }
-
-      const counts = normalizeCounts(postData.counts);
-      const createdAtMs = getTimestampMs(postData.createdAt);
-      counts.comments = Math.max(0, counts.comments - 1);
-      const score = computeScore(counts, createdAtMs);
-
-      tx.delete(commentRef);
-      tx.set(
-        postRef,
-        {
-          counts,
-          score,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          lastEngagedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      return { deleted: true, counts, score };
-    });
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    if (code === "forbidden") {
-      res.status(403).json({ error: code });
-      return;
-    }
-    if (code === "not_found" || code === "comment_not_found") {
-      res.status(404).json({ error: code });
-      return;
-    }
-    console.error("[Explore] delete comment failed", error);
-    res.status(500).json({ error: "comment_delete_failed" });
-  }
-});
-
-ROUTES.post("/posts/:postId/report", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-    const reason = sanitizeText((req.body || {}).reason, 120);
-    const details = sanitizeText((req.body || {}).details, 1000);
-
-    if (!user || !postId || !reason) {
-      res.status(400).json({ error: "invalid_report" });
-      return;
-    }
-
-    const reportRef = db.collection("reports").doc(`${postId}_${user.uid}`);
-
-    const result = await updatePostEngagement(postId, async (tx, postRef, postData) => {
-      const counts = normalizeCounts(postData.counts);
-      const createdAtMs = getTimestampMs(postData.createdAt);
-      const reportSnap = await tx.get(reportRef);
-
-      if (!reportSnap.exists) {
-        tx.set(reportRef, {
-          postId,
-          reporterUid: user.uid,
-          reason,
-          details,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          status: "open",
-        });
-        counts.reports += 1;
-      }
-
-      const score = computeScore(counts, createdAtMs);
-      tx.set(
-        postRef,
-        {
-          counts,
-          score,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      return {
-        reported: true,
-        counts,
-        score,
-      };
-    });
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    if (code === "not_found") {
-      res.status(404).json({ error: code });
-      return;
-    }
-    if (code === "gone") {
-      res.status(410).json({ error: code });
-      return;
-    }
-    console.error("[Explore] report failed", error);
-    res.status(500).json({ error: "report_failed" });
-  }
-});
-
-ROUTES.patch("/posts/:postId/visibility", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-    const visibility = sanitizeText((req.body || {}).visibility, 20) as Visibility;
-
-    if (!user || !postId || !["public", "unlisted"].includes(visibility)) {
-      res.status(400).json({ error: "invalid_visibility" });
-      return;
-    }
-
-    const postRef = db.collection("posts").doc(postId);
-    const postSnap = await postRef.get();
-    if (!postSnap.exists) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-
-    const post = (postSnap.data() || {}) as Record<string, unknown>;
-    if (asString(post.authorUid) !== user.uid) {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
-
-    await postRef.set(
-      {
-        visibility,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    res.status(200).json({ ok: true, visibility });
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    console.error("[Explore] visibility update failed", error);
-    res.status(500).json({ error: "visibility_update_failed" });
-  }
-});
-
-ROUTES.delete("/posts/:postId", async (req, res) => {
-  try {
-    const user = await verifyRequestUser(req, true);
-    const postId = sanitizeText(req.params.postId, 180);
-
-    if (!user || !postId) {
-      res.status(400).json({ error: "invalid_request" });
-      return;
-    }
-
-    const postRef = db.collection("posts").doc(postId);
-    const postSnap = await postRef.get();
-    if (!postSnap.exists) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-
-    const postData = (postSnap.data() || {}) as Record<string, unknown>;
-    if (asString(postData.authorUid) !== user.uid) {
-      res.status(403).json({ error: "forbidden" });
-      return;
-    }
-
-    await postRef.set(
-      {
-        visibility: "deleted",
-        deletedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    await Promise.all([
-      deleteCollectionDocs(postRef.collection("comments")),
-      deleteCollectionDocs(db.collection("postLikes").doc(postId).collection("users")),
-      deleteCollectionDocs(db.collection("postReposts").doc(postId).collection("users")),
-      deleteCollectionDocs(db.collection("postShareEvents").where("postId", "==", postId)),
-      deleteCollectionDocs(db.collection("reports").where("postId", "==", postId)),
-    ]);
-
-    await Promise.all([
-      db.collection("postLikes").doc(postId).delete().catch(() => undefined),
-      db.collection("postReposts").doc(postId).delete().catch(() => undefined),
-    ]);
-
-    await postRef.delete();
-
-    res.status(200).json({ ok: true, deleted: true });
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    console.error("[Explore] delete failed", error);
-    res.status(500).json({ error: "post_delete_failed" });
-  }
-});
-
-ROUTES.get("/profile/handle/:handle", async (req, res) => {
-  try {
-    const handle = normalizeHandle(req.params.handle);
-    if (!handle) {
-      res.status(400).json({ error: "invalid_handle" });
-      return;
-    }
-
-    const viewer = await verifyRequestUser(req, false).catch(() => null);
-
-    let snap = await db.collection("users").where("handle", "==", handle).limit(1).get();
-    if (snap.empty) {
-      snap = await db.collection("users").where("profile.username", "==", handle).limit(1).get();
-    }
-
-    if (snap.empty) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-
-    const userDoc = snap.docs[0];
-    const userData = userDoc.data() || {};
-    const payload = await buildProfilePayload(userDoc.id, userData, viewer?.uid || null);
-
-    if (!asBoolean(payload.publicProfile, false) && viewer?.uid !== userDoc.id) {
-      res.status(404).json({ error: "not_found" });
-      return;
-    }
-
-    res.status(200).json(payload);
-  } catch (error) {
-    console.error("[Explore] profile by handle failed", error);
-    res.status(500).json({ error: "profile_lookup_failed" });
-  }
-});
-
-ROUTES.get("/profile/:uid/posts", async (req, res) => {
-  try {
-    const uid = sanitizeText(req.params.uid, 140);
-    const limit = parseLimit(req.query.limit);
-    const cursor = decodeCursor(req.query.cursor);
-    if (!uid) {
-      res.status(400).json({ error: "invalid_uid" });
-      return;
-    }
-
-    const viewer = await verifyRequestUser(req, false).catch(() => null);
-    const isOwner = viewer?.uid === uid;
-
-    let queryRef: admin.firestore.Query;
-    if (isOwner) {
-      queryRef = db
-        .collection("posts")
-        .where("authorUid", "==", uid)
-        .orderBy("createdAt", "desc")
-        .orderBy(admin.firestore.FieldPath.documentId(), "desc");
-    } else {
-      queryRef = db
-        .collection("posts")
-        .where("authorUid", "==", uid)
-        .where("visibility", "==", "public")
-        .orderBy("createdAt", "desc")
-        .orderBy(admin.firestore.FieldPath.documentId(), "desc");
-    }
-
-    if (cursor) {
-      queryRef = queryRef.startAfter(timestampFromMs(cursor.createdAtMs), cursor.id);
-    }
-
-    const snap = await queryRef.limit(limit + 1).get();
-    let docs = snap.docs;
-    if (isOwner) {
-      docs = docs.filter((doc) => asString(doc.data().visibility) !== "deleted");
-    }
-
-    const page = docs.slice(0, limit);
-    const hasMore = docs.length > limit;
-    const postIds = page.map((doc) => doc.id);
-    const engagement = await fetchViewerEngagement(postIds, viewer?.uid || null);
-
-    const posts = page.map((doc) => toPostResponse(doc, engagement.get(doc.id) || { liked: false, reposted: false, saved: false }));
-    const next = hasMore && posts.length
-      ? encodeCursor(buildNextCursor(posts[posts.length - 1] as Record<string, unknown>, false))
-      : null;
-
-    res.status(200).json({ posts, cursor: next, owner: isOwner });
-  } catch (error) {
-    console.error("[Explore] profile posts failed", error);
-    res.status(500).json({ error: "profile_posts_failed" });
-  }
-});
-
 ROUTES.get("/me/profile", async (req, res) => {
   try {
     const viewer = await verifyRequestUser(req, true);
@@ -11429,7 +10454,7 @@ ROUTES.get("/me/profile", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] me profile failed", error);
+    console.error("[API] me profile failed", error);
     res.status(500).json({ error: "me_profile_failed" });
   }
 });
@@ -11472,7 +10497,7 @@ ROUTES.patch("/me/profile", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] me profile update failed", error);
+    console.error("[API] me profile update failed", error);
     res.status(500).json({ error: "me_profile_update_failed" });
   }
 });
@@ -11504,7 +10529,6 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
         following: prefs.following,
         tickers: prefs.tickers,
         watchlist: prefs.watchlist,
-        explore: prefs.explore,
         earnings: prefs.earnings,
         ipos: prefs.ipos,
         daily: prefs.daily,
@@ -11531,7 +10555,7 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] me notification settings failed", error);
+    console.error("[API] me notification settings failed", error);
     res.status(500).json({ error: "notification_settings_failed" });
   }
 });
@@ -11753,7 +10777,7 @@ ROUTES.post("/notifications/register-token", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] register token failed", error);
+    console.error("[API] register token failed", error);
     res.status(500).json({ error: "register_token_failed" });
   }
 });
@@ -11778,7 +10802,7 @@ ROUTES.post("/notifications/unregister-token", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] unregister token failed", error);
+    console.error("[API] unregister token failed", error);
     res.status(500).json({ error: "unregister_token_failed" });
   }
 });
@@ -11864,7 +10888,7 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] preferences failed", error);
+    console.error("[API] preferences failed", error);
     res.status(500).json({ error: "preferences_update_failed" });
   }
 });
@@ -11894,7 +10918,7 @@ ROUTES.post("/notifications/personalize", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("[Explore] notification personalize failed", error);
+    console.error("[API] notification personalize failed", error);
     res.status(500).json({ error: "notification_personalize_failed" });
   }
 });
@@ -11915,7 +10939,7 @@ ROUTES.post("/notifications/sync-topics", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] sync topics failed", error);
+    console.error("[API] sync topics failed", error);
     res.status(500).json({ error: "sync_topics_failed" });
   }
 });
@@ -12328,10 +11352,6 @@ ROUTES.post("/notify/event", async (req, res) => {
       if (category === "watchlist" || category === "earnings") {
         const byTicker = await collectUsersByWatchTickers(inputTickers);
         byTicker.forEach((uid) => targetUsers.add(uid));
-      } else if (category === "explore") {
-        const authorUid = sanitizeText(body.authorUid || body.userId, 220);
-        const byFollow = await collectUsersByFollowedAuthor(authorUid);
-        byFollow.forEach((uid) => targetUsers.add(uid));
       } else if (category === "ipo") {
         const allUsers = await collectUsersForIpoNotifications();
         allUsers.forEach((uid) => targetUsers.add(uid));
@@ -12479,7 +11499,7 @@ ROUTES.post("/notify/watchlist", async (req, res) => {
   }
 });
 
-ROUTES.get(["/promo/status", "/explore/promo/status"], (_req, res) => {
+ROUTES.get("/promo/status", (_req, res) => {
   const serverTimeMs = Date.now();
   const startsAtMs = PROMO_START_MS;
   const endsAtMs = PROMO_END_MS;
@@ -12489,10 +11509,9 @@ ROUTES.get(["/promo/status", "/explore/promo/status"], (_req, res) => {
     promo: {
       id: PROMO_ID,
       active,
-      code: PROMO_CODE,
       discountPercent: PROMO_DISCOUNT_PERCENT,
-      headline: "Upgrade your research workflow with a limited-time offer",
-      body: `Apply code ${PROMO_CODE} for ${PROMO_DISCOUNT_PERCENT}% off your first cycle.`,
+      headline: "Stay current with Quantura research",
+      body: `Enter your email to receive product updates and reveal a ${PROMO_DISCOUNT_PERCENT}% promotional code.`,
       startsAtMs,
       endsAtMs,
       serverTimeMs,
@@ -12500,48 +11519,48 @@ ROUTES.get(["/promo/status", "/explore/promo/status"], (_req, res) => {
   });
 });
 
-ROUTES.post("/follows/:authorUid", async (req, res) => {
+ROUTES.post("/promo/claim", async (req, res) => {
+  const serverTimeMs = Date.now();
+  const active = PROMO_ACTIVE && serverTimeMs >= PROMO_START_MS && serverTimeMs < PROMO_END_MS;
+  if (!active) {
+    res.status(410).json({ ok: false, error: "promo_inactive", message: "This promotional offer is no longer active." });
+    return;
+  }
+  const email = normalizeEmail((req.body || {}).email);
+  const consent = asBoolean((req.body || {}).consent, false);
+  if (!email) {
+    res.status(400).json({ ok: false, error: "invalid_email", message: "Enter a valid email address." });
+    return;
+  }
+  if (!consent) {
+    res.status(400).json({ ok: false, error: "consent_required", message: "Confirm that you want to receive Quantura product and research updates." });
+    return;
+  }
   try {
-    const user = await verifyRequestUser(req, true);
-    if (!user) {
-      res.status(401).json({ error: "unauthenticated" });
-      return;
-    }
-
-    const authorUid = sanitizeText(req.params.authorUid, 140);
-    if (!authorUid || authorUid === user.uid) {
-      res.status(400).json({ error: "invalid_author_uid" });
-      return;
-    }
-
-    const ref = db.collection("users").doc(user.uid).collection("follows").doc(authorUid);
-    const snap = await ref.get();
-    const explicitFollow = (req.body || {}).follow;
-
-    const shouldFollow = typeof explicitFollow === "boolean" ? explicitFollow : !snap.exists;
-    if (shouldFollow) {
-      await ref.set(
-        {
-          authorUid,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    } else {
-      await ref.delete();
-    }
-
-    await syncTopicsForUser(user.uid);
-
-    res.status(200).json({ ok: true, following: shouldFollow });
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    console.error("[Explore] follow toggle failed", error);
-    res.status(500).json({ error: "follow_toggle_failed" });
+    const subscriberId = crypto.createHash("sha256").update(email).digest("hex");
+    await db.collection("promo_subscribers").doc(subscriberId).set({
+      email,
+      emailPrefs: { newsletter: true },
+      consent: true,
+      consentSource: "promo_claim",
+      promoId: PROMO_ID,
+      discountPercent: PROMO_DISCOUNT_PERCENT,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAtMs: serverTimeMs,
+    }, { merge: true });
+    res.status(200).json({
+      ok: true,
+      promo: {
+        id: PROMO_ID,
+        code: PROMO_CODE,
+        discountPercent: PROMO_DISCOUNT_PERCENT,
+        endsAtMs: PROMO_END_MS,
+      },
+      message: "Your email was saved. Your promotional code is ready.",
+    });
+  } catch (error) {
+    console.error("[Promo] claim failed", error instanceof Error ? error.message : "unknown error");
+    res.status(500).json({ ok: false, error: "promo_claim_failed", message: "We could not save your email right now. Please try again." });
   }
 });
 
@@ -12586,7 +11605,7 @@ ROUTES.post("/watch-tickers/:ticker", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] watch ticker failed", error);
+    console.error("[API] watch ticker failed", error);
     res.status(500).json({ error: "watch_ticker_failed" });
   }
 });
@@ -12926,7 +11945,7 @@ ROUTES.post("/autopilot/sports/runs", async (req, res) => {
       mode: "sports_autopilot_run",
       sourceType: "sports_timeseries",
       sourceGroup: "sports",
-      autoPublishToExplore: true,
+      published: false,
       status: "dataset_ready",
       dataset: {
         ticker: syntheticTicker,
@@ -12974,7 +11993,7 @@ ROUTES.post("/autopilot/sports/runs", async (req, res) => {
     let requestId = await syncAutopilotMyRequest(user.uid, runId, baseDoc);
     await runRef.set(
       {
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -13017,7 +12036,7 @@ ROUTES.post("/autopilot/sports/runs", async (req, res) => {
       requestId = await syncAutopilotMyRequest(user.uid, runId, refreshedData);
       await runRef.set(
         {
-          exploreRequestId: requestId,
+          workspaceRequestId: requestId,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -13043,7 +12062,7 @@ ROUTES.post("/autopilot/sports/runs", async (req, res) => {
       requestId = await syncAutopilotMyRequest(user.uid, runId, failedData);
       await runRef.set(
         {
-          exploreRequestId: requestId,
+          workspaceRequestId: requestId,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -13194,7 +12213,7 @@ ROUTES.post("/autopilot/datasets/history", async (req, res) => {
     const requestId = await syncAutopilotMyRequest(user.uid, runRef.id, doc);
     await runRef.set(
       {
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -13264,7 +12283,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       autopilot: {},
-      exploreRequestId: "",
+      workspaceRequestId: "",
     };
 
     if (classified.kind === "historical_dataset") {
@@ -13300,7 +12319,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       const requestId = await syncAutopilotMyRequest(user.uid, runRef.id, doc);
       await runRef.set(
         {
-          exploreRequestId: requestId,
+          workspaceRequestId: requestId,
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -13364,7 +12383,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
     const requestId = await syncAutopilotMyRequest(user.uid, runRef.id, doc);
     await runRef.set(
       {
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -13487,7 +12506,7 @@ ROUTES.post("/autopilot/runs", async (req, res) => {
     const requestId = await syncAutopilotMyRequest(user.uid, runId, refreshedData);
     await db.collection("autopilot_requests").doc(runId).set(
       {
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -13750,7 +12769,7 @@ ROUTES.post("/autopilot/runs/:runId/analyze", async (req, res) => {
     const requestId = await syncAutopilotMyRequest(user.uid, runId, refreshed);
     await db.collection("autopilot_requests").doc(runId).set(
       {
-        exploreRequestId: requestId,
+        workspaceRequestId: requestId,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
@@ -14305,7 +13324,7 @@ ROUTES.get("/my-requests/shared/:slug", async (req, res) => {
       res.status(403).json({ error: code });
       return;
     }
-    console.error("[Explore] read shared request failed", error);
+    console.error("[API] read shared request failed", error);
     res.status(500).json({ error: "request_share_lookup_failed" });
   }
 });
@@ -14352,7 +13371,7 @@ ROUTES.get("/my-requests/shared/:slug/files/:fileKey/text", async (req, res) => 
       res.status(403).json({ error: code });
       return;
     }
-    console.error("[Explore] read shared request file failed", error);
+    console.error("[API] read shared request file failed", error);
     res.status(500).json({ error: "request_share_file_failed" });
   }
 });
@@ -14380,13 +13399,10 @@ ROUTES.get("/my-requests", async (req, res) => {
       .limit(Math.max(limit * 4, 140))
       .get();
 
-    const requestDocs = await Promise.all(
-      snap.docs.map(async (doc) => {
-        const data = (doc.data() || {}) as Record<string, unknown>;
-        const repaired = await ensurePublishedMyRequestExplorePost(viewer.uid, doc.id, data);
-        return { id: doc.id, data: repaired };
-      })
-    );
+    const requestDocs = snap.docs.map((doc) => ({
+      id: doc.id,
+      data: (doc.data() || {}) as Record<string, unknown>,
+    }));
 
     const rows = requestDocs
       .map((doc) => toMyRequestResponse(doc.id, doc.data, { includePayload: true }))
@@ -14425,7 +13441,7 @@ ROUTES.get("/my-requests", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] list my requests failed", error);
+    console.error("[API] list my requests failed", error);
     res.status(500).json({ error: "my_requests_list_failed" });
   }
 });
@@ -14467,12 +13483,12 @@ ROUTES.post("/my-requests", async (req, res) => {
       createdAt: shareExisting.createdAt || shareRequested.createdAt || null,
     };
     const ticker = firstTickerFromRequest(input, { collection: sourceCollection, id: sourceId }, outputsMeta);
-    const nextPublished = asBoolean(body.published, asBoolean(existing.published, false));
+    const nextPublished = false;
     const requestedVisibility = normalizeMyRequestVisibility(
       body.visibility,
       normalizeMyRequestVisibility(existing.visibility, share.visibility as MyRequestShareVisibility)
     );
-    const effectiveVisibility = nextPublished ? "public" : requestedVisibility;
+    const effectiveVisibility = requestedVisibility;
 
     const payload: Record<string, unknown> = {
       type,
@@ -14487,8 +13503,8 @@ ROUTES.post("/my-requests", async (req, res) => {
       },
       searchText: buildMyRequestSearchText(title, type, ticker, input, outputsMeta),
       published: nextPublished,
-      publishedAt: nextPublished ? existing.publishedAt || admin.firestore.FieldValue.serverTimestamp() : null,
-      explorePostId: nextPublished ? sanitizeText(body.explorePostId || existing.explorePostId, 220) : "",
+      publishedAt: null,
+      explorePostId: "",
       deleted: false,
       share,
       visibility: effectiveVisibility,
@@ -14497,20 +13513,6 @@ ROUTES.post("/my-requests", async (req, res) => {
     };
 
     await requestRef.set(payload, { merge: true });
-    if (nextPublished) {
-      const merged = { ...existing, ...payload };
-      const postId = await upsertExplorePostFromMyRequest(viewer.uid, requestId, merged, "public");
-      await requestRef.set(
-        {
-          published: true,
-          publishedAt: existing.publishedAt || admin.firestore.FieldValue.serverTimestamp(),
-          explorePostId: postId,
-          visibility: "public",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    }
     const refreshed = await requestRef.get();
     res.status(200).json({
       ok: true,
@@ -14522,7 +13524,7 @@ ROUTES.post("/my-requests", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] upsert my request failed", error);
+    console.error("[API] upsert my request failed", error);
     res.status(500).json({ error: "my_request_upsert_failed" });
   }
 });
@@ -14544,9 +13546,8 @@ ROUTES.get("/my-requests/:requestId", async (req, res) => {
       res.status(404).json({ error: "request_not_found" });
       return;
     }
-    const repaired = await ensurePublishedMyRequestExplorePost(viewer.uid, item.id, item.data);
     res.status(200).json({
-      request: toMyRequestResponse(item.id, repaired, { includePayload: true }),
+      request: toMyRequestResponse(item.id, item.data, { includePayload: true }),
     });
   } catch (error: any) {
     const code = String(error?.message || "");
@@ -14554,7 +13555,7 @@ ROUTES.get("/my-requests/:requestId", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] read my request failed", error);
+    console.error("[API] read my request failed", error);
     res.status(500).json({ error: "my_request_read_failed" });
   }
 });
@@ -14631,7 +13632,7 @@ ROUTES.patch("/my-requests/:requestId", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] rename my request failed", error);
+    console.error("[API] rename my request failed", error);
     res.status(500).json({ error: "my_request_rename_failed" });
   }
 });
@@ -14753,180 +13754,8 @@ ROUTES.post("/my-requests/:requestId/share", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] share my request failed", error);
+    console.error("[API] share my request failed", error);
     res.status(500).json({ error: "my_request_share_failed" });
-  }
-});
-
-ROUTES.post("/my-requests/:requestId/publish", async (req, res) => {
-  try {
-    const viewer = await verifyRequestUser(req, true);
-    if (!viewer) {
-      res.status(401).json({ error: "unauthenticated" });
-      return;
-    }
-    const requestId = normalizeMyRequestId(req.params.requestId);
-    if (!requestId) {
-      res.status(400).json({ error: "invalid_request_id" });
-      return;
-    }
-    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
-    const snap = await requestRef.get();
-    if (!snap.exists) {
-      res.status(404).json({ error: "request_not_found" });
-      return;
-    }
-    const existing = (snap.data() || {}) as Record<string, unknown>;
-    if (asBoolean(existing.deleted, false)) {
-      res.status(404).json({ error: "request_not_found" });
-      return;
-    }
-
-    const body = asPlainObject(req.body);
-    const requestedVisibility = normalizeMyRequestVisibility(body.visibility, "public");
-    const visibility = requestedVisibility === "public" ? "public" : "unlisted";
-    const postId = await upsertExplorePostFromMyRequest(viewer.uid, requestId, existing, visibility);
-
-    await requestRef.set(
-      {
-        published: true,
-        publishedAt: admin.firestore.FieldValue.serverTimestamp(),
-        explorePostId: postId,
-        visibility: requestedVisibility === "private" ? "unlisted" : requestedVisibility,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    const sourceRef = asPlainObject(existing.sourceRef);
-    const sourceCollection = sanitizeText(sourceRef.collection, 80);
-    const sourceId = sanitizeText(sourceRef.id, 220);
-    if ((normalizeMyRequestType(existing.type) || "forecast") === "screener" && sourceCollection === "screener_runs" && sourceId) {
-      await db
-        .collection(sourceCollection)
-        .doc(sourceId)
-        .set(
-          {
-            isPublic: true,
-            published: true,
-            publishedAt: admin.firestore.FieldValue.serverTimestamp(),
-            explorePostId: postId,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-    }
-
-    const refreshed = await requestRef.get();
-    res.status(200).json({
-      ok: true,
-      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
-      post: {
-        id: postId,
-        visibility,
-      },
-    });
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    console.error("[Explore] publish my request failed", error);
-    res.status(500).json({ error: "my_request_publish_failed" });
-  }
-});
-
-ROUTES.post("/my-requests/:requestId/unpublish", async (req, res) => {
-  try {
-    const viewer = await verifyRequestUser(req, true);
-    if (!viewer) {
-      res.status(401).json({ error: "unauthenticated" });
-      return;
-    }
-    const requestId = normalizeMyRequestId(req.params.requestId);
-    if (!requestId) {
-      res.status(400).json({ error: "invalid_request_id" });
-      return;
-    }
-    const requestRef = db.collection("users").doc(viewer.uid).collection("requests").doc(requestId);
-    const snap = await requestRef.get();
-    if (!snap.exists) {
-      res.status(404).json({ error: "request_not_found" });
-      return;
-    }
-    const existing = (snap.data() || {}) as Record<string, unknown>;
-    if (asBoolean(existing.deleted, false)) {
-      res.status(404).json({ error: "request_not_found" });
-      return;
-    }
-
-    const sourceRef = asPlainObject(existing.sourceRef);
-    const sourceCollection = sanitizeText(sourceRef.collection, 80);
-    const sourceId = sanitizeText(sourceRef.id, 220);
-    const type = normalizeMyRequestType(existing.type) || "forecast";
-    const candidatePostIds = [
-      sanitizeText(existing.explorePostId, 220),
-      deriveMyRequestExplorePostId(requestId, existing),
-      type === "forecast" && sourceCollection === "forecast_requests" ? `forecast_${sourceId}` : "",
-      type === "screener" && sourceCollection === "screener_runs" ? `screener_${sourceId}` : "",
-    ]
-      .map((item) => sanitizeText(item, 220))
-      .filter(Boolean);
-
-    await Promise.all(
-      candidatePostIds.map((postId) =>
-        db
-          .collection("posts")
-          .doc(postId)
-          .set(
-            {
-              visibility: "hidden",
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          )
-          .catch(() => undefined)
-      )
-    );
-
-    await requestRef.set(
-      {
-        published: false,
-        publishedAt: null,
-        explorePostId: "",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-    if (type === "screener" && sourceCollection === "screener_runs" && sourceId) {
-      await db
-        .collection(sourceCollection)
-        .doc(sourceId)
-        .set(
-          {
-            isPublic: false,
-            published: false,
-            publishedAt: null,
-            explorePostId: "",
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-    }
-
-    const refreshed = await requestRef.get();
-    res.status(200).json({
-      ok: true,
-      request: toMyRequestResponse(refreshed.id, (refreshed.data() || {}) as Record<string, unknown>, { includePayload: true }),
-    });
-  } catch (error: any) {
-    const code = String(error?.message || "");
-    if (code === "unauthenticated" || code === "invalid_token") {
-      res.status(401).json({ error: code });
-      return;
-    }
-    console.error("[Explore] unpublish my request failed", error);
-    res.status(500).json({ error: "my_request_unpublish_failed" });
   }
 });
 
@@ -14989,7 +13818,7 @@ ROUTES.post("/my-requests/:requestId/duplicate", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] duplicate my request failed", error);
+    console.error("[API] duplicate my request failed", error);
     res.status(500).json({ error: "my_request_duplicate_failed" });
   }
 });
@@ -15035,7 +13864,7 @@ ROUTES.delete("/my-requests/:requestId", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] delete my request failed", error);
+    console.error("[API] delete my request failed", error);
     res.status(500).json({ error: "my_request_delete_failed" });
   }
 });
@@ -15081,7 +13910,7 @@ ROUTES.get("/saved/folders", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] list saved folders failed", error);
+    console.error("[API] list saved folders failed", error);
     res.status(500).json({ error: "saved_folders_failed" });
   }
 });
@@ -15143,7 +13972,7 @@ ROUTES.post("/saved/folders", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] create saved folder failed", error);
+    console.error("[API] create saved folder failed", error);
     res.status(500).json({ error: "saved_folder_create_failed" });
   }
 });
@@ -15185,7 +14014,7 @@ ROUTES.get("/saved/folders/:folderId/items", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] list folder items failed", error);
+    console.error("[API] list folder items failed", error);
     res.status(500).json({ error: "saved_folder_items_failed" });
   }
 });
@@ -15259,7 +14088,7 @@ ROUTES.post("/saved/folders/:folderId/items", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] save folder item failed", error);
+    console.error("[API] save folder item failed", error);
     res.status(500).json({ error: "saved_folder_item_create_failed" });
   }
 });
@@ -15305,7 +14134,7 @@ ROUTES.delete("/saved/folders/:folderId/items/:itemType/:sourceId", async (req, 
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] delete folder item failed", error);
+    console.error("[API] delete folder item failed", error);
     res.status(500).json({ error: "saved_folder_item_delete_failed" });
   }
 });
@@ -15412,7 +14241,7 @@ ROUTES.get("/saved/search", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
-    console.error("[Explore] saved search failed", error);
+    console.error("[API] saved search failed", error);
     res.status(500).json({ error: "saved_search_failed" });
   }
 });
@@ -15476,7 +14305,7 @@ ROUTES.get("/shares/:shareId", async (req, res) => {
       }),
     });
   } catch (error) {
-    console.error("[Explore] share lookup failed", error);
+    console.error("[API] share lookup failed", error);
     res.status(500).json({ error: "share_lookup_failed" });
   }
 });
@@ -15492,37 +14321,6 @@ function cronRequestAuthorized(req: Request): boolean {
   return expectedBuffer.length === suppliedBuffer.length && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
 }
 
-async function reconcileCreatedPosts(limitPerCollection = 100): Promise<Record<string, number>> {
-  const sources: Array<{ postType: PostType; collection: string }> = [
-    { postType: "forecast", collection: "forecast_requests" },
-    { postType: "backtest", collection: "backtests" },
-    { postType: "agent", collection: "agent_runs" },
-    { postType: "screener", collection: "screener_runs" },
-  ];
-  const checked: Record<string, number> = {};
-  for (const source of sources) {
-    let snapshot: admin.firestore.QuerySnapshot;
-    try {
-      snapshot = await db.collection(source.collection).orderBy("createdAt", "desc").limit(limitPerCollection).get();
-    } catch (_error) {
-      snapshot = await db.collection(source.collection).limit(limitPerCollection).get();
-    }
-    checked[source.collection] = snapshot.size;
-    for (const doc of snapshot.docs) {
-      try {
-        await createPostFromResult(source.postType, doc.id, (doc.data() || {}) as Record<string, unknown>);
-      } catch (error) {
-        console.error("[Explore] post reconciliation failed", {
-          collection: source.collection,
-          sourceId: doc.id,
-          error,
-        });
-      }
-    }
-  }
-  return checked;
-}
-
 ROUTES.all("/internal/cron/:jobName", async (req, res) => {
   if (!cronRequestAuthorized(req)) {
     res.status(401).json({ ok: false, error: "unauthorized" });
@@ -15530,11 +14328,6 @@ ROUTES.all("/internal/cron/:jobName", async (req, res) => {
   }
   try {
     const jobName = sanitizeText(req.params.jobName, 100);
-    if (jobName === "reconcile-posts") {
-      const checked = await reconcileCreatedPosts();
-      res.status(200).json({ ok: true, job: jobName, checked });
-      return;
-    }
     if (jobName === "autopilot-reconcile") {
       await reconcileAutopilotRuns({});
       res.status(200).json({ ok: true, job: jobName });
@@ -15557,7 +14350,7 @@ ROUTES.all("/internal/cron/:jobName", async (req, res) => {
     }
     res.status(404).json({ ok: false, error: "job_not_found" });
   } catch (error) {
-    console.error("[Explore] cron job failed", { jobName: req.params.jobName, error });
+    console.error("[API] cron job failed", { jobName: req.params.jobName, error });
     res.status(500).json({ ok: false, error: "job_failed" });
   }
 });
@@ -15570,55 +14363,11 @@ app.use((_req, res) => {
 });
 
 app.use((error: any, _req: Request, res: Response, _next: any) => {
-  console.error("[Explore] unhandled route error", error);
+  console.error("[API] unhandled route error", error);
   res.status(500).json({ error: "internal_error" });
 });
 
 export const quanturaExploreApi = app;
-
-async function handleCreateTrigger(postType: PostType, cloudEvent: any): Promise<void> {
-  try {
-    const docPath = parseDocumentPath(cloudEvent);
-    if (!docPath) {
-      console.warn(`[Explore] ${postType} trigger missing doc path`);
-      return;
-    }
-    const sourceDocId = docPath.split("/").pop() || "";
-    if (!sourceDocId) return;
-
-    const fields = cloudEvent?.data?.value?.fields;
-    const payload = decodeFirestoreFields(fields || {});
-
-    if (!Object.keys(payload).length) {
-      console.warn(`[Explore] ${postType} trigger had empty payload: ${docPath}`);
-      return;
-    }
-
-    if (!payload.createdAt && cloudEvent?.data?.value?.createTime) {
-      payload.createdAt = cloudEvent.data.value.createTime;
-    }
-
-    await createPostFromResult(postType, sourceDocId, payload);
-  } catch (error) {
-    console.error(`[Explore] ${postType} trigger failed`, error);
-  }
-}
-
-export async function onForecastCreated(cloudEvent: any): Promise<void> {
-  await handleCreateTrigger("forecast", cloudEvent);
-}
-
-export async function onBacktestCreated(cloudEvent: any): Promise<void> {
-  await handleCreateTrigger("backtest", cloudEvent);
-}
-
-export async function onAgentRunCreated(cloudEvent: any): Promise<void> {
-  await handleCreateTrigger("agent", cloudEvent);
-}
-
-export async function onScreenerRunCreated(cloudEvent: any): Promise<void> {
-  await handleCreateTrigger("screener", cloudEvent);
-}
 
 export async function refreshFiscaldataDefaults(_cloudEvent: any): Promise<void> {
   await runScheduledFiscaldataRefresh({ db });

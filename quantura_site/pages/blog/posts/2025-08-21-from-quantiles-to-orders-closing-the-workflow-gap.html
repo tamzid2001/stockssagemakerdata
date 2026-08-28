@@ -31,7 +31,7 @@
     <meta property="article:tag" content="workflow" />
     <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
-    <link rel="manifest" href="/manifest.json?v=20260405b" />
+    <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="/styles.css?v=20260405a" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">
@@ -56,7 +56,7 @@
     <script defer src="/app.js?v=20260405a"></script>
   </head>
   <body>
-    
+
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home">
@@ -64,6 +64,7 @@
           <span>QUANTURA</span>
         </a>
         <nav class="nav-links">
+          <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Forecasting</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
@@ -75,7 +76,7 @@
         <div class="nav-actions"></div>
       </div>
     </header>
-  
+
 
     <main>
       <section class="page-hero">
@@ -99,7 +100,7 @@
       <section class="section">
         <div class="container">
           <article class="card" style="padding: 28px;">
-            
+
     <figure style="margin: 0 0 18px;">
       <img src="/assets/hero-illustration.svg" alt="Quantura research workflow visual" style="width:100%;border-radius:16px;display:block;" />
       <figcaption class="small muted" style="margin-top:8px;">Quantura institutional workflow brief · SageMaker Canvas</figcaption>
@@ -122,7 +123,7 @@
       <em>"The goal of a successful trader is to make the best trades."</em> — Alexander Elder.
       <span class="small">Source: <a href="https://www.goodreads.com/quotes/795577" target="_blank" rel="noopener noreferrer">https://www.goodreads.com/quotes/795577</a></span>
     </p>
-    <p>Signal quality degrades quickly when watchlists grow without ownership constraints. Enforce explicit owner assignments and review dates per symbol. If a symbol has no owner or no next review date, it should not remain in active workflow. This is a simple operational rule that materially improves focus and reduces false urgency.</p>
+    <p>Signal quality degrades quickly when research queues grow without ownership constraints. Enforce explicit owner assignments and review dates per symbol. If a symbol has no owner or next review date, archive it until the thesis is active again. This materially improves focus and reduces false urgency.</p>
 
     <h2>Practical checklist</h2>
     <ul>
@@ -138,7 +139,7 @@
       <li>Load context in <a href="/terminal">Terminal</a> and collect structured modules that support or reject the thesis.</li>
       <li>Run scenario framing in <a href="/forecasting">Forecast</a> and record quantile boundaries with expected catalysts.</li>
       <li>Cross-check signal quality with <a href="/research">Research</a> and inspect narrative divergence before escalation.</li>
-      <li>Publish a concise note to <a href="/dashboard">private workspace</a> and route unresolved uncertainty to <a href="/forecasting">forecast review</a>.</li>
+      <li>Save a concise private research note with the forecast inputs, contradictory evidence, and review status.</li>
       <li>Convert approved actions into alert thresholds and assign owner-level accountability.</li>
     </ol>
 
@@ -156,7 +157,7 @@
 const exportJob = "canvas_prediction_export_to_quantura";
 return { canvasWorkflow, exportJob };</code></pre>
 
-    
+
       <h2>Quantura + Canvas workflow</h2>
       <p>
         For SageMaker Canvas programs, the production-ready handoff is: feature preparation in a leakage-safe table,
@@ -169,13 +170,13 @@ return { canvasWorkflow, exportJob };</code></pre>
         <li><strong>Evaluate rigorously:</strong> include directional accuracy, error distribution, and stability by regime.</li>
         <li><strong>Export predictions:</strong> include symbol, horizon, model version, and confidence fields.</li>
         <li><strong>Visualize in Quantura:</strong> overlay forecasts with market structure and live narrative signals.</li>
-        <li><strong>Operationalize:</strong> convert outputs into watchlist actions and alert ownership.</li>
+        <li><strong>Operationalize:</strong> convert outputs into assigned research actions and measurable review triggers.</li>
       </ol>
       <p>
         The practical constraint is governance: even no-code workflows must satisfy reproducibility, traceability,
         and rollback requirements. Canvas accelerates iteration, but discipline still determines quality.
       </p>
-    
+
 
     <h2>Data and validation notes</h2>
     <p>
@@ -184,7 +185,7 @@ return { canvasWorkflow, exportJob };</code></pre>
       Decision-ready output requires clear narrative discipline. Every thesis should include one paragraph for the base case, one for upside, and one for downside, each tied to measurable evidence. Ambiguous narrative language should be removed. This practice not only improves decision quality but also makes retrospective learning far easier.
     </p>
     <p>
-      If you rely on no-code outputs in SageMaker Canvas or model-assisted drafting in Model Council, keep a strict separation
+      If you rely on no-code outputs in SageMaker Canvas or optional AI forecast interpretation, keep a strict separation
       between exploratory notes and decision-authorized notes. Exploratory artifacts can move quickly; decision artifacts must be reproducible.
     </p>
 
@@ -192,7 +193,7 @@ return { canvasWorkflow, exportJob };</code></pre>
     <ul>
       <li>Average band-width drift versus prior week</li>
       <li>Cross-source discrepancy rate for critical fields</li>
-      <li>Owner response time for watchlist alerts tagged as high urgency</li>
+      <li>Owner response time for high-urgency forecast-boundary events</li>
       <li>Percent of published notes with explicit invalidation rules</li>
       <li>Share of decisions that include documented downside and scenario response</li>
     </ul>
@@ -225,7 +226,7 @@ return { canvasWorkflow, exportJob };</code></pre>
       Final operator note (2025-08-21): #sagemaker-canvas #no-code #mlops #forecasting #quantura #markets #workflow. Keep assumptions explicit, keep triggers measurable,
       and never separate signal quality from execution quality.
     </p>
-  
+
           </article>
         </div>
       </section>
@@ -238,10 +239,10 @@ return { canvasWorkflow, exportJob };</code></pre>
           <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
         </div>
         <div class="small">
-          <strong>Dashboard</strong>
+          <strong>Research</strong>
           <div><a href="/">Home</a></div>
           <div><a href="/terminal">Terminal</a></div>
-          <div><a href="/dashboard">private workspace</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
           <div><a href="/pricing">Pricing</a></div>

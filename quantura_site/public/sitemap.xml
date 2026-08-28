@@ -2,11 +2,11 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://quantura.studio/</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/about</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/blog</loc>
@@ -29,15 +29,15 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-04-03-watchlist-alert-design-that-actually-gets-used</loc>
+    <loc>https://quantura.studio/blog/posts/2025-04-03-forecast-boundary-alert-design-that-actually-gets-used</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-04-10-publishing-research-to-explore-without-creating-noise</loc>
+    <loc>https://quantura.studio/blog/posts/2025-04-10-private-research-notes-without-workflow-noise</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-04-17-model-council-verification-workflow-for-high-impact-calls</loc>
+    <loc>https://quantura.studio/blog/posts/2025-04-17-balanced-ai-forecast-verification-for-high-impact-calls</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
@@ -77,11 +77,11 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-06-26-explore-feed-governance-publish-review-unpublish</loc>
+    <loc>https://quantura.studio/blog/posts/2025-06-26-forecast-governance-review-validate-archive</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-07-03-prompt-rewrites-that-improve-model-council-precision</loc>
+    <loc>https://quantura.studio/blog/posts/2025-07-03-structured-prompts-that-improve-forecast-analysis-precision</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
@@ -117,11 +117,11 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-09-04-turning-watchlists-into-action-queues</loc>
+    <loc>https://quantura.studio/blog/posts/2025-09-04-turning-screener-results-into-research-queues</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-09-11-explore-publishing-metrics-that-matter</loc>
+    <loc>https://quantura.studio/blog/posts/2025-09-11-forecast-review-metrics-that-matter</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
@@ -161,11 +161,11 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-11-20-alert-fatigue-reduction-in-active-watchlists</loc>
+    <loc>https://quantura.studio/blog/posts/2025-11-20-alert-fatigue-reduction-in-forecast-monitoring</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2025-11-27-explore-post-templates-for-reproducible-research</loc>
+    <loc>https://quantura.studio/blog/posts/2025-11-27-private-templates-for-reproducible-research</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
@@ -205,15 +205,15 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2026-02-05-watchlist-ownership-models-for-team-execution</loc>
+    <loc>https://quantura.studio/blog/posts/2026-02-05-forecast-review-ownership-models-for-team-execution</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2026-02-12-explore-audit-trails-for-institutional-compliance</loc>
+    <loc>https://quantura.studio/blog/posts/2026-02-12-forecast-audit-trails-for-institutional-compliance</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/posts/2026-02-19-model-council-escalation-paths-for-high-uncertainty</loc>
+    <loc>https://quantura.studio/blog/posts/2026-02-19-ai-analysis-escalation-paths-for-high-uncertainty</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
@@ -221,7 +221,115 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
+    <loc>https://quantura.studio/blog/posts/2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-03-12-alpaca-and-yahoo-finance-fallback-without-silent-source-changes</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-03-19-options-chain-reconciliation-across-market-data-providers</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-03-26-prediction-csv-validation-before-quantile-analysis</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-04-02-p50-statistical-anomaly-bands-without-false-confidence-claims</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-04-09-last-two-p10-signals-and-business-day-horizon-logic</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-04-16-true-forecast-boundary-crossings-without-email-spam</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-04-23-regular-and-extended-hours-price-monitoring-by-design</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-04-30-full-universe-screener-coverage-and-degraded-scan-detection</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-05-07-chunked-nasdaq-screening-with-checkpoints-and-retries</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-05-14-quantile-distance-filters-for-cross-sectional-research</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-05-21-earnings-date-caching-without-fabricated-calendar-events</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-05-28-polymarket-us-mlb-pregame-data-at-one-minute-fidelity</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-06-04-preparing-mlb-probability-series-for-sagemaker-canvas</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-06-11-private-iam-roles-for-user-billed-sagemaker-execution</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-06-18-least-privilege-aws-trust-policies-for-forecast-workflows</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-06-25-meta-prophet-scenarios-with-mathematically-honest-signs</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-07-02-technical-indicators-in-independent-chart-panes</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-07-09-optional-gpt-analysis-with-full-p10-p50-p90-context</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-07-16-balanced-bull-bear-and-base-forecast-interpretation</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-07-23-forecast-uncertainty-expansion-and-contraction-over-time</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-07-30-yahoo-finance-options-history-as-an-availability-fallback</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-08-06-chronological-csv-exports-that-open-cleanly-in-spreadsheets</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-08-13-notification-centers-that-separate-inbox-delivery-and-email</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-08-20-mobile-navigation-for-dense-quantitative-workspaces</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/posts/2026-08-27-quantura-and-sagemaker-canvas-the-complete-research-loop</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
     <loc>https://quantura.studio/blog/rss.xml</loc>
+    <lastmod>2026-08-28</lastmod>
+  </url>
+  <url>
+    <loc>https://quantura.studio/blog/topics/ai-forecast-analysis</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
@@ -233,7 +341,7 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/topics/explore-workflows</loc>
+    <loc>https://quantura.studio/blog/topics/forecast-alerts</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
@@ -249,10 +357,6 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/topics/model-council</loc>
-    <lastmod>2026-08-28</lastmod>
-  </url>
-  <url>
     <loc>https://quantura.studio/blog/topics/portfolio-playbooks</loc>
     <lastmod>2026-08-28</lastmod>
   </url>
@@ -265,55 +369,51 @@
     <lastmod>2026-08-28</lastmod>
   </url>
   <url>
-    <loc>https://quantura.studio/blog/topics/watchlists-alerts</loc>
-    <lastmod>2026-08-28</lastmod>
-  </url>
-  <url>
     <loc>https://quantura.studio/contact</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/disclaimer</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/events</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/forecasting</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/pricing</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/privacy</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/research</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/screener</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/shop</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/shop/success</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/terms</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
   <url>
     <loc>https://quantura.studio/ticker</loc>
-    <lastmod>2026-08-28</lastmod>
+    <lastmod>2026-08-24</lastmod>
   </url>
 </urlset>

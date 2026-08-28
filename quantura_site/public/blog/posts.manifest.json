@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-04-05T00:04:05.934Z",
-  "count": 52,
+  "generatedAt": "2026-08-28T23:00:59.961Z",
+  "count": 78,
   "topics": [
     {
       "slug": "macro-signals",
@@ -23,19 +23,14 @@
       "description": "Narrative tracking before consensus reprices and liquidity rotates."
     },
     {
-      "slug": "watchlists-alerts",
-      "label": "Watchlists & Alerts",
-      "description": "Operational playbooks for watchlists, alerting, and action routing."
+      "slug": "forecast-alerts",
+      "label": "Forecast Alerts",
+      "description": "Date-aware quantile crossing, delivery controls, and notification operations."
     },
     {
-      "slug": "explore-workflows",
-      "label": "Explore Workflows",
-      "description": "Public research pipelines, publishing workflows, and feedback loops."
-    },
-    {
-      "slug": "model-council",
-      "label": "Model Council",
-      "description": "Multi-model verification, citations, and guardrail-first decision support."
+      "slug": "ai-forecast-analysis",
+      "label": "AI Forecast Analysis",
+      "description": "Optional balanced interpretation, structured context, citations, and guardrails."
     },
     {
       "slug": "build-notes",
@@ -60,6 +55,550 @@
   ],
   "posts": [
     {
+      "weekIndex": 78,
+      "title": "Week 78: Quantura and SageMaker Canvas: The Complete Research Loop",
+      "rawTitle": "Quantura and SageMaker Canvas: The Complete Research Loop",
+      "slug": "2026-08-27-quantura-and-sagemaker-canvas-the-complete-research-loop",
+      "dateIso": "2026-08-27",
+      "topic": "sagemaker-canvas",
+      "tags": [
+        "sagemaker-canvas",
+        "no-code",
+        "mlops",
+        "forecasting",
+        "quantura",
+        "markets",
+        "execution"
+      ],
+      "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-08-27-quantura-and-sagemaker-canvas-the-complete-research-loop",
+      "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 77,
+      "title": "Week 77: Mobile Navigation for Dense Quantitative Workspaces",
+      "rawTitle": "Mobile Navigation for Dense Quantitative Workspaces",
+      "slug": "2026-08-20-mobile-navigation-for-dense-quantitative-workspaces",
+      "dateIso": "2026-08-20",
+      "topic": "build-notes",
+      "tags": [
+        "build-notes",
+        "engineering",
+        "firebase",
+        "gcloud",
+        "native",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-08-20-mobile-navigation-for-dense-quantitative-workspaces",
+      "description": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 76,
+      "title": "Week 76: Notification Centers That Separate Inbox Delivery and Email",
+      "rawTitle": "Notification Centers That Separate Inbox Delivery and Email",
+      "slug": "2026-08-13-notification-centers-that-separate-inbox-delivery-and-email",
+      "dateIso": "2026-08-13",
+      "topic": "forecast-alerts",
+      "tags": [
+        "forecast-alerts",
+        "forecast-boundaries",
+        "alerts",
+        "ops",
+        "execution",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-08-13-notification-centers-that-separate-inbox-delivery-and-email",
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 75,
+      "title": "Week 75: Chronological CSV Exports That Open Cleanly in Spreadsheets",
+      "rawTitle": "Chronological CSV Exports That Open Cleanly in Spreadsheets",
+      "slug": "2026-08-06-chronological-csv-exports-that-open-cleanly-in-spreadsheets",
+      "dateIso": "2026-08-06",
+      "topic": "data-validation",
+      "tags": [
+        "data-validation",
+        "data",
+        "validation",
+        "qa",
+        "governance",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-08-06-chronological-csv-exports-that-open-cleanly-in-spreadsheets",
+      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 74,
+      "title": "Week 74: Yahoo Finance Options History as an Availability Fallback",
+      "rawTitle": "Yahoo Finance Options History as an Availability Fallback",
+      "slug": "2026-07-30-yahoo-finance-options-history-as-an-availability-fallback",
+      "dateIso": "2026-07-30",
+      "topic": "data-validation",
+      "tags": [
+        "data-validation",
+        "data",
+        "validation",
+        "qa",
+        "governance",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-07-30-yahoo-finance-options-history-as-an-availability-fallback",
+      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 73,
+      "title": "Week 73: Forecast Uncertainty Expansion and Contraction Over Time",
+      "rawTitle": "Forecast Uncertainty Expansion and Contraction Over Time",
+      "slug": "2026-07-23-forecast-uncertainty-expansion-and-contraction-over-time",
+      "dateIso": "2026-07-23",
+      "topic": "forecasting-workflows",
+      "tags": [
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-07-23-forecast-uncertainty-expansion-and-contraction-over-time",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 72,
+      "title": "Week 72: Balanced Bull Bear and Base Forecast Interpretation",
+      "rawTitle": "Balanced Bull Bear and Base Forecast Interpretation",
+      "slug": "2026-07-16-balanced-bull-bear-and-base-forecast-interpretation",
+      "dateIso": "2026-07-16",
+      "topic": "ai-forecast-analysis",
+      "tags": [
+        "ai-forecast-analysis",
+        "llm",
+        "verification",
+        "citations",
+        "guardrails",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-07-16-balanced-bull-bear-and-base-forecast-interpretation",
+      "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 71,
+      "title": "Week 71: Optional GPT Analysis With Full P10 P50 P90 Context",
+      "rawTitle": "Optional GPT Analysis With Full P10 P50 P90 Context",
+      "slug": "2026-07-09-optional-gpt-analysis-with-full-p10-p50-p90-context",
+      "dateIso": "2026-07-09",
+      "topic": "ai-forecast-analysis",
+      "tags": [
+        "ai-forecast-analysis",
+        "llm",
+        "verification",
+        "citations",
+        "guardrails",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-07-09-optional-gpt-analysis-with-full-p10-p50-p90-context",
+      "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 70,
+      "title": "Week 70: Technical Indicators in Independent Chart Panes",
+      "rawTitle": "Technical Indicators in Independent Chart Panes",
+      "slug": "2026-07-02-technical-indicators-in-independent-chart-panes",
+      "dateIso": "2026-07-02",
+      "topic": "technical-risk",
+      "tags": [
+        "technical-risk",
+        "technical",
+        "momentum",
+        "volatility",
+        "risk",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-07-02-technical-indicators-in-independent-chart-panes",
+      "description": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 69,
+      "title": "Week 69: Meta Prophet Scenarios With Mathematically Honest Signs",
+      "rawTitle": "Meta Prophet Scenarios With Mathematically Honest Signs",
+      "slug": "2026-06-25-meta-prophet-scenarios-with-mathematically-honest-signs",
+      "dateIso": "2026-06-25",
+      "topic": "forecasting-workflows",
+      "tags": [
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-06-25-meta-prophet-scenarios-with-mathematically-honest-signs",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 68,
+      "title": "Week 68: Least-Privilege AWS Trust Policies for Forecast Workflows",
+      "rawTitle": "Least-Privilege AWS Trust Policies for Forecast Workflows",
+      "slug": "2026-06-18-least-privilege-aws-trust-policies-for-forecast-workflows",
+      "dateIso": "2026-06-18",
+      "topic": "sagemaker-canvas",
+      "tags": [
+        "sagemaker-canvas",
+        "no-code",
+        "mlops",
+        "forecasting",
+        "quantura",
+        "markets",
+        "execution"
+      ],
+      "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-06-18-least-privilege-aws-trust-policies-for-forecast-workflows",
+      "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 67,
+      "title": "Week 67: Private IAM Roles for User-Billed SageMaker Execution",
+      "rawTitle": "Private IAM Roles for User-Billed SageMaker Execution",
+      "slug": "2026-06-11-private-iam-roles-for-user-billed-sagemaker-execution",
+      "dateIso": "2026-06-11",
+      "topic": "sagemaker-canvas",
+      "tags": [
+        "sagemaker-canvas",
+        "no-code",
+        "mlops",
+        "forecasting",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-06-11-private-iam-roles-for-user-billed-sagemaker-execution",
+      "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 66,
+      "title": "Week 66: Preparing MLB Probability Series for SageMaker Canvas",
+      "rawTitle": "Preparing MLB Probability Series for SageMaker Canvas",
+      "slug": "2026-06-04-preparing-mlb-probability-series-for-sagemaker-canvas",
+      "dateIso": "2026-06-04",
+      "topic": "sagemaker-canvas",
+      "tags": [
+        "sagemaker-canvas",
+        "no-code",
+        "mlops",
+        "forecasting",
+        "quantura",
+        "markets",
+        "execution"
+      ],
+      "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-06-04-preparing-mlb-probability-series-for-sagemaker-canvas",
+      "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 65,
+      "title": "Week 65: Polymarket US MLB Pregame Data at One-Minute Fidelity",
+      "rawTitle": "Polymarket US MLB Pregame Data at One-Minute Fidelity",
+      "slug": "2026-05-28-polymarket-us-mlb-pregame-data-at-one-minute-fidelity",
+      "dateIso": "2026-05-28",
+      "topic": "forecasting-workflows",
+      "tags": [
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-05-28-polymarket-us-mlb-pregame-data-at-one-minute-fidelity",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 64,
+      "title": "Week 64: Earnings-Date Caching Without Fabricated Calendar Events",
+      "rawTitle": "Earnings-Date Caching Without Fabricated Calendar Events",
+      "slug": "2026-05-21-earnings-date-caching-without-fabricated-calendar-events",
+      "dateIso": "2026-05-21",
+      "topic": "data-validation",
+      "tags": [
+        "data-validation",
+        "data",
+        "validation",
+        "qa",
+        "governance",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-05-21-earnings-date-caching-without-fabricated-calendar-events",
+      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 63,
+      "title": "Week 63: Quantile Distance Filters for Cross-Sectional Research",
+      "rawTitle": "Quantile Distance Filters for Cross-Sectional Research",
+      "slug": "2026-05-14-quantile-distance-filters-for-cross-sectional-research",
+      "dateIso": "2026-05-14",
+      "topic": "forecasting-workflows",
+      "tags": [
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-05-14-quantile-distance-filters-for-cross-sectional-research",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 62,
+      "title": "Week 62: Chunked Nasdaq Screening With Checkpoints and Retries",
+      "rawTitle": "Chunked Nasdaq Screening With Checkpoints and Retries",
+      "slug": "2026-05-07-chunked-nasdaq-screening-with-checkpoints-and-retries",
+      "dateIso": "2026-05-07",
+      "topic": "build-notes",
+      "tags": [
+        "build-notes",
+        "engineering",
+        "firebase",
+        "gcloud",
+        "native",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-05-07-chunked-nasdaq-screening-with-checkpoints-and-retries",
+      "description": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 61,
+      "title": "Week 61: Full-Universe Screener Coverage and Degraded Scan Detection",
+      "rawTitle": "Full-Universe Screener Coverage and Degraded Scan Detection",
+      "slug": "2026-04-30-full-universe-screener-coverage-and-degraded-scan-detection",
+      "dateIso": "2026-04-30",
+      "topic": "data-validation",
+      "tags": [
+        "data-validation",
+        "data",
+        "validation",
+        "qa",
+        "governance",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-04-30-full-universe-screener-coverage-and-degraded-scan-detection",
+      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 60,
+      "title": "Week 60: Regular and Extended-Hours Price Monitoring by Design",
+      "rawTitle": "Regular and Extended-Hours Price Monitoring by Design",
+      "slug": "2026-04-23-regular-and-extended-hours-price-monitoring-by-design",
+      "dateIso": "2026-04-23",
+      "topic": "forecast-alerts",
+      "tags": [
+        "forecast-alerts",
+        "forecast-boundaries",
+        "alerts",
+        "ops",
+        "execution",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-04-23-regular-and-extended-hours-price-monitoring-by-design",
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 59,
+      "title": "Week 59: True Forecast-Boundary Crossings Without Email Spam",
+      "rawTitle": "True Forecast-Boundary Crossings Without Email Spam",
+      "slug": "2026-04-16-true-forecast-boundary-crossings-without-email-spam",
+      "dateIso": "2026-04-16",
+      "topic": "forecast-alerts",
+      "tags": [
+        "forecast-alerts",
+        "forecast-boundaries",
+        "alerts",
+        "ops",
+        "execution",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-04-16-true-forecast-boundary-crossings-without-email-spam",
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 58,
+      "title": "Week 58: Last-Two-P10 Signals and Business-Day Horizon Logic",
+      "rawTitle": "Last-Two-P10 Signals and Business-Day Horizon Logic",
+      "slug": "2026-04-09-last-two-p10-signals-and-business-day-horizon-logic",
+      "dateIso": "2026-04-09",
+      "topic": "forecasting-workflows",
+      "tags": [
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-04-09-last-two-p10-signals-and-business-day-horizon-logic",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 57,
+      "title": "Week 57: P50 Statistical Anomaly Bands Without False Confidence Claims",
+      "rawTitle": "P50 Statistical Anomaly Bands Without False Confidence Claims",
+      "slug": "2026-04-02-p50-statistical-anomaly-bands-without-false-confidence-claims",
+      "dateIso": "2026-04-02",
+      "topic": "forecasting-workflows",
+      "tags": [
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-04-02-p50-statistical-anomaly-bands-without-false-confidence-claims",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 56,
+      "title": "Week 56: Prediction CSV Validation Before Quantile Analysis",
+      "rawTitle": "Prediction CSV Validation Before Quantile Analysis",
+      "slug": "2026-03-26-prediction-csv-validation-before-quantile-analysis",
+      "dateIso": "2026-03-26",
+      "topic": "data-validation",
+      "tags": [
+        "data-validation",
+        "data",
+        "validation",
+        "qa",
+        "governance",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-03-26-prediction-csv-validation-before-quantile-analysis",
+      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 55,
+      "title": "Week 55: Options Chain Reconciliation Across Market-Data Providers",
+      "rawTitle": "Options Chain Reconciliation Across Market-Data Providers",
+      "slug": "2026-03-19-options-chain-reconciliation-across-market-data-providers",
+      "dateIso": "2026-03-19",
+      "topic": "data-validation",
+      "tags": [
+        "data-validation",
+        "data",
+        "validation",
+        "qa",
+        "governance",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-03-19-options-chain-reconciliation-across-market-data-providers",
+      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 54,
+      "title": "Week 54: Alpaca and Yahoo Finance Fallback Without Silent Source Changes",
+      "rawTitle": "Alpaca and Yahoo Finance Fallback Without Silent Source Changes",
+      "slug": "2026-03-12-alpaca-and-yahoo-finance-fallback-without-silent-source-changes",
+      "dateIso": "2026-03-12",
+      "topic": "data-validation",
+      "tags": [
+        "data-validation",
+        "data",
+        "validation",
+        "qa",
+        "governance",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-03-12-alpaca-and-yahoo-finance-fallback-without-silent-source-changes",
+      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
+      "weekIndex": 53,
+      "title": "Week 53: SageMaker Canvas Time-Series Schema for Quantura Exports",
+      "rawTitle": "SageMaker Canvas Time-Series Schema for Quantura Exports",
+      "slug": "2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports",
+      "dateIso": "2026-03-05",
+      "topic": "sagemaker-canvas",
+      "tags": [
+        "sagemaker-canvas",
+        "no-code",
+        "mlops",
+        "forecasting",
+        "quantura",
+        "markets"
+      ],
+      "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "heroImage": "/assets/hero-illustration.svg",
+      "canonical": "https://quantura.studio/blog/posts/2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports",
+      "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls."
+    },
+    {
       "weekIndex": 52,
       "title": "Week 52: SageMaker Canvas Governance: Leakage, Drift, and Audit",
       "rawTitle": "SageMaker Canvas Governance: Leakage, Drift, and Audit",
@@ -82,9 +621,9 @@
     },
     {
       "weekIndex": 51,
-      "title": "Week 51: Model Council Escalation Paths for High Uncertainty",
-      "rawTitle": "Model Council Escalation Paths for High Uncertainty",
-      "slug": "2026-02-19-model-council-escalation-paths-for-high-uncertainty",
+      "title": "Week 51: AI Analysis Escalation Paths for High Uncertainty",
+      "rawTitle": "AI Analysis Escalation Paths for High Uncertainty",
+      "slug": "2026-02-19-ai-analysis-escalation-paths-for-high-uncertainty",
       "dateIso": "2026-02-19",
       "topic": "sagemaker-canvas",
       "tags": [
@@ -98,18 +637,18 @@
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2026-02-19-model-council-escalation-paths-for-high-uncertainty",
+      "canonical": "https://quantura.studio/blog/posts/2026-02-19-ai-analysis-escalation-paths-for-high-uncertainty",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 50,
-      "title": "Week 50: Explore Audit Trails for Institutional Compliance",
-      "rawTitle": "Explore Audit Trails for Institutional Compliance",
-      "slug": "2026-02-12-explore-audit-trails-for-institutional-compliance",
+      "title": "Week 50: Forecast Audit Trails for Institutional Compliance",
+      "rawTitle": "Forecast Audit Trails for Institutional Compliance",
+      "slug": "2026-02-12-forecast-audit-trails-for-institutional-compliance",
       "dateIso": "2026-02-12",
-      "topic": "model-council",
+      "topic": "ai-forecast-analysis",
       "tags": [
-        "model-council",
+        "ai-forecast-analysis",
         "llm",
         "verification",
         "citations",
@@ -117,31 +656,31 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2026-02-12-explore-audit-trails-for-institutional-compliance",
-      "description": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2026-02-12-forecast-audit-trails-for-institutional-compliance",
+      "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 49,
-      "title": "Week 49: Watchlist Ownership Models for Team Execution",
-      "rawTitle": "Watchlist Ownership Models for Team Execution",
-      "slug": "2026-02-05-watchlist-ownership-models-for-team-execution",
+      "title": "Week 49: Forecast Review Ownership Models for Team Execution",
+      "rawTitle": "Forecast Review Ownership Models for Team Execution",
+      "slug": "2026-02-05-forecast-review-ownership-models-for-team-execution",
       "dateIso": "2026-02-05",
-      "topic": "explore-workflows",
+      "topic": "forecasting-workflows",
       "tags": [
-        "explore-workflows",
-        "explore",
-        "publishing",
-        "community",
-        "workflow",
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
         "quantura",
         "markets"
       ],
-      "excerpt": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2026-02-05-watchlist-ownership-models-for-team-execution",
-      "description": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2026-02-05-forecast-review-ownership-models-for-team-execution",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 48,
@@ -149,20 +688,20 @@
       "rawTitle": "Narrative Contradictions and Tactical Repositioning",
       "slug": "2026-01-29-narrative-contradictions-and-tactical-repositioning",
       "dateIso": "2026-01-29",
-      "topic": "watchlists-alerts",
+      "topic": "forecast-alerts",
       "tags": [
-        "watchlists-alerts",
-        "watchlist",
+        "forecast-alerts",
+        "forecast-boundaries",
         "alerts",
         "ops",
         "execution",
         "quantura",
         "markets"
       ],
-      "excerpt": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
       "canonical": "https://quantura.studio/blog/posts/2026-01-29-narrative-contradictions-and-tactical-repositioning",
-      "description": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 47,
@@ -317,9 +856,9 @@
       "rawTitle": "Guardrails for Multi-Provider Model Routing",
       "slug": "2025-12-04-guardrails-for-multi-provider-model-routing",
       "dateIso": "2025-12-04",
-      "topic": "model-council",
+      "topic": "ai-forecast-analysis",
       "tags": [
-        "model-council",
+        "ai-forecast-analysis",
         "llm",
         "verification",
         "citations",
@@ -327,52 +866,52 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
       "canonical": "https://quantura.studio/blog/posts/2025-12-04-guardrails-for-multi-provider-model-routing",
-      "description": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 39,
-      "title": "Week 39: Explore Post Templates for Reproducible Research",
-      "rawTitle": "Explore Post Templates for Reproducible Research",
-      "slug": "2025-11-27-explore-post-templates-for-reproducible-research",
+      "title": "Week 39: Private Templates for Reproducible Research",
+      "rawTitle": "Private Templates for Reproducible Research",
+      "slug": "2025-11-27-private-templates-for-reproducible-research",
       "dateIso": "2025-11-27",
-      "topic": "explore-workflows",
+      "topic": "forecasting-workflows",
       "tags": [
-        "explore-workflows",
-        "explore",
-        "publishing",
-        "community",
-        "workflow",
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
         "quantura",
         "markets"
       ],
-      "excerpt": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-11-27-explore-post-templates-for-reproducible-research",
-      "description": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-11-27-private-templates-for-reproducible-research",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 38,
-      "title": "Week 38: Alert Fatigue Reduction in Active Watchlists",
-      "rawTitle": "Alert Fatigue Reduction in Active Watchlists",
-      "slug": "2025-11-20-alert-fatigue-reduction-in-active-watchlists",
+      "title": "Week 38: Alert Fatigue Reduction in Forecast Monitoring",
+      "rawTitle": "Alert Fatigue Reduction in Forecast Monitoring",
+      "slug": "2025-11-20-alert-fatigue-reduction-in-forecast-monitoring",
       "dateIso": "2025-11-20",
-      "topic": "watchlists-alerts",
+      "topic": "forecast-alerts",
       "tags": [
-        "watchlists-alerts",
-        "watchlist",
+        "forecast-alerts",
+        "forecast-boundaries",
         "alerts",
         "ops",
         "execution",
         "quantura",
         "markets"
       ],
-      "excerpt": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-11-20-alert-fatigue-reduction-in-active-watchlists",
-      "description": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-11-20-alert-fatigue-reduction-in-forecast-monitoring",
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 37,
@@ -548,9 +1087,9 @@
       "rawTitle": "Citation-First LLM Output Standards",
       "slug": "2025-09-18-citation-first-llm-output-standards",
       "dateIso": "2025-09-18",
-      "topic": "model-council",
+      "topic": "ai-forecast-analysis",
       "tags": [
-        "model-council",
+        "ai-forecast-analysis",
         "llm",
         "verification",
         "citations",
@@ -558,52 +1097,52 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
       "canonical": "https://quantura.studio/blog/posts/2025-09-18-citation-first-llm-output-standards",
-      "description": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 28,
-      "title": "Week 28: Explore Publishing Metrics That Matter",
-      "rawTitle": "Explore Publishing Metrics That Matter",
-      "slug": "2025-09-11-explore-publishing-metrics-that-matter",
+      "title": "Week 28: Forecast Review Metrics That Matter",
+      "rawTitle": "Forecast Review Metrics That Matter",
+      "slug": "2025-09-11-forecast-review-metrics-that-matter",
       "dateIso": "2025-09-11",
-      "topic": "explore-workflows",
+      "topic": "forecasting-workflows",
       "tags": [
-        "explore-workflows",
-        "explore",
-        "publishing",
-        "community",
-        "workflow",
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
         "quantura",
         "markets"
       ],
-      "excerpt": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-09-11-explore-publishing-metrics-that-matter",
-      "description": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-09-11-forecast-review-metrics-that-matter",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 27,
-      "title": "Week 27: Turning Watchlists into Action Queues",
-      "rawTitle": "Turning Watchlists into Action Queues",
-      "slug": "2025-09-04-turning-watchlists-into-action-queues",
+      "title": "Week 27: Turning Screener Results into Research Queues",
+      "rawTitle": "Turning Screener Results into Research Queues",
+      "slug": "2025-09-04-turning-screener-results-into-research-queues",
       "dateIso": "2025-09-04",
-      "topic": "watchlists-alerts",
+      "topic": "forecast-alerts",
       "tags": [
-        "watchlists-alerts",
-        "watchlist",
+        "forecast-alerts",
+        "forecast-boundaries",
         "alerts",
         "ops",
         "execution",
         "quantura",
         "markets"
       ],
-      "excerpt": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-09-04-turning-watchlists-into-action-queues",
-      "description": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-09-04-turning-screener-results-into-research-queues",
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 26,
@@ -775,13 +1314,13 @@
     },
     {
       "weekIndex": 18,
-      "title": "Week 18: Prompt Rewrites That Improve Model Council Precision",
-      "rawTitle": "Prompt Rewrites That Improve Model Council Precision",
-      "slug": "2025-07-03-prompt-rewrites-that-improve-model-council-precision",
+      "title": "Week 18: Structured Prompts That Improve Forecast Analysis Precision",
+      "rawTitle": "Structured Prompts That Improve Forecast Analysis Precision",
+      "slug": "2025-07-03-structured-prompts-that-improve-forecast-analysis-precision",
       "dateIso": "2025-07-03",
-      "topic": "model-council",
+      "topic": "ai-forecast-analysis",
       "tags": [
-        "model-council",
+        "ai-forecast-analysis",
         "llm",
         "verification",
         "citations",
@@ -789,16 +1328,16 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-07-03-prompt-rewrites-that-improve-model-council-precision",
-      "description": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-07-03-structured-prompts-that-improve-forecast-analysis-precision",
+      "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 17,
-      "title": "Week 17: Explore Feed Governance: Publish, Review, Unpublish",
-      "rawTitle": "Explore Feed Governance: Publish, Review, Unpublish",
-      "slug": "2025-06-26-explore-feed-governance-publish-review-unpublish",
+      "title": "Week 17: Forecast Governance: Review, Validate, Archive",
+      "rawTitle": "Forecast Governance: Review, Validate, Archive",
+      "slug": "2025-06-26-forecast-governance-review-validate-archive",
       "dateIso": "2025-06-26",
       "topic": "sagemaker-canvas",
       "tags": [
@@ -811,7 +1350,7 @@
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-06-26-explore-feed-governance-publish-review-unpublish",
+      "canonical": "https://quantura.studio/blog/posts/2025-06-26-forecast-governance-review-validate-archive",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
@@ -820,20 +1359,20 @@
       "rawTitle": "Alert Escalation Ladders for Small Teams",
       "slug": "2025-06-19-alert-escalation-ladders-for-small-teams",
       "dateIso": "2025-06-19",
-      "topic": "watchlists-alerts",
+      "topic": "forecast-alerts",
       "tags": [
-        "watchlists-alerts",
-        "watchlist",
+        "forecast-alerts",
+        "forecast-boundaries",
         "alerts",
         "ops",
         "execution",
         "quantura",
         "markets"
       ],
-      "excerpt": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
       "canonical": "https://quantura.studio/blog/posts/2025-06-19-alert-escalation-ladders-for-small-teams",
-      "description": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 15,
@@ -1004,13 +1543,13 @@
     },
     {
       "weekIndex": 7,
-      "title": "Week 7: Model Council Verification Workflow for High-Impact Calls",
-      "rawTitle": "Model Council Verification Workflow for High-Impact Calls",
-      "slug": "2025-04-17-model-council-verification-workflow-for-high-impact-calls",
+      "title": "Week 7: Balanced AI Forecast Verification for High-Impact Calls",
+      "rawTitle": "Balanced AI Forecast Verification for High-Impact Calls",
+      "slug": "2025-04-17-balanced-ai-forecast-verification-for-high-impact-calls",
       "dateIso": "2025-04-17",
-      "topic": "model-council",
+      "topic": "ai-forecast-analysis",
       "tags": [
-        "model-council",
+        "ai-forecast-analysis",
         "llm",
         "verification",
         "citations",
@@ -1018,52 +1557,52 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-04-17-model-council-verification-workflow-for-high-impact-calls",
-      "description": "Model Council: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-04-17-balanced-ai-forecast-verification-for-high-impact-calls",
+      "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 6,
-      "title": "Week 6: Publishing Research to Explore Without Creating Noise",
-      "rawTitle": "Publishing Research to Explore Without Creating Noise",
-      "slug": "2025-04-10-publishing-research-to-explore-without-creating-noise",
+      "title": "Week 6: Private Research Notes Without Workflow Noise",
+      "rawTitle": "Private Research Notes Without Workflow Noise",
+      "slug": "2025-04-10-private-research-notes-without-workflow-noise",
       "dateIso": "2025-04-10",
-      "topic": "explore-workflows",
+      "topic": "forecasting-workflows",
       "tags": [
-        "explore-workflows",
-        "explore",
-        "publishing",
-        "community",
-        "workflow",
+        "forecasting-workflows",
+        "forecast",
+        "quantiles",
+        "scenarios",
+        "process",
         "quantura",
         "markets"
       ],
-      "excerpt": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-04-10-publishing-research-to-explore-without-creating-noise",
-      "description": "Explore Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-04-10-private-research-notes-without-workflow-noise",
+      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 5,
-      "title": "Week 5: Watchlist Alert Design That Actually Gets Used",
-      "rawTitle": "Watchlist Alert Design That Actually Gets Used",
-      "slug": "2025-04-03-watchlist-alert-design-that-actually-gets-used",
+      "title": "Week 5: Forecast Boundary Alert Design That Actually Gets Used",
+      "rawTitle": "Forecast Boundary Alert Design That Actually Gets Used",
+      "slug": "2025-04-03-forecast-boundary-alert-design-that-actually-gets-used",
       "dateIso": "2025-04-03",
-      "topic": "watchlists-alerts",
+      "topic": "forecast-alerts",
       "tags": [
-        "watchlists-alerts",
-        "watchlist",
+        "forecast-alerts",
+        "forecast-boundaries",
         "alerts",
         "ops",
         "execution",
         "quantura",
         "markets"
       ],
-      "excerpt": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroImage": "/assets/hero-illustration.svg",
-      "canonical": "https://quantura.studio/blog/posts/2025-04-03-watchlist-alert-design-that-actually-gets-used",
-      "description": "Watchlists & Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
+      "canonical": "https://quantura.studio/blog/posts/2025-04-03-forecast-boundary-alert-design-that-actually-gets-used",
+      "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls."
     },
     {
       "weekIndex": 4,

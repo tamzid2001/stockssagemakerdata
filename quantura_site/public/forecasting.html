@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Terminal | Quantura Horizon + Indicators</title>
-        <meta name="description" content="Generate quantile forecasts, toggle technical indicators, and track ticker momentum with Quantura's terminal." />
+    <title>Meta Prophet Forecast | Quantura</title>
+        <meta name="description" content="Analyze Meta Prophet forecast quantiles, technical indicators, deterministic scenarios, and optional balanced AI interpretation." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="stock forecasting terminal, quantile forecast, fan chart, ticker analysis, historical market data" />
         <link rel="canonical" href="https://quantura.studio/forecasting" />
@@ -48,7 +48,7 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
   </head>
   <body>
@@ -93,16 +93,13 @@
       <div class="app-layout">
         <aside class="app-sidebar">
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
-	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
+	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Meta Prophet Forecast</span></a>
               <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
-	            <a class="sidebar-link" href="/indicators" data-panel-target="indicators"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Indicators</span></a>
               <a class="sidebar-link" href="/historical-data" data-panel-target="news"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
               <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-              <a class="sidebar-link" href="/studio" data-panel-target="learn"><i class="iconoir-info-circle" aria-hidden="true"></i><span>Learn more</span></a>
 	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-	            <a class="sidebar-link" href="/watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist and alerts</span></a>
 	          </nav>
 	        </aside>
 
@@ -126,8 +123,9 @@
 	                <div class="studio-panel">
                   <section class="panel" data-panel="forecast">
 	                    <div class="panel-header">
-	                      <h2>Forecast</h2>
-	                      <p class="small">Generate quantile bands for the ticker in your chart and save the run so you can re-plot it later.</p>
+	                      <div class="eyebrow">Unified quantitative workspace</div>
+	                      <h2>Meta Prophet Forecast</h2>
+	                      <p class="small">Generate a complete forecast distribution, inspect technical confirmation, compare signed bull/base/bear scenarios, and request balanced AI interpretation only when you choose.</p>
 	                    </div>
 	                    <form id="forecast-form" class="card">
 	                      <div class="form-grid">
@@ -156,27 +154,73 @@
                           </div>
 	                      </div>
 	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
-	                      <details class="learn-more">
-	                        <summary>Learn more</summary>
-	                        <div class="small">
-                            <p>
-                              Forecasts are stored to your workspace as fixed probability bands. Quantura Horizon saves a <strong>P01-P99</strong> outer range,
-                              a <strong>P10-P90</strong> range, a <strong>P25-P75</strong> range, and the <strong>P50</strong> median path so every saved run renders consistently.
-                            </p>
-                            <p>
-                              <strong>Forecast length</strong> controls how many future timestamps are generated for the selected timeframe. Daily forecasts use trading days (business days).
-                              Hourly forecasts are capped to keep the terminal responsive.
-                            </p>
-                            <p>
-                              <strong>Quantura Horizon</strong> is optimized for transparent trend and seasonality interpretation with stable uncertainty bands.
-                              Quantura stores each run so you can compare results, review confidence structure, and export files for downstream analysis.
-                            </p>
-                          </div>
-	                      </details>
 	                    </form>
                     <div class="results-panel">
-                      <h3>Forecast output</h3>
-                      <div id="forecast-output" class="panel-output small">Run a forecast to see model summary and preview rows.</div>
+                      <h3>Forecast workspace</h3>
+                      <div id="forecast-output" class="panel-output small">Run a forecast to load the market snapshot, Prophet quantiles, scenario math, and uncertainty analysis.</div>
+                    </div>
+                    <section class="forecast-workspace-section" id="technical-indicators" aria-labelledby="technical-indicators-title">
+                      <div class="panel-header forecast-subsection-header">
+                        <div>
+                          <div class="eyebrow">Confirmation layer</div>
+                          <h3 id="technical-indicators-title">Technical Indicators</h3>
+                          <p class="small">Calculate indicators for the active forecast ticker. Price overlays remain on the upper pane while oscillators use independent lower panes.</p>
+                        </div>
+                      </div>
+                      <form id="technicals-form" class="card forecast-indicator-form">
+                        <div class="form-grid">
+                          <div class="field">
+                            <label class="label" for="technicals-ticker">Ticker</label>
+                            <input id="technicals-ticker" name="ticker" placeholder="MSFT" required />
+                          </div>
+                          <div class="field">
+                            <label class="label" for="technicals-interval">Interval</label>
+                            <select id="technicals-interval" name="interval"><option value="1d">Daily</option><option value="1h">Hourly</option></select>
+                          </div>
+                          <div class="field">
+                            <label class="label" for="technicals-lookback">Lookback (days)</label>
+                            <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
+                          </div>
+                        </div>
+                        <fieldset class="field indicator-field">
+                          <legend class="label">Indicators</legend>
+                          <div class="checkbox-grid indicator-toggle-grid">
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="RSI" checked /><span class="indicator-toggle-label">RSI</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MACD" checked /><span class="indicator-toggle-label">MACD</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="SMA" checked /><span class="indicator-toggle-label">SMA</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="EMA" checked /><span class="indicator-toggle-label">EMA</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="BBANDS" checked /><span class="indicator-toggle-label">Bollinger</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ATR" /><span class="indicator-toggle-label">ATR</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ADX" /><span class="indicator-toggle-label">ADX</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="CCI" /><span class="indicator-toggle-label">CCI</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MFI" /><span class="indicator-toggle-label">MFI</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="OBV" /><span class="indicator-toggle-label">OBV</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ROC" /><span class="indicator-toggle-label">Momentum / ROC</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="STOCH" /><span class="indicator-toggle-label">Stochastic</span></label>
+                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="WILLR" /><span class="indicator-toggle-label">Williams %R</span></label>
+                          </div>
+                        </fieldset>
+                        <button class="cta" type="submit" data-analytics="technicals_submit"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Calculate indicators</span></button>
+                      </form>
+                      <div class="results-panel forecast-indicator-results">
+                        <div class="card-head"><div><h3>Indicator output</h3><p class="small muted">Deterministic calculations load without calling the AI service.</p></div></div>
+                        <div id="technicals-output" class="panel-output small">Select indicators and calculate them for the active ticker.</div>
+                        <div id="indicator-chart" class="chart" aria-label="Technical indicator chart"></div>
+                      </div>
+                    </section>
+                    <div id="forecast-scenario-host" class="forecast-workspace-section">
+                      <section class="results-panel">
+                        <div class="eyebrow">Scenario analysis</div>
+                        <h3>Forecast Scenarios</h3>
+                        <p class="small muted">Generate a forecast to compare end-of-horizon P10, P50, and P90 outcomes.</p>
+                      </section>
+                    </div>
+                    <div id="forecast-ai-host" class="forecast-workspace-section">
+                      <section class="results-panel forecast-ai-summary-panel">
+                        <div class="eyebrow">Optional interpretation</div>
+                        <h3>AI Forecast Analysis</h3>
+                        <p class="small muted">Generate a forecast first. AI analysis never runs automatically.</p>
+                      </section>
                     </div>
                     <div class="card" data-my-requests-panel data-default-type="forecast">
                       <div class="card-head">
@@ -207,97 +251,27 @@
                     <div class="container">
                       <div class="section-title">
                         <h2>Forecast Foundry</h2>
-                        <p class="small">Prepare daily market data for SageMaker or analyze prediction quantile CSVs with validated anomaly and tail-signal statistics, all inside your private Workspace.</p>
+                        <p class="small">Upload a prediction CSV and run deterministic quantile, anomaly, scenario, and tail-signal analysis inside your private workspace.</p>
                       </div>
 
                       <div class="foundry-layout">
                         <div class="foundry-main-grid">
                           <form id="foundry-source-form" class="card">
                             <div class="eyebrow">Quantura Forecast Foundry</div>
-                            <h3>Prepare a source</h3>
-                            <p class="small">Prepare daily history for SageMaker or upload a prediction CSV for deterministic quantile, anomaly, and tail-signal analysis.</p>
+                            <h3>Upload prediction CSV</h3>
+                            <p class="small">Upload date-aware P10/P50/P90 forecasts. Ticker and actual-price columns are optional; additional quantiles and explicit 95% interval columns are supported.</p>
+                            <input id="foundry-source-kind" name="sourceKind" type="hidden" value="prediction_csv" />
+                            <input id="foundry-interval" name="interval" type="hidden" value="1d" />
                             <div class="form-grid">
                               <div class="field">
-                                <label class="label" for="foundry-source-kind">Source type</label>
-                                <select id="foundry-source-kind" name="sourceKind">
-                                  <option value="history">Historical downloader</option>
-                                  <option value="historical_csv">Historical CSV</option>
-                                  <option value="prediction_csv">Prediction quantile CSV</option>
-                                </select>
-                              </div>
-                              <div class="field">
-                                <label class="label" for="foundry-ticker">Ticker</label>
+                                <label class="label" for="foundry-ticker">Ticker (optional)</label>
                                 <input id="foundry-ticker" name="ticker" placeholder="AAPL" />
                               </div>
                               <div class="field">
-                                <label class="label" for="foundry-interval">Data interval</label>
-                                <select id="foundry-interval" name="interval">
-                                  <option value="1d">Daily</option>
-                                </select>
-                                <div class="small muted">Forecast Foundry currently supports daily historical datasets only.</div>
+                                <label class="label" for="foundry-file">Prediction CSV</label>
+                                <input id="foundry-file" class="file-input" type="file" accept=".csv,text/csv" required />
+                                <div class="small muted" id="foundry-file-help">Include a date/timestamp plus P50 or median. P10, P90, other quantiles, ticker, actual price, and explicit 95% interval columns are optional.</div>
                               </div>
-                            </div>
-
-                            <div class="small muted">Run titles are generated automatically from the ticker or detected symbol.</div>
-
-                            <div id="foundry-model-metrics-block">
-                              <div class="field" style="margin-top: 8px;">
-                                <label class="label">Optional model metrics</label>
-                                <div class="small muted">Attach external model diagnostics if you want them saved alongside this Foundry run.</div>
-                              </div>
-                              <div class="form-grid">
-                                <div class="field">
-                                  <label class="label" for="foundry-model-status">Model status</label>
-                                  <select id="foundry-model-status" name="modelStatus">
-                                    <option value="Standard Build" selected>Standard Build</option>
-                                    <option value="Quick Build">Quick Build</option>
-                                  </select>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="foundry-avg-wql">Avg. wQL</label>
-                                  <input id="foundry-avg-wql" name="avgWql" inputmode="decimal" placeholder="0.020" />
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="foundry-mape">MAPE</label>
-                                  <input id="foundry-mape" name="mape" inputmode="decimal" placeholder="0.023" />
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="foundry-wape">WAPE</label>
-                                  <input id="foundry-wape" name="wape" inputmode="decimal" placeholder="0.031" />
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="foundry-rmse">RMSE</label>
-                                  <input id="foundry-rmse" name="rmse" inputmode="decimal" placeholder="12.819" />
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="foundry-mase">MASE</label>
-                                  <input id="foundry-mase" name="mase" inputmode="decimal" placeholder="0.087" />
-                                </div>
-                              </div>
-                            </div>
-
-                            <div id="foundry-history-fields" class="form-grid">
-                              <div class="field">
-                                <label class="label" for="foundry-end">End date</label>
-                                <input id="foundry-end" name="end" type="date" />
-                              </div>
-                              <div class="field">
-                                <label class="label" for="foundry-row-limit">Market prices</label>
-                                <select id="foundry-row-limit" name="rowLimit">
-                                  <option value="500" selected>Latest 500 prices</option>
-                                  <option value="1000">Latest 1,000 prices</option>
-                                  <option value="1500">Latest 1,500 prices</option>
-                                  <option value="2000">Latest 2,000 prices</option>
-                                  <option value="all">All available prices</option>
-                                </select>
-                                <div class="small muted">Foundry prepares the selected number of daily market prices.</div>
-                              </div>
-                            </div>
-
-                            <div id="foundry-file-field" class="field">
-                              <label class="label" for="foundry-file">CSV file</label>
-                              <input id="foundry-file" class="file-input" type="file" accept=".csv,text/csv" />
-                              <div class="small muted" id="foundry-file-help">Historical CSVs must resolve to item, timestamp/date, and closing-price columns.</div>
                             </div>
 
                             <fieldset id="foundry-price-alert-config" class="forecast-alert-config hidden">
@@ -326,78 +300,16 @@
                               <p class="small muted">Notifications go only to the verified email on your private account. Monitoring stops after this forecast horizon expires.</p>
                             </fieldset>
 
-                            <div class="hero-actions hidden" id="foundry-upload-actions" style="margin-top: 12px; justify-content: flex-start;">
-                              <button class="cta" id="foundry-upload-prepare-button" type="button" data-analytics="foundry_prepare_source_upload">
-                                <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
-                              </button>
-                            </div>
-
                             <div class="field">
                               <label class="label" for="foundry-notes">Notes</label>
-                              <textarea id="foundry-notes" name="notes" placeholder="Context, horizon assumptions, special constraints, or what the analysis should emphasize"></textarea>
+                              <textarea id="foundry-notes" name="notes" placeholder="Forecast horizon, model version, assumptions, or review context"></textarea>
                             </div>
-
-                            <div id="foundry-autopilot-controls">
-                              <h3 style="margin-top: 16px;">Autopilot controls</h3>
-                              <div class="form-grid">
-                                <div class="field">
-                                  <label class="label" for="foundry-horizon">Forecast horizon</label>
-                                  <select id="foundry-horizon" name="horizon">
-                                    <option value="3d">3 Days</option>
-                                    <option value="1w">Week Ending Friday</option>
-                                    <option value="2w">2 Weeks</option>
-                                    <option value="3w">3 Weeks</option>
-                                    <option value="1m" selected>1 Month</option>
-                                    <option value="3m">3 Months</option>
-                                    <option value="6m">6 Months</option>
-                                    <option value="1y">1 Year</option>
-                                  </select>
-                                  <div class="small muted">Pick a market-ready horizon. Forecast Foundry maps it to trading-day or trading-hour steps automatically based on your selected interval.</div>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="foundry-quantiles">Quantiles (0-1)</label>
-                                  <input id="foundry-quantiles" name="quantiles" placeholder="0.1,0.5,0.9" value="0.1,0.5,0.9" />
-                                  <div class="small muted">Enter 3 to 5 quantiles between <code>0.01</code> and <code>0.99</code>. Use an odd count and include <code>0.5</code>. Example: <code>0.1,0.5,0.9</code> or <code>0.1,0.25,0.5,0.75,0.9</code>.</div>
-                                </div>
-                              </div>
-                            </div>
-
                             <div class="hero-actions" id="foundry-primary-actions" style="margin-top: 14px; justify-content: flex-start;">
                               <button class="cta" id="foundry-prepare-button" type="submit" data-analytics="foundry_prepare_source">
-                                <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Prepare source</span>
-                              </button>
-                              <button class="cta secondary" id="foundry-run-button" type="button" data-analytics="foundry_start_autopilot">
-                                <i class="iconoir-rocket" aria-hidden="true"></i><span>Start Autopilot</span>
+                                <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Analyze prediction CSV</span>
                               </button>
                             </div>
-                            <p class="small" id="autopilot-status">Sign in with a full account to unlock Forecast Foundry.</p>
-                            <div class="small muted" id="foundry-instance-limit">Concurrent instance limit: 0 of 2 active.</div>
-                            <div class="notice small" id="foundry-access-note">
-                              SageMaker training currently supports daily historical datasets. Prediction CSV uploads are analysis-only and do not start SageMaker compute.
-                            </div>
-
-                            <div class="card" style="margin-top: 18px;">
-                              <div class="card-head">
-                                <h3>Research guide</h3>
-                              </div>
-                              <div class="small">
-                                <p>
-                                  Use the
-                                  <a href="https://docs.aws.amazon.com/forecast/latest/dg/metrics.html" target="_blank" rel="noopener noreferrer">AWS Forecast metrics documentation</a>
-                                  to understand how Average wQL, wQL, WAPE, RMSE, MAPE, and MASE are interpreted. Lower error values indicate a stronger forecasting model.
-                                </p>
-                                <p>
-                                  In Forecast Foundry, the point-forecast anchor is the middle quantile column, which is usually the median
-                                  <code>P50</code> or <code>0.5</code>.
-                                </p>
-                                <p>
-                                  Review the median forecast path and its outer quantile bands together. Wider bands communicate greater model uncertainty and should not be treated as trading instructions.
-                                </p>
-                                <p>
-                                  Prediction uploads use supplied model 95% interval columns when present. Otherwise Quantura labels the derived mean ± 1.96 sample-standard-deviation range as a <strong>P50 95% Statistical Anomaly Band</strong>, not as the model's confidence interval.
-                                </p>
-                              </div>
-                            </div>
+                            <p class="small" id="autopilot-status">Sign in with a full account to analyze a prediction CSV.</p>
                           </form>
 
                           <div class="card foundry-detail-card">
@@ -405,22 +317,19 @@
                               <h3>Selected run</h3>
                               <div class="hero-actions" style="justify-content: flex-start;">
                                 <button class="cta secondary small" id="foundry-refresh-button" type="button">
-                                  <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh AWS status</span>
+                                  <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh analysis</span>
                                 </button>
                                 <button class="cta secondary small" id="foundry-open-chart-button" type="button" disabled>
                                   <i class="iconoir-graph-up" aria-hidden="true"></i><span>Open interactive chart</span>
-                                </button>
-                                <button class="cta secondary small hidden" id="foundry-business-days-button" type="button">
-                                  <i class="iconoir-download" aria-hidden="true"></i><span>Download business-day CSV</span>
                                 </button>
                                 <button class="cta secondary small" id="foundry-share-button" type="button">
                                   <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
                                 </button>
                               </div>
                             </div>
-                            <div id="foundry-run-meta" class="panel-output small">Select a foundry run to inspect its source schema, status, and forecast artifacts.</div>
-                            <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private Workspace sync controls appear here after a source is prepared.</div>
-                            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Forecast run analysis will appear here.</div>
+                            <div id="foundry-run-meta" class="panel-output small">Select a prediction analysis to inspect its schema, validation results, quantiles, and saved artifacts.</div>
+                            <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private workspace controls appear here after the prediction file is analyzed.</div>
+                            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Prediction quantile analysis will appear here.</div>
                             <div id="foundry-price-alert-status" class="forecast-alert-status hidden" aria-live="polite"></div>
                             <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">Dataset preview metadata will appear here.</div>
                             <div id="predictions-chart" class="chart foundry-chart-launcher" style="margin-top: 14px;"></div>
@@ -430,10 +339,10 @@
 
                         <div class="results-panel foundry-runs-panel" id="autopilot-result">
                           <div class="card-head">
-                            <h3>Foundry runs</h3>
+                            <h3>Prediction analyses</h3>
                             <button class="cta secondary small" id="foundry-refresh-list" type="button">Refresh</button>
                           </div>
-                          <div id="autopilot-output" class="panel-output small">Saved foundry runs will appear here.</div>
+                          <div id="autopilot-output" class="panel-output small">Saved prediction analyses will appear here.</div>
                         </div>
                       </div>
                     </div>
@@ -487,103 +396,32 @@
                         <div id="mlb-history-chart" class="chart integration-chart" aria-label="MLB pregame probability history chart"></div>
                         <div id="mlb-history-preview" class="responsive-table-wrap"><div class="empty-state">No observations loaded.</div></div>
                       </div>
-                      <div class="notice small"><strong>SageMaker-ready:</strong> download this time-series dataset, connect your AWS role under <a href="/account">Account → AWS / SageMaker Integration</a>, then prepare it in Forecast Foundry. AWS resources run under the identity and account you connect.</div>
-                    </div>
-                  </section>
-
-                  <section class="panel hidden" data-panel="indicators">
-                    <div class="panel-header">
-                      <h2>Indicators</h2>
-                      <p class="small">Toggle indicator stacks, compare signals across intervals, and keep everything aligned to the active ticker context.</p>
-                    </div>
-                    <form id="technicals-form" class="card">
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="technicals-ticker">Ticker</label>
-                          <input id="technicals-ticker" name="ticker" placeholder="MSFT" required />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="technicals-interval">Interval</label>
-                          <select id="technicals-interval" name="interval">
-                            <option value="1d">Daily</option>
-                            <option value="1h">Hourly</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="technicals-lookback">Lookback (days)</label>
-                          <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
-                        </div>
-                      </div>
-                      <fieldset class="field indicator-field">
-                        <legend class="label">Indicators</legend>
-                        <div class="checkbox-grid indicator-toggle-grid">
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="RSI" checked /><span class="indicator-toggle-label">RSI</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MACD" checked /><span class="indicator-toggle-label">MACD</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="SMA" /><span class="indicator-toggle-label">SMA</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="EMA" /><span class="indicator-toggle-label">EMA</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="BBANDS" /><span class="indicator-toggle-label">Bollinger</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ATR" /><span class="indicator-toggle-label">ATR</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ADX" /><span class="indicator-toggle-label">ADX</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="CCI" /><span class="indicator-toggle-label">CCI</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MFI" /><span class="indicator-toggle-label">MFI</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="OBV" /><span class="indicator-toggle-label">OBV</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ROC" /><span class="indicator-toggle-label">ROC</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="STOCH" /><span class="indicator-toggle-label">Stochastic</span></label>
-                          <label class="indicator-toggle"><input type="checkbox" name="indicators" value="WILLR" /><span class="indicator-toggle-label">Williams %R</span></label>
-                        </div>
-                      </fieldset>
-                      <button class="cta" type="submit" data-analytics="technicals_submit">Run indicators</button>
-                      <details class="learn-more">
-                        <summary>Learn more</summary>
-                        <p class="small">
-                          Price and SMA/EMA/Bollinger overlays render in the upper pane. Oscillators such as RSI and MACD render in separate lower panes with independent scales.
-                        </p>
-                      </details>
-                    </form>
-                    <div class="results-panel">
-                      <h3>Indicator output</h3>
-                      <div id="technicals-output" class="panel-output small">Select indicators to see the latest values.</div>
-                      <div id="indicator-chart" class="chart" style="margin-top: 16px;"></div>
-                    </div>
-                    <div class="card" data-my-requests-panel data-default-type="indicator">
-                      <div class="card-head">
-                        <h3>My Requests</h3>
-                        <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
-                      </div>
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label">Search</label>
-                          <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
-                        </div>
-                        <div class="field">
-                          <label class="label">Type</label>
-                          <select data-my-requests-type>
-                            <option value="">All</option>
-                            <option value="forecast">Forecasting</option>
-                            <option value="screener">Screeners</option>
-                            <option value="indicator">Indicators</option>
-                          </select>
-                        </div>
-                      </div>
-                      <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
-                      <div class="order-list panel-output" data-my-requests-list></div>
+                      <div class="notice small"><strong>SageMaker-ready:</strong> download this time-series dataset, then use the workflow in <a href="/research">Research → SageMaker Canvas</a>. Connected SageMaker resources run under the identity and AWS account you configure.</div>
                     </div>
                   </section>
 
                   <section class="panel hidden" data-panel="news">
                     <div class="panel-header">
                       <h2>Historical Data Download</h2>
-                      <p class="small">Retrieve genuine Alpaca equity bars, preview them safely, and download a chronological CSV.</p>
+                      <p class="small">Choose Alpaca or Yahoo Finance, preview genuine equity bars, and download a chronological CSV. Automatic mode falls back to Yahoo when Alpaca is unavailable.</p>
                     </div>
                     <div class="content-grid">
                       <form id="alpaca-history-form" class="card download-form-card" autocomplete="off">
                         <div class="card-head">
                           <div>
                             <h3>Historical Market Data</h3>
-                            <p class="small muted download-form-subcopy">Choose the symbol, timeframe, range, trading sessions, adjustment, and entitled feed.</p>
+                            <p class="small muted download-form-subcopy">Choose a source, symbol, timeframe, latest-row count, session coverage, and adjustment.</p>
                           </div>
                         </div>
                         <div class="form-grid download-form-grid">
+                          <div class="field">
+                            <label class="label" for="market-history-source">Data source</label>
+                            <select id="market-history-source" name="source">
+                              <option value="auto" selected>Automatic — Alpaca, then Yahoo Finance</option>
+                              <option value="alpaca">Alpaca</option>
+                              <option value="yahoo">Yahoo Finance</option>
+                            </select>
+                          </div>
                           <div class="field">
                             <label class="label" for="alpaca-symbol">Symbol</label>
                             <input id="alpaca-symbol" name="symbol" type="text" value="AAPL" pattern="[A-Za-z][A-Za-z0-9.\-]{0,14}" required />
@@ -593,10 +431,6 @@
                             <select id="alpaca-timeframe" name="timeframe">
                               <option value="1Min">1 minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option><option value="30Min">30 minutes</option><option value="1Hour">1 hour</option><option value="1Day" selected>1 day</option>
                             </select>
-                          </div>
-                          <div class="field">
-                            <label class="label" for="alpaca-start">Start date</label>
-                            <input id="alpaca-start" name="start" type="date" required />
                           </div>
                           <div class="field">
                             <label class="label" for="alpaca-end">End date</label>
@@ -620,20 +454,16 @@
                         <div class="download-form-actions">
                           <button class="cta" type="submit"><i class="iconoir-database" aria-hidden="true"></i><span>Load Data</span></button>
                           <button class="cta secondary" id="alpaca-download" type="button" disabled><i class="iconoir-download" aria-hidden="true"></i><span>Download CSV</span></button>
-                          <p class="small" id="alpaca-history-status" role="status" aria-live="polite">Checking Alpaca connection…</p>
+                          <p class="small" id="alpaca-history-status" role="status" aria-live="polite">Checking market-data sources…</p>
                         </div>
                       </form>
                       <div class="card download-guidance-card">
                         <h3>Session coverage</h3>
-                        <p class="small">Intraday results label every row as premarket, regular, after-hours, or overnight. Extended-hours availability depends on the chosen feed and Alpaca subscription; Quantura never fabricates missing observations.</p>
+                        <p class="small">Intraday results label sessions when the provider supplies sufficient timestamps. Alpaca supports entitled IEX/SIP/overnight feeds; Yahoo Finance is a best-effort fallback and does not expose trade count or VWAP.</p>
                         <div id="alpaca-session-summary" class="metadata-list"><p class="small muted">Load data to see session counts.</p></div>
                       </div>
                     </div>
-                    <div class="results-panel data-results-panel"><div class="card-head"><div><h3>Data preview</h3><p class="small muted" id="alpaca-preview-summary">No data loaded.</p></div></div><div id="alpaca-history-preview" class="responsive-table-wrap"><div class="empty-state">Set a symbol and date range, then choose Load Data.</div></div></div>
-                    <div class="notice" style="margin-top: 16px;">
-                      Historical downloads pair best with the Forecasting panel for the active symbol.
-                      <a class="news-link" href="/forecasting?panel=forecast">Open Forecasting</a>.
-                    </div>
+                    <div class="results-panel data-results-panel"><div class="card-head"><div><h3>Data preview</h3><p class="small muted" id="alpaca-preview-summary">No data loaded.</p></div></div><div id="alpaca-history-preview" class="responsive-table-wrap"><div class="empty-state">Choose a source, symbol, and row count, then load data.</div></div></div>
                   </section>
 
                   <section class="panel hidden" data-panel="market-headlines">
@@ -680,10 +510,11 @@
                   <section class="panel hidden" data-panel="options">
                     <div class="panel-header">
                       <h2>Options</h2>
-                      <p class="small">Inspect active Alpaca contracts and snapshots, select a specific call or put, then preview, chart, and download its historical bars.</p>
+                      <p class="small">Choose Alpaca or Yahoo Finance, inspect a live options chain, select a call or put contract, then preview, chart, and download available historical bars.</p>
                     </div>
                     <form id="alpaca-options-form" class="card" autocomplete="off">
                       <div class="form-grid">
+                        <div class="field"><label class="label" for="options-market-source">Data source</label><select id="options-market-source"><option value="auto" selected>Automatic — Alpaca, then Yahoo Finance</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select></div>
                         <div class="field">
                           <label class="label" for="alpaca-options-underlying">Underlying ticker</label>
                           <input id="alpaca-options-underlying" value="AAPL" required />
@@ -693,7 +524,7 @@
                           <select id="alpaca-options-expiration" required><option value="">Load expirations first</option></select>
                         </div>
                         <div class="field"><label class="label" for="alpaca-options-type">Contract type</label><select id="alpaca-options-type"><option value="call">Calls</option><option value="put">Puts</option></select></div>
-                        <div class="field"><label class="label" for="alpaca-options-feed">Snapshot feed</label><select id="alpaca-options-feed"><option value="indicative">Indicative</option><option value="opra">OPRA (subscription required)</option></select></div>
+                        <div class="field"><label class="label" for="alpaca-options-feed">Alpaca snapshot feed</label><select id="alpaca-options-feed"><option value="indicative">Indicative</option><option value="opra">OPRA (subscription required)</option></select><div class="small muted">Yahoo Finance chooses its public feed and does not supply Greeks.</div></div>
                       </div>
                       <div class="hero-actions workflow-actions">
                         <button class="cta secondary" id="alpaca-options-expirations" type="button">Load expirations</button>
@@ -722,212 +553,26 @@
                   </section>
                   <section class="panel hidden" data-panel="screener">
                     <div class="panel-header screener-panel-header">
-                      <h2>GitHub Actions Screener</h2>
-                      <p class="small">Run the daily Prophet signal tracker from the Quantura repository and save completed results privately in My Requests.</p>
+                      <h2>Quantitative Forecast Screener</h2>
+                      <p class="small">Research the validated S&amp;P 500, broad Nasdaq common-stock universe, and SPY with forecast-quantile, market-cap, earnings, and model-signal filters.</p>
                     </div>
-                    <form id="screener-form" class="card" data-screener-mode="github_actions">
-                      <h3>Run stock screener</h3>
-                      <p class="small muted" style="margin-top:8px;">
-                        Quantura dispatches the repository GitHub Action, waits for the uploaded artifact, and saves the result privately in My Requests.
-                      </p>
-                      <div class="form-grid" style="margin-top:12px;">
-                        <div class="field">
-                          <label class="label" for="screener-min-market-cap">Market cap floor</label>
-                          <select id="screener-min-market-cap" name="minMarketCap">
-                            <option value="50000000000">$50B</option>
-                            <option value="100000000000" selected>$100B</option>
-                            <option value="200000000000">$200B</option>
-                            <option value="500000000000">$500B</option>
-                            <option value="1000000000000">$1T</option>
-                          </select>
-                          <p class="small muted">Default floor is $100B. The GitHub workflow scans the combined S&amp;P 500 + Nasdaq universe above this threshold.</p>
-                        </div>
+                    <div class="card">
+                      <h3>Open the research table</h3>
+                      <p class="small muted">The scheduled scanner now runs in deterministic parallel chunks, validates full-universe coverage, and publishes only complete datasets. Use the dedicated Screener for responsive search, combined quantile filters, sorting, pagination, and CSV export.</p>
+                      <div class="hero-actions" style="margin-top:16px;">
+                        <a class="cta" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Open Quantitative Screener</span></a>
                       </div>
-                      <div class="small muted" id="screener-results-count">Matches: —</div>
-                      <button class="cta" id="screener-generate-button" type="submit" data-analytics="screener_submit">
-                        <i class="iconoir-play" aria-hidden="true"></i><span>Launch live screener</span>
-                      </button>
-                      <p class="small muted" id="screener-dispatch-status">Ready to dispatch the live GitHub screener.</p>
-                      <details class="learn-more">
-                        <summary>Learn more</summary>
-                        <p class="small">
-                          Quantura stores each GitHub Actions run in your workspace so you can reopen it later and download the CSV.
-                        </p>
-                      </details>
-                    </form>
+                    </div>
                     <div class="results-panel">
-                      <h3>Screener output</h3>
-                      <div id="screener-output" class="panel-output small">Workflow status, saved request state, and live screener matches appear here.</div>
-                    </div>
-
-                      <div class="card">
-                        <div class="card-head">
-                          <h3>Scheduled GitHub Runs</h3>
-                          <button class="cta secondary small" id="screener-github-history-refresh" type="button">Refresh</button>
-                        </div>
-                        <p class="small muted" id="screener-github-history-status">Loading scheduled GitHub screener runs...</p>
-                        <div class="order-list panel-output" id="screener-github-history-list">
-                          <div class="small muted">Running and completed scheduled GitHub screener workflows will appear here for everyone.</div>
-                        </div>
-                      </div>
-                      <div class="card" data-my-requests-panel data-default-type="screener">
-                        <div class="card-head">
-                          <h3>My Requests</h3>
-                          <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
-                        </div>
-                        <div class="form-grid">
-                          <div class="field">
-                            <label class="label">Search</label>
-                            <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
-                          </div>
-                          <div class="field">
-                            <label class="label">Type</label>
-                            <select data-my-requests-type>
-                              <option value="">All</option>
-                              <option value="forecast">Forecasting</option>
-                              <option value="screener">Screeners</option>
-                              <option value="indicator">Indicators</option>
-                            </select>
-                          </div>
-                        </div>
-                        <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
-                        <div class="order-list panel-output" data-my-requests-list></div>
-                      </div>
-                  </section>
-
-	                  <section class="panel hidden" data-panel="watchlist">
-	                    <div class="panel-header">
-	                      <h2>Watchlist and alerts</h2>
-	                      <p class="small">Save symbols to your workspace. Every followed asset automatically gets a default ±5% volatility alert.</p>
-	                    </div>
-
-	                    <div class="content-grid">
-	                      <form id="watchlist-form" class="card">
-	                        <h3>Add to watchlist</h3>
-	                        <div class="field">
-	                          <label class="label" for="watchlist-ticker">Ticker</label>
-	                          <input id="watchlist-ticker" name="ticker" placeholder="AAPL" required />
-	                        </div>
-	                        <div class="field">
-	                          <label class="label" for="watchlist-notes">Notes (optional)</label>
-	                          <textarea id="watchlist-notes" name="notes" placeholder="Thesis, catalysts, or why this name matters"></textarea>
-	                        </div>
-	                        <button class="cta" type="submit" data-analytics="watchlist_add">Add</button>
-	                        <details class="learn-more">
-	                          <summary>Learn more</summary>
-	                          <p class="small">
-	                            Watchlists live in your active workspace. Invite collaborators from the Dashboard to share this list.
-	                            Click any symbol to update the chart instantly.
-	                          </p>
-	                        </details>
-	                      </form>
-
-	                      <div class="results-panel">
-	                        <h3>Watchlist</h3>
-	                        <div id="watchlist-list" class="panel-output small">Sign in to start saving tickers.</div>
-	                      </div>
-	                    </div>
-
-	                    <div class="content-grid" style="margin-top: 16px;">
-	                      <form id="alert-form" class="card">
-	                        <h3>Create custom price alert</h3>
-	                        <div class="form-grid">
-	                          <div class="field">
-	                            <label class="label" for="alert-ticker">Ticker</label>
-	                            <input id="alert-ticker" name="ticker" placeholder="NVDA" required />
-	                          </div>
-	                          <div class="field">
-	                            <label class="label" for="alert-condition">Condition</label>
-	                            <select id="alert-condition" name="condition">
-	                              <option value="above">Crosses above</option>
-	                              <option value="below">Crosses below</option>
-	                            </select>
-	                          </div>
-	                          <div class="field">
-	                            <label class="label" for="alert-price">Target price (USD)</label>
-	                            <input id="alert-price" name="target" type="number" step="0.01" placeholder="150.00" required />
-	                          </div>
-	                        </div>
-	                        <div class="field">
-	                          <label class="label" for="alert-notes">Notes (optional)</label>
-	                          <textarea id="alert-notes" name="notes" placeholder="What should you do when this triggers?"></textarea>
-	                        </div>
-	                        <div class="hero-actions" style="margin-top: 12px;">
-	                          <button class="cta" type="submit" data-analytics="alert_create">Create custom alert</button>
-	                          <button class="cta secondary" id="alerts-check" type="button" data-analytics="alert_check">Check alerts now</button>
-	                        </div>
-	                        <p class="small" id="alerts-status"></p>
-	                        <details class="learn-more">
-	                          <summary>Learn more</summary>
-	                          <p class="small">
-	                            Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Dashboard.
-	                            Quantura stores alerts in your workspace, along with trigger events, so you can audit what happened.
-	                          </p>
-	                        </details>
-	                      </form>
-
-	                      <div class="results-panel">
-	                        <h3>Active alerts</h3>
-	                        <div id="alerts-list" class="panel-output small">Create an alert to see it here.</div>
-	                      </div>
-	                    </div>
-	                  </section>
-
-                  <section class="panel hidden" data-panel="learn">
-                    <div class="panel-header">
-                      <h2>Learn more</h2>
-                      <p class="small">Structured terminal documentation inspired by professional screener help systems.</p>
-                    </div>
-                    <div class="help-layout">
-                                            <aside class="card help-sidebar">
-                        <h3>Help index</h3>
-                        <a href="#help-screener-overview">Screener Overview</a>
-                        <a href="#help-filter-groups">Workflow</a>
-                        <a href="#help-tech-intro">Technical Analysis Intro</a>
-                        <a href="#help-research-loop">Research Workflow</a>
-                      </aside>
-                      <div class="help-content">
-                        <article class="card help-article" id="help-screener-overview">
-                          <h3>Screener overview</h3>
-                          <p class="small">
-                            Quantura Screener dispatches the repository GitHub workflow, waits for the uploaded artifact, and saves the completed run back into your workspace.
-                          </p>
-                          <p class="small">
-                            Use the market-cap floor to control the universe, then reopen completed runs from My Requests when scheduled jobs finish.
-                          </p>
-                        </article>
-                        <article class="card help-article" id="help-filter-groups">
-                          <h3>Workflow</h3>
-                          <div class="help-kv-grid small">
-                            <div><strong>Dispatch</strong> launches the GitHub Actions screener with the selected market-cap floor.</div>
-                            <div><strong>Tracking</strong> keeps the live workflow status attached to the saved run while the artifact is processing.</div>
-                            <div><strong>Artifacts</strong> expose downloadable CSV output as soon as GitHub uploads the screener results.</div>
-                            <div><strong>Workspace</strong> stores each run in My Requests so it can be reopened without rerunning the workflow.</div>
-                            <div><strong>Dashboard</strong> keeps completed screener runs in the authenticated workspace for later review.</div>
-                          </div>
-                        </article>
-
-                        <article class="card help-article" id="help-tech-intro">
-                          <h3>Technical analysis intro</h3>
-                          <p class="small">
-                            Start with trend context (price regime + moving averages), then add momentum (RSI, MACD), and finally confirm participation (relative/current volume, short float).
-                          </p>
-                          <p class="small">
-                            Treat technical signals as probabilistic confirmation layers. Pair them with earnings timing, analyst targets, and sector context before sizing risk.
-                          </p>
-                        </article>
-                        <article class="card help-article" id="help-research-loop">
-                          <h3>Research workflow</h3>
-                          <p class="small">
-                            1) Run Screener to generate candidates. 2) Validate with Indicators and News. 3) Build quantile ranges in Forecast. 4) Save and compare runs week-over-week.
-                          </p>
-                          <div class="notice" style="margin-top: 12px;">
-                            For deeper process walkthroughs and model notes, visit the <a href="/blog">Quantura blog</a>.
-                          </div>
-                        </article>
+                      <h3>Research coverage</h3>
+                      <div class="panel-output small">
+                        <p><strong>Universe:</strong> current S&amp;P 500 constituents, eligible Nasdaq-listed common stocks, plus SPY as an ETF.</p>
+                        <p><strong>Signals:</strong> actual price versus P10/P50/P90, percentage distance, P50 model bias, last-two-P10 signal, and next earnings date where available.</p>
+                        <p><strong>Integrity:</strong> missing values remain unavailable, timestamps are explicit, and a degraded scan cannot overwrite the prior validated dataset.</p>
                       </div>
                     </div>
                   </section>
+
                 </div>
               </div>
             </div>

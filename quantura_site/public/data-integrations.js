@@ -73,8 +73,9 @@
 
   function stockHistoryBody() {
     return {
+      source: byId("market-history-source")?.value || "auto",
       symbol: byId("alpaca-symbol")?.value.trim().toUpperCase(), timeframe: byId("alpaca-timeframe")?.value,
-      start: byId("alpaca-start")?.value, end: byId("alpaca-end")?.value, session: byId("alpaca-session")?.value,
+      end: byId("alpaca-end")?.value, session: byId("alpaca-session")?.value,
       adjustment: byId("alpaca-adjustment")?.value, feed: byId("alpaca-feed")?.value, limit: byId("alpaca-row-limit")?.value,
     };
   }
@@ -82,20 +83,35 @@
     const form = byId("alpaca-history-form");
     if (!form) return;
     const end = new Date();
-    const start = new Date(end.getTime() - 30 * 86400000);
-    byId("alpaca-start").value = isoDate(start);
     byId("alpaca-end").value = isoDate(end);
     const historyStatus = byId("alpaca-history-status");
     const loadButton = form.querySelector('button[type="submit"]');
     const downloadButton = byId("alpaca-download");
-    jsonRequest("/api/market-data/alpaca/status").then(() => status(historyStatus, "Alpaca account and IEX market data are connected.", "success")).catch((error) => status(historyStatus, error.message, "error"));
+    const sourceSelect = byId("market-history-source");
+    const feedSelect = byId("alpaca-feed");
+    const syncSourceControls = () => {
+      const yahooOnly = sourceSelect?.value === "yahoo";
+      if (feedSelect) {
+        feedSelect.disabled = yahooOnly;
+        feedSelect.title = yahooOnly ? "Yahoo Finance selects its own public chart feed." : "Choose an Alpaca market-data feed.";
+      }
+    };
+    sourceSelect?.addEventListener("change", syncSourceControls);
+    syncSourceControls();
+    jsonRequest("/api/market-data/history/status")
+      .then((payload) => {
+        const alpaca = payload?.sources?.alpaca?.available ? "Alpaca connected" : "Alpaca unavailable";
+        const yahoo = payload?.sources?.yahoo?.available ? "Yahoo Finance available" : "Yahoo Finance unavailable";
+        status(historyStatus, `${alpaca} · ${yahoo}. Automatic mode uses the first available source.`, payload?.sources?.yahoo?.available ? "success" : "warning");
+      })
+      .catch((error) => status(historyStatus, error.message, "error"));
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
       const body = stockHistoryBody();
       disable(loadButton, true, "Loading data…");
       downloadButton.disabled = true;
-      status(historyStatus, "Requesting Alpaca bars and following pagination…");
+      status(historyStatus, "Requesting chronological market bars…");
       try {
         const payload = await jsonRequest("/api/market-data/stocks/history", { method: "POST", body: JSON.stringify(body) });
         const rows = Array.isArray(payload.rows) ? payload.rows : [];
@@ -108,8 +124,11 @@
         ], rows);
         const counts = rows.reduce((result, row) => ({ ...result, [row.session]: (result[row.session] || 0) + 1 }), {});
         byId("alpaca-session-summary").innerHTML = Object.entries(counts).map(([key, value]) => `<div><span>${html(key.replaceAll("_", " "))}</span><strong>${Number(value).toLocaleString()}</strong></div>`).join("") || '<p class="small muted">No session observations.</p>';
-        byId("alpaca-preview-summary").textContent = `${payload.count.toLocaleString()} ${payload.timeframe} observations · ${payload.feed.toUpperCase()} · ${payload.adjustment} · oldest to newest`;
-        status(historyStatus, `Loaded ${payload.count.toLocaleString()} observations successfully.`, "success");
+        const provider = String(payload.provider || payload.source || "market data");
+        const feed = payload.feed ? ` · ${String(payload.feed).toUpperCase()}` : "";
+        const fallback = payload.fallbackUsed ? " · automatic fallback used" : "";
+        byId("alpaca-preview-summary").textContent = `${Number(payload.count || rows.length).toLocaleString()} ${payload.timeframe} observations · ${provider}${feed} · ${payload.adjustment || "raw"}${fallback} · oldest to newest`;
+        status(historyStatus, `Loaded ${Number(payload.count || rows.length).toLocaleString()} observations from ${provider}.`, "success");
         downloadButton.disabled = false;
       } catch (error) {
         byId("alpaca-history-preview").innerHTML = `<div class="error-state">${html(error.message)}</div>`;
@@ -128,7 +147,7 @@
   }
 
   function optionHistoryBody() {
-    return { contractSymbol: byId("alpaca-option-contract")?.value, start: byId("alpaca-option-start")?.value, end: byId("alpaca-option-end")?.value, timeframe: byId("alpaca-option-timeframe")?.value, feed: byId("alpaca-options-feed")?.value, limit: byId("alpaca-option-row-limit")?.value };
+    return { source: byId("options-market-source")?.value || "auto", contractSymbol: byId("alpaca-option-contract")?.value, start: byId("alpaca-option-start")?.value, end: byId("alpaca-option-end")?.value, timeframe: byId("alpaca-option-timeframe")?.value, feed: byId("alpaca-options-feed")?.value, limit: byId("alpaca-option-row-limit")?.value };
   }
   function initOptions() {
     const form = byId("alpaca-options-form");
@@ -142,17 +161,32 @@
     const historyLoad = byId("alpaca-option-load-history");
     const historyDownload = byId("alpaca-option-download");
     const historyStatus = byId("alpaca-option-history-status");
+    const sourceSelect = byId("options-market-source");
+    const feedSelect = byId("alpaca-options-feed");
     const end = new Date();
     byId("alpaca-option-end").value = isoDate(end);
     byId("alpaca-option-start").value = isoDate(new Date(end.getTime() - 7 * 86400000));
+    const syncOptionSource = () => {
+      const yahooOnly = sourceSelect?.value === "yahoo";
+      if (feedSelect) {
+        feedSelect.disabled = yahooOnly;
+        feedSelect.title = yahooOnly ? "Yahoo Finance selects its own public options feed." : "Choose an Alpaca options feed.";
+      }
+      expiration.innerHTML = '<option value="">Load expirations first</option>';
+      byId("alpaca-option-contract").value = "";
+      historyLoad.disabled = true;
+      historyDownload.disabled = true;
+    };
+    sourceSelect?.addEventListener("change", syncOptionSource);
+    syncOptionSource();
     async function loadExpirations() {
       const symbol = underlying.value.trim().toUpperCase();
       if (!/^[A-Z][A-Z0-9.\-]{0,14}$/.test(symbol)) { status(statusNode, "Enter a valid underlying ticker.", "error"); return; }
       disable(expirationButton, true, "Loading expirations…");
       try {
-        const payload = await jsonRequest(`/api/market-data/options/expirations?underlying=${encodeURIComponent(symbol)}`);
+        const payload = await jsonRequest(`/api/market-data/options/expirations?underlying=${encodeURIComponent(symbol)}&source=${encodeURIComponent(sourceSelect?.value || "auto")}`);
         expiration.innerHTML = payload.expirations.map((date) => `<option value="${html(date)}">${html(date)}</option>`).join("");
-        status(statusNode, `Loaded ${payload.expirations.length} active expirations. Choose one and load the chain.`, "success");
+        status(statusNode, `Loaded ${payload.expirations.length} active expirations from ${payload.provider || "market data"}${payload.fallbackUsed ? " using automatic fallback" : ""}. Choose one and load the chain.`, "success");
       } catch (error) { expiration.innerHTML = '<option value="">No expirations available</option>'; status(statusNode, error.message, "error"); }
       finally { disable(expirationButton, false); }
     }
@@ -164,7 +198,7 @@
       disable(loadButton, true, "Loading chain…");
       status(statusNode, "Loading contract metadata and Alpaca snapshots…");
       try {
-        const query = new URLSearchParams({ underlying: underlying.value.trim().toUpperCase(), expiration: expiration.value, type: byId("alpaca-options-type").value, feed: byId("alpaca-options-feed").value });
+        const query = new URLSearchParams({ underlying: underlying.value.trim().toUpperCase(), expiration: expiration.value, type: byId("alpaca-options-type").value, feed: byId("alpaca-options-feed").value, source: sourceSelect?.value || "auto" });
         const payload = await jsonRequest(`/api/market-data/options/chain?${query}`);
         const rows = Array.isArray(payload.contracts) ? payload.contracts : [];
         table(byId("alpaca-options-chain"), [
@@ -190,7 +224,7 @@
             status(historyStatus, "Contract selected. Choose a range and load history.");
           });
         });
-        status(statusNode, `Loaded ${rows.length.toLocaleString()} ${byId("alpaca-options-type").value} contracts.`, "success");
+        status(statusNode, `Loaded ${rows.length.toLocaleString()} ${byId("alpaca-options-type").value} contracts from ${payload.provider || "market data"}${payload.fallbackUsed ? " using automatic fallback" : ""}.`, "success");
       } catch (error) { byId("alpaca-options-chain").innerHTML = `<div class="error-state">${html(error.message)}</div>`; status(statusNode, error.message, "error"); }
       finally { disable(loadButton, false); }
     });
@@ -208,7 +242,7 @@
           { key: "tradeCount", label: "Trades", render: (row) => number(row.tradeCount, 0) }, { key: "vwap", label: "VWAP", render: (row) => number(row.vwap) },
         ], rows);
         plot(byId("alpaca-option-history-chart"), [{ type: "scatter", mode: "lines", x: rows.map((row) => row.timestamp), y: rows.map((row) => row.close), line: { color: "#60a5fa", width: 2 }, name: "Close" }], { yaxis: { title: "Option price", gridcolor: "rgba(148,163,184,.16)" } });
-        status(historyStatus, `Loaded ${payload.count.toLocaleString()} historical observations.`, "success"); historyDownload.disabled = false;
+        status(historyStatus, `Loaded ${payload.count.toLocaleString()} historical observations from ${payload.provider || "market data"}${payload.fallbackUsed ? " using automatic fallback" : ""}.`, "success"); historyDownload.disabled = false;
       } catch (error) { byId("alpaca-option-history-preview").innerHTML = `<div class="error-state">${html(error.message)}</div>`; status(historyStatus, error.message, "error"); }
       finally { disable(historyLoad, false); }
     });

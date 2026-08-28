@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Research | Market Intelligence + MLOps Notes</title>
-        <meta name="description" content="Curated Quantura research notes on demand forecasting, demand inflection signals, and production MLOps architecture." />
+    <title>Quantura Research | SageMaker Canvas Time-Series Forecasting</title>
+        <meta name="description" content="A practical SageMaker Canvas time-series forecasting workflow connecting Quantura historical data, prediction quantiles, analysis, and AWS execution." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="market research dashboard, macro analysis, treasury data, inflation data" />
         <link rel="canonical" href="https://quantura.studio/research" />
@@ -66,10 +66,10 @@
       <section class="section research-shell">
         <div class="container">
           <div class="section-title research-intro">
-            <h1>Market Intelligence + MLOps Library</h1>
+            <div class="eyebrow">AWS SageMaker Canvas</div>
+            <h1>Time-series forecasting, from market data to quantile review.</h1>
             <p class="small">
-              Quantura research is organized into two product pillars: demand inflection forecasting and production-grade MLOps.
-              Use the note cards to jump to internal pages and keep your implementation decisions consistent across teams.
+              This research hub documents the practical path through Quantura: export chronological data, build a time-series model in SageMaker Canvas, upload its quantile predictions, and review the forecast distribution without mixing deterministic analysis with optional AI interpretation.
             </p>
           </div>
 
@@ -85,26 +85,39 @@
             data-rn-placeholder="true"
           ></div>
 
-          <div class="research-pillars" aria-label="Research pillars">
+          <div class="research-pillars" aria-label="SageMaker Canvas forecasting workflow">
             <article class="card research-pillar">
-              <h2>Pillar A: Market Intelligence</h2>
+              <h2>1. Prepare the Canvas dataset</h2>
               <ul class="research-bullet-list">
-                <li>Foundations: naive, moving-average, ARIMA/ETS, Prophet-style decomposition.</li>
-                <li>Modern: multi-horizon forecasting with interpretable deep models like TFT.</li>
-                <li>Evaluation: rolling validation windows, leakage prevention, interval calibration.</li>
-                <li>Signals: transform forecast deltas into demand inflection features.</li>
+                <li>Use Historical Data for chronological Alpaca or Yahoo Finance equity bars.</li>
+                <li>Use Sports Forecasting for Polymarket US MLB pregame one-minute datasets.</li>
+                <li>Map a text item ID, datetime timestamp, and numeric target column.</li>
+                <li>Keep observations regular; distinguish missing values from genuine zeroes.</li>
               </ul>
             </article>
             <article class="card research-pillar">
-              <h2>Pillar B: MLOps</h2>
+              <h2>2. Build and return predictions</h2>
               <ul class="research-bullet-list">
-                <li>CI/CD for ML with continuous training and automated validation gates.</li>
-                <li>Data and feature validation, skew/drift monitoring, retraining triggers.</li>
-                <li>Experiment tracking, model registry, reproducible lineage and audit trails.</li>
-                <li>Operational playbooks for safe rollout, rollback, and incident handling.</li>
+                <li>Configure target, item ID, timestamp, forecast length, and up to five forecast quantiles in Canvas.</li>
+                <li>Compare Quick and Standard builds using Average wQL, WAPE, RMSE, MAPE, and MASE.</li>
+                <li>Upload the Canvas prediction CSV to Forecast Foundry for P10/P50/P90 analysis.</li>
+                <li>Review anomalies, scenarios, uncertainty, alerts, and saved runs in the private workspace.</li>
               </ul>
             </article>
           </div>
+
+          <section class="card research-component-map" aria-labelledby="research-component-map-title">
+            <div class="eyebrow">Quantura component map</div>
+            <h2 id="research-component-map-title">Where each website component fits</h2>
+            <div class="research-note-grid">
+              <div><strong>Historical Data</strong><p class="small muted">Select Alpaca, Yahoo Finance, or automatic fallback; preview and export a valid CSV.</p></div>
+              <div><strong>Forecast Foundry</strong><p class="small muted">Validate Canvas prediction CSVs and analyze quantiles, anomalies, bias, and tail signals.</p></div>
+              <div><strong>Meta Prophet Forecast</strong><p class="small muted">Compare deterministic P10/P50/P90 scenarios with technical indicators and optional balanced AI analysis.</p></div>
+              <div><strong>Screener</strong><p class="small muted">Find cross-sectional dislocations between actual price and stored forecast quantiles.</p></div>
+              <div><strong>Sports Forecasting</strong><p class="small muted">Prepare MLB pregame probability series for the same time-series workflow.</p></div>
+              <div><strong>AWS / SageMaker</strong><p class="small muted">Connect a private IAM role so permitted jobs run under, and are billed to, the user's AWS account.</p></div>
+            </div>
+          </section>
 
           <section class="research-library" aria-labelledby="research-notes-heading">
             <div class="research-library-head">
@@ -132,8 +145,8 @@
               </article>
               <article class="card research-note-card">
                 <span class="research-note-tag">Market Intelligence</span>
-                <h3>AWS metrics and point forecast</h3>
-                <p>How Amazon Forecast defines Average wQL, forecast types, and how Quantura maps quantile outputs into a stock point decision.</p>
+                <h3>Canvas metrics and quantiles</h3>
+                <p>How SageMaker Canvas evaluates time-series forecasts and how Quantura preserves P10/P50/P90 as a distribution.</p>
                 <a class="news-link" href="#note-aws-metrics">Open note</a>
               </article>
               <article class="card research-note-card">
@@ -213,46 +226,28 @@
             </article>
 
             <article class="card research-note-page" id="note-aws-metrics">
-              <h3>AWS Forecast metrics and Quantura point forecast update</h3>
+              <h3>SageMaker Canvas metrics and Quantura quantile review</h3>
               <p>
-                The AWS Forecast metrics guide is a strong reference for reading backtests because it lays out how Forecast
-                scores predictors across backtest windows and how it separates quantile forecasts from point-style operating
-                decisions. It covers wQL, Average wQL, WAPE, RMSE, MAPE, and MASE, and the practical reading is simple: lower values
-                indicate better predictors across those reported metrics.
+                SageMaker Canvas reports advanced time-series metrics including Average wQL, WAPE, RMSE, MAPE, and MASE. These measurements describe different error characteristics; no single score replaces inspection of the forecast horizon and quantile calibration.
               </p>
               <ul class="research-bullet-list">
-                <li>Average wQL is the mean of the selected quantile losses, with AWS defaulting to 0.10, 0.50, and 0.90.</li>
-                <li>wQL is quantile-specific and useful when underprediction and overprediction have different business costs.</li>
-                <li>WAPE, RMSE, MAPE, and MASE summarize overall error from the backtest windows rather than a single quantile slice.</li>
-                <li>AWS forecast types can include <code>mean</code> plus up to five custom quantiles from <code>0.01</code> through <code>0.99</code> via the <code>ForecastTypes</code> parameter.</li>
+                <li>Average wQL summarizes accuracy across forecast quantiles; lower is better for the evaluated data.</li>
+                <li>WAPE normalizes aggregate absolute error by the observed target total.</li>
+                <li>RMSE emphasizes larger misses; MAPE expresses mean percentage error where its denominator is meaningful.</li>
+                <li>MASE compares absolute error with a simple baseline; values below one are estimated to outperform that baseline.</li>
+                <li>Canvas accepts up to five comma-separated quantiles for a time-series model.</li>
               </ul>
-              <div class="research-diagram" role="img" aria-label="AWS Forecast metrics flow">
-                Backtest windows -> Quantile metrics (wQL, Average wQL) + point metrics (WAPE, RMSE, MAPE, MASE) -> forecast type selection -> operating decision
+              <div class="research-diagram" role="img" aria-label="SageMaker Canvas and Quantura workflow">
+                Chronological dataset → Canvas time-series build → quantile CSV → Forecast Foundry validation → P10/P50/P90 scenarios and anomaly review
               </div>
               <p>
-                AWS documentation makes two important points: you can request <code>mean</code> as a forecast type, and you can
-                also use a quantile as the effective point forecast when the cost of underpredicting differs from the cost of
-                overpredicting. That is why AWS supports mixed forecast-type selections such as <code>0.01</code>,
-                <code>mean</code>, <code>0.65</code>, and <code>0.99</code>.
-              </p>
-              <p>
-                In Quantura's SageMaker Canvas stock workflow, the exported prediction files are quantile-first and do not
-                actually expose a separate mean column, so the operative point forecast is the quantile in the middle. In
-                practice that middle column is usually <code>P50</code> or <code>0.5</code>, and it becomes the anchor for the
-                business-day comparison logic.
-              </p>
-              <p>
-                The Quantura point forecast update is: take the first actionable business-day middle quantile in the forecast
-                round and the last valid business-day middle quantile in the forecast, compare them at the second
-                significant figure, and for most stocks you can round those values to the tens place. If the last middle
-                quantile is lower than the first middle quantile at that significance level, use the upper bound as the
-                operative point level. Otherwise use the lower bound. That keeps the decision anchored to the middle quantile
-                while still adapting to the direction implied by the business-day path.
+                Quantura treats P10 as a lower scenario, P50 as the median/base scenario, and P90 as an upper scenario. It never collapses the distribution into a guaranteed point target. Uploaded rows are date-aware and retain the model's supplied boundaries.
               </p>
               <h4>Further Reading</h4>
               <ul class="research-links">
-                <li><a href="https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com" target="_blank" rel="noopener noreferrer">AWS Forecast metrics reference</a></li>
-                <li><a href="https://docs.aws.amazon.com/forecast/latest/dg/metrics.html?utm_source=chatgpt.com#ChoosingForecastTypes" target="_blank" rel="noopener noreferrer">AWS forecast types and point forecast guidance</a></li>
+                <li><a href="https://docs.aws.amazon.com/sagemaker/latest/dg/canvas-time-series.html" target="_blank" rel="noopener noreferrer">SageMaker Canvas time-series forecasts</a></li>
+                <li><a href="https://docs.aws.amazon.com/sagemaker/latest/dg/canvas-build-model-how-to.html" target="_blank" rel="noopener noreferrer">Build a Canvas time-series model</a></li>
+                <li><a href="https://docs.aws.amazon.com/sagemaker/latest/dg/canvas-metrics.html" target="_blank" rel="noopener noreferrer">SageMaker Canvas metrics reference</a></li>
               </ul>
             </article>
 
@@ -322,27 +317,25 @@
           </section>
 
           <section class="card research-note-page research-blueprint" id="blueprint-page" aria-labelledby="blueprint-title">
-            <h2 id="blueprint-title">Blueprint: End-to-End Forecasting + MLOps Architecture</h2>
+            <h2 id="blueprint-title">Blueprint: Quantura + SageMaker Canvas</h2>
             <p>
-              Use this reference architecture for Quantura-aligned deployment: ingestion to monitoring with explicit control
-              points for validation, registration, and rollback.
+              Keep data acquisition, AWS model building, prediction review, and notifications as explicit stages with auditable handoffs.
             </p>
             <div class="blueprint-flow" aria-label="Forecasting architecture flow">
-              <div class="blueprint-node">Ingestion</div>
+              <div class="blueprint-node">Quantura CSV</div>
               <div class="blueprint-arrow">-></div>
-              <div class="blueprint-node">Feature Store</div>
+              <div class="blueprint-node">S3 / Canvas</div>
               <div class="blueprint-arrow">-></div>
-              <div class="blueprint-node">Training</div>
+              <div class="blueprint-node">Canvas Build</div>
               <div class="blueprint-arrow">-></div>
-              <div class="blueprint-node">Model Registry</div>
+              <div class="blueprint-node">Quantile Export</div>
               <div class="blueprint-arrow">-></div>
-              <div class="blueprint-node">Deployment</div>
+              <div class="blueprint-node">Foundry Analysis</div>
               <div class="blueprint-arrow">-></div>
-              <div class="blueprint-node">Monitoring</div>
+              <div class="blueprint-node">Alerts / Review</div>
             </div>
             <p class="small">
-              Expansion points: real-time feature updates, shadow deployments, champion/challenger routing, and automated
-              governance checks for model lifecycle approvals.
+              AWS compute charges remain separate from Quantura platform charges and are billed by AWS to the connected account when resources run there.
             </p>
           </section>
 

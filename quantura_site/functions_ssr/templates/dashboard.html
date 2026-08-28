@@ -48,7 +48,7 @@
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
-      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","watchlist_enabled":"true","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
   </head>
   <body>
@@ -88,7 +88,6 @@
 			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
 			            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
 			            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
-			            <a class="sidebar-link" href="/watchlist" data-panel-target="watchlist"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Watchlist</span></a>
 		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
 		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
 		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Notifications</span></a>
@@ -240,7 +239,6 @@
               <div class="hero-actions workflow-actions"><button class="cta" type="submit">Save / Update</button><button class="cta secondary" id="aws-test-connection" type="button" disabled>Test Connection</button><button class="cta danger" id="aws-disconnect" type="button" disabled>Disconnect</button></div>
               <p id="aws-integration-status" class="integration-status" role="status" aria-live="polite">Sign in to load your AWS integration status.</p>
             </form>
-            <details class="learn-more"><summary>Minimum IAM and trust-policy setup</summary><div class="small"><p>The assumed role needs scoped S3 access to the selected bucket, SageMaker job create/describe/list permissions, and <code>iam:PassRole</code> only for the selected SageMaker execution role. Its trust policy must allow <code>sts:AssumeRoleWithWebIdentity</code> from Vercel OIDC and restrict the subject to Quantura's production API project. See the deployment documentation for a copyable policy.</p></div></details>
           </section>
           <section class="card forecast-alert-settings-card" aria-labelledby="forecast-alert-settings-title">
             <div class="card-head"><div><div class="eyebrow">Prediction monitoring</div><h3 id="forecast-alert-settings-title">Forecast Price Alerts</h3><p class="small muted">Manage date-aware quantile crossing emails created by your private prediction CSV analyses.</p></div><span class="pill">Alpaca + Resend</span></div>
@@ -263,42 +261,58 @@
       <section class="section panel hidden" data-panel="notifications" id="notifications">
         <div class="container">
           <div class="section-title">
-            <h2>Browser notifications</h2>
-            <p class="small">Enable web push notifications, stream messages live, and keep a timestamped event log.</p>
+            <div class="eyebrow">Private account activity</div>
+            <h2>Notification center</h2>
+            <p class="small">Review account updates and manage push delivery for this browser. Prediction-boundary email settings remain under Profile.</p>
           </div>
-          <div class="content-grid">
-            <div class="card">
-              <h3>Web push setup</h3>
-              <div class="feature-list">
-                <div class="feature"><span></span>HTTPS + service worker required</div>
-                <div class="feature"><span></span>Permission must be granted by browser</div>
-                <div class="feature"><span></span>Token stored securely to your account</div>
+          <div class="notification-center-grid">
+            <section class="results-panel notification-inbox" aria-labelledby="notification-inbox-title">
+              <div class="card-head notification-inbox-head">
+                <div>
+                  <h3 id="notification-inbox-title">Inbox</h3>
+                  <span class="pill" id="notifications-unread-count">Unread 0</span>
+                </div>
+                <button class="cta secondary small" id="notifications-mark-all" type="button">Mark all read</button>
               </div>
-              <div class="hero-actions" style="margin-top: 16px;">
-                <button class="cta" id="notifications-enable" type="button">Enable notifications</button>
-                <button class="cta secondary" id="notifications-refresh" type="button">Refresh token</button>
-                <button class="cta secondary" id="notifications-send-test" type="button">Send test push</button>
+              <div class="notification-filter-bar" role="group" aria-label="Filter notifications">
+                <button class="task-chip active" type="button" data-notification-filter="all">All</button>
+                <button class="task-chip" type="button" data-notification-filter="unread">Unread</button>
+                <button class="task-chip" type="button" data-notification-filter="earnings">Earnings</button>
+                <button class="task-chip" type="button" data-notification-filter="daily">Daily</button>
+                <button class="task-chip" type="button" data-notification-filter="weekly">Weekly</button>
               </div>
-              <p class="small" id="notifications-status" style="margin-top: 12px;">Sign in and enable notifications.</p>
-              <div class="notice small" style="margin-top: 10px;">
-                <strong>FCM token:</strong> <span id="notifications-token">No token registered yet.</span>
+              <div id="notifications-items" class="notification-log notification-inbox-list">
+                <div class="empty-state">Sign in to load your notification inbox.</div>
               </div>
+            </section>
+
+            <aside class="card notification-delivery-card" aria-labelledby="notification-delivery-title">
+              <div class="eyebrow">Delivery</div>
+              <h3 id="notification-delivery-title">Browser push</h3>
+              <p class="small muted">Enable push on this device to receive supported Quantura account updates. Browser permission and HTTPS are required.</p>
+              <div class="notification-delivery-status">
+                <span class="status-dot" aria-hidden="true"></span>
+                <p class="small" id="notifications-status">Sign in to configure browser push.</p>
+              </div>
+              <span id="notifications-token" class="hidden" aria-hidden="true">No token registered yet.</span>
+              <div class="hero-actions notification-delivery-actions">
+                <button class="cta" id="notifications-enable" type="button">Enable on this device</button>
+                <button class="cta secondary" id="notifications-send-test" type="button">Send test</button>
+                <button class="cta secondary small" id="notifications-refresh" type="button">Reconnect device</button>
+              </div>
+              <div id="notifications-privacy-host"></div>
+            </aside>
+          </div>
+
+          <section class="results-panel notification-activity-card" aria-labelledby="notification-activity-title">
+            <div class="card-head">
+              <div><h3 id="notification-activity-title">This-device activity</h3><p class="small muted">Recent push registration and foreground delivery events for this browser session.</p></div>
+              <button class="cta secondary small" id="notifications-clear" type="button">Clear activity</button>
             </div>
-            <div class="results-panel">
-              <div class="card-head">
-                <h3>Live notification log</h3>
-                <button class="cta secondary small" id="notifications-clear" type="button">Clear log</button>
-              </div>
               <div id="notifications-log" class="notification-log">
-                <div class="small muted">No live notifications yet.</div>
+                <div class="empty-state">No device activity yet.</div>
               </div>
-              <h3 style="margin-top: 8px;">How delivery works</h3>
-              <p class="small">
-                Quantura registers your browser token to your account and sends push notifications through the messaging service.
-                You can revoke permission any time from your browser site settings.
-              </p>
-            </div>
-          </div>
+          </section>
         </div>
       </section>
 
@@ -316,86 +330,6 @@
 	            <div class="card">
 	              <h3>Forecast requests</h3>
 	              <div id="user-forecasts" class="order-list panel-output"></div>
-	            </div>
-	          </div>
-	        </div>
-	      </section>
-
-	      <section class="section panel hidden" data-panel="watchlist" id="watchlist">
-	        <div class="container">
-	          <div class="section-title">
-	            <h2>Watchlist and price alerts</h2>
-	            <p class="small">Save tickers to your active workspace and track actionable levels. Every followed asset gets a default ±5% volatility alert.</p>
-	          </div>
-
-	          <div class="content-grid">
-	            <form id="watchlist-form" class="card">
-	              <h3>Add to watchlist</h3>
-	              <div class="field">
-	                <label class="label" for="watchlist-ticker">Ticker</label>
-	                <input id="watchlist-ticker" name="ticker" placeholder="AAPL" required />
-	              </div>
-	              <div class="field">
-	                <label class="label" for="watchlist-notes">Notes (optional)</label>
-	                <textarea id="watchlist-notes" name="notes" placeholder="Thesis, catalysts, or why this name matters"></textarea>
-	              </div>
-	              <button class="cta" type="submit" data-analytics="watchlist_add">Add</button>
-	              <details class="learn-more">
-	                <summary>Learn more</summary>
-	                <p class="small">
-	                  Watchlists are workspace-scoped. If you’re collaborating, switching workspaces changes the watchlist you see.
-	                  Click a ticker to open it in the Forecasting studio.
-	                </p>
-	              </details>
-	            </form>
-
-	            <div class="results-panel">
-	              <h3>Watchlist</h3>
-	              <div id="watchlist-list" class="panel-output small">Sign in to start saving tickers.</div>
-	            </div>
-	          </div>
-
-	          <div class="content-grid" style="margin-top: 16px;">
-	            <form id="alert-form" class="card">
-	              <h3>Create custom price alert</h3>
-	              <div class="form-grid">
-	                <div class="field">
-	                  <label class="label" for="alert-ticker">Ticker</label>
-	                  <input id="alert-ticker" name="ticker" placeholder="NVDA" required />
-	                </div>
-	                <div class="field">
-	                  <label class="label" for="alert-condition">Condition</label>
-	                  <select id="alert-condition" name="condition">
-	                    <option value="above">Crosses above</option>
-	                    <option value="below">Crosses below</option>
-	                  </select>
-	                </div>
-	                <div class="field">
-	                  <label class="label" for="alert-price">Target price (USD)</label>
-	                  <input id="alert-price" name="target" type="number" step="0.01" placeholder="150.00" required />
-	                </div>
-	              </div>
-	              <div class="field">
-	                <label class="label" for="alert-notes">Notes (optional)</label>
-	                <textarea id="alert-notes" name="notes" placeholder="What should you do when this triggers?"></textarea>
-	              </div>
-	              <div class="hero-actions" style="margin-top: 12px;">
-	                <button class="cta" type="submit" data-analytics="alert_create">Create custom alert</button>
-	                <button class="cta secondary" id="alerts-check" type="button" data-analytics="alert_check">Check alerts now</button>
-	              </div>
-	              <p class="small" id="alerts-status"></p>
-	              <details class="learn-more">
-	                <summary>Learn more</summary>
-	                <p class="small">
-	                  Alerts are evaluated against the latest market price. For push delivery, enable notifications in the Notifications panel.
-	                  Quantura logs trigger events in your workspace so you can review what happened later.
-	                </p>
-	              </details>
-	            </form>
-
-	            <div class="results-panel">
-	              <h3>Active alerts</h3>
-	              <div id="alerts-list" class="panel-output small">Create an alert to see it here.</div>
 	            </div>
 	          </div>
 	        </div>
@@ -467,25 +401,23 @@
         <div class="container">
           <div class="section-title">
             <h2>Workspace collaboration</h2>
-            <p class="small">Guest workspaces are available immediately. Create a full account later if you want emailed collaborator invites and shared seats.</p>
+            <p class="small">Share forecast runs, prediction analyses, screener research, and assigned review work inside a private workspace.</p>
           </div>
 
           <div class="content-grid">
             <div class="card">
               <h3>Active workspace</h3>
-              <p class="small">Your forecast list and saved runs follow this workspace across pages.</p>
+              <p class="small">Saved analyses, forecast runs, and workspace tasks follow the selected workspace across the platform.</p>
               <div class="field">
                 <label class="label" for="workspace-select">Workspace</label>
                 <select id="workspace-select"></select>
               </div>
-              <div class="notice small" id="workspace-hint">
-                Tip: switch workspaces, then open the terminal to plot shared forecasts.
-              </div>
+              <p class="small muted" id="workspace-hint">Switching workspaces reloads the research and tasks shared with that team.</p>
             </div>
 
             <div class="card">
               <h3>Invite a collaborator</h3>
-              <p class="small">Guest workspaces can save context right away. Email invites unlock after you create or sign in to a full account.</p>
+              <p class="small">Sign in with a full account to invite teammates. Viewer access is read-only; editors can contribute to shared research workflows.</p>
               <form id="collab-invite-form" class="auth-form">
                 <label class="label" for="collab-invite-email">Email</label>
                 <input id="collab-invite-email" type="email" placeholder="collaborator@domain.com" required />
