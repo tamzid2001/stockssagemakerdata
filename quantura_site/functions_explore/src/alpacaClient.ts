@@ -413,7 +413,6 @@ export class AlpacaClient {
     const contractSymbol = normalizeSymbol(input.contractSymbol, true);
     const { start, end } = normalizeRange(input.start, input.end);
     const timeframe = normalizeTimeframe(input.timeframe);
-    const feed = OPTION_FEEDS.has(String(input.feed || "").toLowerCase()) ? String(input.feed).toLowerCase() : "indicative";
     const requestedRows = Number(input.limit);
     const maxRows = requestedRows === 0 ? Number.POSITIVE_INFINITY : Math.max(1, Math.min(requestedRows || 2000, 50000));
     const rows: AlpacaBar[] = [];
@@ -425,7 +424,6 @@ export class AlpacaClient {
         start,
         end,
         limit: String(Math.min(10000, maxRows - rows.length)),
-        feed,
         sort: "desc",
       });
       if (pageToken) query.set("page_token", pageToken);
@@ -437,7 +435,9 @@ export class AlpacaClient {
     } while (pageToken && rows.length < maxRows);
     const sorted = rows.filter((row) => row.timestamp).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)).slice(0, maxRows);
     if (!sorted.length) throw new AlpacaError("no_data", "No historical observations are available for this contract and date range.", 404);
-    return { contractSymbol, timeframe, feed, rows: sorted };
+    // Alpaca chooses the entitled options feed for historical bars. Unlike the
+    // snapshots endpoint, /v1beta1/options/bars does not accept a feed query.
+    return { contractSymbol, timeframe, feed: "entitlement-default", rows: sorted };
   }
 }
 

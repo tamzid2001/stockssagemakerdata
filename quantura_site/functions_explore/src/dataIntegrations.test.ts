@@ -95,6 +95,36 @@ test("Alpaca options chain joins contracts to supported snapshot fields", async 
   assert.deepEqual(chain[0], { symbol: "AAPL260918C00200000", underlying: "AAPL", expiration: "2026-09-18", strike: 200, type: "call", bid: 12.1, ask: 12.4, last: 12.2, volume: 150, openInterest: 900, impliedVolatility: 0.31, delta: 0.55, gamma: 0.03, theta: -0.08, vega: 0.19 });
 });
 
+test("Alpaca option history uses the supported bars contract without a snapshot feed parameter", async () => {
+  withAlpacaEnvironment();
+  let requestedUrl = "";
+  const client = new AlpacaClient({ fetchImpl: (async (input: string | URL | Request) => {
+    requestedUrl = String(input);
+    return Response.json({
+      bars: {
+        AAPL260918C00200000: [
+          { t: "2026-08-24T14:31:00Z", o: 11.9, h: 12.4, l: 11.8, c: 12.2, v: 150, n: 18, vw: 12.1 },
+        ],
+      },
+      next_page_token: null,
+    });
+  }) as typeof fetch });
+  const result = await client.getOptionBars({
+    contractSymbol: "AAPL260918C00200000",
+    timeframe: "1Min",
+    start: "2026-08-24",
+    end: "2026-08-25",
+    feed: "indicative",
+    limit: 500,
+  });
+  const parsed = new URL(requestedUrl);
+  assert.equal(parsed.pathname, "/v1beta1/options/bars");
+  assert.equal(parsed.searchParams.get("symbols"), "AAPL260918C00200000");
+  assert.equal(parsed.searchParams.has("feed"), false);
+  assert.equal(result.feed, "entitlement-default");
+  assert.equal(result.rows[0].close, 12.2);
+});
+
 test("MLB discovery and minute normalization preserve the downloader schema semantics", () => {
   const payload = { events: [{ ticker: "mlb-test", title: "New York at Boston", createdAt: "2026-08-20T10:00:00Z", startTime: "2026-08-20T12:05:00Z", markets: [{ id: "market-1", slug: "aec-mlb-test", sportsMarketType: "baseball_team_full_game_moneyline", createdAt: "2026-08-20T10:00:00Z", gameStartTime: "2026-08-20T12:05:00Z", marketSides: [{ id: "ny", long: true, team: { name: "New York" } }, { id: "bos", long: false, team: { name: "Boston" } }] }] }] };
   const [market] = discoverMlbMarkets(payload, new Date("2026-08-20T11:00:00Z"));
