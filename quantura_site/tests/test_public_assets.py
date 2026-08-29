@@ -159,14 +159,54 @@ def test_data_integration_surfaces_are_present():
         'id="alpaca-history-form"',
         'id="alpaca-options-form"',
         'id="alpaca-option-history-form"',
-        'id="mlb-market-form"',
+        'id="prediction-market-form"',
+        'value="polymarket_us" checked',
+        'value="kalshi"',
+        'id="pm-market-list"',
+        'id="pm-canvas-options"',
+        'id="pm-preview-table"',
+        'id="pm-download-csv"',
     ]:
         assert marker in forecasting
     assert 'id="aws-integration-form"' in dashboard
     assert "/api/market-data/stocks/history" in client
     assert "/api/market-data/options/history" in client
-    assert "/api/sports/mlb/history" in client
+    assert "/api/sports/prediction-markets/categories" in client
+    assert "/api/sports/prediction-markets/markets" in client
+    assert "/api/sports/prediction-markets/preview" in client
+    assert "/api/sports/prediction-markets/export" in client
+    assert "initMlb" not in client
     assert "/api/me/aws-integration" in client
+
+
+def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
+    forecasting = (PAGES / "forecasting.html").read_text()
+    backend = (ROOT / "functions_explore" / "src" / "predictionMarketData.ts").read_text()
+    client = (PUBLIC / "data-integrations.js").read_text()
+
+    for text in [
+        "Prediction Market Historical Data",
+        "Raw provider data",
+        "Normalized data",
+        "SageMaker Canvas ready",
+        "Pregame only",
+        "Missing intervals",
+    ]:
+        assert text in forecasting
+    for route in [
+        '"/sports/prediction-markets/status"',
+        '"/sports/prediction-markets/categories"',
+        '"/sports/prediction-markets/markets"',
+        '"/sports/prediction-markets/preview"',
+        '"/sports/prediction-markets/export"',
+    ]:
+        assert route in backend
+    assert 'headers = ["item_id", "timestamp", "target", ...features]' in backend
+    assert 'stableItemId(contract.source, contract.contractId)' in backend
+    assert 'timestamp >= eventStart' in backend
+    assert '"Canvas target values use decimal probability units from 0.00 to 1.00."' in backend
+    assert 'input[name="pm-source"]:checked' in client
+    assert 'input[name="pm-mode"]:checked' in client
 
 
 def test_pricing_describes_platform_features_without_generic_model_pricing():

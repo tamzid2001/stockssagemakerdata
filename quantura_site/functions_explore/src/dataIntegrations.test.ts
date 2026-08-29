@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AlpacaClient, AlpacaError, barsToCsv, classifyEquitySession } from "./alpacaClient";
 import { buildMlbMinuteRows, discoverMlbMarkets, encodePriceHistoryRequest } from "./polymarketMlb";
+import {
+  buildPredictionMarketDataset,
+  kalshiAuthHeaders,
+  normalizeKalshiEvent,
+  normalizePolymarketEvents,
+  normalizeProbability,
+  predictionDatasetCsv,
+  resamplePredictionObservations,
+  stableItemId,
+  type NormalizedPredictionObservation,
+  type PredictionMarketSource,
+} from "./predictionMarketData";
 import { userFromRequest, validateAwsIntegration } from "./awsIntegration";
 
 function withAlpacaEnvironment(): void {
@@ -137,6 +149,142 @@ test("MLB discovery and minute normalization preserve the downloader schema sema
   assert.deepEqual(built.rows.map((row) => row.price), ["0.5100", "0.5100", "0.5300", "0.5300"]);
   assert.deepEqual(Object.keys(built.rows[0]), ["item_id", "datetime", "price", "minutes_before_start"]);
   assert.ok(encodePriceHistoryRequest(market.marketSlug, Date.parse(market.createdAt), Date.parse(market.gameStart)).length > 0);
+});
+
+function predictionObservation(
+  source: PredictionMarketSource,
+  contractId: string,
+  timestamp: string,
+  values: Partial<NormalizedPredictionObservation> = {}
+): NormalizedPredictionObservation {
+  const eventStart = values.event_start === undefined ? "2026-08-20T12:00:00.000Z" : values.event_start;
+  const bid = values.bid === undefined ? 0.48 : values.bid;
+  const ask = values.ask === undefined ? 0.52 : values.ask;
+  return {
+    source,
+    sport: "Baseball",
+    league: "MLB",
+    event_id: `${contractId}-event`,
+    market_id: `${contractId}-market`,
+    contract_id: contractId,
+    item_id: stableItemId(source, contractId),
+    market_title: "Representative sports contract",
+    outcome: "Home team",
+    event_start: eventStart,
+    timestamp,
+    price: values.price === undefined ? 0.5 : values.price,
+    bid,
+    ask,
+    midpoint: bid !== null && ask !== null ? (bid + ask) / 2 : null,
+    last_trade: values.last_trade === undefined ? 0.5 : values.last_trade,
+    spread: bid !== null && ask !== null ? ask - bid : null,
+    spread_pct: bid !== null && ask !== null && bid + ask > 0 ? ((ask - bid) / ((bid + ask) / 2)) * 100 : null,
+    volume: values.volume === undefined ? 10 : values.volume,
+    open_interest: values.open_interest === undefined ? 50 : values.open_interest,
+    liquidity: values.liquidity === undefined ? 100 : values.liquidity,
+    minutes_to_event: (Date.parse(eventStart || timestamp) - Date.parse(timestamp)) / 60000,
+    seconds_to_event: (Date.parse(eventStart || timestamp) - Date.parse(timestamp)) / 1000,
+    status: "open",
+    is_forward_filled: values.is_forward_filled || false,
+    raw: values.raw || { provider_price: values.price === undefined ? 0.5 : values.price },
+  };
+}
+
+test("Prediction providers normalize cents and decimals into one probability unit", () => {
+  assert.equal(normalizeProbability(53), 0.53);
+  assert.equal(normalizeProbability("0.53"), 0.53);
+  assert.equal(normalizeProbability(101), null);
+  assert.equal(normalizeProbability(-0.01), null);
+});
+
+test("Polymarket US discovery produces selectable provider-neutral contracts", () => {
+  const contracts = normalizePolymarketEvents({ events: [{
+    id: "event-1", title: "New York at Boston", startTime: "2026-08-20T12:00:00Z",
+    markets: [{ id: "market-1", slug: "mlb-ny-bos", title: "Moneyline", marketSides: [
+      { id: "new-york", long: true, description: "New York", quote: { value: 0.57 } },
+      { id: "boston", long: false, description: "Boston", quote: { value: 0.43 } },
+    ] }],
+  }] }, { id: "mlb", label: "MLB", providerId: "1", sport: "Baseball" });
+  assert.equal(contracts.length, 2);
+  assert.equal(contracts[0].source, "polymarket_us");
+  assert.equal(contracts[0].eventStart, "2026-08-20T12:00:00.000Z");
+  assert.equal(contracts[1].side, "short");
+});
+
+test("Kalshi discovery creates YES and NO contracts with correctly complemented quotes", () => {
+  const contracts = normalizeKalshiEvent({
+    event: { event_ticker: "KXMLB-26AUG20", title: "New York at Boston", series_ticker: "KXMLBGAME" },
+    markets: [{ ticker: "KXMLB-26AUG20-NY", title: "New York wins", status: "active", occurrence_datetime: "2026-08-20T23:00:00Z", last_price: 61, yes_bid: 60, yes_ask: 62, volume_fp: "120", open_interest_fp: "75" }],
+  }, "Baseball");
+  assert.equal(contracts.length, 2);
+  assert.equal(contracts[0].currentPrice, 0.61);
+  assert.equal(contracts[1].currentPrice, 0.39);
+  assert.equal(contracts[1].bid, 0.38);
+  assert.equal(contracts[1].ask, 0.4);
+  assert.equal(contracts[0].eventStart, "2026-08-20T23:00:00.000Z");
+});
+
+test("Prediction time-series processing deduplicates, orders, resamples, and explicitly forward-fills", () => {
+  const rows = [
+    predictionObservation("kalshi", "market:yes", "2026-08-20T10:02:35Z", { price: 0.55, volume: 4 }),
+    predictionObservation("kalshi", "market:yes", "2026-08-20T10:00:30Z", { price: 0.5, volume: 2 }),
+    predictionObservation("kalshi", "market:yes", "2026-08-20T10:00:30Z", { price: 0.51, volume: 3 }),
+  ];
+  const sampled = resamplePredictionObservations(rows, "1m", "forward_fill");
+  assert.deepEqual(sampled.map((row) => row.timestamp), ["2026-08-20T10:00:00.000Z", "2026-08-20T10:01:00.000Z", "2026-08-20T10:02:00.000Z"]);
+  assert.deepEqual(sampled.map((row) => row.price), [0.51, 0.51, 0.55]);
+  assert.equal(sampled[1].is_forward_filled, true);
+  assert.equal(sampled[1].volume, null);
+});
+
+test("Pregame Canvas export excludes post-start observations and validates cross-provider rows", () => {
+  const rows = [
+    predictionObservation("polymarket_us", "pm-contract", "2026-08-20T11:58:00Z", { price: 0.48 }),
+    predictionObservation("polymarket_us", "pm-contract", "2026-08-20T12:00:00Z", { price: 0.51 }),
+    predictionObservation("kalshi", "kalshi-contract:yes", "2026-08-20T11:59:00Z", { price: 0.62 }),
+  ];
+  const dataset = buildPredictionMarketDataset(rows, {
+    source: "polymarket_us",
+    mode: "canvas",
+    frequency: "raw",
+    target: "price",
+    missing: "leave",
+    pregameOnly: true,
+    features: ["source", "sport", "minutes_to_event", "bid", "ask", "spread"],
+  });
+  assert.equal(dataset.rows.length, 2);
+  assert.equal(dataset.validation.postStartRowsRemoved, 1);
+  assert.equal(dataset.validation.timezone, "UTC");
+  assert.equal(dataset.validation.targetRange.min, 0.48);
+  assert.equal(dataset.validation.targetRange.max, 0.62);
+  assert.match(String(dataset.rows[0].item_id), /^(kalshi|polymarket_us):/);
+  assert.deepEqual(dataset.headers.slice(0, 3), ["item_id", "timestamp", "target"]);
+});
+
+test("Normalized and raw prediction exports preserve supported fields without credentials", () => {
+  const row = predictionObservation("kalshi", "market:yes", "2026-08-20T10:00:00Z", { bid: 0.45, ask: 0.5, raw: { trade_id: "trade-1", yes_price: 0.48 } });
+  const normalized = buildPredictionMarketDataset([row], { source: "kalshi", mode: "normalized", frequency: "raw", target: "price", missing: "leave", pregameOnly: false });
+  assert.ok(normalized.headers.includes("item_id"));
+  assert.equal(normalized.rows[0].spread, 0.04999999999999999);
+  const raw = buildPredictionMarketDataset([row], { source: "kalshi", mode: "raw", frequency: "raw", target: "price", missing: "leave", pregameOnly: false });
+  const csv = predictionDatasetCsv(raw);
+  assert.match(csv, /^source,event_id,market_id,contract_id,outcome,timestamp,/);
+  assert.match(csv, /trade-1/);
+  assert.doesNotMatch(csv.toLowerCase(), /private.key|access.key|secret/);
+});
+
+test("Stable IDs cannot collide across providers and Kalshi signing is absent without server credentials", () => {
+  assert.notEqual(stableItemId("polymarket_us", "same-contract"), stableItemId("kalshi", "same-contract"));
+  const previousId = process.env.KALSHI_API_KEY_ID;
+  const previousAlias = process.env.KALSHI_PROD_API_KEY;
+  const previousKey = process.env.KALSHI_PRIVATE_KEY;
+  delete process.env.KALSHI_API_KEY_ID;
+  delete process.env.KALSHI_PROD_API_KEY;
+  delete process.env.KALSHI_PRIVATE_KEY;
+  assert.equal(kalshiAuthHeaders("GET", "/trade-api/v2/api_keys"), null);
+  if (previousId !== undefined) process.env.KALSHI_API_KEY_ID = previousId;
+  if (previousAlias !== undefined) process.env.KALSHI_PROD_API_KEY = previousAlias;
+  if (previousKey !== undefined) process.env.KALSHI_PRIVATE_KEY = previousKey;
 });
 
 test("AWS integration validation enforces same-account least-privilege role structure", () => {

@@ -16,7 +16,7 @@ export type MlbMarket = {
   status: "upcoming" | "previous";
   sides: [Side, Side];
 };
-type PricePoint = { timestamp: number; longPrice: number; shortPrice: number };
+export type PolymarketPricePoint = { timestamp: number; longPrice: number; shortPrice: number };
 export type MlbMinuteRow = { item_id: string; datetime: string; price: string; minutes_before_start: number };
 
 export class PolymarketMlbError extends Error {
@@ -134,10 +134,11 @@ function messageField(number: number, value: Buffer): Buffer {
   return Buffer.concat([encodeVarint((number << 3) | 2), encodeVarint(value.length), value]);
 }
 
-export function encodePriceHistoryRequest(symbol: string, startMs: number, endMs: number): Buffer {
+export function encodePriceHistoryRequest(symbol: string, startMs: number, endMs: number, fidelityMinutes = 1): Buffer {
   if (!symbol || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) throw new PolymarketMlbError("The market history range is invalid.", 400);
+  if (!Number.isInteger(fidelityMinutes) || fidelityMinutes < 1 || fidelityMinutes > 1440) throw new PolymarketMlbError("The requested fidelity is invalid.", 400);
   const interval = Buffer.concat([integerField(1, startMs / 1000), integerField(2, endMs / 1000)]);
-  return Buffer.concat([stringField(1, symbol), messageField(2, interval), integerField(4, 1)]);
+  return Buffer.concat([stringField(1, symbol), messageField(2, interval), integerField(4, fidelityMinutes)]);
 }
 
 function readVarint(buffer: Buffer, initialOffset: number): [number, number] {
@@ -191,8 +192,8 @@ function wireFields(buffer: Buffer): WireField[] {
   return fields;
 }
 
-export function decodePriceHistoryResponse(buffer: Buffer): PricePoint[] {
-  const points: PricePoint[] = [];
+export function decodePriceHistoryResponse(buffer: Buffer): PolymarketPricePoint[] {
+  const points: PolymarketPricePoint[] = [];
   wireFields(buffer).filter((field) => field.number === 1 && field.type === 2).forEach((field) => {
     const values = new Map(wireFields(field.value as Buffer).map((child) => [child.number, child]));
     const timestamp = values.get(1);
@@ -207,7 +208,7 @@ export function decodePriceHistoryResponse(buffer: Buffer): PricePoint[] {
   return points.sort((left, right) => left.timestamp - right.timestamp);
 }
 
-export function buildMlbMinuteRows(points: PricePoint[], side: Side, market: MlbMarket, endMs: number): { rows: MlbMinuteRow[]; observedMinutes: number } {
+export function buildMlbMinuteRows(points: PolymarketPricePoint[], side: Side, market: MlbMarket, endMs: number): { rows: MlbMinuteRow[]; observedMinutes: number } {
   const hardEnd = Math.min(endMs, Date.parse(market.gameStart));
   const lastCompleteMinute = Math.floor(hardEnd / 60000) * 60 - 60;
   const closes = new Map<number, number>();
@@ -236,12 +237,17 @@ export function buildMlbMinuteRows(points: PricePoint[], side: Side, market: Mlb
   return { rows, observedMinutes: closes.size };
 }
 
-async function fetchHistory(market: MlbMarket, side: Side): Promise<{ rows: MlbMinuteRow[]; observedMinutes: number; rawPoints: number }> {
-  const endMs = Math.min(Date.now(), Date.parse(market.gameStart));
-  const request = encodePriceHistoryRequest(market.marketSlug, Date.parse(market.createdAt), endMs);
+export async function fetchPolymarketPricePoints(
+  symbol: string,
+  startMs: number,
+  endMs: number,
+  fidelityMinutes = 1,
+  fetchImpl: typeof fetch = fetch
+): Promise<PolymarketPricePoint[]> {
+  const request = encodePriceHistoryRequest(symbol, startMs, endMs, fidelityMinutes);
   let response: Response;
   try {
-    response = await fetch(PRICE_HISTORY_URL, {
+    response = await fetchImpl(PRICE_HISTORY_URL, {
       method: "POST",
       headers: { "User-Agent": USER_AGENT, "Content-Type": "application/proto", Accept: "application/proto" },
       body: new Uint8Array(request),
@@ -250,9 +256,24 @@ async function fetchHistory(market: MlbMarket, side: Side): Promise<{ rows: MlbM
   } catch (_error) {
     throw new PolymarketMlbError("Polymarket US price history could not be reached. Try again.");
   }
-  if (!response.ok) throw new PolymarketMlbError(response.status === 429 ? "Polymarket US rate-limited this request. Wait briefly and retry." : "Polymarket US could not load this market's price history.", response.status === 429 ? 429 : 502);
+  if (!response.ok) {
+    throw new PolymarketMlbError(
+      response.status === 429
+        ? "Polymarket US rate-limited this request. Wait briefly and retry."
+        : response.status === 401 || response.status === 403
+        ? "Polymarket US rejected the historical-data request."
+        : "Polymarket US could not load this market's price history.",
+      response.status === 429 ? 429 : response.status === 401 || response.status === 403 ? response.status : 502
+    );
+  }
   const points = decodePriceHistoryResponse(Buffer.from(await response.arrayBuffer()));
   if (!points.length) throw new PolymarketMlbError("No price observations are available for this market.", 404);
+  return points;
+}
+
+async function fetchHistory(market: MlbMarket, side: Side): Promise<{ rows: MlbMinuteRow[]; observedMinutes: number; rawPoints: number }> {
+  const endMs = Math.min(Date.now(), Date.parse(market.gameStart));
+  const points = await fetchPolymarketPricePoints(market.marketSlug, Date.parse(market.createdAt), endMs);
   const built = buildMlbMinuteRows(points, side, market, endMs);
   if (!built.rows.length) throw new PolymarketMlbError("No completed pregame minute observations are available for this outcome.", 404);
   return { ...built, rawPoints: points.length };
