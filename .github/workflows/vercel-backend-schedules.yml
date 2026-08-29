@@ -17,6 +17,10 @@ on:
           - social-planner
           - newsletter-daily
           - newsletter-weekly
+          - autopilot-reconcile
+          - automation-schedules
+          - forecast-boundary-alerts
+          - fiscaldata-refresh
 
 concurrency:
   group: vercel-backend-schedules
@@ -45,9 +49,21 @@ jobs:
         run: |
           set -euo pipefail
           auth_header="Authorization: Bearer ${CRON_SECRET}"
-          curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/reconcile-posts"
-          curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/autopilot-reconcile"
-          curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/automation-schedules"
+          job_status=0
+
+          run_api_job() {
+            local job="$1"
+            echo "Running ${job}"
+            if ! curl --fail-with-body --silent --show-error --retry 2 -H "$auth_header" -X POST "${API_ORIGIN}/api/internal/cron/${job}"; then
+              echo "Backend job failed: ${job}" >&2
+              job_status=1
+            fi
+          }
+
+          run_api_job "autopilot-reconcile"
+          run_api_job "automation-schedules"
+          run_api_job "forecast-boundary-alerts"
+          exit "$job_status"
 
       - name: Dispatch time-based production jobs
         if: github.event_name != 'workflow_dispatch' || inputs.job == 'scheduled'
@@ -102,6 +118,9 @@ jobs:
           case "$REQUESTED_JOB" in
             newsletter-weekly)
               job_origin="$NEWSLETTER_ORIGIN"
+              ;;
+            autopilot-reconcile|automation-schedules|forecast-boundary-alerts|fiscaldata-refresh)
+              job_origin="$API_ORIGIN"
               ;;
             social-dispatch|forecast-report|social-planner|newsletter-daily)
               job_origin="$LEGACY_ORIGIN"
