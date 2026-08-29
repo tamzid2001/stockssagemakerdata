@@ -7,6 +7,7 @@ import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { registerMarketDataRoutes } from "./marketDataRoutes";
 import { registerPolymarketMlbRoutes } from "./polymarketMlb";
+import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerAwsIntegrationRoutes, resolveUserAutopilotAwsConfig } from "./awsIntegration";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 import { runIndicatorAnalysis } from "./indicators";
@@ -643,6 +644,7 @@ const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 registerFiscalDataRoutes(ROUTES, { db });
 registerMarketDataRoutes(ROUTES);
 registerPolymarketMlbRoutes(ROUTES);
+registerPredictionMarketDataRoutes(ROUTES);
 registerAwsIntegrationRoutes(ROUTES, { db, auth });
 
 // Retired public-social and currency endpoints. Keep an explicit response for

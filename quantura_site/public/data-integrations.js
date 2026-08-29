@@ -53,6 +53,31 @@
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
   }
+  async function downloadFile(url, body, format, fallbackName) {
+    const expectedType = format === "json" ? "application/json" : "text/csv";
+    let response;
+    try {
+      response = await fetch(url, { method: "POST", headers: { Accept: expectedType, "Content-Type": "application/json" }, body: JSON.stringify({ ...body, format }) });
+    } catch (_error) {
+      throw new Error("The download service could not be reached.");
+    }
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || !contentType.includes(expectedType)) {
+      const payload = contentType.includes("application/json") ? await response.json().catch(() => ({})) : {};
+      throw new Error(payload.message || `No valid ${format.toUpperCase()} file was generated.`);
+    }
+    const blob = await response.blob();
+    if (!blob.size) throw new Error(`The generated ${format.toUpperCase()} file was empty.`);
+    const disposition = response.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = match?.[1] || fallbackName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+  }
   function table(container, columns, rows, limit = 100) {
     if (!container) return;
     if (!rows.length) {
@@ -254,50 +279,228 @@
     });
   }
 
-  function initMlb() {
-    const form = byId("mlb-market-form");
+  function initPredictionMarketHub() {
+    const form = byId("prediction-market-form");
     if (!form) return;
-    const game = byId("mlb-game"); const outcome = byId("mlb-outcome"); const sourceStatus = byId("mlb-source-status"); const download = byId("mlb-download");
+    const providerStatus = byId("pm-provider-status");
+    const category = byId("pm-category");
+    const marketList = byId("pm-market-list");
+    const previewButton = byId("pm-preview-button");
+    const csvButton = byId("pm-download-csv");
+    const jsonButton = byId("pm-download-json");
+    const selected = new Map();
     let markets = [];
-    async function loadGames() {
-      const button = byId("mlb-refresh-games"); disable(button, true, "Refreshing…"); status(sourceStatus, "Loading genuine MLB moneyline markets from Polymarket US…");
+    let capabilities = {};
+    let page = 1;
+    let total = 0;
+    const pageSize = 30;
+    const source = () => form.querySelector('input[name="pm-source"]:checked')?.value || "polymarket_us";
+    const mode = () => form.querySelector('input[name="pm-mode"]:checked')?.value || "normalized";
+    const localDateTime = (date) => {
+      const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return adjusted.toISOString().slice(0, 16);
+    };
+    const now = new Date();
+    byId("pm-history-end").value = localDateTime(now);
+    byId("pm-history-start").value = localDateTime(new Date(now.getTime() - 7 * 86400000));
+
+    function updateSelection() {
+      byId("pm-selected-count").textContent = `${selected.size} selected`;
+      csvButton.disabled = true;
+      jsonButton.disabled = true;
+    }
+    function updateCapabilities() {
+      const provider = capabilities[source()] || {};
+      const allowedTargets = new Set(provider.targets || ["price"]);
+      [...byId("pm-target").options].forEach((option) => { option.disabled = !allowedTargets.has(option.value); });
+      if (!allowedTargets.has(byId("pm-target").value)) byId("pm-target").value = "price";
+      [...form.querySelectorAll('input[name="pm-feature"]')].forEach((input) => {
+        if (["bid", "ask", "spread", "volume", "open_interest"].includes(input.value)) {
+          const capabilityKey = input.value === "open_interest" ? "openInterestHistory" : input.value === "volume" ? "volumeHistory" : "bidAskHistory";
+          input.disabled = provider[capabilityKey] === false;
+          if (input.disabled) input.checked = false;
+        }
+      });
+    }
+    function renderProviderCard(id, label, info) {
+      const card = byId(id);
+      if (!card) return;
+      const publicText = info?.publicConnection === "connected" ? `${Number(info.categoryCount || 0).toLocaleString()} sports categories` : String(info?.publicConnection || "unavailable").replaceAll("_", " ");
+      const authText = String(info?.authentication || "not checked").replaceAll("_", " ");
+      const historyText = String(info?.historicalConnection?.status || "not checked").replaceAll("_", " ");
+      card.dataset.tone = info?.publicConnection === "connected" ? "success" : "warning";
+      card.innerHTML = `<span>${html(label)}</span><strong>${html(publicText)}</strong><small>History: ${html(historyText)} · server authentication: ${html(authText)}</small>`;
+    }
+    async function loadProviderStatus(deep = false) {
+      const button = byId("pm-test-sources");
+      disable(button, true, deep ? "Testing securely…" : "Checking…");
       try {
-        const payload = await jsonRequest(`/api/sports/mlb/games?scope=${encodeURIComponent(byId("mlb-scope").value)}`);
-        markets = Array.isArray(payload.markets) ? payload.markets : [];
-        game.innerHTML = markets.length ? `<option value="">Choose a game</option>${markets.map((market) => `<option value="${html(market.marketSlug)}">${html(market.eventTitle)} · ${html(new Date(market.gameStart).toLocaleString())}</option>`).join("")}` : '<option value="">No MLB markets available</option>';
-        outcome.innerHTML = '<option value="">Choose a game first</option>';
-        status(sourceStatus, markets.length ? `Loaded ${markets.length} MLB moneyline markets.` : "No MLB moneyline markets are available right now.", markets.length ? "success" : "warning");
-      } catch (error) { game.innerHTML = '<option value="">Markets unavailable</option>'; status(sourceStatus, error.message, "error"); }
+        const payload = await jsonRequest(`/api/sports/prediction-markets/status${deep ? "?deep=1" : ""}`);
+        capabilities = payload.capabilities || {};
+        renderProviderCard("pm-status-polymarket", "Polymarket US", payload.providers?.polymarket_us);
+        renderProviderCard("pm-status-kalshi", "Kalshi", payload.providers?.kalshi);
+        updateCapabilities();
+        status(providerStatus, deep ? "Connection checks completed. Credentials remain server-side and were not returned to this page." : "Provider discovery is ready. Choose a sport to find current markets.", "success");
+      } catch (error) { status(providerStatus, error.message, "error"); }
       finally { disable(button, false); }
     }
-    game.addEventListener("change", () => {
-      const market = markets.find((item) => item.marketSlug === game.value);
-      outcome.innerHTML = market ? `<option value="">Choose an outcome</option>${market.sides.map((side) => `<option value="${html(side.itemId)}">${html(side.team)} · ${html(side.position)}</option>`).join("")}` : '<option value="">Choose a game first</option>';
-      download.disabled = true;
-    });
-    byId("mlb-scope").addEventListener("change", loadGames);
-    byId("mlb-refresh-games").addEventListener("click", loadGames);
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault(); if (!form.reportValidity()) return;
-      const submit = form.querySelector('button[type="submit"]'); const body = { marketSlug: game.value, itemId: outcome.value, limit: byId("mlb-row-limit").value };
-      disable(submit, true, "Loading history…"); download.disabled = true; status(sourceStatus, "Requesting and normalizing 1-minute pregame observations…");
+    async function loadCategories(loadMarketsAfter = false) {
+      category.disabled = true;
+      category.innerHTML = '<option value="">Loading categories…</option>';
+      marketList.innerHTML = '<div class="loading-state">Loading supported sports from the provider…</div>';
+      status(providerStatus, `Loading ${source() === "kalshi" ? "Kalshi" : "Polymarket US"} sports categories…`);
       try {
-        const payload = await jsonRequest("/api/sports/mlb/history", { method: "POST", body: JSON.stringify(body) }); const rows = Array.isArray(payload.rows) ? payload.rows : []; const meta = payload.metadata || {};
-        byId("mlb-metadata").innerHTML = [["Teams / game", meta.event_title], ["Market ID", meta.market_id], ["Outcome", `${meta.team} (${meta.position})`], ["Item ID", meta.item_id], ["Game start", new Date(meta.game_start).toLocaleString()], ["Data freshness", new Date(meta.data_freshness).toLocaleString()], ["Loaded / available", `${meta.output_rows.toLocaleString()} / ${meta.available_rows.toLocaleString()}`], ["Observed / forward-filled", `${meta.observed_minutes.toLocaleString()} / ${meta.forward_filled_minutes.toLocaleString()}`]].map(([label, value]) => `<div><span>${html(label)}</span><strong>${html(value)}</strong></div>`).join("");
-        byId("mlb-history-summary").textContent = `${meta.team}: ${meta.output_rows.toLocaleString()} pregame one-minute rows, oldest to newest.`;
-        table(byId("mlb-history-preview"), [{ key: "datetime", label: "Timestamp (UTC)" }, { key: "price", label: "Probability", render: (row) => `${(Number(row.price) * 100).toFixed(2)}%` }, { key: "minutes_before_start", label: "Minutes before game", render: (row) => number(row.minutes_before_start, 0) }, { key: "item_id", label: "Outcome item ID" }], rows);
-        plot(byId("mlb-history-chart"), [{ type: "scatter", mode: "lines", x: rows.map((row) => row.datetime), y: rows.map((row) => Number(row.price) * 100), line: { color: "#34d399", width: 2 }, name: "Pregame probability" }], { yaxis: { title: "Probability (%)", range: [0, 100], gridcolor: "rgba(148,163,184,.16)" } });
-        status(sourceStatus, "Pregame dataset loaded successfully.", "success"); download.disabled = false;
-      } catch (error) { byId("mlb-history-preview").innerHTML = `<div class="error-state">${html(error.message)}</div>`; status(sourceStatus, error.message, "error"); }
-      finally { disable(submit, false); }
-    });
-    download.addEventListener("click", async () => {
-      const body = { marketSlug: game.value, itemId: outcome.value, limit: byId("mlb-row-limit").value }; disable(download, true, "Generating CSV…");
-      try { await downloadCsv("/api/sports/mlb/history", body, "polymarket-us-mlb-pregame-1m.csv"); status(sourceStatus, "SageMaker-ready CSV generated and downloaded.", "success"); }
-      catch (error) { status(sourceStatus, error.message, "error"); }
-      finally { disable(download, false); }
-    });
-    loadGames();
+        const payload = await jsonRequest(`/api/sports/prediction-markets/categories?source=${encodeURIComponent(source())}`);
+        capabilities[source()] = payload.capabilities || capabilities[source()] || {};
+        const categories = Array.isArray(payload.categories) ? payload.categories : [];
+        const preferred = categories.find((item) => /(^|\s)mlb($|\s)|baseball/i.test(`${item.id} ${item.label}`)) || categories[0];
+        category.innerHTML = categories.length ? categories.map((item) => `<option value="${html(item.id)}"${item.id === preferred?.id ? " selected" : ""}>${html(item.label)}${item.seriesCount ? ` · ${Number(item.seriesCount).toLocaleString()} series` : ""}</option>`).join("") : '<option value="">No supported sports available</option>';
+        category.disabled = !categories.length;
+        updateCapabilities();
+        status(providerStatus, categories.length ? `Loaded ${categories.length.toLocaleString()} real provider categories.` : "No supported sports categories are available right now.", categories.length ? "success" : "warning");
+        marketList.innerHTML = '<div class="empty-state">Choose filters, then find available contracts.</div>';
+        if (loadMarketsAfter && categories.length) await loadMarkets();
+      } catch (error) {
+        category.innerHTML = '<option value="">Categories unavailable</option>';
+        marketList.innerHTML = `<div class="error-state">${html(error.message)}</div>`;
+        status(providerStatus, error.message, "error");
+      } finally { category.disabled = false; }
+    }
+    function marketKey(contract) { return `${contract.source}:${contract.contractId}`; }
+    function formatProbability(value) { return Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(1)}%` : "Unavailable"; }
+    function renderMarkets() {
+      byId("pm-market-count").textContent = `${markets.length.toLocaleString()} shown · ${total.toLocaleString()} matching`;
+      byId("pm-page-label").textContent = `Page ${page}`;
+      byId("pm-previous-page").disabled = page <= 1;
+      byId("pm-next-page").disabled = page * pageSize >= total || markets.length < pageSize;
+      if (!markets.length) {
+        marketList.innerHTML = '<div class="empty-state">No markets match these filters. Broaden the date, status, or search query.</div>';
+        return;
+      }
+      marketList.innerHTML = `<table class="prediction-market-table"><thead><tr><th scope="col">Select</th><th scope="col">Event / market</th><th scope="col">Outcome</th><th scope="col">Start</th><th scope="col">Status</th><th scope="col">Price</th></tr></thead><tbody>${markets.map((contract, index) => {
+        const key = marketKey(contract);
+        const checked = selected.has(key) ? " checked" : "";
+        return `<tr><td data-label="Select"><input type="checkbox" data-market-index="${index}" aria-label="Select ${html(contract.eventTitle)} ${html(contract.outcome)}"${checked} /></td><td data-label="Event"><strong>${html(contract.eventTitle)}</strong><small>${html(contract.marketTitle)} · ${html(contract.providerSymbol)}</small></td><td data-label="Outcome">${html(contract.outcome)}</td><td data-label="Start">${html(contract.eventStart ? new Date(contract.eventStart).toLocaleString() : "Unavailable")}</td><td data-label="Status"><span class="market-status-pill" data-status="${html(contract.status)}">${html(contract.status)}</span></td><td data-label="Price">${html(formatProbability(contract.currentPrice))}</td></tr>`;
+      }).join("")}</tbody></table>`;
+      marketList.querySelectorAll("input[data-market-index]").forEach((input) => input.addEventListener("change", () => {
+        const contract = markets[Number(input.dataset.marketIndex)];
+        const key = marketKey(contract);
+        if (input.checked && selected.size >= 25) {
+          input.checked = false;
+          status(providerStatus, "Select no more than 25 contracts per dataset.", "warning");
+          return;
+        }
+        if (input.checked) {
+          selected.set(key, contract);
+          const eventEnd = contract.eventStart ? new Date(Math.min(Date.now(), Date.parse(contract.eventStart))) : now;
+          if (Number.isFinite(eventEnd.getTime())) {
+            byId("pm-history-end").value = localDateTime(eventEnd);
+            byId("pm-history-start").value = localDateTime(new Date(eventEnd.getTime() - 7 * 86400000));
+          }
+        } else selected.delete(key);
+        updateSelection();
+      }));
+    }
+    async function loadMarkets() {
+      if (!category.value) { status(providerStatus, "Choose a sport or league first.", "warning"); return; }
+      const button = byId("pm-find-markets");
+      disable(button, true, "Finding markets…");
+      marketList.innerHTML = '<div class="loading-state">Discovering provider markets and contracts…</div>';
+      const params = new URLSearchParams({ source: source(), category: category.value, status: byId("pm-status").value, search: byId("pm-search").value.trim(), dateFrom: byId("pm-event-from").value, dateTo: byId("pm-event-to").value, page: String(page), pageSize: String(pageSize) });
+      try {
+        const payload = await jsonRequest(`/api/sports/prediction-markets/markets?${params}`);
+        markets = Array.isArray(payload.items) ? payload.items : [];
+        total = Number(payload.total || markets.length);
+        renderMarkets();
+        const coverage = payload.scanLimited ? ` Scanned ${Number(payload.seriesScanned || 0).toLocaleString()} of ${Number(payload.seriesAvailable || 0).toLocaleString()} provider series; refine search or filters for a narrower result.` : "";
+        status(providerStatus, markets.length ? `Found ${total.toLocaleString()} matching contracts.${coverage} Select one or more outcomes.` : "No contracts match the current filters.", markets.length ? (payload.providerFailures ? "warning" : "success") : "warning");
+      } catch (error) {
+        markets = []; total = 0;
+        marketList.innerHTML = `<div class="error-state">${html(error.message)}</div>`;
+        status(providerStatus, error.message, "error");
+      } finally { disable(button, false); }
+    }
+    function requestBody() {
+      if (!selected.size) throw new Error("Select at least one market contract before previewing data.");
+      const startValue = byId("pm-history-start").value;
+      const endValue = byId("pm-history-end").value;
+      if (!startValue || !endValue) throw new Error("Choose a valid historical start and end time.");
+      return {
+        source: source(), contracts: [...selected.values()], start: new Date(startValue).toISOString(), end: new Date(endValue).toISOString(),
+        frequency: byId("pm-frequency").value, pregameOnly: byId("pm-pregame").checked, missing: byId("pm-missing").value,
+        mode: mode(), target: byId("pm-target").value, features: [...form.querySelectorAll('input[name="pm-feature"]:checked')].map((input) => input.value),
+      };
+    }
+    function renderValidation(payload) {
+      const validation = payload.validation || {};
+      const targetMin = validation.targetRange?.min;
+      const targetMax = validation.targetRange?.max;
+      byId("pm-preview-summary").innerHTML = [
+        ["Markets", validation.markets], ["Observations", validation.observations], ["Frequency", payload.frequency], ["Target", payload.target],
+        ["Date range", payload.dateRange?.start && payload.dateRange?.end ? `${new Date(payload.dateRange.start).toLocaleString()} → ${new Date(payload.dateRange.end).toLocaleString()}` : "Unavailable"],
+        ["Target range", targetMin !== null && targetMin !== undefined ? `${formatProbability(targetMin)}–${formatProbability(targetMax)}` : "Not applicable"],
+      ].map(([label, value]) => `<div><span>${html(label)}</span><strong>${html(value)}</strong></div>`).join("");
+      const checks = [
+        ["Missing target rows removed", validation.missingTargetRowsRemoved || 0], ["Duplicate timestamps resolved", validation.duplicateTimestampsResolved || 0],
+        ["Invalid timestamps removed", validation.invalidTimestampsRemoved || 0], ["Invalid probability rows removed", validation.invalidProbabilityRowsRemoved || 0],
+        ["Post-start rows excluded", validation.postStartRowsRemoved || 0], ["Timezone", validation.timezone || "UTC"],
+      ];
+      const node = byId("pm-validation");
+      node.classList.remove("hidden");
+      node.dataset.tone = validation.ready ? "success" : "warning";
+      node.innerHTML = `<div class="validation-heading"><strong>${validation.ready ? "Dataset ready" : "Dataset needs review"}</strong><span>${html(payload.mode === "canvas" ? "SageMaker Canvas validation" : "Historical data validation")}</span></div><div class="validation-checks">${checks.map(([label, value]) => `<div><span>${html(label)}</span><strong>${html(value)}</strong></div>`).join("")}</div>${Array.isArray(validation.messages) ? `<ul>${validation.messages.map((message) => `<li>${html(message)}</li>`).join("")}</ul>` : ""}`;
+    }
+    async function preview(event) {
+      event.preventDefault();
+      let body;
+      try { body = requestBody(); } catch (error) { status(providerStatus, error.message, "warning"); return; }
+      disable(previewButton, true, "Preparing preview…");
+      csvButton.disabled = true; jsonButton.disabled = true;
+      status(providerStatus, "Fetching and validating historical market observations…");
+      try {
+        const payload = await jsonRequest("/api/sports/prediction-markets/preview", { method: "POST", body: JSON.stringify(body) });
+        renderValidation(payload);
+        const headers = Array.isArray(payload.headers) ? payload.headers : [];
+        const rows = Array.isArray(payload.previewRows) ? payload.previewRows : [];
+        table(byId("pm-preview-table"), headers.map((key) => ({ key, label: key.replaceAll("_", " "), render: (row) => typeof row[key] === "number" ? number(row[key], 6) : row[key] })), rows, 100);
+        csvButton.disabled = !payload.validation?.ready;
+        jsonButton.disabled = !payload.validation?.ready;
+        status(providerStatus, `Previewed ${Number(payload.rowCount || 0).toLocaleString()} validated observations.`, payload.validation?.ready ? "success" : "warning");
+      } catch (error) {
+        byId("pm-preview-table").innerHTML = `<div class="error-state">${html(error.message)}</div>`;
+        status(providerStatus, error.message, "error");
+      } finally { disable(previewButton, false); }
+    }
+    async function download(format) {
+      let body;
+      try { body = requestBody(); } catch (error) { status(providerStatus, error.message, "warning"); return; }
+      const button = format === "json" ? jsonButton : csvButton;
+      disable(button, true, `Generating ${format.toUpperCase()}…`);
+      try {
+        await downloadFile("/api/sports/prediction-markets/export", body, format, `${source()}-${mode()}-sports.${format}`);
+        status(providerStatus, `${format.toUpperCase()} generated and downloaded successfully.`, "success");
+      } catch (error) { status(providerStatus, error.message, "error"); }
+      finally { disable(button, false); }
+    }
+
+    form.querySelectorAll('input[name="pm-source"]').forEach((input) => input.addEventListener("change", async () => {
+      selected.clear(); markets = []; total = 0; page = 1; updateSelection(); updateCapabilities(); await loadCategories(true);
+    }));
+    form.querySelectorAll('input[name="pm-mode"]').forEach((input) => input.addEventListener("change", () => {
+      byId("pm-canvas-options").classList.toggle("hidden", mode() !== "canvas");
+      csvButton.disabled = true; jsonButton.disabled = true;
+    }));
+    [byId("pm-frequency"), byId("pm-missing"), byId("pm-pregame"), byId("pm-target")].forEach((control) => control.addEventListener("change", () => { csvButton.disabled = true; jsonButton.disabled = true; }));
+    byId("pm-find-markets").addEventListener("click", () => { page = 1; loadMarkets(); });
+    byId("pm-search").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); page = 1; loadMarkets(); } });
+    byId("pm-previous-page").addEventListener("click", () => { if (page > 1) { page -= 1; loadMarkets(); } });
+    byId("pm-next-page").addEventListener("click", () => { page += 1; loadMarkets(); });
+    byId("pm-test-sources").addEventListener("click", () => loadProviderStatus(true));
+    form.addEventListener("submit", preview);
+    csvButton.addEventListener("click", () => download("csv"));
+    jsonButton.addEventListener("click", () => download("json"));
+    updateSelection();
+    loadProviderStatus(false).finally(() => loadCategories(true));
   }
 
   async function firebaseToken() {
@@ -461,5 +664,5 @@
     }
   }
 
-  window.addEventListener("DOMContentLoaded", () => { initHistoricalData(); initOptions(); initMlb(); initAws(); initForecastAlerts(); });
+  window.addEventListener("DOMContentLoaded", () => { initHistoricalData(); initOptions(); initPredictionMarketHub(); initAws(); initForecastAlerts(); });
 })();
