@@ -5205,8 +5205,9 @@
   };
 
   let forecastCacheDbPromise = null;
-  const DEFAULT_FORECAST_QUANTILES = Object.freeze([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]);
-  const DEFAULT_FORECAST_BAND_SUMMARY = "P01\u2013P99, P10\u2013P90, P25\u2013P75, and the P50 median path";
+  const DEFAULT_FORECAST_QUANTILES = Object.freeze([0.01, 0.25, 0.5, 0.75, 0.99]);
+  const META_PROPHET_QUANTILE_LEVELS = Object.freeze([1, 25, 50, 75, 99]);
+  const DEFAULT_FORECAST_BAND_SUMMARY = "P1\u2013P99 extreme range, P25\u2013P75 central range, and the P50 median path";
 
   const computeFastHash = (input) => {
     const text = String(input || "");
@@ -5422,6 +5423,7 @@
     interval = "1d",
     horizon = 0,
     service = "prophet",
+    quantileSchemaVersion = "",
     quantiles = [],
     start = "",
     forecastRows = [],
@@ -5446,6 +5448,7 @@
       interval: String(interval || "1d").trim().toLowerCase(),
       horizon: Number(horizon) || normalizedRows.length,
       service: String(service || "prophet").trim().toLowerCase(),
+      quantileSchemaVersion: String(quantileSchemaVersion || "").trim(),
       quantiles: Array.isArray(quantiles) ? quantiles : [],
       start: String(start || "").trim(),
       paramsHash,
@@ -8298,7 +8301,8 @@
           ${metrics.lastClose ? `<div><strong>Last close</strong> ${escapeHtml(metrics.lastClose)}</div>` : ""}
           ${metrics.medianEnd ? `<div><strong>Median end</strong> ${escapeHtml(metrics.medianEnd)}</div>` : ""}
           ${metrics.mae ? `<div><strong>MAE</strong> ${escapeHtml(metrics.mae)}</div>` : ""}
-          ${metrics.coverage10_90 ? `<div><strong>Coverage</strong> ${escapeHtml(metrics.coverage10_90)}</div>` : ""}
+          ${metrics.coverage25_75 ? `<div><strong>Central coverage</strong> ${escapeHtml(metrics.coverage25_75)}</div>` : ""}
+          ${metrics.coverage1_99 ? `<div><strong>Extreme coverage</strong> ${escapeHtml(metrics.coverage1_99)}</div>` : ""}
           ${item.serviceMessage ? `<div><strong>Message</strong> ${escapeHtml(item.serviceMessage)}</div>` : ""}
         `
         : "";
@@ -19515,7 +19519,7 @@
 
     const entries = quantKeys
       .map((key) => ({ key, q: Number(key.slice(1)) / 100 }))
-      .filter((item) => Number.isFinite(item.q))
+      .filter((item) => Number.isFinite(item.q) && META_PROPHET_QUANTILE_LEVELS.includes(Math.round(item.q * 100)))
       .sort((a, b) => a.q - b.q);
 
     const x = forecastRows.map((row) => row.ds);
@@ -22183,7 +22187,7 @@
     const raw = String(key || "").trim().toLowerCase();
     if (!/^q\d{1,3}$/.test(raw)) return raw.toUpperCase();
     const level = Math.max(0, Math.floor(Number(raw.slice(1)) || 0));
-    return `P${String(level).padStart(level < 100 ? 2 : 3, "0")}`;
+    return `P${level}`;
   };
 
   const resolveForecastQuantileKey = (quantileKeys = [], targetLevel = 50) => {
@@ -22210,7 +22214,7 @@
         .map((key) => Number(String(key || "").replace(/^q/i, "")))
         .filter((value) => Number.isFinite(value))
     );
-    if ([1, 10, 25, 50, 75, 90, 99].every((value) => levels.has(value))) {
+    if (META_PROPHET_QUANTILE_LEVELS.every((value) => levels.has(value))) {
       return DEFAULT_FORECAST_BAND_SUMMARY;
     }
     return quantileKeys.map((key) => formatForecastQuantileLabel(key)).join(", ");
@@ -22269,14 +22273,17 @@
       (left, right) => left.x.getTime() - right.x.getTime()
     );
 
-    const q01Key = resolveForecastQuantileKey(quantileKeys, 1);
-    const q10Key = resolveForecastQuantileKey(quantileKeys, 10);
-    const q25Key = resolveForecastQuantileKey(quantileKeys, 25);
-    const q50Key = resolveForecastQuantileKey(quantileKeys, 50);
-    const q75Key = resolveForecastQuantileKey(quantileKeys, 75);
-    const q90Key = resolveForecastQuantileKey(quantileKeys, 90);
-    const q99Key = resolveForecastQuantileKey(quantileKeys, 99);
-    const medianKey = q50Key || resolveForecastQuantileKey(quantileKeys, 50);
+    const exactQuantileKey = (level) => quantileKeys.find((key) => Number(key.slice(1)) === level) || "";
+    const q01Key = exactQuantileKey(1);
+    const q25Key = exactQuantileKey(25);
+    const q50Key = exactQuantileKey(50);
+    const q75Key = exactQuantileKey(75);
+    const q99Key = exactQuantileKey(99);
+    const medianKey = q50Key;
+    if (![q01Key, q25Key, q50Key, q75Key, q99Key].every(Boolean)) {
+      host.innerHTML = `<div class="alert warning">This saved forecast uses the legacy quantile model. Regenerate it to view P1, P25, P50, P75, and P99.</div>`;
+      return;
+    }
     const lastActualPoint = historicalRows[historicalRows.length - 1] || null;
     const firstForecastPoint = forecastPoints[0] || null;
     const explicitPlotStart = [forecastDoc?.plotStartDate, forecastDoc?.chartConfig?.plotStartDate, forecastDoc?.metrics?.plotStartDate]
@@ -22323,8 +22330,6 @@
     const forecastColor = dark ? "#ff9a84" : "#EF553B";
     const band25Color = dark ? "rgba(190, 214, 127, 0.34)" : "rgba(186, 214, 111, 0.34)";
     const band25Line = dark ? "#b9d97c" : "#B6CF78";
-    const band10Color = dark ? "rgba(132, 203, 255, 0.24)" : "rgba(125, 198, 255, 0.25)";
-    const band10Line = dark ? "#8ecfff" : "#8CC7F7";
     const band01Color = dark ? "rgba(182, 142, 255, 0.22)" : "rgba(176, 140, 255, 0.24)";
     const band01Line = dark ? "#bd98ff" : "#AD8CFF";
     const isHourlyForecast = String(forecastDoc?.interval || state.tickerContext.interval || "1d").toLowerCase() === "1h";
@@ -22340,7 +22345,7 @@
       chartStartDate;
     const chartTitle = `${titleTicker} Prophet Forecast (Interactive) from ${formatIsoDate(
       chartStartDate || chartEndDate || new Date()
-    )} with P10\u2013P90 and P25\u2013P75`;
+    )} with P1\u2013P99 and P25\u2013P75`;
     const compactLegend = typeof window !== "undefined" && window.innerWidth < 720;
 
     const traces = [];
@@ -22356,7 +22361,7 @@
         x: upperSeries.map((point) => point.x),
         y: upperSeries.map((point) => point.y),
         line: { width: 1.3, color: lineColor },
-        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(label)} upper=$%{y:.2f}<extra></extra>`,
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(formatForecastQuantileLabel(upperKey))}=$%{y:.2f}<extra></extra>`,
         showlegend: false,
       });
       traces.push({
@@ -22368,13 +22373,12 @@
         line: { width: 1.3, color: lineColor },
         fill: "tonexty",
         fillcolor,
-        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(label)} lower=$%{y:.2f}<extra></extra>`,
+        hovertemplate: `Date=%{x|${hoverDateFormat}}<br>${escapeHtml(formatForecastQuantileLabel(lowerKey))}=$%{y:.2f}<extra></extra>`,
         legendrank: legendRank,
       });
     };
 
-    addBand(q01Key, q99Key, "P01\u2013P99", band01Color, band01Line, 30);
-    addBand(q10Key, q90Key, "P10\u2013P90", band10Color, band10Line, 20);
+    addBand(q01Key, q99Key, "P1\u2013P99 extreme range", band01Color, band01Line, 30);
     addBand(q25Key, q75Key, "P25\u2013P75", band25Color, band25Line, 10);
 
     const medianSeries = buildForecastSeries(medianKey);
@@ -22565,37 +22569,82 @@
       String(left?.ds || "").localeCompare(String(right?.ds || ""))
     );
     const keys = extractQuantileKeys(rows);
-    const p10 = calculateForecastQuantileSummary(rows, keys.find((key) => Number(key.slice(1)) === 10));
-    const p50 = calculateForecastQuantileSummary(rows, keys.find((key) => Number(key.slice(1)) === 50));
-    const p90 = calculateForecastQuantileSummary(rows, keys.find((key) => Number(key.slice(1)) === 90));
+    const summaries = Object.fromEntries(
+      META_PROPHET_QUANTILE_LEVELS.map((level) => {
+        const name = `P${level}`;
+        const key = keys.find((candidate) => Number(candidate.slice(1)) === level);
+        return [name, calculateForecastQuantileSummary(rows, key)];
+      })
+    );
     const market = getLatestForecastMarketPoint(forecastDoc);
     const ticker = normalizeTicker(forecastDoc.ticker || state.tickerContext.ticker || "");
-    if (!ticker || !rows.length || !p10 || !p50 || !p90 || !market.currentPrice) {
+    const hasCanonicalQuantiles = META_PROPHET_QUANTILE_LEVELS.every((level) => Boolean(summaries[`P${level}`]));
+    if (!ticker || !rows.length || !hasCanonicalQuantiles || !market.currentPrice) {
       return {
         valid: false,
         error: !market.currentPrice
           ? "Latest actual price is unavailable, so scenario percentages and AI analysis cannot be calculated."
-          : "Complete P10, P50, and P90 forecast series are required.",
+          : "Complete P1, P25, P50, P75, and P99 forecast series are required. Regenerate this forecast if it was saved with the legacy quantile model.",
+        ticker,
+        rows,
+        currentPrice: market.currentPrice,
+      };
+    }
+    const ordered = rows.every((row) => {
+      const values = META_PROPHET_QUANTILE_LEVELS.map((level) => Number(row[summaries[`P${level}`].key]));
+      return values.every(Number.isFinite) && values.every((value, index) => index === 0 || values[index - 1] <= value);
+    });
+    if (!ordered) {
+      return {
+        valid: false,
+        error: "Forecast quantiles are out of order. Regenerate the forecast before using the workspace.",
         ticker,
         rows,
         currentPrice: market.currentPrice,
       };
     }
     const percentChange = (target) => ((target - market.currentPrice) / market.currentPrice) * 100;
+    const quantiles = Object.fromEntries(
+      Object.entries(summaries).map(([name, summary]) => [
+        name,
+        {
+          ...summary,
+          dollarChange: summary.final - market.currentPrice,
+          percentChange: percentChange(summary.final),
+        },
+      ])
+    );
     const startDate = String(rows[0]?.ds || "").trim();
     const endDate = String(rows[rows.length - 1]?.ds || "").trim();
-    const uncertaintySeries = rows.map((row) => ({
-      date: String(row.ds || ""),
-      range: Number(row[p90.key]) - Number(row[p10.key]),
-    }));
-    const startRange = uncertaintySeries[0].range;
-    const finalRange = uncertaintySeries[uncertaintySeries.length - 1].range;
-    const uncertaintyChangePercent = startRange > 0 ? ((finalRange - startRange) / startRange) * 100 : 0;
-    const uncertaintyDirection = uncertaintyChangePercent > 5 ? "expanding" : uncertaintyChangePercent < -5 ? "contracting" : "stable";
+    const buildRange = (label, lowerName, upperName) => {
+      const lower = quantiles[lowerName];
+      const upper = quantiles[upperName];
+      const series = rows.map((row) => {
+        const range = Number(row[upper.key]) - Number(row[lower.key]);
+        return { date: String(row.ds || ""), range, rangePercentOfCurrent: (range / market.currentPrice) * 100 };
+      });
+      const startRange = series[0].range;
+      const finalRange = series[series.length - 1].range;
+      const changePercent = startRange > 0 ? ((finalRange - startRange) / startRange) * 100 : 0;
+      return {
+        label,
+        lowerQuantile: lowerName,
+        upperQuantile: upperName,
+        series,
+        startRange,
+        finalRange,
+        averageRange: series.reduce((sum, item) => sum + item.range, 0) / series.length,
+        finalRangePercentOfCurrent: (finalRange / market.currentPrice) * 100,
+        changePercent,
+        direction: changePercent > 5 ? "expanding" : changePercent < -5 ? "contracting" : "stable",
+      };
+    };
     const scenarios = {
-      bear: { label: "Bear", quantile: "P10", target: p10.final, percentChange: percentChange(p10.final), forecastEndDate: endDate },
-      base: { label: "Base", quantile: "P50", target: p50.final, percentChange: percentChange(p50.final), forecastEndDate: endDate },
-      bull: { label: "Bull", quantile: "P90", target: p90.final, percentChange: percentChange(p90.final), forecastEndDate: endDate },
+      extremeBear: { label: "Extreme Bear", quantile: "P1", target: quantiles.P1.final, dollarChange: quantiles.P1.dollarChange, percentChange: quantiles.P1.percentChange, forecastEndDate: endDate },
+      bear: { label: "Bear", quantile: "P25", target: quantiles.P25.final, dollarChange: quantiles.P25.dollarChange, percentChange: quantiles.P25.percentChange, forecastEndDate: endDate },
+      base: { label: "Base", quantile: "P50", target: quantiles.P50.final, dollarChange: quantiles.P50.dollarChange, percentChange: quantiles.P50.percentChange, forecastEndDate: endDate },
+      bull: { label: "Bull", quantile: "P75", target: quantiles.P75.final, dollarChange: quantiles.P75.dollarChange, percentChange: quantiles.P75.percentChange, forecastEndDate: endDate },
+      extremeBull: { label: "Extreme Bull", quantile: "P99", target: quantiles.P99.final, dollarChange: quantiles.P99.dollarChange, percentChange: quantiles.P99.percentChange, forecastEndDate: endDate },
     };
     const storedIndicatorData = state.tickerContext.indicatorData && typeof state.tickerContext.indicatorData === "object"
       ? state.tickerContext.indicatorData
@@ -22619,6 +22668,20 @@
           : exhaustionConflict
             ? "mixed"
             : "confirm";
+    const p50Start = quantiles.P50.series[0].value;
+    const p50TrendPercent = p50Start > 0 ? ((quantiles.P50.final - p50Start) / p50Start) * 100 : 0;
+    const currentPosition =
+      market.currentPrice < quantiles.P1.final
+        ? "below_p1"
+        : market.currentPrice < quantiles.P25.final
+          ? "between_p1_p25"
+          : market.currentPrice < quantiles.P50.final
+            ? "between_p25_p50"
+            : market.currentPrice < quantiles.P75.final
+              ? "between_p50_p75"
+              : market.currentPrice <= quantiles.P99.final
+                ? "between_p75_p99"
+                : "above_p99";
     return {
       valid: true,
       ticker,
@@ -22629,16 +22692,21 @@
       startDate,
       endDate,
       horizon: rows.length,
-      quantiles: { P10: p10, P50: p50, P90: p90 },
+      quantiles,
       scenarios,
-      uncertainty: {
-        series: uncertaintySeries,
-        startRange,
-        finalRange,
-        averageRange: uncertaintySeries.reduce((sum, item) => sum + item.range, 0) / uncertaintySeries.length,
-        finalRangePercentOfCurrent: (finalRange / market.currentPrice) * 100,
-        changePercent: uncertaintyChangePercent,
-        direction: uncertaintyDirection,
+      ranges: {
+        central: buildRange("Central forecast range", "P25", "P75"),
+        extreme: buildRange("Extreme forecast range", "P1", "P99"),
+      },
+      currentPosition,
+      forecastTrend: {
+        quantile: "P50",
+        startValue: p50Start,
+        finalValue: quantiles.P50.final,
+        dollarChange: quantiles.P50.final - p50Start,
+        percentChange: p50TrendPercent,
+        averageChangePerStep: (quantiles.P50.final - p50Start) / Math.max(1, rows.length - 1),
+        direction: p50TrendPercent > 0.5 ? "bullish" : p50TrendPercent < -0.5 ? "bearish" : "neutral",
       },
       indicatorData,
       indicatorAgreement: {
@@ -22769,7 +22837,7 @@
                 ? `<div class="alert warning"><strong>AI analysis unavailable.</strong> ${escapeHtml(error)} The forecast, scenarios, and indicators above remain available.</div>`
                 : answer
                   ? `<div class="markdown-output">${renderMarkdown(answer, { fallback: "No AI analysis returned." })}</div>`
-                  : `<div class="forecast-ai-empty">Generate an AI interpretation of the forecast, indicators, quantiles, and bull/bear scenarios. Nothing is sent until you choose to generate it.</div>`
+                  : `<div class="forecast-ai-empty">Generate an AI interpretation of all five forecast scenarios, both uncertainty ranges, and the technical indicators. Nothing is sent until you choose to generate it.</div>`
           }
         </div>
         <div class="forecast-ai-actions">
@@ -22786,7 +22854,10 @@
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
     const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || forecastDoc.forecastPreview || []);
-    const quantKeys = extractQuantileKeys(rows);
+    const availableQuantKeys = extractQuantileKeys(rows);
+    const quantKeys = META_PROPHET_QUANTILE_LEVELS
+      .map((level) => availableQuantKeys.find((key) => Number(key.slice(1)) === level))
+      .filter(Boolean);
     if (!rows.length) {
       setOutputReady(ui.forecastOutput);
       if (ui.forecastScenarioHost) ui.forecastScenarioHost.innerHTML = "";
@@ -22828,6 +22899,11 @@
       const pct = num <= 1 ? num * 100 : num;
       return formatPercent(pct, { digits });
     };
+    const formatUsdChange = (value) => {
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return "—";
+      return `${amount > 0 ? "+" : amount < 0 ? "−" : ""}$${Math.abs(amount).toFixed(2)}`;
+    };
 
     const metricChip = (label, value, iconName) => `
       <div class="metric-chip">
@@ -22866,9 +22942,13 @@
       displayedKeys.add("mape");
       chips.push(metricChip("MAPE", formatFractionPercent(metrics.mape), "percentage"));
     }
-    if (metrics.coverage10_90 !== null && metrics.coverage10_90 !== undefined && metrics.coverage10_90 !== "n/a") {
-      displayedKeys.add("coverage10_90");
-      chips.push(metricChip("Coverage (10–90)", formatFractionPercent(metrics.coverage10_90), "check-circle"));
+    if (metrics.coverage25_75 !== null && metrics.coverage25_75 !== undefined && metrics.coverage25_75 !== "n/a") {
+      displayedKeys.add("coverage25_75");
+      chips.push(metricChip("Coverage (25–75)", formatFractionPercent(metrics.coverage25_75), "check-circle"));
+    }
+    if (metrics.coverage1_99 !== null && metrics.coverage1_99 !== undefined && metrics.coverage1_99 !== "n/a") {
+      displayedKeys.add("coverage1_99");
+      chips.push(metricChip("Coverage (1–99)", formatFractionPercent(metrics.coverage1_99), "check-circle"));
     }
     if (metrics.historyPoints !== null && metrics.historyPoints !== undefined) {
       displayedKeys.add("historyPoints");
@@ -22946,11 +23026,13 @@
           <div class="forecast-snapshot-grid">
             ${[
               ["Current Price", formatUsd(workspace.currentPrice)],
-              ["P10", formatUsd(workspace.quantiles.P10.final)],
+              ["P1", formatUsd(workspace.quantiles.P1.final)],
+              ["P25", formatUsd(workspace.quantiles.P25.final)],
               ["P50", formatUsd(workspace.quantiles.P50.final)],
-              ["P90", formatUsd(workspace.quantiles.P90.final)],
-              ["Median Change", formatPercent(workspace.scenarios.base.percentChange, { signed: true })],
+              ["P75", formatUsd(workspace.quantiles.P75.final)],
+              ["P99", formatUsd(workspace.quantiles.P99.final)],
               ["Forecast Horizon", `${workspace.horizon} ${workspace.interval === "1h" ? "hours" : "trading days"}`],
+              ["Forecast End", formatIsoDate(workspace.endDate)],
             ]
               .map(([label, value]) => `<div class="forecast-snapshot-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
               .join("")}
@@ -22968,11 +23050,11 @@
           <div class="forecast-section-heading"><div><div class="eyebrow">Distribution</div><h3 id="quantile-statistics-heading">Quantile Statistics</h3></div></div>
           <div class="table-wrap">
             <table class="data-table forecast-statistics-table">
-              <thead><tr><th>Quantile</th><th>Minimum</th><th>Maximum</th><th>Average</th><th>Horizon target</th><th>Unusual values</th></tr></thead>
+              <thead><tr><th>Quantile</th><th>Minimum</th><th>Maximum</th><th>Average</th><th>Std. dev.</th><th>Horizon target</th><th>$ change</th><th>% change</th><th>Unusual values</th></tr></thead>
               <tbody>
-                ${["P10", "P50", "P90"].map((name) => {
+                ${["P1", "P25", "P50", "P75", "P99"].map((name) => {
                   const stats = workspace.quantiles[name];
-                  return `<tr><td><strong>${name}</strong></td><td>${formatUsd(stats.minimum)}</td><td>${formatUsd(stats.maximum)}</td><td>${formatUsd(stats.average)}</td><td>${formatUsd(stats.final)}</td><td>${stats.unusual.length}</td></tr>`;
+                  return `<tr><td><strong>${name}</strong></td><td>${formatUsd(stats.minimum)}</td><td>${formatUsd(stats.maximum)}</td><td>${formatUsd(stats.average)}</td><td>${formatUsd(stats.standardDeviation)}</td><td>${formatUsd(stats.final)}</td><td>${formatUsdChange(stats.dollarChange)}</td><td>${formatPercent(stats.percentChange, { signed: true })}</td><td>${stats.unusual.length}</td></tr>`;
                 }).join("")}
               </tbody>
             </table>
@@ -22993,13 +23075,16 @@
                 <span class="scenario-label">${escapeHtml(scenario.label)} Case · ${escapeHtml(scenario.quantile)}</span>
                 <strong>${formatUsd(scenario.target)}</strong>
                 <span class="scenario-change ${scenario.percentChange > 0 ? "positive" : scenario.percentChange < 0 ? "negative" : "neutral"}">${formatPercent(scenario.percentChange, { signed: true })}</span>
-                <small>from current ${formatUsd(workspace.currentPrice)}</small>
+                <small>${formatUsdChange(scenario.dollarChange)} from current ${formatUsd(workspace.currentPrice)}</small>
               </article>`).join("")}
           </div>
-          <div class="forecast-uncertainty-card">
-            <strong>P10–P90 uncertainty: ${formatUsd(workspace.uncertainty.finalRange)}</strong>
-            <span>${formatPercent(workspace.uncertainty.finalRangePercentOfCurrent)} of current price · ${escapeHtml(workspace.uncertainty.direction)}</span>
-            <small>Range changed ${formatPercent(workspace.uncertainty.changePercent, { signed: true })} from the start of the forecast horizon.</small>
+          <div class="forecast-range-grid">
+            ${[workspace.ranges.central, workspace.ranges.extreme].map((range) => `
+              <div class="forecast-uncertainty-card">
+                <strong>${escapeHtml(range.lowerQuantile)}–${escapeHtml(range.upperQuantile)} ${escapeHtml(range.label.toLowerCase())}: ${formatUsd(range.finalRange)}</strong>
+                <span>${formatPercent(range.finalRangePercentOfCurrent)} of current price · ${escapeHtml(range.direction)}</span>
+                <small>Range changed ${formatPercent(range.changePercent, { signed: true })} from the start of the forecast horizon.</small>
+              </div>`).join("")}
           </div>
           <p class="small muted">Formula: ((horizon target − latest actual price) / latest actual price) × 100. Signs are never changed to fit the scenario label.</p>
         </section>`
@@ -23057,7 +23142,7 @@
         <div class="table-wrap" style="margin-top:10px;">
           <table class="data-table">
             <thead>
-              <tr>${headers.map((key) => `<th>${escapeHtml(key)}</th>`).join("")}</tr>
+              <tr>${headers.map((key) => `<th>${escapeHtml(key === "ds" ? "Date" : formatForecastQuantileLabel(key))}</th>`).join("")}</tr>
             </thead>
             <tbody>
               ${slice
@@ -25843,7 +25928,10 @@
               if (String(doc.chartSeriesSource || "") === "preview_only") {
                 showToast("Only preview rows are available on this device. Downloading preview CSV.", "warn");
               }
-		        const quantKeys = extractQuantileKeys(rows);
+		        const availableQuantKeys = extractQuantileKeys(rows);
+                const quantKeys = META_PROPHET_QUANTILE_LEVELS
+                  .map((level) => availableQuantKeys.find((key) => Number(key.slice(1)) === level))
+                  .filter(Boolean);
 		        const headers = ["ds", ...quantKeys];
 		        const csv = buildCsv(rows, headers);
 		        const ticker = normalizeTicker(doc.ticker || "ticker") || "ticker";
@@ -27078,6 +27166,7 @@
                 interval: String(payload.interval || "1d"),
                 horizon: Number(payload.horizon || 0),
                 service: String(payload.service || "prophet"),
+                quantileSchemaVersion: String(data.quantileSchemaVersion || "meta_prophet_v2_p1_p25_p50_p75_p99"),
                 quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
                 start: String(payload.start || ""),
                 forecastRows: alignedRows,
@@ -27099,6 +27188,7 @@
                 start: String(payload.start || ""),
                 quantiles: Array.isArray(payload.quantiles) ? payload.quantiles : [],
                 service: String(payload.service || "prophet"),
+                quantileSchemaVersion: String(data.quantileSchemaVersion || "meta_prophet_v2_p1_p25_p50_p75_p99"),
                 engine: String(data.engine || ""),
                 status: String(data.status || "completed"),
                 serviceMessage: [String(data.serviceMessage || "").trim(), historyLoadMessage].filter(Boolean).join(" "),
@@ -27108,7 +27198,8 @@
                     : {
                         lastClose: data.lastClose,
                         mae: data.mae,
-                        coverage10_90: data.coverage10_90,
+                        coverage25_75: data.coverage25_75,
+                        coverage1_99: data.coverage1_99,
                         medianEnd: localKeyLevels.median,
                       },
                 forecastPreview: Array.isArray(data.forecastPreview) ? data.forecastPreview : alignedRows.slice(0, 12),

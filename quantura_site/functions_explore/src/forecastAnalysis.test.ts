@@ -7,19 +7,22 @@ import {
   parseForecastAgentSections,
   renderForecastAgentMarkdown,
 } from "./forecastAnalysis";
+import { buildForecastFromHistory, META_PROPHET_FORECAST_QUANTILES } from "./forecastingScreener";
 
-function rows(values: Array<[number, number, number]>) {
-  return values.map(([p10, p50, p90], index) => ({
+type FiveQuantiles = [number, number, number, number, number];
+
+function rows(values: FiveQuantiles[]) {
+  return values.map(([p1, p25, p50, p75, p99], index) => ({
     ds: `2026-09-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
-    q10: p10,
+    q1: p1,
+    q25: p25,
     q50: p50,
-    q90: p90,
-    q25: (p10 + p50) / 2,
-    q75: (p50 + p90) / 2,
+    q75: p75,
+    q99: p99,
   }));
 }
 
-function context(currentPrice: number, values: Array<[number, number, number]>, direction = "neutral") {
+function context(currentPrice: number, values: FiveQuantiles[], direction = "neutral") {
   return buildForecastAnalysisContext({
     ticker: "PLTR",
     currentPrice,
@@ -44,100 +47,157 @@ test("percentage changes preserve positive and negative signs", () => {
   assert.throws(() => forecastPercentChange(110, 0), /positive current price/i);
 });
 
-test("bullish distribution produces signed bear, base, and bull scenarios", () => {
-  const result = context(100, [[95, 105, 115], [98, 110, 125]], "bullish");
-  assert.equal(result.scenarios.bear.percentChange, -2);
+test("canonical five-level scenario mapping preserves mathematical direction", () => {
+  const result = context(100, [[70, 90, 105, 115, 140], [75, 95, 110, 125, 150]], "bullish");
+  assert.equal(result.scenarios.extremeBear.quantile, "P1");
+  assert.equal(result.scenarios.extremeBear.percentChange, -25);
+  assert.equal(result.scenarios.bear.quantile, "P25");
+  assert.equal(result.scenarios.bear.percentChange, -5);
   assert.equal(result.scenarios.base.percentChange, 10);
   assert.equal(result.scenarios.bull.percentChange, 25);
+  assert.equal(result.scenarios.extremeBull.percentChange, 50);
   assert.equal(result.indicatorAgreement.status, "confirm");
 });
 
-test("bearish distribution still preserves the upper-tail scenario without inventing upside", () => {
-  const result = context(120, [[90, 100, 110], [82, 92, 105]], "bearish");
-  assert.equal(result.scenarios.bear.percentChange, -31.666667);
-  assert.equal(result.scenarios.base.percentChange, -23.333333);
-  assert.equal(result.scenarios.bull.percentChange, -12.5);
+test("bearish distribution does not invent upside for P99", () => {
+  const result = context(120, [[65, 80, 95, 105, 115], [60, 75, 90, 100, 110]], "bearish");
+  assert.equal(result.scenarios.extremeBear.percentChange, -50);
+  assert.equal(result.scenarios.base.percentChange, -25);
+  assert.equal(result.scenarios.extremeBull.percentChange, -8.333333);
   assert.equal(result.indicatorAgreement.status, "confirm");
 });
 
-test("entire forecast above current price leaves P10 mathematically positive", () => {
-  const result = context(80, [[85, 95, 110], [90, 100, 120]], "bullish");
-  assert.equal(result.scenarios.bear.percentChange, 12.5);
-  assert.equal(result.scenarios.base.percentChange, 25);
-  assert.equal(result.scenarios.bull.percentChange, 50);
+test("entire forecast above current price leaves P1 mathematically positive", () => {
+  const result = context(80, [[82, 90, 100, 110, 125], [85, 95, 105, 120, 140]], "bullish");
+  assert.equal(result.scenarios.extremeBear.percentChange, 6.25);
+  assert.equal(result.scenarios.extremeBull.percentChange, 75);
+  assert.equal(result.currentPosition, "below_p1");
 });
 
-test("mixed distribution and neutral indicators produce mixed agreement", () => {
-  const result = context(100, [[85, 99.8, 115], [80, 100.2, 120]], "neutral");
-  assert.equal(result.currentPosition, "between_p10_p50");
-  assert.equal(result.indicatorAgreement.status, "mixed");
+test("current-price position covers mixed and extreme locations", () => {
+  assert.equal(context(100, [[70, 90, 100, 110, 130]]).currentPosition, "between_p50_p75");
+  assert.equal(context(140, [[70, 90, 100, 110, 130]]).currentPosition, "above_p99");
+  assert.equal(context(80, [[70, 90, 100, 110, 130]]).currentPosition, "between_p1_p25");
+  assert.equal(context(105, [[70, 90, 100, 110, 130]]).currentPosition, "between_p50_p75");
 });
 
-test("opposed forecast and indicator directions are a conflict", () => {
-  const result = context(100, [[90, 104, 112], [92, 108, 118]], "bearish");
-  assert.equal(result.indicatorAgreement.status, "conflict");
+test("central and extreme ranges are calculated and classified independently", () => {
+  const result = context(100, [
+    [70, 90, 100, 110, 130],
+    [50, 85, 100, 115, 150],
+  ]);
+  assert.equal(result.ranges.central.finalRange, 30);
+  assert.equal(result.ranges.central.finalRangePercentOfCurrent, 30);
+  assert.equal(result.ranges.central.direction, "expanding");
+  assert.equal(result.ranges.extreme.finalRange, 100);
+  assert.equal(result.ranges.extreme.finalRangePercentOfCurrent, 100);
+  assert.equal(result.ranges.extreme.direction, "expanding");
+
+  const narrow = context(100, [
+    [80, 90, 100, 110, 120],
+    [81, 90.5, 100, 109.5, 119],
+  ]);
+  assert.equal(narrow.ranges.central.direction, "stable");
+  assert.equal(narrow.ranges.extreme.direction, "stable");
 });
 
-test("wide and narrow ranges classify uncertainty movement", () => {
-  const expanding = context(100, [[95, 100, 105], [70, 100, 130]]);
-  const contracting = context(100, [[70, 100, 130], [95, 100, 105]]);
-  const stable = context(100, [[90, 100, 110], [89.5, 100, 110.5]]);
-  assert.equal(expanding.uncertainty.direction, "expanding");
-  assert.equal(contracting.uncertainty.direction, "contracting");
-  assert.equal(stable.uncertainty.direction, "stable");
-  assert.equal(expanding.uncertainty.finalRangePercentOfCurrent, 60);
+test("quantile summaries include standard deviation and current-price changes", () => {
+  const result = context(100, [[70, 90, 100, 110, 130], [75, 95, 110, 120, 140]]);
+  assert.equal(result.forecast.quantiles.P50.average, 105);
+  assert.equal(result.forecast.quantiles.P50.minimum, 100);
+  assert.equal(result.forecast.quantiles.P50.maximum, 110);
+  assert.equal(result.forecast.quantiles.P50.standardDeviation, 5);
+  assert.equal(result.forecast.quantiles.P50.dollarChange, 10);
+  assert.equal(result.forecast.quantiles.P50.percentChange, 10);
+  assert.equal(result.forecast.trend.direction, "bullish");
 });
 
-test("additional quantiles remain available to the agent architecture", () => {
-  const result = context(100, [[90, 100, 110], [91, 101, 111]]);
-  assert.ok(result.forecast.additionalQuantiles.P25);
-  assert.ok(result.forecast.additionalQuantiles.P75);
-});
-
-test("missing or inverted major quantiles fail with actionable validation", () => {
+test("missing or inverted canonical quantiles fail with actionable validation", () => {
   assert.throws(
-    () => buildForecastAnalysisContext({ ticker: "AAPL", currentPrice: 100, forecastRows: [{ ds: "2026-09-01", q50: 101, q90: 110 }] }),
-    /P10, P50, and P90/i
+    () => buildForecastAnalysisContext({ ticker: "AAPL", currentPrice: 100, forecastRows: [{ ds: "2026-09-01", q25: 95, q50: 101, q75: 105, q99: 110 }] }),
+    /P1, P25, P50, P75, and P99/i
   );
   assert.throws(
-    () => buildForecastAnalysisContext({ ticker: "AAPL", currentPrice: 100, forecastRows: [{ ds: "2026-09-01", q10: 105, q50: 100, q90: 110 }] }),
+    () => buildForecastAnalysisContext({ ticker: "AAPL", currentPrice: 100, forecastRows: [{ ds: "2026-09-01", q1: 80, q25: 105, q50: 100, q75: 110, q99: 120 }] }),
     /out of order/i
   );
 });
 
-test("agent request contains full quantile series, scenarios, horizon, current price, and indicators", () => {
-  const result = context(100, [[90, 100, 110], [92, 104, 118]], "bullish");
+test("agent request contains all five series, scenarios, ranges, horizon, price, trend, and indicators", () => {
+  const result = context(100, [[70, 90, 100, 110, 130], [72, 92, 104, 118, 145]], "bullish");
   const request = buildForecastAgentRequest(result);
   const payload = request.userPayload as any;
   assert.equal(payload.currentPrice, 100);
   assert.equal(payload.forecast.horizon, 2);
-  assert.equal(payload.forecast.quantiles.P10.series.length, 2);
-  assert.equal(payload.forecast.quantiles.P50.series.length, 2);
-  assert.equal(payload.forecast.quantiles.P90.series.length, 2);
-  assert.equal(payload.scenarios.bear.quantile, "P10");
-  assert.equal(payload.scenarios.base.quantile, "P50");
-  assert.equal(payload.scenarios.bull.quantile, "P90");
+  for (const name of ["P1", "P25", "P50", "P75", "P99"]) {
+    assert.equal(payload.forecast.quantiles[name].series.length, 2);
+    assert.equal(typeof payload.forecast.quantiles[name].percentChange, "number");
+  }
+  assert.equal(payload.scenarios.extremeBear.quantile, "P1");
+  assert.equal(payload.scenarios.extremeBull.quantile, "P99");
+  assert.equal(payload.ranges.central.lowerQuantile, "P25");
+  assert.equal(payload.ranges.extreme.upperQuantile, "P99");
   assert.equal(payload.indicators.derived.rsi14, 55);
-  for (const requirement of ["Bull Case", "Bear Case", "Base Case", "Technical Confirmation", "Risk / Uncertainty", "Overall Bias"]) {
+  assert.equal(payload.forecast.trend.quantile, "P50");
+  for (const requirement of [
+    "Forecast Distribution",
+    "Extreme Bear Case",
+    "Bear Case",
+    "Base Case",
+    "Bull Case",
+    "Extreme Bull Case",
+    "Technical Confirmation / Conflict",
+    "Forecast Uncertainty",
+    "Overall Bias",
+  ]) {
     assert.match(request.systemPrompt, new RegExp(requirement.replace("/", "\\/"), "i"));
   }
 });
 
-test("structured agent output requires every balanced section", () => {
+test("structured agent output requires every five-scenario section", () => {
   const complete = {
-    forecastSummary: "Distribution summary.",
-    bullCase: "P90 upside evidence.",
-    bearCase: "P10 downside evidence.",
-    baseCase: "P50 median evidence.",
+    forecastDistribution: "Current price is within the central distribution.",
+    extremeBearCase: "P1 tail scenario.",
+    bearCase: "P25 lower scenario.",
+    baseCase: "P50 median scenario.",
+    bullCase: "P75 upper scenario.",
+    extremeBullCase: "P99 tail scenario.",
     technicalConfirmation: "Indicators are mixed.",
-    riskUncertainty: "Range is wide.",
+    forecastUncertainty: "Central and extreme ranges are stable.",
     overallBias: "Neutral / Mixed",
-    overallAssessment: "Both cases remain plausible.",
+    overallAssessment: "Upside and downside remain plausible.",
   };
   const parsed = parseForecastAgentSections(JSON.stringify(complete));
   const markdown = renderForecastAgentMarkdown(parsed);
-  assert.match(markdown, /### Bull Case/);
-  assert.match(markdown, /### Bear Case/);
-  assert.match(markdown, /### Base Case/);
+  assert.match(markdown, /### Extreme Bear Case/);
+  assert.match(markdown, /### Extreme Bull Case/);
+  assert.match(markdown, /### Forecast Uncertainty/);
   assert.throws(() => parseForecastAgentSections(JSON.stringify({ ...complete, bearCase: "" })), /invalid structured/i);
+});
+
+test("forecast pipeline emits and serializes only canonical ordered quantiles", () => {
+  const historyRows = Array.from({ length: 90 }, (_, index) => {
+    const date = new Date(Date.UTC(2026, 0, 1 + index));
+    const close = 100 * Math.exp(0.001 * index + Math.sin(index / 5) * 0.01);
+    return { Date: date.toISOString().slice(0, 10), Close: close };
+  });
+  const forecast = buildForecastFromHistory({
+    ticker: "AAPL",
+    interval: "1d",
+    horizon: 12,
+    quantiles: META_PROPHET_FORECAST_QUANTILES,
+    historyRows,
+  });
+  assert.deepEqual(forecast.quantiles, [0.01, 0.25, 0.5, 0.75, 0.99]);
+  assert.equal(forecast.forecastRows.length, 12);
+  for (const row of forecast.forecastRows) {
+    const values = [row.q1, row.q25, row.q50, row.q75, row.q99].map(Number);
+    assert.ok(values.every(Number.isFinite));
+    assert.ok(values.every((value, index) => index === 0 || values[index - 1] <= value));
+    assert.deepEqual(Object.keys(row).filter((key) => /^q\d+$/.test(key)), ["q1", "q25", "q50", "q75", "q99"]);
+  }
+  const serialized = JSON.parse(JSON.stringify(forecast));
+  assert.equal(serialized.forecastRows[0].q1, forecast.forecastRows[0].q1);
+  assert.equal(typeof serialized.metrics.coverage25_75, "number");
+  assert.equal(typeof serialized.metrics.coverage1_99, "number");
 });

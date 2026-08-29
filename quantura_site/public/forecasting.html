@@ -149,8 +149,8 @@
 	                      <div class="field">
 	                        <label class="label">Forecast bands</label>
 	                        <div class="small muted">
-                            Quantura Horizon always uses fixed bands: <strong>P01-P99</strong>, <strong>P10-P90</strong>, <strong>P25-P75</strong>, plus the
-                            <strong>P50</strong> median path.
+                            Quantura Horizon uses canonical distribution quantiles: <strong>P1</strong>, <strong>P25</strong>, <strong>P50</strong>,
+                            <strong>P75</strong>, and <strong>P99</strong>.
                           </div>
 	                      </div>
 	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
@@ -212,7 +212,7 @@
                       <section class="results-panel">
                         <div class="eyebrow">Scenario analysis</div>
                         <h3>Forecast Scenarios</h3>
-                        <p class="small muted">Generate a forecast to compare end-of-horizon P10, P50, and P90 outcomes.</p>
+                        <p class="small muted">Generate a forecast to compare extreme-tail, quartile, and median outcomes across P1, P25, P50, P75, and P99.</p>
                       </section>
                     </div>
                     <div id="forecast-ai-host" class="forecast-workspace-section">

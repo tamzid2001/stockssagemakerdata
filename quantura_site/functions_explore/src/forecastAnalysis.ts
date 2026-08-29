@@ -1,7 +1,8 @@
 import crypto from "crypto";
 
-export type ForecastQuantileName = "P10" | "P50" | "P90";
+export type ForecastQuantileName = "P1" | "P25" | "P50" | "P75" | "P99";
 export type ForecastBias = "bullish" | "bearish" | "neutral";
+export type RangeDirection = "expanding" | "contracting" | "stable";
 
 export type ForecastSeriesPoint = {
   date: string;
@@ -13,17 +14,36 @@ export type ForecastQuantileSummary = {
   average: number;
   minimum: number;
   maximum: number;
+  standardDeviation: number;
+  lowerBoundary: number;
+  upperBoundary: number;
   final: number;
+  dollarChange: number;
+  percentChange: number;
   unusualCount: number;
   unusual: ForecastSeriesPoint[];
 };
 
 export type ForecastScenario = {
-  label: "Bear" | "Base" | "Bull";
+  label: "Extreme Bear" | "Bear" | "Base" | "Bull" | "Extreme Bull";
   quantile: ForecastQuantileName;
   target: number;
+  dollarChange: number;
   percentChange: number;
   forecastEndDate: string;
+};
+
+export type ForecastRangeSummary = {
+  label: string;
+  lowerQuantile: ForecastQuantileName;
+  upperQuantile: ForecastQuantileName;
+  series: Array<{ date: string; range: number; rangePercentOfCurrent: number }>;
+  startRange: number;
+  finalRange: number;
+  averageRange: number;
+  finalRangePercentOfCurrent: number;
+  changePercent: number;
+  direction: RangeDirection;
 };
 
 export type ForecastAnalysisContext = {
@@ -36,23 +56,34 @@ export type ForecastAnalysisContext = {
     horizon: number;
     interval: "1d" | "1h";
     quantiles: Record<ForecastQuantileName, ForecastQuantileSummary>;
-    additionalQuantiles: Record<string, ForecastQuantileSummary>;
+    trend: {
+      quantile: "P50";
+      startValue: number;
+      finalValue: number;
+      dollarChange: number;
+      percentChange: number;
+      averageChangePerStep: number;
+      direction: ForecastBias;
+    };
   };
   scenarios: {
+    extremeBear: ForecastScenario;
     bear: ForecastScenario;
     base: ForecastScenario;
     bull: ForecastScenario;
+    extremeBull: ForecastScenario;
   };
-  uncertainty: {
-    series: Array<{ date: string; range: number; rangePercentOfCurrent: number }>;
-    startRange: number;
-    finalRange: number;
-    averageRange: number;
-    finalRangePercentOfCurrent: number;
-    changePercent: number;
-    direction: "expanding" | "contracting" | "stable";
+  ranges: {
+    central: ForecastRangeSummary;
+    extreme: ForecastRangeSummary;
   };
-  currentPosition: "below_p10" | "between_p10_p50" | "between_p50_p90" | "above_p90";
+  currentPosition:
+    | "below_p1"
+    | "between_p1_p25"
+    | "between_p25_p50"
+    | "between_p50_p75"
+    | "between_p75_p99"
+    | "above_p99";
   indicators: {
     selected: string[];
     latest: Array<{ name: string; value: number; display: string }>;
@@ -70,19 +101,21 @@ export type ForecastAnalysisContext = {
 };
 
 export type ForecastAgentSections = {
-  forecastSummary: string;
-  bullCase: string;
+  forecastDistribution: string;
+  extremeBearCase: string;
   bearCase: string;
   baseCase: string;
+  bullCase: string;
+  extremeBullCase: string;
   technicalConfirmation: string;
-  riskUncertainty: string;
-  overallBias: "Bullish" | "Moderately Bullish" | "Neutral / Mixed" | "Moderately Bearish" | "Bearish";
+  forecastUncertainty: string;
+  overallBias: "Strongly Bullish" | "Moderately Bullish" | "Neutral / Mixed" | "Moderately Bearish" | "Strongly Bearish";
   overallAssessment: string;
 };
 
 type RawObject = Record<string, unknown>;
 
-const MAJOR_QUANTILES: ForecastQuantileName[] = ["P10", "P50", "P90"];
+export const META_PROPHET_QUANTILE_NAMES: ForecastQuantileName[] = ["P1", "P25", "P50", "P75", "P99"];
 
 function plainObject(value: unknown): RawObject {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as RawObject) : {};
@@ -133,7 +166,7 @@ function readQuantile(row: RawObject, name: string): number | null {
   return null;
 }
 
-function quantileStats(series: ForecastSeriesPoint[]): ForecastQuantileSummary {
+function quantileStats(series: ForecastSeriesPoint[], currentPrice: number): ForecastQuantileSummary {
   if (!series.length) throw new Error("Forecast quantile series is empty.");
   const values = series.map((item) => item.value);
   const average = values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -142,12 +175,18 @@ function quantileStats(series: ForecastSeriesPoint[]): ForecastQuantileSummary {
   const lower = average - 1.96 * standardDeviation;
   const upper = average + 1.96 * standardDeviation;
   const unusual = series.filter((item) => item.value < lower || item.value > upper);
+  const final = values[values.length - 1];
   return {
     series,
     average: rounded(average),
     minimum: rounded(Math.min(...values)),
     maximum: rounded(Math.max(...values)),
-    final: rounded(values[values.length - 1]),
+    standardDeviation: rounded(standardDeviation),
+    lowerBoundary: rounded(lower),
+    upperBoundary: rounded(upper),
+    final: rounded(final),
+    dollarChange: rounded(final - currentPrice),
+    percentChange: forecastPercentChange(final, currentPrice),
     unusualCount: unusual.length,
     unusual,
   };
@@ -201,11 +240,16 @@ function normalizeIndicatorContext(raw: unknown): ForecastAnalysisContext["indic
   };
 }
 
-function currentPosition(price: number, p10: number, p50: number, p90: number): ForecastAnalysisContext["currentPosition"] {
-  if (price < p10) return "below_p10";
-  if (price < p50) return "between_p10_p50";
-  if (price <= p90) return "between_p50_p90";
-  return "above_p90";
+function currentPosition(
+  price: number,
+  quantiles: Record<ForecastQuantileName, ForecastQuantileSummary>
+): ForecastAnalysisContext["currentPosition"] {
+  if (price < quantiles.P1.final) return "below_p1";
+  if (price < quantiles.P25.final) return "between_p1_p25";
+  if (price < quantiles.P50.final) return "between_p25_p50";
+  if (price < quantiles.P75.final) return "between_p50_p75";
+  if (price <= quantiles.P99.final) return "between_p75_p99";
+  return "above_p99";
 }
 
 function buildIndicatorAgreement(
@@ -250,6 +294,35 @@ function buildIndicatorAgreement(
   };
 }
 
+function buildRangeSummary(
+  label: string,
+  lowerQuantile: ForecastQuantileName,
+  upperQuantile: ForecastQuantileName,
+  normalizedRows: Array<{ date: string; quantiles: Record<string, number> }>,
+  currentPrice: number
+): ForecastRangeSummary {
+  const series = normalizedRows.map((row) => {
+    const range = row.quantiles[upperQuantile] - row.quantiles[lowerQuantile];
+    return { date: row.date, range: rounded(range), rangePercentOfCurrent: rounded((range / currentPrice) * 100) };
+  });
+  const startRange = series[0].range;
+  const finalRange = series[series.length - 1].range;
+  const changePercent = startRange > 0 ? rounded(((finalRange - startRange) / startRange) * 100) : 0;
+  const direction: RangeDirection = changePercent > 5 ? "expanding" : changePercent < -5 ? "contracting" : "stable";
+  return {
+    label,
+    lowerQuantile,
+    upperQuantile,
+    series,
+    startRange,
+    finalRange,
+    averageRange: rounded(series.reduce((sum, item) => sum + item.range, 0) / series.length),
+    finalRangePercentOfCurrent: rounded((finalRange / currentPrice) * 100),
+    changePercent,
+    direction,
+  };
+}
+
 export function buildForecastAnalysisContext(rawInput: unknown): ForecastAnalysisContext {
   const raw = plainObject(rawInput);
   const ticker = normalizeTicker(raw.ticker);
@@ -271,7 +344,7 @@ export function buildForecastAnalysisContext(rawInput: unknown): ForecastAnalysi
         const value = name ? readQuantile(row, name) : null;
         if (name && value !== null) quantiles[name] = rounded(value);
       });
-      MAJOR_QUANTILES.forEach((name) => {
+      META_PROPHET_QUANTILE_NAMES.forEach((name) => {
         const value = readQuantile(row, name);
         if (value !== null) quantiles[name] = rounded(value);
       });
@@ -283,59 +356,51 @@ export function buildForecastAnalysisContext(rawInput: unknown): ForecastAnalysi
   if (!normalizedRows.length) throw new Error("Forecast rows do not contain valid dates.");
 
   normalizedRows.forEach((row) => {
-    const p10 = finite(row.quantiles.P10);
-    const p50 = finite(row.quantiles.P50);
-    const p90 = finite(row.quantiles.P90);
-    if (p10 === null || p50 === null || p90 === null) throw new Error("P10, P50, and P90 are required for every forecast row.");
-    if (p10 > p50 || p50 > p90) throw new Error(`Forecast quantiles are out of order on ${row.date.slice(0, 10)}.`);
+    const values = META_PROPHET_QUANTILE_NAMES.map((name) => finite(row.quantiles[name]));
+    if (values.some((value) => value === null)) {
+      throw new Error("P1, P25, P50, P75, and P99 are required for every Meta Prophet forecast row. Regenerate legacy forecasts.");
+    }
+    if (values.some((value, index) => index > 0 && Number(values[index - 1]) > Number(value))) {
+      throw new Error(`Forecast quantiles are out of order on ${row.date.slice(0, 10)}.`);
+    }
   });
 
-  const quantileNames = Array.from(new Set(normalizedRows.flatMap((row) => Object.keys(row.quantiles))));
-  const summaries: Record<string, ForecastQuantileSummary> = {};
-  quantileNames.forEach((name) => {
-    const series = normalizedRows
-      .map((row) => ({ date: row.date, value: row.quantiles[name] }))
-      .filter((point) => Number.isFinite(point.value));
-    if (series.length === normalizedRows.length) summaries[name] = quantileStats(series);
-  });
-  const p10 = summaries.P10;
-  const p50 = summaries.P50;
-  const p90 = summaries.P90;
-  if (!p10 || !p50 || !p90) throw new Error("Complete P10, P50, and P90 series are required.");
-
+  const quantiles = Object.fromEntries(
+    META_PROPHET_QUANTILE_NAMES.map((name) => {
+      const series = normalizedRows.map((row) => ({ date: row.date, value: row.quantiles[name] }));
+      return [name, quantileStats(series, currentPrice)];
+    })
+  ) as Record<ForecastQuantileName, ForecastQuantileSummary>;
   const startDate = normalizedRows[0].date;
   const endDate = normalizedRows[normalizedRows.length - 1].date;
-  const scenario = (label: ForecastScenario["label"], quantile: ForecastQuantileName, target: number): ForecastScenario => ({
-    label,
-    quantile,
-    target: rounded(target),
-    percentChange: forecastPercentChange(target, currentPrice),
-    forecastEndDate: endDate,
-  });
-  const scenarios = {
-    bear: scenario("Bear", "P10", p10.final),
-    base: scenario("Base", "P50", p50.final),
-    bull: scenario("Bull", "P90", p90.final),
-  };
-  const uncertaintySeries = normalizedRows.map((row) => {
-    const range = row.quantiles.P90 - row.quantiles.P10;
+  const scenario = (label: ForecastScenario["label"], quantile: ForecastQuantileName): ForecastScenario => {
+    const target = quantiles[quantile].final;
     return {
-      date: row.date,
-      range: rounded(range),
-      rangePercentOfCurrent: rounded((range / currentPrice) * 100),
+      label,
+      quantile,
+      target,
+      dollarChange: rounded(target - currentPrice),
+      percentChange: forecastPercentChange(target, currentPrice),
+      forecastEndDate: endDate,
     };
-  });
-  const startRange = uncertaintySeries[0].range;
-  const finalRange = uncertaintySeries[uncertaintySeries.length - 1].range;
-  const rangeChangePercent = startRange > 0 ? rounded(((finalRange - startRange) / startRange) * 100) : 0;
-  const uncertaintyDirection = rangeChangePercent > 5 ? "expanding" : rangeChangePercent < -5 ? "contracting" : "stable";
+  };
+  const scenarios = {
+    extremeBear: scenario("Extreme Bear", "P1"),
+    bear: scenario("Bear", "P25"),
+    base: scenario("Base", "P50"),
+    bull: scenario("Bull", "P75"),
+    extremeBull: scenario("Extreme Bull", "P99"),
+  };
+  const central = buildRangeSummary("Central forecast range", "P25", "P75", normalizedRows, currentPrice);
+  const extreme = buildRangeSummary("Extreme forecast range", "P1", "P99", normalizedRows, currentPrice);
+  const p50Start = quantiles.P50.series[0].value;
+  const p50Final = quantiles.P50.final;
+  const p50DollarChange = rounded(p50Final - p50Start);
+  const p50PercentChange = p50Start > 0 ? forecastPercentChange(p50Final, p50Start) : 0;
+  const trendDirection: ForecastBias = p50PercentChange > 0.5 ? "bullish" : p50PercentChange < -0.5 ? "bearish" : "neutral";
   const indicators = normalizeIndicatorContext(raw.indicators);
   const indicatorAgreement = buildIndicatorAgreement(scenarios.base.percentChange, indicators);
 
-  const additionalQuantiles: Record<string, ForecastQuantileSummary> = {};
-  Object.entries(summaries).forEach(([name, summary]) => {
-    if (!MAJOR_QUANTILES.includes(name as ForecastQuantileName)) additionalQuantiles[name] = summary;
-  });
   return {
     ticker,
     currentPrice: rounded(currentPrice),
@@ -345,64 +410,71 @@ export function buildForecastAnalysisContext(rawInput: unknown): ForecastAnalysi
       endDate,
       horizon: normalizedRows.length,
       interval,
-      quantiles: { P10: p10, P50: p50, P90: p90 },
-      additionalQuantiles,
+      quantiles,
+      trend: {
+        quantile: "P50",
+        startValue: rounded(p50Start),
+        finalValue: p50Final,
+        dollarChange: p50DollarChange,
+        percentChange: p50PercentChange,
+        averageChangePerStep: rounded(p50DollarChange / Math.max(1, normalizedRows.length - 1)),
+        direction: trendDirection,
+      },
     },
     scenarios,
-    uncertainty: {
-      series: uncertaintySeries,
-      startRange,
-      finalRange,
-      averageRange: rounded(uncertaintySeries.reduce((sum, item) => sum + item.range, 0) / uncertaintySeries.length),
-      finalRangePercentOfCurrent: rounded((finalRange / currentPrice) * 100),
-      changePercent: rangeChangePercent,
-      direction: uncertaintyDirection,
-    },
-    currentPosition: currentPosition(currentPrice, p10.final, p50.final, p90.final),
+    ranges: { central, extreme },
+    currentPosition: currentPosition(currentPrice, quantiles),
     indicators,
     indicatorAgreement,
   };
 }
 
 export const FORECAST_ANALYSIS_SYSTEM_PROMPT = [
-  "You are Quantura's GPT-5.6 Luna quantitative forecast-analysis assistant.",
-  "You receive structured actual market data, Meta Prophet forecast quantiles, deterministic statistics, scenario percentages, uncertainty measures, anomaly flags, and technical indicators.",
+  "You are Quantura's GPT-5.6 Luna quantitative Meta Prophet forecast-analysis assistant.",
+  "You receive structured actual market data, canonical forecast-distribution quantiles, deterministic statistics, scenario percentages, uncertainty ranges, anomaly flags, forecast trend, and technical indicators.",
   "Use only the supplied data and analyze it objectively. Never start from a directional conclusion or evaluate only one thesis.",
-  "P10 is the lower forecast quantile, P50 is the median/base forecast, and P90 is the upper forecast quantile; none is guaranteed.",
-  "Every response must independently evaluate the Bull Case, Bear Case, and Base Case before selecting an overall bias.",
-  "The Bull Case must cite the final P90 target and its mathematically signed percentage change from current price, even if negative.",
-  "The Bear Case must cite the final P10 target and its mathematically signed percentage change from current price, even if positive.",
-  "The Base Case must cite the final P50 target and its mathematically signed percentage change from current price.",
-  "Technical Confirmation must explain confirmation, conflict, and contradictions such as bullish forecasts with overbought RSI or bearish forecasts with oversold RSI.",
-  "Risk / Uncertainty must analyze the full P10-P90 width, whether it expands, contracts, or remains stable, and unusual quantile observations.",
-  "Compare bullish and bearish evidence explicitly. Do not ignore contradictory evidence or imply certainty, guaranteed returns, or investment advice.",
-  "Choose Overall Bias only after both directional cases: Bullish, Moderately Bullish, Neutral / Mixed, Moderately Bearish, or Bearish.",
-  "Return valid JSON matching the supplied schema and do not add unsupported facts, news, fundamentals, or prices.",
+  "P1 is an extreme lower-tail scenario, P25 is the lower quartile, P50 is the median/base scenario, P75 is the upper quartile, and P99 is an extreme upper-tail scenario.",
+  "P99 does not mean the stock will reach P99. P1 does not mean the stock will fall to P1. P50 is a median forecast, not a guaranteed price. Quantiles represent distribution scenarios and extreme quantiles are tail scenarios.",
+  "Forecast Distribution must explain where current price sits relative to P1, P25, P50, P75, and P99.",
+  "Extreme Bear Case must cite P1 and its mathematically signed percentage change from current price.",
+  "Bear Case must cite P25 and its mathematically signed percentage change from current price.",
+  "Base Case must cite P50 and its mathematically signed percentage change from current price.",
+  "Bull Case must cite P75 and its mathematically signed percentage change from current price.",
+  "Extreme Bull Case must cite P99 and its mathematically signed percentage change from current price.",
+  "Technical Confirmation / Conflict must explain whether indicators confirm or contradict the distribution, including exhaustion risks.",
+  "Forecast Uncertainty must analyze both the P25-P75 central range and P1-P99 extreme range, including whether each expands, contracts, or remains stable.",
+  "Compare upside, downside, and contradictory evidence before choosing Overall Bias: Strongly Bullish, Moderately Bullish, Neutral / Mixed, Moderately Bearish, or Strongly Bearish.",
+  "Never imply certainty, guaranteed returns, support/resistance guarantees, or investment advice. Do not add unsupported facts, news, fundamentals, or prices.",
+  "Return valid JSON matching the supplied schema.",
 ].join(" ");
 
 export const FORECAST_ANALYSIS_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
-    forecastSummary: { type: "string", minLength: 1, maxLength: 1400 },
-    bullCase: { type: "string", minLength: 1, maxLength: 1400 },
+    forecastDistribution: { type: "string", minLength: 1, maxLength: 1400 },
+    extremeBearCase: { type: "string", minLength: 1, maxLength: 1400 },
     bearCase: { type: "string", minLength: 1, maxLength: 1400 },
     baseCase: { type: "string", minLength: 1, maxLength: 1400 },
+    bullCase: { type: "string", minLength: 1, maxLength: 1400 },
+    extremeBullCase: { type: "string", minLength: 1, maxLength: 1400 },
     technicalConfirmation: { type: "string", minLength: 1, maxLength: 1400 },
-    riskUncertainty: { type: "string", minLength: 1, maxLength: 1400 },
+    forecastUncertainty: { type: "string", minLength: 1, maxLength: 1400 },
     overallBias: {
       type: "string",
-      enum: ["Bullish", "Moderately Bullish", "Neutral / Mixed", "Moderately Bearish", "Bearish"],
+      enum: ["Strongly Bullish", "Moderately Bullish", "Neutral / Mixed", "Moderately Bearish", "Strongly Bearish"],
     },
     overallAssessment: { type: "string", minLength: 1, maxLength: 1400 },
   },
   required: [
-    "forecastSummary",
-    "bullCase",
+    "forecastDistribution",
+    "extremeBearCase",
     "bearCase",
     "baseCase",
+    "bullCase",
+    "extremeBullCase",
     "technicalConfirmation",
-    "riskUncertainty",
+    "forecastUncertainty",
     "overallBias",
     "overallAssessment",
   ],
@@ -416,7 +488,7 @@ export function buildForecastAgentRequest(context: ForecastAnalysisContext): {
   return {
     systemPrompt: FORECAST_ANALYSIS_SYSTEM_PROMPT,
     userPayload: {
-      task: "Analyze the complete Meta Prophet forecast distribution and technical confirmation using balanced bull, bear, and base cases.",
+      task: "Analyze the complete five-quantile Meta Prophet distribution, its two uncertainty ranges, technical confirmation, and all five scenarios before selecting a bias.",
       ...context,
     },
     responseSchema: FORECAST_ANALYSIS_RESPONSE_SCHEMA,
@@ -443,24 +515,34 @@ export function parseForecastAgentSections(value: unknown): ForecastAgentSection
   } else {
     parsed = plainObject(value);
   }
-  const allowedBiases = new Set(["Bullish", "Moderately Bullish", "Neutral / Mixed", "Moderately Bearish", "Bearish"]);
+  const allowedBiases = new Set([
+    "Strongly Bullish",
+    "Moderately Bullish",
+    "Neutral / Mixed",
+    "Moderately Bearish",
+    "Strongly Bearish",
+  ]);
   const result = {
-    forecastSummary: text(parsed.forecastSummary, 1400),
-    bullCase: text(parsed.bullCase, 1400),
+    forecastDistribution: text(parsed.forecastDistribution, 1400),
+    extremeBearCase: text(parsed.extremeBearCase, 1400),
     bearCase: text(parsed.bearCase, 1400),
     baseCase: text(parsed.baseCase, 1400),
+    bullCase: text(parsed.bullCase, 1400),
+    extremeBullCase: text(parsed.extremeBullCase, 1400),
     technicalConfirmation: text(parsed.technicalConfirmation, 1400),
-    riskUncertainty: text(parsed.riskUncertainty, 1400),
+    forecastUncertainty: text(parsed.forecastUncertainty, 1400),
     overallBias: text(parsed.overallBias, 40),
     overallAssessment: text(parsed.overallAssessment, 1400),
   };
   if (
-    !result.forecastSummary ||
-    !result.bullCase ||
+    !result.forecastDistribution ||
+    !result.extremeBearCase ||
     !result.bearCase ||
     !result.baseCase ||
+    !result.bullCase ||
+    !result.extremeBullCase ||
     !result.technicalConfirmation ||
-    !result.riskUncertainty ||
+    !result.forecastUncertainty ||
     !result.overallAssessment ||
     !allowedBiases.has(result.overallBias)
   ) {
@@ -471,18 +553,22 @@ export function parseForecastAgentSections(value: unknown): ForecastAgentSection
 
 export function renderForecastAgentMarkdown(sections: ForecastAgentSections): string {
   return [
-    "### Forecast Summary",
-    sections.forecastSummary,
-    "### Bull Case",
-    sections.bullCase,
+    "### Forecast Distribution",
+    sections.forecastDistribution,
+    "### Extreme Bear Case",
+    sections.extremeBearCase,
     "### Bear Case",
     sections.bearCase,
     "### Base Case",
     sections.baseCase,
-    "### Technical Confirmation",
+    "### Bull Case",
+    sections.bullCase,
+    "### Extreme Bull Case",
+    sections.extremeBullCase,
+    "### Technical Confirmation / Conflict",
     sections.technicalConfirmation,
-    "### Risk / Uncertainty",
-    sections.riskUncertainty,
+    "### Forecast Uncertainty",
+    sections.forecastUncertainty,
     `### Overall Bias: ${sections.overallBias}`,
     sections.overallAssessment,
   ].join("\n\n");
