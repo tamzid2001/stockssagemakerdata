@@ -106,6 +106,14 @@ def test_meta_prophet_is_the_only_forecast_indicator_workspace_and_ai_is_opt_in(
 
     assert "buildForecastWorkspaceContext" in client
     assert "((target - market.currentPrice) / market.currentPrice) * 100" in client
+    assert "Object.freeze([0.01, 0.25, 0.5, 0.75, 0.99])" in client
+    assert 'extremeBear: { label: "Extreme Bear", quantile: "P1"' in client
+    assert 'bear: { label: "Bear", quantile: "P25"' in client
+    assert 'base: { label: "Base", quantile: "P50"' in client
+    assert 'bull: { label: "Bull", quantile: "P75"' in client
+    assert 'extremeBull: { label: "Extreme Bull", quantile: "P99"' in client
+    assert 'addBand(q01Key, q99Key, "P1\\u2013P99 extreme range"' in client
+    assert 'addBand(q25Key, q75Key, "P25\\u2013P75"' in client
     assert 'fetch("/api/forecast-analysis"' in client
     assert 'data-action="forecast-ai-generate"' in client
     assert client.count("runForecastAiAnalysis({") == 1
@@ -115,6 +123,23 @@ def test_meta_prophet_is_the_only_forecast_indicator_workspace_and_ai_is_opt_in(
 
     assert 'ROUTES.post("/forecast-analysis"' in backend
     assert "FORECAST_ANALYSIS_SYSTEM_PROMPT" in analysis
+    for quantile in ("P1", "P25", "P50", "P75", "P99"):
+        assert quantile in analysis
+    assert "P99 does not mean the stock will reach P99" in analysis
+    assert "P1 does not mean the stock will fall to P1" in analysis
+
+
+def test_meta_prophet_pipeline_uses_canonical_ordered_quantiles_in_both_backends():
+    node_model = (ROOT / "functions_explore" / "src" / "forecastingScreener.ts").read_text()
+    node_api = (ROOT / "functions_explore" / "src" / "index.ts").read_text()
+    legacy_model = (ROOT / "functions_legacy_vercel" / "main.py").read_text()
+
+    assert "META_PROPHET_FORECAST_QUANTILES = Object.freeze([0.01, 0.25, 0.5, 0.75, 0.99])" in node_model
+    assert "quantiles: META_PROPHET_FORECAST_QUANTILES" in node_api
+    assert "Forecast quantile ordering failed" in node_model
+    assert "META_PROPHET_QUANTILES = [0.01, 0.25, 0.5, 0.75, 0.99]" in legacy_model
+    assert 'quantiles = list(META_PROPHET_QUANTILES) if service == "prophet"' in legacy_model
+    assert "Forecast quantile ordering failed" in legacy_model
 
 
 def test_explore_surface_and_generated_content_are_retired():

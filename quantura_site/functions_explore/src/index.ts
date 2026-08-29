@@ -19,7 +19,7 @@ import {
 } from "./autopilot";
 import {
   buildForecastFromHistory,
-  DEFAULT_FORECAST_QUANTILES,
+  META_PROPHET_FORECAST_QUANTILES,
   fetchYahooHistoryBars,
   runMarketDataScreener,
 } from "./forecastingScreener";
@@ -3219,7 +3219,19 @@ async function syncLegacyRequestsForUser(uid: string): Promise<void> {
     const published = postVisibility === "public";
     const metricsRaw = asPlainObject(data.metrics);
     const metrics: Record<string, unknown> = {};
-    ["lastClose", "medianEnd", "mae", "rmse", "mape", "coverage10_90", "historyPoints", "drift", "volatility"].forEach((key) => {
+    [
+      "lastClose",
+      "medianEnd",
+      "mae",
+      "rmse",
+      "mape",
+      "coverage10_90",
+      "coverage25_75",
+      "coverage1_99",
+      "historyPoints",
+      "drift",
+      "volatility",
+    ].forEach((key) => {
       const value = metricsRaw[key];
       if (value === null || value === undefined || value === "") return;
       if (typeof value === "number" && Number.isFinite(value)) {
@@ -7929,7 +7941,7 @@ ROUTES.post("/forecast/run", async (req, res) => {
       ticker,
       interval,
       horizon,
-      quantiles: DEFAULT_FORECAST_QUANTILES,
+      quantiles: META_PROPHET_FORECAST_QUANTILES,
       historyRows: history.rows,
     });
 
@@ -7946,6 +7958,7 @@ ROUTES.post("/forecast/run", async (req, res) => {
       horizon,
       service: "prophet",
       engine: forecast.engine,
+      quantileSchemaVersion: "meta_prophet_v2_p1_p25_p50_p75_p99",
       status: "completed",
       quantiles: forecast.quantiles,
       start: sanitizeText(body.start, 40),
@@ -7996,6 +8009,7 @@ ROUTES.post("/forecast/run", async (req, res) => {
       horizon,
       service: "prophet",
       engine: forecast.engine,
+      quantileSchemaVersion: "meta_prophet_v2_p1_p25_p50_p75_p99",
       status: "completed",
       quantiles: forecast.quantiles,
       forecastRows: forecast.forecastRows,
@@ -9062,7 +9076,7 @@ ROUTES.post("/forecast-analysis", async (req, res) => {
         cached.exists &&
         sanitizeText(data.userId, 220) === viewer?.uid &&
         sanitizeText(data.contextHash, 80) === contextHash &&
-        asPlainObject(data.sections).forecastSummary
+        asPlainObject(data.sections).forecastDistribution
       ) {
         res.status(200).json({
           ok: true,

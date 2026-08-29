@@ -5690,9 +5690,16 @@ def _trending_snapshots(tickers: list[str], max_rows: int = 18) -> dict[str, dic
     return snapshots
 
 
+META_PROPHET_QUANTILES = [0.01, 0.25, 0.5, 0.75, 0.99]
+
+
+def _quantile_key(quantile: float) -> str:
+    return f"q{int(round(float(quantile) * 100))}"
+
+
 def _parse_quantiles(raw: Any) -> list[float]:
     if raw is None:
-        return [0.1, 0.5, 0.9]
+        return list(META_PROPHET_QUANTILES)
 
     values: list[float] = []
     if isinstance(raw, str):
@@ -5857,14 +5864,29 @@ def _generate_quantile_forecast(
     for idx, ts in enumerate(dates):
         row = {"ds": ts.isoformat()}
         for quantile in quantiles:
-            row[f"q{int(round(quantile * 100)):02d}"] = round(float(np.quantile(sim_prices[:, idx], quantile)), 4)
+            row[_quantile_key(quantile)] = round(float(np.quantile(sim_prices[:, idx], quantile)), 4)
+        ordered = [float(row[_quantile_key(quantile)]) for quantile in quantiles]
+        if any(left > right for left, right in zip(ordered, ordered[1:])):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.INTERNAL,
+                f"Forecast quantile ordering failed for {ts.isoformat()}.",
+            )
         forecast_rows.append(row)
 
     ref_q = min(quantiles, key=lambda q: abs(q - 0.5)) if quantiles else 0.5
-    median_key = f"q{int(round(ref_q * 100)):02d}"
+    median_key = _quantile_key(ref_q)
     median_path = np.array([row.get(median_key, values[-1]) for row in forecast_rows], dtype=float)
     last_actual = float(values[-1])
     mae_recent = float(np.mean(np.abs(np.diff(values[-min(len(values), 90) :])))) if len(values) > 2 else 0.0
+    diagnostic_previous = values[-min(len(values), 253) : -1]
+    diagnostic_actual = values[-min(len(values) - 1, 252) :]
+    diagnostic_mean_log = np.log(diagnostic_previous) + drift
+    diagnostic_central_low = np.exp(diagnostic_mean_log + NormalDist().inv_cdf(0.25) * vol)
+    diagnostic_central_high = np.exp(diagnostic_mean_log + NormalDist().inv_cdf(0.75) * vol)
+    diagnostic_extreme_low = np.exp(diagnostic_mean_log + NormalDist().inv_cdf(0.01) * vol)
+    diagnostic_extreme_high = np.exp(diagnostic_mean_log + NormalDist().inv_cdf(0.99) * vol)
+    coverage_central = float(np.mean((diagnostic_actual >= diagnostic_central_low) & (diagnostic_actual <= diagnostic_central_high)))
+    coverage_extreme = float(np.mean((diagnostic_actual >= diagnostic_extreme_low) & (diagnostic_actual <= diagnostic_extreme_high)))
 
     return {
         "engine": "statistical_fallback",
@@ -5874,6 +5896,8 @@ def _generate_quantile_forecast(
         "metrics": {
             "lastClose": round(last_actual, 4),
             "mae": round(mae_recent, 4),
+            "coverage25_75": round(coverage_central, 4),
+            "coverage1_99": round(coverage_extreme, 4),
             "horizon": horizon,
             "medianEnd": round(float(median_path[-1]), 4),
             "drift": round(drift, 6),
@@ -5927,14 +5951,23 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
 
                 lower = in_sample["yhat_lower"].to_numpy(dtype=float)
                 upper = in_sample["yhat_upper"].to_numpy(dtype=float)
-                coverage = float(np.mean((actual[-tail:] >= lower[-tail:]) & (actual[-tail:] <= upper[-tail:])))
+                yhat_tail = yhat[-tail:]
+                z_80_diagnostic = NormalDist().inv_cdf(0.9)
+                sigma_tail = np.maximum((upper[-tail:] - lower[-tail:]) / (2 * z_80_diagnostic), 1e-6)
+                central_low = yhat_tail + NormalDist().inv_cdf(0.25) * sigma_tail
+                central_high = yhat_tail + NormalDist().inv_cdf(0.75) * sigma_tail
+                extreme_low = yhat_tail + NormalDist().inv_cdf(0.01) * sigma_tail
+                extreme_high = yhat_tail + NormalDist().inv_cdf(0.99) * sigma_tail
+                coverage_central = float(np.mean((actual[-tail:] >= central_low) & (actual[-tail:] <= central_high)))
+                coverage_extreme = float(np.mean((actual[-tail:] >= extreme_low) & (actual[-tail:] <= extreme_high)))
 
                 forecast_core["metrics"].update(
                     {
                         "mae": round(mae, 4),
                         "rmse": round(rmse, 4),
                         "mape": round(mape, 6),
-                        "coverage10_90": round(coverage, 4),
+                        "coverage25_75": round(coverage_central, 4),
+                        "coverage1_99": round(coverage_extreme, 4),
                         "historyPoints": int(len(df)),
                         "historyStart": str(df["ds"].iloc[0].isoformat()) if len(df) else "",
                         "historyEnd": str(df["ds"].iloc[-1].isoformat()) if len(df) else "",
@@ -5967,14 +6000,20 @@ def _run_prophet_engine(close_series: pd.Series, horizon: int, quantiles: list[f
             out_row: dict[str, Any] = {"ds": row["ds"].isoformat()}
             for q in quantiles:
                 z = normal.inv_cdf(q)
-                out_row[f"q{int(round(q * 100)):02d}"] = round(yhat + sigma * z, 4)
+                out_row[_quantile_key(q)] = round(max(0.000001, yhat + sigma * z), 4)
+            ordered = [float(out_row[_quantile_key(q)]) for q in quantiles]
+            if any(left > right for left, right in zip(ordered, ordered[1:])):
+                raise ValueError(f"Forecast quantile ordering failed for {row['ds'].isoformat()}.")
             rows.append(out_row)
 
         forecast_core["engine"] = "prophet"
-        forecast_core["serviceMessage"] = "Forecast generated with Quantura Horizon, quantiles derived from model uncertainty."
+        forecast_core["serviceMessage"] = (
+            "Forecast generated with Quantura Horizon using canonical P1, P25, P50, P75, and P99 "
+            "quantiles derived from Prophet model uncertainty."
+        )
         forecast_core["forecastRows"] = rows
         ref_q = min(quantiles, key=lambda q: abs(q - 0.5)) if quantiles else 0.5
-        ref_key = f"q{int(round(ref_q * 100)):02d}"
+        ref_key = _quantile_key(ref_q)
         forecast_core["metrics"]["medianEnd"] = rows[-1].get(ref_key) if rows else forecast_core["metrics"].get("medianEnd")
 
         return forecast_core
@@ -6098,7 +6137,7 @@ def _build_forecast_trade_rationale(
     last_close = _safe_float(metrics.get("lastClose")) or 0.0
     median_end = _safe_float(metrics.get("medianEnd"))
     drift = _safe_float(metrics.get("drift")) or 0.0
-    coverage = _safe_float(metrics.get("coverage10_90"))
+    coverage = _safe_float(metrics.get("coverage25_75"))
     volatility = _safe_float(metrics.get("volatility"))
 
     implied_return = None
@@ -6123,7 +6162,7 @@ def _build_forecast_trade_rationale(
 
     coverage_text = "coverage unavailable"
     if coverage is not None:
-        coverage_text = f"{coverage * 100:.1f}% coverage in the 10-90% band"
+        coverage_text = f"{coverage * 100:.1f}% coverage in the P25-P75 central range"
     vol_text = "volatility regime unavailable"
     if volatility is not None:
         vol_text = f"volatility near {volatility * 100:.2f}%"
@@ -6272,7 +6311,8 @@ def _render_forecast_report_html(
     rows = [
         ("Last Close", metrics.get("lastClose")),
         ("Median End", metrics.get("medianEnd")),
-        ("Coverage 10-90", metrics.get("coverage10_90")),
+        ("Coverage P25-P75", metrics.get("coverage25_75")),
+        ("Coverage P1-P99", metrics.get("coverage1_99")),
         ("Support", key_levels.get("support")),
         ("Resistance", key_levels.get("resistance")),
     ]
@@ -9431,7 +9471,7 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Horizon must be an integer.")
     if horizon <= 0:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Horizon must be greater than 0.")
-    quantiles = _parse_quantiles(data.get("quantiles"))
+    quantiles = list(META_PROPHET_QUANTILES) if service == "prophet" else _parse_quantiles(data.get("quantiles"))
     start = data.get("start")
 
     try:
@@ -9483,6 +9523,7 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "start": start,
         "quantiles": quantiles,
         "service": service,
+        "quantileSchemaVersion": "meta_prophet_v2_p1_p25_p50_p75_p99" if service == "prophet" else "custom",
         "engine": result.get("engine"),
         "status": result.get("status", "completed"),
         "serviceMessage": result.get("serviceMessage"),
@@ -9529,13 +9570,15 @@ def _handle_forecast_request(req: https_fn.CallableRequest, forced_service: str 
         "requestId": doc_ref.id,
         "status": request_doc["status"],
         "service": service,
+        "quantileSchemaVersion": request_doc["quantileSchemaVersion"],
         "engine": request_doc["engine"],
         "serviceMessage": request_doc["serviceMessage"],
         "quantiles": quantiles,
         "metrics": _serialize_for_firestore(metrics),
         "lastClose": metrics.get("lastClose"),
         "mae": metrics.get("mae"),
-        "coverage10_90": metrics.get("coverage10_90", "n/a"),
+        "coverage25_75": metrics.get("coverage25_75", "n/a"),
+        "coverage1_99": metrics.get("coverage1_99", "n/a"),
         "forecastPreview": request_doc["forecastPreview"],
         "forecastSeries": _serialize_for_firestore(forecast_rows_out),
         # Keep a compatibility alias for older clients while moving long-term storage to client-side only.

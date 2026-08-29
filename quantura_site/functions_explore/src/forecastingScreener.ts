@@ -68,7 +68,7 @@ export type MarketDataScreenerResponse = {
   serviceMessage: string;
 };
 
-export const DEFAULT_FORECAST_QUANTILES = Object.freeze([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99]);
+export const META_PROPHET_FORECAST_QUANTILES = Object.freeze([0.01, 0.25, 0.5, 0.75, 0.99]);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -612,9 +612,17 @@ function nextForecastDates(lastDate: Date, horizon: number, interval: HistoryInt
   return out;
 }
 
-function computeBacktestMetrics(closes: number[]): { mae: number; rmse: number; mape: number; coverage10_90: number; drift: number; volatility: number } {
+function computeBacktestMetrics(closes: number[]): {
+  mae: number;
+  rmse: number;
+  mape: number;
+  coverage25_75: number;
+  coverage1_99: number;
+  drift: number;
+  volatility: number;
+} {
   if (closes.length < 3) {
-    return { mae: 0, rmse: 0, mape: 0, coverage10_90: 0, drift: 0, volatility: 0 };
+    return { mae: 0, rmse: 0, mape: 0, coverage25_75: 0, coverage1_99: 0, drift: 0, volatility: 0 };
   }
   const returns = closes
     .slice(1)
@@ -622,28 +630,35 @@ function computeBacktestMetrics(closes: number[]): { mae: number; rmse: number; 
     .filter((value) => Number.isFinite(value));
   const drift = average(returns);
   const volatility = stddev(returns);
-  const z10 = inverseStandardNormal(0.1);
-  const z90 = inverseStandardNormal(0.9);
+  const z1 = inverseStandardNormal(0.01);
+  const z25 = inverseStandardNormal(0.25);
+  const z75 = inverseStandardNormal(0.75);
+  const z99 = inverseStandardNormal(0.99);
   const errors: number[] = [];
   const pctErrors: number[] = [];
-  let covered = 0;
+  let coveredCentral = 0;
+  let coveredExtreme = 0;
   for (let index = 1; index < closes.length; index += 1) {
     const previous = closes[index - 1];
     const actual = closes[index];
     const meanLog = Math.log(previous) + drift;
     const median = Math.exp(meanLog);
-    const low = Math.exp(meanLog + z10 * volatility);
-    const high = Math.exp(meanLog + z90 * volatility);
+    const extremeLow = Math.exp(meanLog + z1 * volatility);
+    const centralLow = Math.exp(meanLog + z25 * volatility);
+    const centralHigh = Math.exp(meanLog + z75 * volatility);
+    const extremeHigh = Math.exp(meanLog + z99 * volatility);
     const error = actual - median;
     errors.push(error);
     pctErrors.push(previous > 0 ? Math.abs(error) / previous : 0);
-    if (actual >= low && actual <= high) covered += 1;
+    if (actual >= centralLow && actual <= centralHigh) coveredCentral += 1;
+    if (actual >= extremeLow && actual <= extremeHigh) coveredExtreme += 1;
   }
   const mae = average(errors.map((value) => Math.abs(value)));
   const rmse = Math.sqrt(average(errors.map((value) => value ** 2)));
   const mape = average(pctErrors);
-  const coverage10_90 = errors.length ? covered / errors.length : 0;
-  return { mae, rmse, mape, coverage10_90, drift, volatility };
+  const coverage25_75 = errors.length ? coveredCentral / errors.length : 0;
+  const coverage1_99 = errors.length ? coveredExtreme / errors.length : 0;
+  return { mae, rmse, mape, coverage25_75, coverage1_99, drift, volatility };
 }
 
 function normalizeForecastQuantiles(raw: unknown): number[] {
@@ -659,7 +674,7 @@ function normalizeForecastQuantiles(raw: unknown): number[] {
       return true;
     })
     .sort((left, right) => left - right);
-  if (!values.length) return [...DEFAULT_FORECAST_QUANTILES];
+  if (!values.length) return [...META_PROPHET_FORECAST_QUANTILES];
   return values;
 }
 
@@ -700,6 +715,8 @@ export function buildForecastFromHistory(input: {
   const volatility = Math.max(stddev(returns), 0.0001);
   const futureDates = nextForecastDates(lastDate, horizon, interval);
 
+  // Quantiles are closed-form percentiles of the existing log-normal return model:
+  // exp(log(lastClose) + drift * h + z(q) * volatility * sqrt(h)).
   const forecastRows = futureDates.map((ds, stepIndex) => {
     const step = stepIndex + 1;
     const meanLog = Math.log(lastClose) + drift * step;
@@ -711,6 +728,13 @@ export function buildForecastFromHistory(input: {
     });
     if (row.q50 === undefined) {
       row.q50 = Number(Math.exp(meanLog).toFixed(6));
+    }
+    const orderedValues = quantiles.map((quantile) => Number(row[`q${Math.round(quantile * 100)}`]));
+    if (
+      orderedValues.some((value) => !Number.isFinite(value)) ||
+      orderedValues.some((value, index) => index > 0 && orderedValues[index - 1] > value)
+    ) {
+      throw new Error(`Forecast quantile ordering failed for ${ds}.`);
     }
     return row;
   });
@@ -740,11 +764,12 @@ export function buildForecastFromHistory(input: {
       mae: Number(metrics.mae.toFixed(6)),
       rmse: Number(metrics.rmse.toFixed(6)),
       mape: Number(metrics.mape.toFixed(6)),
-      coverage10_90: Number(metrics.coverage10_90.toFixed(6)),
+      coverage25_75: Number(metrics.coverage25_75.toFixed(6)),
+      coverage1_99: Number(metrics.coverage1_99.toFixed(6)),
       drift: Number(metrics.drift.toFixed(6)),
       volatility: Number(metrics.volatility.toFixed(6)),
     },
-    serviceMessage: `Quantura Horizon generated ${horizon} forward ${interval === "1h" ? "hourly" : "daily"} steps with fixed P01-P99, P10-P90, and P25-P75 bands from ${closes.length} historical bars.`,
+    serviceMessage: `Quantura Horizon generated ${horizon} forward ${interval === "1h" ? "hourly" : "daily"} steps with canonical P1, P25, P50, P75, and P99 forecast-distribution quantiles from ${closes.length} historical bars.`,
     tradeRationale: buildTradeRationale(lastClose, finalMedian, metrics.volatility, interval),
     historyRows: input.historyRows,
     engine: "quantura_quantile_drift_v1",
