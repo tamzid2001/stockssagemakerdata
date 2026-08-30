@@ -1,5 +1,5 @@
 google-cloud-firestore>=2.20.0
 google-cloud-secret-manager>=2.20.0
-openai>=1.0.0
+openai==1.54.3
 requests>=2.33.0
 requests-oauthlib>=2.0.0
