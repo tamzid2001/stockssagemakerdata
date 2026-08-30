@@ -21,6 +21,8 @@ PUBLIC_ORIGIN="${PUBLIC_ORIGIN:-https://quantura.studio}"
 SHOP_ALLOWED_ORIGINS="${SHOP_ALLOWED_ORIGINS:-https://quantura.studio,https://www.quantura.studio,https://quantura-e2e3d.web.app,https://quantura-e2e3d.firebaseapp.com}"
 PLAY_INTEGRITY_ANDROID_PACKAGE="${PLAY_INTEGRITY_ANDROID_PACKAGE:-com.quantura.quanturaapp}"
 REQUIRE_PLAY_INTEGRITY="${REQUIRE_PLAY_INTEGRITY:-false}"
+AIKIDO_BLOCK="${AIKIDO_BLOCK:-false}"
+AIKIDO_NODE_OPTIONS="${AIKIDO_NODE_OPTIONS:--r @aikidosec/firewall/instrument}"
 AMAZON_NOVA_BASE_URL="${AMAZON_NOVA_BASE_URL:-}"
 FISCALDATA_REFRESH_TOPIC="${FISCALDATA_REFRESH_TOPIC:-fiscaldata-refresh}"
 AUTOPILOT_RECONCILE_TOPIC="${AUTOPILOT_RECONCILE_TOPIC:-quantura-autopilot-reconcile}"
@@ -116,6 +118,7 @@ if [[ -z "${PROJECT_ID}" || "${PROJECT_ID}" == "(unset)" ]]; then
 fi
 
 EXTRA_FLAGS=()
+AIKIDO_SECRET_BINDING=""
 
 if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
   AUTO_SECRET_BINDINGS=()
@@ -193,11 +196,34 @@ if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
   fi
 fi
 
+# Zen protects the Express HTTP functions only. Keep its runtime token out of
+# unrelated triggers, SSR, and newsletter services, including when callers
+# provide their own GCLOUD_SET_SECRETS override.
+if "${GCLOUD_BIN}" secrets describe "AIKIDO_TOKEN" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+  AIKIDO_SECRET_BINDING="AIKIDO_TOKEN=projects/${PROJECT_ID}/secrets/AIKIDO_TOKEN:latest"
+fi
+
 if [[ -n "${GCLOUD_SET_SECRETS:-}" ]]; then
   EXTRA_FLAGS+=(--set-secrets="${GCLOUD_SET_SECRETS}")
 fi
 if [[ -n "${REMOVE_SECRETS_KEYS}" ]]; then
   EXTRA_FLAGS+=(--remove-secrets="${REMOVE_SECRETS_KEYS}")
+fi
+
+EXPRESS_EXTRA_FLAGS=()
+EXPRESS_SET_SECRETS="${GCLOUD_SET_SECRETS:-}"
+if [[ -n "${AIKIDO_SECRET_BINDING}" ]]; then
+  if [[ -n "${EXPRESS_SET_SECRETS}" ]]; then
+    EXPRESS_SET_SECRETS="${EXPRESS_SET_SECRETS},${AIKIDO_SECRET_BINDING}"
+  else
+    EXPRESS_SET_SECRETS="${AIKIDO_SECRET_BINDING}"
+  fi
+fi
+if [[ -n "${EXPRESS_SET_SECRETS}" ]]; then
+  EXPRESS_EXTRA_FLAGS+=(--set-secrets="${EXPRESS_SET_SECRETS}")
+fi
+if [[ -n "${REMOVE_SECRETS_KEYS}" ]]; then
+  EXPRESS_EXTRA_FLAGS+=(--remove-secrets="${REMOVE_SECRETS_KEYS}")
 fi
 
 if [[ "${LOCAL_FUNCTIONS_BUILD}" == "true" ]]; then
@@ -232,8 +258,8 @@ echo "==> Deploying quanturaExploreApi (Gen2)"
   --entry-point=quanturaExploreApi \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN},PLAY_INTEGRITY_ANDROID_PACKAGE=${PLAY_INTEGRITY_ANDROID_PACKAGE},REQUIRE_PLAY_INTEGRITY=${REQUIRE_PLAY_INTEGRITY},AMAZON_NOVA_BASE_URL=${AMAZON_NOVA_BASE_URL}" \
-  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+  --set-env-vars="PUBLIC_ORIGIN=${PUBLIC_ORIGIN},PLAY_INTEGRITY_ANDROID_PACKAGE=${PLAY_INTEGRITY_ANDROID_PACKAGE},REQUIRE_PLAY_INTEGRITY=${REQUIRE_PLAY_INTEGRITY},AMAZON_NOVA_BASE_URL=${AMAZON_NOVA_BASE_URL},AIKIDO_BLOCK=${AIKIDO_BLOCK},NODE_OPTIONS=${AIKIDO_NODE_OPTIONS}" \
+  ${EXPRESS_EXTRA_FLAGS[@]+"${EXPRESS_EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying shopApi (Gen2)"
 "${GCLOUD_BIN}" functions deploy shopApi \
@@ -246,8 +272,8 @@ echo "==> Deploying shopApi (Gen2)"
   --entry-point=shopApi \
   --trigger-http \
   --allow-unauthenticated \
-  --set-env-vars="^##^PUBLIC_ORIGIN=${PUBLIC_ORIGIN}##SHOP_ALLOWED_ORIGINS=${SHOP_ALLOWED_ORIGINS}" \
-  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
+  --set-env-vars="^##^PUBLIC_ORIGIN=${PUBLIC_ORIGIN}##SHOP_ALLOWED_ORIGINS=${SHOP_ALLOWED_ORIGINS}##AIKIDO_BLOCK=${AIKIDO_BLOCK}##NODE_OPTIONS=${AIKIDO_NODE_OPTIONS}" \
+  ${EXPRESS_EXTRA_FLAGS[@]+"${EXPRESS_EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Firestore trigger: onForecastCreated"
 "${GCLOUD_BIN}" functions deploy onForecastCreated \

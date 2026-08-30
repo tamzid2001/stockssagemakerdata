@@ -1093,6 +1093,22 @@ section.studio-section#terminal {
   margin-top: 14px;
 }
 
+.aikido-audit-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-top: 16px;
+  border-radius: 8px;
+  outline-offset: 4px;
+}
+
+.aikido-audit-badge img {
+  display: block;
+  width: auto;
+  max-width: min(100%, 210px);
+  height: 40px;
+}
+
 .badge-chip {
   display: inline-flex;
   align-items: center;
