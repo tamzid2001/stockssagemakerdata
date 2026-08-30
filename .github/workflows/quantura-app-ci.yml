@@ -85,6 +85,12 @@ jobs:
         run: |
           npm run build --prefix quantura_site/functions_explore
 
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
       - name: Run Forecast API Firestore integration tests
         working-directory: quantura_site
         run: |
