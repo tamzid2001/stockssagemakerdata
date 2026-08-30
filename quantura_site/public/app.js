@@ -26628,6 +26628,16 @@
           await linkPendingCredentialIfPresent({ silent: true });
           return auth.currentUser || current;
         } catch (linkError) {
+          // Password credentials for an existing account cannot be linked to the
+          // temporary anonymous user. In that case the submitted password must
+          // be verified by the normal sign-in path before generic provider
+          // collision recovery runs. Otherwise recovery consumes the collision
+          // and the user has to submit the same sign-in form repeatedly.
+          if (String(methodHint || "").trim().toLowerCase() === "password" && isAuthCollision(linkError?.code)) {
+            const result = await fallbackSignIn();
+            await linkPendingCredentialIfPresent({ silent: true });
+            return result?.user || auth.currentUser || null;
+          }
           if (await recoverFromAuthCollision(linkError, { methodHint })) {
             return auth.currentUser || null;
           }

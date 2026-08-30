@@ -9,6 +9,20 @@ import { hashForecastApiKey, normalizeForecastDraft } from "./quanturaForecasts"
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 
+async function waitForAuditRecords(
+  collection: FirebaseFirestore.CollectionReference,
+  minimum: number,
+  timeoutMs = 3_000,
+): Promise<FirebaseFirestore.QuerySnapshot> {
+  const deadline = Date.now() + timeoutMs;
+  let snapshot = await collection.get();
+  while (snapshot.size < minimum && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    snapshot = await collection.get();
+  }
+  return snapshot;
+}
+
 test("versioned API enforces authentication, scopes, revocation and public redaction", { skip: !emulatorAvailable }, async () => {
   const projectId = process.env.GOOGLE_CLOUD_PROJECT || "quantura-forecast-integration";
   const firebaseApp = admin.initializeApp({ projectId }, `forecast-route-test-${Date.now()}`);
@@ -106,7 +120,7 @@ test("versioned API enforces authentication, scopes, revocation and public redac
     assert.equal(revoked.status, 401);
     assert.equal((await revoked.json() as any).error.code, "API_KEY_REVOKED");
 
-    const audits = await db.collection("quantura_forecast_api_usage").get();
+    const audits = await waitForAuditRecords(db.collection("quantura_forecast_api_usage"), 4);
     assert.ok(audits.size >= 4);
     assert.equal(JSON.stringify(audits.docs.map((doc) => doc.data())).includes(rawKey), false);
   } finally {

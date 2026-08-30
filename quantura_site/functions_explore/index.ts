@@ -1,3 +1,4 @@
+import "@aikidosec/firewall";
 import express from "express";
 import { quanturaExploreApi, shopApi } from "./src/index";
 
