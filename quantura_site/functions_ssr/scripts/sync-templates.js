@@ -27,6 +27,9 @@ const main = async () => {
   for (const file of files) {
     if (!file.endsWith(".html")) continue;
     const rel = path.relative(sourceRoot, file);
+    // Ignore editor/OS duplicate files such as "page 2.html". Only canonical
+    // source pages belong in the deployable SSR template tree.
+    if (/\s\d+\.html$/i.test(rel)) continue;
     const dest = path.join(destRoot, rel);
     await fs.mkdir(path.dirname(dest), { recursive: true });
     await fs.copyFile(file, dest);

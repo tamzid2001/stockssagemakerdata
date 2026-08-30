@@ -14,7 +14,19 @@ const baseUrl = String(process.env.SITE_URL || "https://quantura.studio").replac
 
 const EXCLUDE_FILES = new Set([
   "admin.html",
+  "forecast-admin.html",
+  "forecast-detail.html",
 ]);
+
+const FORECAST_HUB_ROUTES = [
+  "/forecasts/markets",
+  "/forecasts/earnings",
+  "/forecasts/corporate",
+  "/forecasts/technology",
+  "/forecasts/politics",
+  "/forecasts/economics",
+  "/forecasts/sports",
+];
 
 async function walkHtmlFiles(dir, out = []) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -54,6 +66,7 @@ async function collectRoutes() {
   for (const filePath of files) {
     const rel = path.relative(pagesRoot, filePath);
     if (EXCLUDE_FILES.has(path.basename(rel))) continue;
+    if (/\s\d+\.html$/i.test(rel)) continue;
 
     const html = await fs.readFile(filePath, "utf8");
     if (hasNoIndex(html)) continue;
@@ -74,6 +87,15 @@ async function collectRoutes() {
     routes.push({ route: "/blog/rss.xml", lastmod: rssStat.mtime.toISOString().slice(0, 10) });
   } catch {
     // RSS feed is optional.
+  }
+
+  const forecastPagePath = path.join(pagesRoot, "forecasts.html");
+  try {
+    const forecastStat = await fs.stat(forecastPagePath);
+    const lastmod = forecastStat.mtime.toISOString().slice(0, 10);
+    for (const route of FORECAST_HUB_ROUTES) routes.push({ route, lastmod });
+  } catch {
+    // Forecast hub is optional during staged rollouts.
   }
 
   const dedup = new Map();

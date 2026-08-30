@@ -1,0 +1,11 @@
+version: v1
+max_results: 5
+required_metadata:
+  - publication_timestamp
+  - ingestion_timestamp
+  - source
+  - document_type
+backtest_filters:
+  publication_timestamp_lte_as_of: true
+  ingestion_timestamp_lte_as_of: true
+fail_on_future_document: true

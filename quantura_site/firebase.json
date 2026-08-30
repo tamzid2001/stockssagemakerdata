@@ -117,6 +117,8 @@
       { "source": "/api/sports/mlb/**", "function": "quanturaExploreApi" },
       { "source": "/api/forecast", "function": "quanturaExploreApi" },
       { "source": "/api/forecast/**", "function": "quanturaExploreApi" },
+      { "source": "/api/forecasts/**", "function": "quanturaExploreApi" },
+      { "source": "/api/v1/**", "function": "quanturaExploreApi" },
       { "source": "/api/screener", "function": "quanturaExploreApi" },
       { "source": "/api/screener/**", "function": "quanturaExploreApi" },
       { "source": "/api/stocks/screener", "function": "quanturaExploreApi" },
@@ -179,6 +181,9 @@
       { "source": "/privacy", "function": "ssr" },
       { "source": "/disclaimer", "function": "ssr" },
       { "source": "/admin", "function": "ssr" },
+      { "source": "/admin/forecasts", "function": "ssr" },
+      { "source": "/forecasts", "function": "ssr" },
+      { "source": "/forecasts/**", "function": "ssr" },
 
       { "source": "/blog", "function": "ssr" },
       { "source": "/blog/posts/**", "function": "ssr" },

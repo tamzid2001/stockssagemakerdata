@@ -1,0 +1,71 @@
+[
+  {
+    "case": "prophet_chronos_disagreement",
+    "input": {
+      "current_price": 100,
+      "scenarios": {
+        "bear": {"target": 92, "percent_change": -8},
+        "base": {"target": 101, "percent_change": 1},
+        "bull": {"target": 111, "percent_change": 11}
+      },
+      "model_agreement": {"level": "conflicting"},
+      "selected_forecast": {"validation_metrics": {"sample_size": 80, "mean_absolute_calibration_error": 0.08}},
+      "ranges": {"extreme": {"percent_of_current": 42}},
+      "retrieved_context": []
+    },
+    "output": {
+      "overall_bias": "neutral_mixed",
+      "signal": "HOLD",
+      "confidence": 0.52,
+      "forecast_distribution": "The median is close to current price while models disagree and the tail range is wide.",
+      "bull_case": {"target": 111, "change_pct": 11, "drivers": ["P75 offers upside, but disagreement weakens confirmation."]},
+      "base_case": {"target": 101, "change_pct": 1, "drivers": ["P50 implies little displacement."]},
+      "bear_case": {"target": 92, "change_pct": -8, "drivers": ["P25 retains material downside."]},
+      "extreme_bear_case": "P1 is a lower-tail scenario rather than a prediction of certainty.",
+      "extreme_bull_case": "P99 is an upper-tail scenario rather than a prediction of certainty.",
+      "uncertainty": "Wide tails and model disagreement reduce conviction.",
+      "risk_level": "high",
+      "model_agreement": "conflicting",
+      "quantitative_evidence": ["P50 is only 1% above current price."],
+      "contextual_evidence": [],
+      "conflicting_evidence": ["P75 upside coexists with P25 downside and model disagreement."],
+      "reason_codes": ["MODEL_DISAGREEMENT", "WIDE_TAILS", "BOTH_SIDES_REVIEWED"],
+      "tool_disclosure": []
+    }
+  },
+  {
+    "case": "bullish_forecast_overbought_technicals",
+    "input": {
+      "current_price": 100,
+      "scenarios": {
+        "bear": {"target": 96, "percent_change": -4},
+        "base": {"target": 108, "percent_change": 8},
+        "bull": {"target": 116, "percent_change": 16}
+      },
+      "model_agreement": {"level": "strong"},
+      "indicators": {"rsi": {"value": 76, "regime": "overbought"}},
+      "selected_forecast": {"validation_metrics": {"sample_size": 140, "mean_absolute_calibration_error": 0.05}},
+      "ranges": {"extreme": {"percent_of_current": 28}},
+      "retrieved_context": []
+    },
+    "output": {
+      "overall_bias": "moderately_bullish",
+      "signal": "LONG",
+      "confidence": 0.66,
+      "forecast_distribution": "The validated median and upper quartile are above current price.",
+      "bull_case": {"target": 116, "change_pct": 16, "drivers": ["P75 and model agreement support upside."]},
+      "base_case": {"target": 108, "change_pct": 8, "drivers": ["P50 is positive."]},
+      "bear_case": {"target": 96, "change_pct": -4, "drivers": ["P25 and overbought RSI preserve pullback risk."]},
+      "extreme_bear_case": "P1 remains a nonzero lower-tail risk.",
+      "extreme_bull_case": "P99 remains possible but should not be treated as achievable with certainty.",
+      "uncertainty": "The range is moderate, but technical exhaustion reduces confidence.",
+      "risk_level": "medium",
+      "model_agreement": "strong",
+      "quantitative_evidence": ["P50 is 8% above current price."],
+      "contextual_evidence": [],
+      "conflicting_evidence": ["RSI is overbought despite bullish model agreement."],
+      "reason_codes": ["BULLISH_MODEL_AGREEMENT", "OVERBOUGHT_CONFLICT", "BOTH_SIDES_REVIEWED"],
+      "tool_disclosure": []
+    }
+  }
+]

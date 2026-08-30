@@ -1,0 +1,10 @@
+numpy>=1.26
+pandas>=2.0
+exchange-calendars>=4.5
+openai>=1.54.3
+PyYAML>=6.0
+yfinance>=0.2.54
+prophet>=1.1.6
+
+# Chronos-2 is intentionally installed only on runners/inference hosts that
+# request it. Use: pip install chronos-forecasting

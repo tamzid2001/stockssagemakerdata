@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura Forecasts | Prospective Event Forecasts</title>
+    <meta name="description" content="Browse timestamped Quantura forecasts for unresolved events across markets, earnings, business, technology, policy, economics, and sports." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://quantura.studio/forecasts" />
+    <meta property="og:title" content="Quantura Forecasts — Tomorrow's Headlines, Today" />
+    <meta property="og:description" content="Prospective, timestamped event forecasts scored after resolution." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quantura.studio/forecasts" />
+    <meta property="og:image" content="https://quantura.studio/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura Forecasts" />
+    <meta name="twitter:description" content="Timestamped predictions for unresolved real-world events, with resolution rules and calibration." />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260405b" />
+    <link rel="stylesheet" href="/styles.css?v=20260830f" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js?v=20260830f"></script>
+    <script defer src="/forecasts.js?v=20260830a"></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Quantura Forecasts",
+        "description": "Prospective event forecasts that are timestamped before outcomes and scored after resolution.",
+        "url": "https://quantura.studio/forecasts",
+        "publisher": { "@type": "Organization", "name": "Quantura", "url": "https://quantura.studio/" }
+      }
+    </script>
+  </head>
+  <body class="forecast-feed-page">
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a class="active" href="/forecasts" aria-current="page"><i class="iconoir-brain-research" aria-hidden="true"></i><span>Forecasts</span></a>
+          <a href="/research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
+          <a href="/blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
+          <a href="/pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
+        </nav>
+        <div class="nav-actions">
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="forecast-hero">
+        <div class="container forecast-hero-grid">
+          <div>
+            <div class="eyebrow">Prospective intelligence · scored after resolution</div>
+            <h1>Quantura Forecasts</h1>
+            <p class="forecast-subtitle">Tomorrow's Headlines, Today</p>
+            <p>Quantura forecasts events that may shape markets, business, politics, technology, and sports. Every prediction is timestamped before the outcome is known and scored after resolution.</p>
+            <div class="forecast-trust-row" aria-label="Forecast integrity principles">
+              <span><i class="iconoir-lock" aria-hidden="true"></i> Immutable publication snapshots</span>
+              <span><i class="iconoir-calendar" aria-hidden="true"></i> Objective resolution rules</span>
+              <span><i class="iconoir-stats-up-square" aria-hidden="true"></i> Proper probability scoring</span>
+            </div>
+          </div>
+          <aside class="forecast-method-card">
+            <span class="forecast-label">FORECAST METHODOLOGY</span>
+            <h2>A prediction record, not a news feed</h2>
+            <p>Each card begins with a formal unresolved question. The possible future headline is a concise description of one forecast scenario and is never presented as an event that already happened.</p>
+            <a class="cta secondary" href="#calibration">View prediction record</a>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section forecast-browser" aria-labelledby="tomorrow-headlines-title">
+        <div class="container">
+          <div class="forecast-section-heading">
+            <div>
+              <div class="eyebrow">Prospective feed</div>
+              <h2 id="tomorrow-headlines-title">Tomorrow's Headlines</h2>
+            </div>
+            <div id="forecast-count" class="small muted" aria-live="polite">Loading forecast record…</div>
+          </div>
+
+          <form id="forecast-filter-form" class="forecast-filter-bar" role="search">
+            <div class="field forecast-search-field">
+              <label class="label" for="forecast-search">Search forecasts</label>
+              <input id="forecast-search" type="search" name="search" placeholder="NVDA, Fed, Apple, tariffs, Super Bowl…" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label class="label" for="forecast-category">Category</label>
+              <select id="forecast-category" name="category">
+                <option value="">All categories</option>
+                <option value="markets">Markets</option>
+                <option value="earnings">Earnings</option>
+                <option value="corporate">Corporate</option>
+                <option value="products_technology">Products &amp; technology</option>
+                <option value="politics_policy">Politics &amp; policy</option>
+                <option value="economics">Economics</option>
+                <option value="sports">Sports</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="forecast-status">Status</label>
+              <select id="forecast-status" name="status">
+                <option value="pending">Unresolved</option>
+                <option value="resolved_yes">Resolved yes</option>
+                <option value="resolved_no">Resolved no</option>
+                <option value="resolved_partial">Resolved partial</option>
+                <option value="">All public</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="forecast-sort">View</label>
+              <select id="forecast-sort" name="sort">
+                <option value="recent">Most recent</option>
+                <option value="changed">Recently changed</option>
+                <option value="confidence">Highest confidence</option>
+                <option value="resolving">Resolving soon</option>
+              </select>
+            </div>
+            <button class="cta secondary" id="forecast-clear" type="button">Clear</button>
+          </form>
+
+          <div id="forecast-feed-state" class="forecast-state" aria-live="polite">Loading timestamped forecasts…</div>
+          <div id="forecast-feed" class="forecast-card-grid" hidden></div>
+          <div class="forecast-load-more-wrap"><button id="forecast-load-more" class="cta secondary" type="button" hidden>Load more forecasts</button></div>
+        </div>
+      </section>
+
+      <section class="section forecast-record-section" id="calibration" aria-labelledby="calibration-title">
+        <div class="container">
+          <div class="forecast-section-heading">
+            <div>
+              <div class="eyebrow">Public prediction record</div>
+              <h2 id="calibration-title">Calibration and resolution</h2>
+              <p class="small">Brier scores evaluate probability quality after binary outcomes resolve. A lower average Brier score is better; bucket comparisons show whether stated probabilities match observed frequencies.</p>
+            </div>
+          </div>
+          <div id="forecast-performance-summary" class="forecast-metric-grid" aria-live="polite"></div>
+          <div class="table-wrap forecast-calibration-table-wrap">
+            <table class="data-table" id="forecast-calibration-table">
+              <thead><tr><th>Probability bucket</th><th>Forecasts</th><th>Predicted average</th><th>Actual frequency</th><th>Average Brier</th></tr></thead>
+              <tbody><tr><td colspan="5">Calibration data will appear after forecasts resolve.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section forecast-api-cta">
+        <div class="container content-grid">
+          <div>
+            <div class="eyebrow">Forecast Intelligence API</div>
+            <h2>Prospective data with preserved probability trajectories</h2>
+            <p>Enterprise and data-licensing customers can query scoped, versioned forecast records, historical probability revisions, resolutions, calibration, and immutable dataset releases.</p>
+          </div>
+          <div class="hero-actions"><a class="cta" href="/contact">Request API access</a><a class="cta secondary" href="/research#forecast-api">Read the methodology</a></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer"><div class="container footer-grid"><div><div class="logo">QUANTURA</div><p class="small">Decision intelligence built around evidence, uncertainty, and auditable outcomes.</p></div><div class="small"><strong>Forecasts</strong><div><a href="/forecasts">All forecasts</a></div><div><a href="/forecasts/earnings">Earnings</a></div><div><a href="/forecasts/politics">Politics &amp; policy</a></div><div><a href="/forecasts/sports">Sports</a></div></div><div class="small"><strong>Legal</strong><div><a href="/terms">Terms</a></div><div><a href="/privacy">Privacy</a></div><div><a href="/disclaimer">Disclaimer</a></div></div></div></footer>
+  </body>
+</html>

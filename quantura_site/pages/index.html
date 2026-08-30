@@ -42,6 +42,7 @@
 	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
 	    <script defer src="/app.js?v=20260405a"></script>
+    <script defer src="/forecasts.js?v=20260830a"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
     <script defer src="/marketing-carousel.js"></script>
 
@@ -140,6 +141,7 @@
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/forecasts" data-analytics="nav_forecasts"><i class="iconoir-brain-research" aria-hidden="true"></i><span>Forecasts</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
@@ -202,6 +204,21 @@
           </div>
         </div>
 		      </section>
+
+      <section class="section forecast-home-preview-section" aria-labelledby="home-forecast-title">
+        <div class="container">
+          <div class="forecast-section-heading">
+            <div>
+              <div class="eyebrow">Prospective intelligence · timestamped before outcomes</div>
+              <h2 id="home-forecast-title">Tomorrow's Headlines, Today</h2>
+              <p class="small">Quantura forecasts unresolved events that may shape markets, business, policy, technology, and sports. Every prediction has a formal resolution rule and is scored after reality arrives.</p>
+            </div>
+            <a class="cta secondary" href="/forecasts">Explore Forecasts</a>
+          </div>
+          <div class="forecast-label-row" style="margin-bottom:18px;"><span class="forecast-label">FORECAST</span><span class="forecast-not-occurred">UNRESOLVED EVENTS ARE CLEARLY LABELED</span></div>
+          <div id="home-forecast-preview" class="forecast-card-grid"><div class="forecast-state">Loading the reviewed forecast record…</div></div>
+        </div>
+      </section>
 
       <section class="section section-compact quantura-rn-injection-shell">
         <div class="container">

@@ -1,0 +1,4 @@
+-r requirements-forecast-intelligence.txt
+fastapi>=0.115,<1
+pydantic>=2.9,<3
+uvicorn[standard]>=0.32,<1
