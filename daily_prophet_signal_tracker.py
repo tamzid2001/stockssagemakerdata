@@ -732,7 +732,15 @@ def write_run_manifest(
         payload.update(extra)
 
     manifest = json.dumps(payload, indent=2) + "\n"
+    out_dir_real = os.path.realpath(out_dir)
+    out_manifest_real = os.path.realpath(out_dir / "run_manifest.json")
+    if os.path.commonpath([out_dir_real, out_manifest_real]) != out_dir_real:
+        raise Exception("Invalid file path")
     (out_dir / "run_manifest.json").write_text(manifest, encoding="utf-8")
+    state_dir_real = os.path.realpath(state_dir)
+    state_manifest_real = os.path.realpath(state_dir / "last_run_manifest.json")
+    if os.path.commonpath([state_dir_real, state_manifest_real]) != state_dir_real:
+        raise Exception("Invalid file path")
     (state_dir / "last_run_manifest.json").write_text(manifest, encoding="utf-8")
 
 
@@ -914,8 +922,15 @@ def run(args):
     pd.DataFrame(errors).to_csv(out_dir / "errors.csv", index=False)
 
     signal_list = [] if curr_active.empty else curr_active["ticker"].tolist()
+    out_dir_real = os.path.realpath(out_dir)
+    signal_txt_real = os.path.realpath(out_dir / "signal_tickers.txt")
+    if os.path.commonpath([out_dir_real, signal_txt_real]) != out_dir_real:
+        raise Exception("Invalid file path")
     with open(out_dir / "signal_tickers.txt", "w", encoding="utf-8") as handle:
         handle.write("\n".join(signal_list))
+    signal_json_real = os.path.realpath(out_dir / "signal_tickers.json")
+    if os.path.commonpath([out_dir_real, signal_json_real]) != out_dir_real:
+        raise Exception("Invalid file path")
     with open(out_dir / "signal_tickers.json", "w", encoding="utf-8") as handle:
         json.dump(signal_list, handle, indent=2)
 
