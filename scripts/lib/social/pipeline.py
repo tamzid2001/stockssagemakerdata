@@ -23,6 +23,8 @@ def _event(name: str, **fields: Any) -> None:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    if ".." in str(path):
+        raise Exception("Invalid file path")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
 
