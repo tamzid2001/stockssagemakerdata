@@ -51,15 +51,19 @@ def colab_download_price_csv(ticker: str, start: str, end: str, interval: str = 
     if not out_path:
         out_path = f"{ticker.upper()}_{start}_{end}.csv"
     ensure_dir(os.path.dirname(out_path) or "./")
-    with open(out_path, "w", encoding="utf-8") as f:
+    base_real = os.path.realpath("./")
+    target_real = os.path.realpath(out_path)
+    if os.path.commonpath([base_real, target_real]) != base_real:
+        raise Exception("Invalid file path")
+    with open(target_real, "w", encoding="utf-8") as f:
         f.write(csv_clean)
     # If running in Colab, trigger a download in the browser
     if colab_files is not None:
         try:
-            colab_files.download(out_path)
+            colab_files.download(target_real)
         except Exception:
             pass
-    return out_path
+    return target_real
 
 
 def ensure_dir(path: str) -> None:
