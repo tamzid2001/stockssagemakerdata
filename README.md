@@ -60,16 +60,16 @@ This repository is the operational source of truth for:
 
 ## System Architecture
 
-The platform uses Firebase Hosting for delivery, Cloud Functions Gen2 for APIs and SSR, Firestore and Storage for persistence, AWS services for forecasting execution, and Python/GitHub Actions for scheduled research automation. The repository is now web/backend-only after the legacy Android and Swift/iOS workspaces were removed.
+The production web application, SSR layer, and request-serving APIs run on Vercel. Firebase Authentication, Firestore, and Storage provide identity and persistence; a limited set of event-driven Google Cloud jobs remains during migration. AWS services support forecasting execution, and Python/GitHub Actions run scheduled research automation. The repository is web/backend-only after the legacy Android and Swift/iOS workspaces were removed.
 
 ```mermaid
 flowchart LR
-    A["Web users"] --> B["Firebase Hosting"]
+    A["Web users"] --> B["Vercel"]
     B --> C["Static pages and assets<br/>quantura_site/public"]
-    B --> D["SSR function<br/>quantura_site/functions_ssr"]
+    B --> D["SSR service<br/>quantura_site/functions_ssr"]
     C --> E["Client app runtime<br/>public/app.js + RN web bundle"]
     D --> E
-    E --> F["quanturaExploreApi<br/>functions_explore"]
+    E --> F["Quantura API<br/>functions_explore"]
     E --> G["Firestore"]
     E --> H["Cloud Storage"]
     F --> G
@@ -77,7 +77,8 @@ flowchart LR
     F --> I["AWS SageMaker Autopilot"]
     F --> J["AWS S3"]
     F --> K["Market and external data providers"]
-    F --> L["Secret Manager"]
+    F --> L["Vercel encrypted environment"]
+    M["Google event jobs"] --> G
     N["GitHub Actions"] --> O["Python research jobs"]
     O --> P["Artifacts, reports, and signals"]
     P --> G
@@ -237,27 +238,25 @@ flowchart TD
     A["Local code changes"] --> B["Run validation checks"]
     B --> C["Sync SSR templates from pages/"]
     C --> D["Build RN web bundle"]
-    D --> E["Deploy Gen2 backend functions with gcloud"]
-    E --> F["Ensure Pub/Sub topics and scheduler jobs"]
-    F --> G["Deploy Firebase Hosting"]
-    G --> H["Run smoke checks against live URLs"]
+    D --> E["Deploy linked Vercel services"]
+    E --> F["Verify production aliases"]
+    F --> G["Run smoke checks against live URLs"]
 ```
 
 ## Runtime and Data Model
 
 ### Frontend Delivery
 
-- Firebase Hosting serves public assets and route entrypoints.
+- Vercel serves public assets and route entrypoints for `quantura.studio`.
 - Shared browser behavior lives primarily in `quantura_site/public/app.js`.
 - Styling is centralized in `quantura_site/public/styles.css` with page-specific CSS where needed.
 - React Native Web assets are built into the public app and injected into the site experience where appropriate.
 
 ### Backend Execution
 
-- `quanturaExploreApi` is the main HTTP API surface for app features.
-- `shopApi` supports commerce and billing-related backend tasks.
-- Firestore-triggered handlers react to newly created forecast, backtest, screener, and agent documents.
-- Pub/Sub-triggered handlers support recurring data refresh and Autopilot reconciliation.
+- `quantura-api` is the authoritative HTTP API surface for app features.
+- The shop router supports commerce and billing-related backend tasks inside that Express service.
+- Remaining Firestore/Pub/Sub Google jobs are migration-era event workers, not the public request backend.
 
 ### Persistence
 
@@ -360,34 +359,27 @@ cd /Users/tamzidullah/Desktop/stockssagemakerdata
 ./deploy.sh
 ```
 
-Do not use `firebase deploy --only functions` for this repository.
+Do not use `firebase deploy --only functions` for the production web/API release.
 
 Deployment order:
 
-1. resolve project configuration and runtime defaults
-2. optionally build functions locally
-3. sync SSR templates
-4. build the React Native Web bundle
-5. deploy Gen2 HTTP APIs and triggered functions with `gcloud functions deploy`
-6. ensure required Pub/Sub topics exist
-7. ensure Cloud Scheduler jobs exist and match repo defaults
-8. deploy the SSR function
-9. deploy frontend hosting with Firebase
+1. deploy the Vercel API
+2. deploy the Vercel legacy-compatibility API
+3. deploy the Vercel newsletter service
+4. deploy the Vercel SSR service
+5. deploy the Vercel web application
+6. verify production aliases and live routes
 
-### Functions and Jobs Managed by `deploy.sh`
+### Services Managed by `deploy.sh`
 
-- `quanturaExploreApi`
-- `shopApi`
-- `onForecastCreated`
-- `onBacktestCreated`
-- `onScreenerRunCreated`
-- `onAgentRunCreated`
-- `refreshFiscaldataDefaults`
-- `reconcileAutopilotRuns`
-- `send_newsletter_daily_http`
-- `email_unsubscribe_http`
-- `send_newsletter_weekly_scheduler`
-- Cloud Scheduler jobs for weekly newsletter, Autopilot reconcile, and five-minute weekday forecast-boundary monitoring flows
+- `quantura-api`
+- `quantura-legacy-api`
+- `quantura-newsletter`
+- `quantura-ssr`
+- `quantura`
+
+The archived Google workflow is opt-in with `DEPLOY_PROVIDER=google-legacy`.
+It remains available only while event-driven jobs are migrated and audited.
 
 Forecast-boundary monitoring is deployed as the `monitorForecastBoundaryAlerts` Pub/Sub function. Its default scheduler window is every five minutes from 4:00 a.m. through 7:55 p.m. America/New_York on weekdays. Individual alert configurations still enforce regular-only versus extended-hours sessions, use the latest completed Alpaca one-minute bar close, and expire at the end of the uploaded forecast horizon. Required Secret Manager entries are `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, and `RESEND_API_KEY`; no provider credential is exposed to the browser.
 

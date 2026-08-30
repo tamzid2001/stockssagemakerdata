@@ -1,4 +1,3 @@
-import "@aikidosec/firewall";
 import cors from "cors";
 import express, { Request, Response } from "express";
 import admin from "firebase-admin";

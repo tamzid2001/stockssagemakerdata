@@ -44,6 +44,51 @@ NEWSLETTER_TIMEZONE="${NEWSLETTER_TIMEZONE:-America/New_York}"
 LOCAL_FUNCTIONS_BUILD="${LOCAL_FUNCTIONS_BUILD:-false}"
 GCLOUD_BIN="${GCLOUD_BIN:-}"
 REMOVE_SECRETS_KEYS="${REMOVE_SECRETS_KEYS:-}"
+DEPLOY_PROVIDER="${DEPLOY_PROVIDER:-vercel}"
+DEPLOY_DRY_RUN="${DEPLOY_DRY_RUN:-false}"
+VERCEL_CLI_VERSION="${VERCEL_CLI_VERSION:-59.10.0}"
+
+deploy_vercel_project() {
+  local label="$1"
+  local project_dir="$2"
+
+  if [[ ! -f "${project_dir}/.vercel/project.json" ]]; then
+    echo "Missing Vercel project link for ${label}: ${project_dir}/.vercel/project.json"
+    return 1
+  fi
+
+  echo "==> Deploying ${label} to Vercel production"
+  if [[ "${DEPLOY_DRY_RUN}" == "true" ]]; then
+    echo "DRY RUN: vercel deploy --prod --yes --cwd ${project_dir}"
+    return 0
+  fi
+
+  npm_config_cache="${VERCEL_NPM_CACHE}" npx --yes "vercel@${VERCEL_CLI_VERSION}" \
+    deploy --prod --yes --cwd "${project_dir}"
+}
+
+if [[ "${DEPLOY_PROVIDER}" == "vercel" ]]; then
+  VERCEL_NPM_CACHE="${VERCEL_NPM_CACHE:-$(mktemp -d)}"
+  export VERCEL_NPM_CACHE
+
+  # Vercel is the authoritative public web/API runtime for quantura.studio.
+  # Deploy request-serving backends first and the public site last.
+  deploy_vercel_project "Quantura API" "${FUNCTIONS_SRC}"
+  deploy_vercel_project "Quantura legacy API compatibility service" "${SITE_DIR}/functions_legacy_vercel"
+  deploy_vercel_project "Quantura newsletter service" "${NEWSLETTER_FUNCTIONS_SRC}"
+  deploy_vercel_project "Quantura SSR service" "${SSR_FUNCTIONS_SRC}"
+  deploy_vercel_project "Quantura web application" "${SITE_DIR}"
+  echo "==> Vercel production deployment complete"
+  exit 0
+fi
+
+if [[ "${DEPLOY_PROVIDER}" != "google-legacy" ]]; then
+  echo "Unsupported DEPLOY_PROVIDER=${DEPLOY_PROVIDER}. Use vercel or google-legacy."
+  exit 1
+fi
+
+echo "WARNING: running archived Google Cloud/Firebase deployment workflow."
+echo "The public quantura.studio web and API runtime is Vercel."
 
 # Prefer Homebrew gcloud on macOS if present, then fallback to PATH.
 if [[ -z "${GCLOUD_BIN}" ]]; then
@@ -274,66 +319,6 @@ echo "==> Deploying shopApi (Gen2)"
   --allow-unauthenticated \
   --set-env-vars="^##^PUBLIC_ORIGIN=${PUBLIC_ORIGIN}##SHOP_ALLOWED_ORIGINS=${SHOP_ALLOWED_ORIGINS}##AIKIDO_BLOCK=${AIKIDO_BLOCK}##NODE_OPTIONS=${AIKIDO_NODE_OPTIONS}" \
   ${EXPRESS_EXTRA_FLAGS[@]+"${EXPRESS_EXTRA_FLAGS[@]}"}
-
-echo "==> Deploying Firestore trigger: onForecastCreated"
-"${GCLOUD_BIN}" functions deploy onForecastCreated \
-  --quiet \
-  --project="${PROJECT_ID}" \
-  --gen2 \
-  --runtime="${FUNCTIONS_RUNTIME}" \
-  --region="${REGION}" \
-  --trigger-location="${FIRESTORE_TRIGGER_LOCATION}" \
-  --source="${FUNCTIONS_SRC}" \
-  --entry-point=onForecastCreated \
-  --trigger-event-filters=type=google.cloud.firestore.document.v1.created \
-  --trigger-event-filters=database='(default)' \
-  --trigger-event-filters-path-pattern=document='forecast_requests/{requestId}' \
-  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
-
-echo "==> Deploying Firestore trigger: onBacktestCreated"
-"${GCLOUD_BIN}" functions deploy onBacktestCreated \
-  --quiet \
-  --project="${PROJECT_ID}" \
-  --gen2 \
-  --runtime="${FUNCTIONS_RUNTIME}" \
-  --region="${REGION}" \
-  --trigger-location="${FIRESTORE_TRIGGER_LOCATION}" \
-  --source="${FUNCTIONS_SRC}" \
-  --entry-point=onBacktestCreated \
-  --trigger-event-filters=type=google.cloud.firestore.document.v1.created \
-  --trigger-event-filters=database='(default)' \
-  --trigger-event-filters-path-pattern=document='backtests/{backtestId}' \
-  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
-
-echo "==> Deploying Firestore trigger: onScreenerRunCreated"
-"${GCLOUD_BIN}" functions deploy onScreenerRunCreated \
-  --quiet \
-  --project="${PROJECT_ID}" \
-  --gen2 \
-  --runtime="${FUNCTIONS_RUNTIME}" \
-  --region="${REGION}" \
-  --trigger-location="${FIRESTORE_TRIGGER_LOCATION}" \
-  --source="${FUNCTIONS_SRC}" \
-  --entry-point=onScreenerRunCreated \
-  --trigger-event-filters=type=google.cloud.firestore.document.v1.created \
-  --trigger-event-filters=database='(default)' \
-  --trigger-event-filters-path-pattern=document='screener_runs/{runId}' \
-  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
-
-echo "==> Deploying Firestore trigger: onAgentRunCreated"
-"${GCLOUD_BIN}" functions deploy onAgentRunCreated \
-  --quiet \
-  --project="${PROJECT_ID}" \
-  --gen2 \
-  --runtime="${FUNCTIONS_RUNTIME}" \
-  --region="${REGION}" \
-  --trigger-location="${FIRESTORE_TRIGGER_LOCATION}" \
-  --source="${FUNCTIONS_SRC}" \
-  --entry-point=onAgentRunCreated \
-  --trigger-event-filters=type=google.cloud.firestore.document.v1.created \
-  --trigger-event-filters=database='(default)' \
-  --trigger-event-filters-path-pattern=document='agent_runs/{runId}' \
-  ${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}
 
 echo "==> Deploying Pub/Sub trigger: refreshFiscaldataDefaults"
 "${GCLOUD_BIN}" functions deploy refreshFiscaldataDefaults \
