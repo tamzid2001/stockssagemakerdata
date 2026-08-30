@@ -1,0 +1,15 @@
+version: v1
+starting_capital: 100000
+minimum_confidence: 0.55
+long_enabled: true
+short_enabled: true
+position_size: 1.0
+maximum_exposure: 1.0
+stop_loss: null
+take_profit: null
+max_holding_period: 1
+commission_bps: 1.0
+spread_bps: 2.0
+slippage_bps: 2.0
+short_borrow_bps_annual: 100.0
+execution_rule: next_bar_open

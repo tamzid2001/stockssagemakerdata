@@ -170,6 +170,7 @@ if [[ -z "${GCLOUD_SET_SECRETS:-}" ]]; then
   add_secret_binding "ALPACA_API_KEY" "ALPACA_API_KEY" || true
   add_secret_binding "ALPACA_SECRET_KEY" "ALPACA_SECRET_KEY" || true
   add_secret_binding "RESEND_API_KEY" "RESEND_API_KEY" || true
+  add_secret_binding "QUANTURA_FORECAST_API_KEY_PEPPER" "QUANTURA_FORECAST_API_KEY_PEPPER" || true
 
   if ! add_secret_binding "FMP_API_KEY" "FMP_API_KEY" "FMP_SECRET_KEY" "FMP_KEY"; then
     FMP_FALLBACK_SECRET="$("${GCLOUD_BIN}" secrets list --project="${PROJECT_ID}" --format='value(name)' --filter='name~^FMP_.*_KEY$' 2>/dev/null | head -n 1 | tr -d '[:space:]')"

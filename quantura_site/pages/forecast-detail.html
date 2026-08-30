@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>__FORECAST_SEO_TITLE__</title>
+    <meta name="description" content="__FORECAST_SEO_DESCRIPTION__" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="__FORECAST_CANONICAL__" />
+    <meta property="og:title" content="__FORECAST_SEO_TITLE__" />
+    <meta property="og:description" content="__FORECAST_SEO_DESCRIPTION__" />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="__FORECAST_CANONICAL__" />
+    <meta property="og:image" content="https://quantura.studio/assets/quantura-logo.svg" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="article:published_time" content="__FORECAST_PUBLISHED_AT__" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="__FORECAST_SEO_TITLE__" />
+    <meta name="twitter:description" content="__FORECAST_SEO_DESCRIPTION__" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260405b" />
+    <link rel="stylesheet" href="/styles.css?v=20260830f" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/app.js?v=20260830f"></script>
+    <script defer src="/forecasts.js?v=20260830a"></script>
+    <script type="application/ld+json">__FORECAST_STRUCTURED_DATA__</script>
+  </head>
+  <body class="forecast-detail-page" data-forecast-slug="__FORECAST_SLUG__">
+    <header class="header"><div class="container nav"><a class="logo" href="/"><span>QUANTURA</span></a><nav class="nav-links"><a href="/forecasting">Terminal</a><a class="active" href="/forecasts">Forecasts</a><a href="/research">Research</a><a href="/blog">Blog</a></nav><div class="nav-actions"><span id="header-user-status" class="pill">Guest</span><button class="cta secondary" id="header-auth" type="button">Sign in</button></div></div></header>
+    <main>
+      <section class="forecast-detail-hero"><div class="container"><a class="small forecast-back-link" href="/forecasts">← All forecasts</a><div id="forecast-detail-state" class="forecast-state" aria-live="polite">Loading forecast record…</div><article id="forecast-detail" hidden></article></div></section>
+      <section class="section" id="forecast-probability-history" hidden><div class="container"><div class="forecast-section-heading"><div><div class="eyebrow">Immutable revisions</div><h2>Probability history</h2><p class="small">Every published update remains queryable. Historical probabilities are never overwritten.</p></div></div><div id="forecast-history-chart" class="forecast-history-chart"></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Revision</th><th>Probability</th><th>Change</th><th>Input cutoff</th><th>Published</th><th>Reason</th></tr></thead><tbody id="forecast-history-body"></tbody></table></div></div></section>
+    </main>
+    <footer class="footer"><div class="container"><div class="logo">QUANTURA</div><p class="small">Forecasts are probabilistic scenarios, not guarantees or reports that an unresolved event occurred.</p></div></footer>
+  </body>
+</html>

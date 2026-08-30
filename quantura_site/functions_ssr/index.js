@@ -7,6 +7,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2/options");
 
 const { cert, initializeApp } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
 const { getRemoteConfig, RemoteConfigFetchResponse } = require("firebase-admin/remote-config");
 
 setGlobalOptions({ region: "us-central1", maxInstances: 10, memory: "512MiB" });
@@ -123,6 +124,20 @@ const resolveTemplate = (pathname) => {
   if (forecastingAliases.has(route)) return "forecasting.html";
   if (route === "/events-calendar") return "events.html";
 
+  if (route === "/forecasts") return "forecasts.html";
+  const forecastHubRoutes = new Set([
+    "/forecasts/markets",
+    "/forecasts/earnings",
+    "/forecasts/corporate",
+    "/forecasts/technology",
+    "/forecasts/politics",
+    "/forecasts/economics",
+    "/forecasts/sports",
+  ]);
+  if (forecastHubRoutes.has(route)) return "forecasts.html";
+  if (/^\/forecasts\/(stocks|companies|politics|sports)\/[A-Za-z0-9._-]+$/.test(route)) return "forecasts.html";
+  if (/^\/forecasts\/[A-Za-z0-9][A-Za-z0-9-]*$/.test(route)) return "forecast-detail.html";
+
   const dashboardAliases = new Set([
     "/dashboard",
     "/account",
@@ -139,6 +154,7 @@ const resolveTemplate = (pathname) => {
   if (route === "/contact") return "contact.html";
   if (route === "/shop") return "shop.html";
   if (route === "/admin") return "admin.html";
+  if (route === "/admin/forecasts") return "forecast-admin.html";
   if (route === "/terms") return "terms.html";
   if (route === "/privacy") return "privacy.html";
   if (route === "/disclaimer") return "disclaimer.html";
@@ -180,6 +196,117 @@ const loadTemplateHtml = async (relPath) => {
   const fullPath = path.join(templatesRoot, relPath);
   const data = await fs.readFile(fullPath, "utf8");
   return data;
+};
+
+const htmlEscape = (value) => String(value ?? "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#039;");
+
+const safeJsonForScript = (value) => JSON.stringify(value).replace(/</g, "\\u003c").replace(/<\//g, "<\\/");
+
+const renderForecastHubMetadata = (html, requestPath) => {
+  if (!html.includes("<title>Quantura Forecasts | Prospective Event Forecasts</title>")) return html;
+  const categoryMetadata = {
+    markets: ["Market Forecasts", "Prospective, timestamped forecasts for objectively resolvable market events."],
+    earnings: ["Earnings Forecasts", "Prospective earnings forecasts with frozen reference values and formal resolution rules."],
+    corporate: ["Corporate Forecasts", "Prospective forecasts for public corporate actions and announcements."],
+    technology: ["Technology Forecasts", "Prospective forecasts for public product and technology events."],
+    politics: ["Politics & Policy Forecasts", "Carefully reviewed forecasts for objectively resolvable public political and policy actions."],
+    economics: ["Economic Forecasts", "Prospective forecasts for objectively measurable economic events and policy outcomes."],
+    sports: ["Sports Forecasts", "Prospective forecasts for objectively resolvable major sports events and milestones."],
+  };
+  const segments = requestPath.split("/").filter(Boolean);
+  let heading = "Quantura Forecasts";
+  let description = "Browse timestamped Quantura forecasts for unresolved events across markets, earnings, business, technology, policy, economics, and sports.";
+  if (segments.length === 2 && categoryMetadata[segments[1]]) {
+    [heading, description] = categoryMetadata[segments[1]];
+  } else if (segments.length === 3 && ["stocks", "companies", "politics", "sports"].includes(segments[1])) {
+    const entity = decodeURIComponent(segments[2]).replace(/[-_]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+    heading = `${entity} Forecasts`;
+    description = `Timestamped Quantura forecasts for unresolved events associated with ${entity}, with probability history and formal resolution rules.`;
+  }
+  const title = `${heading} | Quantura`;
+  const canonical = `https://quantura.studio${requestPath}`;
+  return html
+    .replace("<title>Quantura Forecasts | Prospective Event Forecasts</title>", `<title>${htmlEscape(title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${htmlEscape(description)}" />`)
+    .replace(/<link rel="canonical" href="[^"]*" \/>/, `<link rel="canonical" href="${htmlEscape(canonical)}" />`)
+    .replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${htmlEscape(title)}" />`)
+    .replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${htmlEscape(description)}" />`)
+    .replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${htmlEscape(canonical)}" />`)
+    .replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${htmlEscape(title)}" />`)
+    .replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${htmlEscape(description)}" />`)
+    .replace('"name": "Quantura Forecasts"', `"name": ${JSON.stringify(heading)}`)
+    .replace('"description": "Prospective event forecasts that are timestamped before outcomes and scored after resolution."', `"description": ${JSON.stringify(description)}`)
+    .replace('"url": "https://quantura.studio/forecasts"', `"url": ${JSON.stringify(canonical)}`);
+};
+
+const renderForecastMetadata = async (html, requestPath) => {
+  if (!requestPath.startsWith("/forecasts/") || requestPath.split("/").filter(Boolean).length !== 2) return html;
+  const slug = requestPath.slice("/forecasts/".length);
+  const reserved = new Set(["markets", "earnings", "corporate", "technology", "politics", "economics", "sports"]);
+  if (!slug || reserved.has(slug)) return html;
+  try {
+    const db = getFirestore(getAdminApp());
+    const slugSnapshot = await db.collection("quantura_forecast_slugs").doc(slug).get();
+    const forecastId = String(slugSnapshot.data()?.forecast_id || "");
+    if (!forecastId) return html;
+    const snapshot = await db.collection("quantura_forecasts").doc(forecastId).get();
+    const value = snapshot.data() || {};
+    if (!snapshot.exists || value.is_public !== true) return html;
+    const question = String(value.question || "Quantura event forecast").trim();
+    const summary = String(value.short_summary || "A timestamped Quantura forecast for an unresolved real-world event.").trim();
+    const title = `${question} Quantura Forecast`;
+    const canonical = `https://quantura.studio/forecasts/${encodeURIComponent(slug)}`;
+    const structured = {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: `Forecast: ${String(value.possible_future_headline || question)}`,
+      description: summary,
+      datePublished: value.published_at || value.created_at || "",
+      dateModified: value.updated_at || value.published_at || value.created_at || "",
+      mainEntityOfPage: canonical,
+      author: { "@type": "Organization", name: "Quantura" },
+      publisher: { "@type": "Organization", name: "Quantura", url: "https://quantura.studio/" },
+      about: { "@type": "Thing", name: String(value.entity_name || value.category || "Forecast") },
+      isAccessibleForFree: true,
+    };
+    return html
+      .replaceAll("__FORECAST_SEO_TITLE__", htmlEscape(title))
+      .replaceAll("__FORECAST_SEO_DESCRIPTION__", htmlEscape(summary))
+      .replaceAll("__FORECAST_CANONICAL__", htmlEscape(canonical))
+      .replaceAll("__FORECAST_PUBLISHED_AT__", htmlEscape(value.published_at || value.created_at || ""))
+      .replaceAll("__FORECAST_SLUG__", htmlEscape(slug))
+      .replace("__FORECAST_STRUCTURED_DATA__", safeJsonForScript(structured));
+  } catch (error) {
+    // Keep the generic template available if Firestore metadata lookup fails.
+    return html;
+  }
+};
+
+const renderGenericForecastMetadata = (html, requestPath) => {
+  if (!html.includes("__FORECAST_SEO_TITLE__")) return html;
+  const slug = requestPath.slice("/forecasts/".length);
+  const canonical = `https://quantura.studio/forecasts/${encodeURIComponent(slug)}`;
+  const title = "Quantura Event Forecast";
+  const description = "A timestamped Quantura forecast for an unresolved real-world event, with a formal resolution rule and probability history.";
+  return html
+    .replaceAll("__FORECAST_SEO_TITLE__", htmlEscape(title))
+    .replaceAll("__FORECAST_SEO_DESCRIPTION__", htmlEscape(description))
+    .replaceAll("__FORECAST_CANONICAL__", htmlEscape(canonical))
+    .replaceAll("__FORECAST_PUBLISHED_AT__", "")
+    .replaceAll("__FORECAST_SLUG__", htmlEscape(slug))
+    .replace("__FORECAST_STRUCTURED_DATA__", safeJsonForScript({
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "Quantura Event Forecast",
+      description,
+      mainEntityOfPage: canonical,
+      publisher: { "@type": "Organization", name: "Quantura" },
+    }));
 };
 
 const getServerTemplate = async () => {
@@ -357,6 +484,9 @@ const ssrHandler = async (req, res) => {
     initialFetchResponse = null;
   }
 
+  html = renderForecastHubMetadata(html, requestPath);
+  html = await renderForecastMetadata(html, requestPath);
+  html = renderGenericForecastMetadata(html, requestPath);
   const rendered = injectRemoteConfig(html, { initialFetchResponse });
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   // HTML varies by functional cookie (qs_rcid). Avoid long-lived CDN caching across users.

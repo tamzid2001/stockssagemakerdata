@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/dataIntegrations.test.js dist/yahooMarketData.test.js dist/predictionAnalysis.test.js dist/forecastAnalysis.test.js dist/forecastPriceAlerts.test.js dist/quantScreener.test.js",
+    "test": "npm run build && node --test dist/dataIntegrations.test.js dist/yahooMarketData.test.js dist/predictionAnalysis.test.js dist/forecastAnalysis.test.js dist/forecastIntelligence.test.js dist/quanturaForecasts.test.js dist/quanturaForecastGeneration.test.js dist/quanturaForecastJobs.test.js dist/quanturaForecastRoutes.integration.test.js dist/forecastPriceAlerts.test.js dist/quantScreener.test.js",
     "gcp-build": "npm run build",
     "start": "functions-framework --target=quanturaExploreApi --signature-type=http --source=dist/index.js --port=8080",
     "dev": "npm run build && npm run start"

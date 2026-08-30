@@ -20,6 +20,7 @@ on:
           - autopilot-reconcile
           - automation-schedules
           - forecast-boundary-alerts
+          - forecast-lifecycle
           - fiscaldata-refresh
 
 concurrency:
@@ -63,6 +64,7 @@ jobs:
           run_api_job "autopilot-reconcile"
           run_api_job "automation-schedules"
           run_api_job "forecast-boundary-alerts"
+          run_api_job "forecast-lifecycle"
           exit "$job_status"
 
       - name: Dispatch time-based production jobs
@@ -119,7 +121,7 @@ jobs:
             newsletter-weekly)
               job_origin="$NEWSLETTER_ORIGIN"
               ;;
-            autopilot-reconcile|automation-schedules|forecast-boundary-alerts|fiscaldata-refresh)
+            autopilot-reconcile|automation-schedules|forecast-boundary-alerts|forecast-lifecycle|fiscaldata-refresh)
               job_origin="$API_ORIGIN"
               ;;
             social-dispatch|forecast-report|social-planner|newsletter-daily)

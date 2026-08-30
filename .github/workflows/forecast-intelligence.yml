@@ -1,0 +1,217 @@
+name: Forecast Intelligence
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticker:
+        description: "Ticker symbol"
+        required: true
+        default: "AAPL"
+      timeframe:
+        description: "Trading-session forecast horizon"
+        required: true
+        type: choice
+        options: [1_trading_day, 3_trading_days, 5_trading_days, 10_trading_days, 2_weeks, 1_month, 3_months]
+        default: 5_trading_days
+      frequency:
+        description: "Market data frequency"
+        required: true
+        type: choice
+        options: [1d]
+        default: 1d
+      run_prophet:
+        description: "Run Meta Prophet"
+        required: true
+        type: boolean
+        default: true
+      run_chronos:
+        description: "Run official Chronos-2 checkpoint"
+        required: true
+        type: boolean
+        default: true
+      chronos_finetune_mode:
+        description: "Chronos-2 fine-tuning mode"
+        required: true
+        type: choice
+        options: [none, lora, full]
+        default: none
+      run_gpt:
+        description: "Run live GPT-5.6 Luna synthesis"
+        required: true
+        type: boolean
+        default: false
+      enable_rag:
+        description: "Enable point-in-time RAG"
+        required: true
+        type: boolean
+        default: false
+      enable_tools:
+        description: "Enable approved tools"
+        required: true
+        type: boolean
+        default: false
+      reasoning_effort:
+        description: "GPT reasoning effort"
+        required: true
+        type: choice
+        options: [none, low, medium, high, xhigh, max]
+        default: medium
+      prompt_version:
+        description: "Versioned system prompt"
+        required: true
+        type: choice
+        options: [v1-minimal, v1-adversarial, v1-contextual]
+        default: v1-adversarial
+      run_backtest:
+        description: "Run deterministic next-bar backtest"
+        required: true
+        type: boolean
+        default: true
+      run_final_holdout:
+        description: "Run locked final holdout once"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forecast-intelligence-${{ github.ref }}-${{ inputs.ticker }}-${{ inputs.timeframe }}
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ${{ inputs.run_chronos && 'ubuntu-latest' || 'ubuntu-latest' }}
+    timeout-minutes: 180
+    env:
+      MAX_GPT_CALLS: "1"
+      MAX_TOOL_CALLS: "6"
+      MAX_RAG_RESULTS: "5"
+      TOKENIZERS_PARALLELISM: "false"
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout authoritative code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-forecast-intelligence.txt
+
+      - name: Install deterministic and Prophet dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-forecast-intelligence.txt
+
+      - name: Install Chronos-2 on explicit runs
+        if: ${{ inputs.run_chronos }}
+        run: pip install chronos-forecasting
+
+      - name: Validate paid-call budget
+        env:
+          RUN_GPT: ${{ inputs.run_gpt }}
+          ENABLE_RAG: ${{ inputs.enable_rag }}
+          ENABLE_TOOLS: ${{ inputs.enable_tools }}
+        run: |
+          python - <<'PY'
+          import os
+          run_gpt = os.environ["RUN_GPT"].lower() == "true"
+          print("Forecast Intelligence research budget")
+          print(f"GPT calls: {1 if run_gpt else 0}")
+          print(f"Expected uncached GPT calls: {1 if run_gpt else 0}")
+          print(f"Maximum retrieval requests: {1 if os.environ['ENABLE_RAG'].lower() == 'true' else 0}")
+          print(f"Maximum tool requests: {os.environ.get('MAX_TOOL_CALLS', '0') if os.environ['ENABLE_TOOLS'].lower() == 'true' else 0}")
+          if run_gpt and not os.environ.get("OPENAI_API_KEY"):
+              raise SystemExit("OPENAI_API_KEY is required when run_gpt is true")
+          PY
+
+      - name: Run leakage, schema, and deterministic engine tests
+        run: python -m pytest -q forecast_intelligence/tests
+
+      - name: Run Forecast Intelligence
+        env:
+          INPUT_TICKER: ${{ inputs.ticker }}
+          INPUT_TIMEFRAME: ${{ inputs.timeframe }}
+          INPUT_FREQUENCY: ${{ inputs.frequency }}
+          RUN_PROPHET: ${{ inputs.run_prophet }}
+          RUN_CHRONOS: ${{ inputs.run_chronos }}
+          CHRONOS_FINETUNE_MODE: ${{ inputs.chronos_finetune_mode }}
+          RUN_GPT: ${{ inputs.run_gpt }}
+          ENABLE_RAG: ${{ inputs.enable_rag }}
+          ENABLE_TOOLS: ${{ inputs.enable_tools }}
+          REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+          PROMPT_VERSION: ${{ inputs.prompt_version }}
+          RUN_BACKTEST: ${{ inputs.run_backtest }}
+          RUN_FINAL_HOLDOUT: ${{ inputs.run_final_holdout }}
+        run: |
+          python -m forecast_intelligence.cli \
+            --ticker "$INPUT_TICKER" \
+            --timeframe "$INPUT_TIMEFRAME" \
+            --frequency "$INPUT_FREQUENCY" \
+            --run-prophet "$RUN_PROPHET" \
+            --run-chronos "$RUN_CHRONOS" \
+            --chronos-finetune-mode "$CHRONOS_FINETUNE_MODE" \
+            --run-gpt "$RUN_GPT" \
+            $([[ "$RUN_GPT" == "true" ]] && echo "--live-gpt") \
+            --enable-rag "$ENABLE_RAG" \
+            --enable-tools "$ENABLE_TOOLS" \
+            --reasoning-effort "$REASONING_EFFORT" \
+            --prompt-version "$PROMPT_VERSION" \
+            --run-backtest "$RUN_BACKTEST" \
+            --run-final-holdout "$RUN_FINAL_HOLDOUT" \
+            --output-dir artifacts/forecast-intelligence \
+            | tee artifacts/forecast-intelligence-run.json
+
+      - name: Upload reproducible research artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forecast-intelligence-${{ inputs.ticker }}-${{ inputs.timeframe }}
+          path: |
+            artifacts/forecast-intelligence
+            artifacts/forecast-intelligence-run.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Write research summary
+        if: always()
+        env:
+          INPUT_TICKER: ${{ inputs.ticker }}
+          INPUT_TIMEFRAME: ${{ inputs.timeframe }}
+          RUN_GPT: ${{ inputs.run_gpt }}
+          ENABLE_RAG: ${{ inputs.enable_rag }}
+          ENABLE_TOOLS: ${{ inputs.enable_tools }}
+          REASONING_EFFORT: ${{ inputs.reasoning_effort }}
+          PROMPT_VERSION: ${{ inputs.prompt_version }}
+        run: |
+          python - <<'PY'
+          import csv, json, os
+          from pathlib import Path
+
+          out = Path("artifacts/forecast-intelligence")
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          prediction = json.loads((out / "final_prediction.json").read_text()) if (out / "final_prediction.json").exists() else {}
+          comparisons = list(csv.DictReader((out / "forecast_model_comparison.csv").open())) if (out / "forecast_model_comparison.csv").exists() else []
+          scenarios = prediction.get("scenarios", {})
+          backtest = prediction.get("metadata", {}).get("backtest", {})
+          with summary.open("a", encoding="utf-8") as handle:
+              handle.write("## Analysis\n\n")
+              handle.write(f"- Ticker: `{os.environ['INPUT_TICKER']}`\n- Timeframe: `{os.environ['INPUT_TIMEFRAME']}`\n- Target date: `{prediction.get('target_date', 'unavailable')}`\n\n")
+              handle.write("## Models\n\n| Model | MAE | MASE | Quantile Loss | Direction Acc |\n| --- | --: | --: | --: | --: |\n")
+              for row in comparisons:
+                  handle.write(f"| {row.get('model','')} | {row.get('mae','')} | {row.get('mase','')} | {row.get('weighted_quantile_loss','')} | {row.get('directional_accuracy','')} |\n")
+              handle.write(f"\n## Selected Forecast\n\n`{prediction.get('selected_model', 'unavailable')}` — {prediction.get('selection_reason', '')}\n\n")
+              handle.write("## Scenarios\n\n| Scenario | Quantile | Target | Change |\n| --- | --- | --: | --: |\n")
+              for key in ("extreme_bear", "bear", "base", "bull", "extreme_bull"):
+                  row = scenarios.get(key, {})
+                  handle.write(f"| {row.get('label','')} | {row.get('quantile','')} | {row.get('target','')} | {row.get('percent_change','')}% |\n")
+              handle.write("\n## GPT Configuration\n\n")
+              handle.write(f"- Model: `gpt-5.6-luna`\n- Prompt: `{os.environ['PROMPT_VERSION']}`\n- RAG: `{os.environ['ENABLE_RAG']}`\n- Tools: `{os.environ['ENABLE_TOOLS']}`\n- Reasoning: `{os.environ['REASONING_EFFORT']}`\n\n")
+              handle.write("## Trading Results\n\n| Strategy | Return | Max DD | Sharpe |\n| --- | --: | --: | --: |\n")
+              handle.write(f"| Selected forecast | {backtest.get('total_return','')} | {backtest.get('maximum_drawdown','')} | {backtest.get('sharpe','')} |\n\n")
+              holdout = prediction.get("metadata", {}).get("configuration_locked", False)
+              handle.write(f"## Holdout\n\n{'FINAL HOLDOUT — CONFIGURATION LOCKED' if holdout else 'Final holdout not requested.'}\n")
+          PY

@@ -1,0 +1,17 @@
+version: v1
+live:
+  market_data: true
+  earnings: true
+  internal_forecast: true
+  internal_screener: true
+  options_market: true
+  prediction_market: true
+  news: false
+backtest:
+  market_data_asof: true
+  earnings_asof: true
+  internal_forecast_asof: true
+  rag_asof: true
+  live_market_data: false
+  live_news: false
+max_tool_calls_per_analysis: 6

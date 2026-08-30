@@ -243,5 +243,47 @@ service cloud.firestore {
       allow update, delete: if isAdmin()
         || (isSignedIn() && request.auth.uid == resource.data.ownerUid);
     }
+
+    // Quantura Forecasts is server-owned. Public and enterprise consumers use
+    // the redacted HTTP projections, never direct Firestore access.
+    match /quantura_forecasts/{forecastId} {
+      allow read, write: if false;
+
+      match /probability_history/{revisionId} {
+        allow read, write: if false;
+      }
+
+      match /amendments/{amendmentId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /quantura_forecast_api_keys/{keyId} {
+      allow read, write: if false;
+    }
+
+    match /quantura_forecast_api_usage/{requestId} {
+      allow read, write: if false;
+    }
+
+    match /quantura_forecast_rate_windows/{windowId} {
+      allow read, write: if false;
+    }
+
+    match /quantura_forecast_dataset_releases/{version} {
+      allow read, write: if false;
+    }
+
+    match /quantura_forecast_job_runs/{runId} {
+      allow read, write: if false;
+    }
+
+    match /quantura_forecast_aggregates/{aggregateId} {
+      allow read, write: if false;
+    }
+
+    match /quantura_forecast_slugs/{slug} {
+      allow read, write: if false;
+    }
   }
 }

@@ -1,0 +1,30 @@
+version: v1
+calendar: XNYS
+prophet:
+  enabled: true
+  quantiles: [0.01, 0.25, 0.50, 0.75, 0.99]
+  uncertainty_samples: 1000
+chronos:
+  enabled: true
+  checkpoint: amazon/chronos-2
+  finetune_mode: none
+  device_map: cpu
+  native_quantile_range: [0.10, 0.90]
+validation:
+  minimum_history: 120
+  maximum_origins: 12
+  origin_step: 10
+  minimum_selection_samples: 5
+gpt:
+  model: gpt-5.6-luna
+  optimization_method: prompt_fewshot_rag_tools
+  prompt_version: v1-adversarial
+  fewshot_version: v1
+  reasoning_effort: medium
+  max_calls: 1
+rag:
+  policy_version: v1
+  max_results: 5
+tools:
+  policy_version: v1
+  max_calls_per_analysis: 6

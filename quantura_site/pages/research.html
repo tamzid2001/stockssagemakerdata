@@ -50,6 +50,7 @@
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
         <nav class="nav-links">
           <a href="/forecasting" data-analytics="nav_forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
+          <a href="/forecasts" data-analytics="nav_forecasts"><i class="iconoir-brain-research" aria-hidden="true"></i><span>Forecasts</span></a>
           <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
           <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
           <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
@@ -314,6 +315,23 @@
                 <li><a href="https://modelcards.withgoogle.com/about" target="_blank" rel="noopener noreferrer">Model Cards</a></li>
               </ul>
             </article>
+          </section>
+
+          <section class="card research-note-page" id="forecast-api" aria-labelledby="forecast-api-title">
+            <div class="eyebrow">Prospective event intelligence</div>
+            <h2 id="forecast-api-title">Quantura Forecasts methodology and enterprise API</h2>
+            <p>Quantura Forecasts begins with a formal unresolved question, a defined evidence cutoff, and an objective resolution rule. A possible future headline is a human-readable scenario—not a claim that the event occurred. Published probabilities are preserved as an append-only trajectory and binary outcomes are scored with the Brier score.</p>
+            <div class="research-note-grid">
+              <div><strong>Before publication</strong><p class="small muted">Reviewers validate the proposition, deadline, primary resolution source, political-safety rules, and point-in-time evidence.</p></div>
+              <div><strong>After publication</strong><p class="small muted">New information creates a probability revision. It never replaces the initial snapshot or earlier revisions.</p></div>
+              <div><strong>At resolution</strong><p class="small muted">Category-specific structured resolvers use authoritative evidence. Conflicts become disputed records instead of forced outcomes.</p></div>
+              <div><strong>Enterprise access</strong><p class="small muted">Versioned endpoints use hashed, scoped, revocable API keys, cursor pagination, per-key rate limits, and redacted projections that exclude private strategy fields.</p></div>
+            </div>
+            <div class="research-diagram" role="img" aria-label="Quantura Forecasts lifecycle">
+              Formal question → timestamped probability → immutable revisions → authoritative resolution → Brier score and calibration
+            </div>
+            <p class="small">API resources are served under <code>/api/v1</code>. Available scopes separate current records, probability history, resolutions, bulk trajectories, and administration. Authentication credentials belong in request headers and are never accepted in URLs.</p>
+            <div class="hero-actions"><a class="cta" href="/forecasts">Explore forecasts</a><a class="cta secondary" href="/contact">Request API access</a></div>
           </section>
 
           <section class="card research-note-page research-blueprint" id="blueprint-page" aria-labelledby="blueprint-title">

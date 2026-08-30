@@ -8,6 +8,7 @@ import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { registerMarketDataRoutes } from "./marketDataRoutes";
 import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
+import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
 import { registerAwsIntegrationRoutes, resolveUserAutopilotAwsConfig } from "./awsIntegration";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 import { runIndicatorAnalysis } from "./indicators";
@@ -646,6 +647,12 @@ registerMarketDataRoutes(ROUTES);
 registerPolymarketMlbRoutes(ROUTES);
 registerPredictionMarketDataRoutes(ROUTES);
 registerAwsIntegrationRoutes(ROUTES, { db, auth });
+registerQuanturaForecastRoutes(ROUTES, {
+  db,
+  auth,
+  adminEmails: [ADMIN_EMAIL.toLowerCase()],
+  publicOrigin: PUBLIC_ORIGIN,
+});
 
 // Retired public-social and currency endpoints. Keep an explicit response for
 // old clients while ensuring none of the legacy handlers below can execute.
@@ -14361,6 +14368,16 @@ ROUTES.all("/internal/cron/:jobName", async (req, res) => {
     }
     if (jobName === "forecast-boundary-alerts") {
       const result = await monitorForecastBoundaryAlerts({});
+      res.status(200).json({ ok: true, job: jobName, result });
+      return;
+    }
+    if (jobName === "forecast-lifecycle") {
+      const result = await runForecastLifecycleJob({
+        db,
+        auth,
+        adminEmails: [ADMIN_EMAIL.toLowerCase()],
+        publicOrigin: PUBLIC_ORIGIN,
+      }, "all");
       res.status(200).json({ ok: true, job: jobName, result });
       return;
     }

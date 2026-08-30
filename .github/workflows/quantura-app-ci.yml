@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - ".env.example"
+      - "forecast_intelligence/**"
+      - "config/**"
+      - "requirements-forecast-intelligence.txt"
+      - "requirements-forecast-intelligence-service.txt"
       - ".gitignore"
       - "quantura_site/**"
       - "README.md"
@@ -12,11 +16,16 @@ on:
       - "docs/release-checklist.md"
       - "scripts/setup_local_firebase_credentials.sh"
       - ".github/workflows/quantura-app-ci.yml"
+      - ".github/workflows/forecast-intelligence.yml"
   push:
     branches:
       - main
     paths:
       - ".env.example"
+      - "forecast_intelligence/**"
+      - "config/**"
+      - "requirements-forecast-intelligence.txt"
+      - "requirements-forecast-intelligence-service.txt"
       - ".gitignore"
       - "quantura_site/**"
       - "README.md"
@@ -25,6 +34,7 @@ on:
       - "docs/release-checklist.md"
       - "scripts/setup_local_firebase_credentials.sh"
       - ".github/workflows/quantura-app-ci.yml"
+      - ".github/workflows/forecast-intelligence.yml"
   workflow_dispatch:
 
 permissions:
@@ -41,7 +51,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -52,7 +62,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest exchange-calendars
 
       - name: Install web and backend deps
         run: |
@@ -63,6 +73,10 @@ jobs:
         run: |
           pytest -q quantura_site/tests
 
+      - name: Run Forecast Intelligence leakage and schema tests
+        run: |
+          pytest -q forecast_intelligence/tests
+
       - name: Build Quantura web bundle
         run: |
           npm run build --prefix quantura_site
@@ -71,9 +85,25 @@ jobs:
         run: |
           npm run build --prefix quantura_site/functions_explore
 
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Run Forecast API Firestore integration tests
+        working-directory: quantura_site
+        run: |
+          npx --yes firebase-tools@15.7.0 emulators:exec \
+            --only firestore \
+            --project quantura-forecast-integration \
+            "node --test functions_explore/dist/quanturaForecastRoutes.integration.test.js"
+
       - name: Syntax check frontend and SSR entrypoints
         run: |
           node --check quantura_site/public/app.js
+          node --check quantura_site/public/forecasts.js
+          node --check quantura_site/public/forecast-admin.js
           node --check quantura_site/functions_ssr/index.js
 
       - name: Verify local-only secret files are not tracked
