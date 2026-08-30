@@ -304,10 +304,20 @@
     byId("pm-history-end").value = localDateTime(now);
     byId("pm-history-start").value = localDateTime(new Date(now.getTime() - 7 * 86400000));
 
-    function updateSelection() {
-      byId("pm-selected-count").textContent = `${selected.size} selected`;
+    function invalidatePreview() {
       csvButton.disabled = true;
       jsonButton.disabled = true;
+      byId("pm-preview-summary").innerHTML = '<div class="empty-state">Select contracts and preview a dataset.</div>';
+      const validation = byId("pm-validation");
+      validation.classList.add("hidden");
+      validation.removeAttribute("data-tone");
+      validation.innerHTML = "";
+      byId("pm-preview-table").innerHTML = '<div class="empty-state">Preview rows will appear here.</div>';
+    }
+
+    function updateSelection() {
+      byId("pm-selected-count").textContent = `${selected.size} selected`;
+      invalidatePreview();
     }
     function updateCapabilities() {
       const provider = capabilities[source()] || {};
@@ -488,9 +498,10 @@
     }));
     form.querySelectorAll('input[name="pm-mode"]').forEach((input) => input.addEventListener("change", () => {
       byId("pm-canvas-options").classList.toggle("hidden", mode() !== "canvas");
-      csvButton.disabled = true; jsonButton.disabled = true;
+      invalidatePreview();
     }));
-    [byId("pm-frequency"), byId("pm-missing"), byId("pm-pregame"), byId("pm-target")].forEach((control) => control.addEventListener("change", () => { csvButton.disabled = true; jsonButton.disabled = true; }));
+    [byId("pm-history-start"), byId("pm-history-end"), byId("pm-frequency"), byId("pm-missing"), byId("pm-pregame"), byId("pm-target"), ...form.querySelectorAll('input[name="pm-feature"]')]
+      .forEach((control) => control.addEventListener("change", invalidatePreview));
     byId("pm-find-markets").addEventListener("click", () => { page = 1; loadMarkets(); });
     byId("pm-search").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); page = 1; loadMarkets(); } });
     byId("pm-previous-page").addEventListener("click", () => { if (page > 1) { page -= 1; loadMarkets(); } });

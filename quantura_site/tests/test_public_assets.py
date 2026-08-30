@@ -185,6 +185,7 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
     client = (PUBLIC / "data-integrations.js").read_text()
 
     for text in [
+        "<title>Sports Market Forecasting | Quantura</title>",
         "Prediction Market Historical Data",
         "Raw provider data",
         "Normalized data",
@@ -207,6 +208,9 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
     assert '"Canvas target values use decimal probability units from 0.00 to 1.00."' in backend
     assert 'input[name="pm-source"]:checked' in client
     assert 'input[name="pm-mode"]:checked' in client
+    assert "function invalidatePreview()" in client
+    assert 'validation.classList.add("hidden")' in client
+    assert "Preview rows will appear here." in client
 
 
 def test_pricing_describes_platform_features_without_generic_model_pricing():
