@@ -5,13 +5,13 @@
 ### Hosting and app shell
 - [ ] Public assets built from `quantura_site/public/`
 - [ ] Source page changes synced into `quantura_site/functions_ssr/templates/`
-- [ ] Firebase Hosting config reviewed for the target release
+- [ ] Vercel project links, production aliases, and route configuration reviewed
 - [ ] Core logged-out routes render correctly
 - [ ] Core logged-in dashboard routes render correctly
 
 ### Notifications and messaging
 - [ ] `firebase-messaging-sw.js` deployed at the site root
-- [ ] `FCM_WEB_VAPID_KEY` configured in Secret Manager
+- [ ] `FCM_WEB_VAPID_KEY` configured in the applicable encrypted runtime environment
 - [ ] Notification registration and send-test endpoints deployed
 - [ ] Foreground notification test passes
 - [ ] Background notification test passes
@@ -49,7 +49,7 @@
 - [ ] Privacy policy and legal links remain current
 - [ ] No API keys, tokens, `.env` files, or service-account credentials are present in git
 - [ ] Local credential files remain ignored by `.gitignore`
-- [ ] Secret Manager bindings and runtime configuration reviewed for touched integrations
+- [ ] Vercel environment variables and any remaining Google event-job secrets reviewed
 
 ---
 
@@ -67,7 +67,7 @@
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Secret Manager values | Required | Needed for protected runtime integrations |
+| Managed secret values | Required | Provisioned in Vercel or the applicable event-job secret store |
 | Ad or monetization config | Conditional | Required only when the release touches those surfaces |
 | Stripe secrets | Conditional | Required only for billing-related releases |
 | Provider API keys | Conditional | Required only for changed data or model integrations |

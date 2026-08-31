@@ -13,7 +13,11 @@ def test_aikido_firewall_loads_before_express_and_stays_server_side():
     root_env = (REPOSITORY / ".env.example").read_text(encoding="utf-8")
     function_env = (ROOT / "functions_explore" / ".env.example").read_text(encoding="utf-8")
 
-    assert entrypoint.index('import "@aikidosec/firewall";') < entrypoint.index('from "express"')
+    # The shared Google Functions module includes non-HTTP Pub/Sub exports, so
+    # Zen stays scoped to request-serving processes. Google HTTP functions use
+    # NODE_OPTIONS below, while Vercel has an Express-only entrypoint that can
+    # safely load Zen before Express.
+    assert '@aikidosec/firewall' not in entrypoint
     assert vercel_entrypoint.index('import "@aikidosec/firewall";') < vercel_entrypoint.index('from "express"')
     assert package["dependencies"]["@aikidosec/firewall"] == "1.8.37"
     assert "AIKIDO_TOKEN=" in root_env
@@ -32,6 +36,19 @@ def test_aikido_secret_is_scoped_to_express_deployments():
     assert "EXPRESS_EXTRA_FLAGS" in deploy
     assert deploy.count('${EXPRESS_EXTRA_FLAGS[@]+"${EXPRESS_EXTRA_FLAGS[@]}"}') == 2
     assert deploy.count("NODE_OPTIONS=${AIKIDO_NODE_OPTIONS}") == 2
+
+
+def test_production_deploy_defaults_to_vercel_and_archives_google_workflow():
+    deploy = (REPOSITORY / "deploy.sh").read_text(encoding="utf-8")
+
+    assert 'DEPLOY_PROVIDER="${DEPLOY_PROVIDER:-vercel}"' in deploy
+    assert 'if [[ "${DEPLOY_PROVIDER}" == "vercel" ]]' in deploy
+    assert "Quantura API" in deploy
+    assert "Quantura web application" in deploy
+    assert 'if [[ "${DEPLOY_PROVIDER}" != "google-legacy" ]]' in deploy
+    assert "archived Google Cloud/Firebase deployment workflow" in deploy
+    assert "--entry-point=onForecastCreated" not in deploy
+    assert "--entry-point=onBacktestCreated" not in deploy
 
 
 def test_public_aikido_badge_is_accessible_without_certification_claims():
