@@ -6,8 +6,40 @@ import type { Server } from "node:http";
 
 import { registerQuanturaForecastRoutes } from "./quanturaForecastRoutes";
 import { hashForecastApiKey, normalizeForecastDraft } from "./quanturaForecasts";
+import { quanturaExploreApi } from "./index";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+function assertSecurityHeaders(response: Response): void {
+  assert.ok(response.headers.get("content-security-policy"));
+  assert.ok(response.headers.get("strict-transport-security"));
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
+  assert.equal(response.headers.get("x-powered-by"), null);
+}
+
+test("main API emits Helmet headers without breaking CORS or error responses", async () => {
+  const server: Server = await new Promise((resolve) => {
+    const listening = quanturaExploreApi.listen(0, "127.0.0.1", () => resolve(listening));
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("security_header_server_address_invalid");
+  const origin = `http://127.0.0.1:${address.port}`;
+  try {
+    const health = await fetch(`${origin}/api/health`, {
+      headers: { Origin: "https://quantura.studio" },
+    });
+    assert.equal(health.status, 200);
+    assertSecurityHeaders(health);
+    assert.equal(health.headers.get("access-control-allow-origin"), "https://quantura.studio");
+
+    const missing = await fetch(`${origin}/definitely-missing`);
+    assert.equal(missing.status, 404);
+    assertSecurityHeaders(missing);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
 
 async function waitForAuditRecords(
   collection: FirebaseFirestore.CollectionReference,

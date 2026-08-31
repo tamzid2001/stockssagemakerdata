@@ -19,7 +19,12 @@ def test_aikido_firewall_loads_before_express_and_stays_server_side():
     # safely load Zen before Express.
     assert '@aikidosec/firewall' not in entrypoint
     assert vercel_entrypoint.index('import "@aikidosec/firewall";') < vercel_entrypoint.index('from "express"')
+    assert 'import helmet from "helmet";' in entrypoint
+    assert entrypoint.index("app.use(helmet());") < entrypoint.index("app.use(cors(")
+    assert 'import helmet from "helmet";' in vercel_entrypoint
+    assert vercel_entrypoint.index("app.use(helmet());") < vercel_entrypoint.index("app.use(shopApi)")
     assert package["dependencies"]["@aikidosec/firewall"] == "1.8.37"
+    assert package["dependencies"]["helmet"] == "8.1.0"
     assert "AIKIDO_TOKEN=" in root_env
     assert "AIKIDO_BLOCK=false" in root_env
     assert "AIKIDO_NODE_OPTIONS=-r @aikidosec/firewall/instrument" in root_env
