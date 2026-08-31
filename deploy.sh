@@ -47,37 +47,49 @@ REMOVE_SECRETS_KEYS="${REMOVE_SECRETS_KEYS:-}"
 DEPLOY_PROVIDER="${DEPLOY_PROVIDER:-vercel}"
 DEPLOY_DRY_RUN="${DEPLOY_DRY_RUN:-false}"
 VERCEL_CLI_VERSION="${VERCEL_CLI_VERSION:-59.10.0}"
+VERCEL_SCOPE="${VERCEL_SCOPE:-tamzid-ullahs-projects}"
 
 deploy_vercel_project() {
   local label="$1"
-  local project_dir="$2"
-
-  if [[ ! -f "${project_dir}/.vercel/project.json" ]]; then
-    echo "Missing Vercel project link for ${label}: ${project_dir}/.vercel/project.json"
-    return 1
-  fi
+  local project_name="$2"
 
   echo "==> Deploying ${label} to Vercel production"
   if [[ "${DEPLOY_DRY_RUN}" == "true" ]]; then
-    echo "DRY RUN: vercel deploy --prod --yes --cwd ${project_dir}"
+    echo "DRY RUN: vercel deploy --prod --yes --scope ${VERCEL_SCOPE} --project ${project_name} --cwd <committed-snapshot>"
     return 0
   fi
 
+  # Vercel project Root Directories are repository-relative. Deploy from a
+  # clean, repository-root snapshot and select the project explicitly so the
+  # configured root is applied exactly once. The snapshot also prevents local
+  # ignored/untracked files from entering a production deployment.
   npm_config_cache="${VERCEL_NPM_CACHE}" npx --yes "vercel@${VERCEL_CLI_VERSION}" \
-    deploy --prod --yes --cwd "${project_dir}"
+    deploy --prod --yes --scope "${VERCEL_SCOPE}" --project "${project_name}" --cwd "${VERCEL_SOURCE_DIR}"
 }
 
 if [[ "${DEPLOY_PROVIDER}" == "vercel" ]]; then
   VERCEL_NPM_CACHE="${VERCEL_NPM_CACHE:-$(mktemp -d)}"
   export VERCEL_NPM_CACHE
 
+  if [[ "${DEPLOY_DRY_RUN}" != "true" ]]; then
+    VERCEL_SOURCE_DIR="$(mktemp -d)"
+    cleanup_vercel_snapshot() {
+      rm -rf -- "${VERCEL_SOURCE_DIR}"
+    }
+    trap cleanup_vercel_snapshot EXIT
+    git -C "${ROOT_DIR}" archive HEAD | tar -x -C "${VERCEL_SOURCE_DIR}"
+  else
+    VERCEL_SOURCE_DIR="${ROOT_DIR}"
+  fi
+  export VERCEL_SOURCE_DIR
+
   # Vercel is the authoritative public web/API runtime for quantura.studio.
   # Deploy request-serving backends first and the public site last.
-  deploy_vercel_project "Quantura API" "${FUNCTIONS_SRC}"
-  deploy_vercel_project "Quantura legacy API compatibility service" "${SITE_DIR}/functions_legacy_vercel"
-  deploy_vercel_project "Quantura newsletter service" "${NEWSLETTER_FUNCTIONS_SRC}"
-  deploy_vercel_project "Quantura SSR service" "${SSR_FUNCTIONS_SRC}"
-  deploy_vercel_project "Quantura web application" "${SITE_DIR}"
+  deploy_vercel_project "Quantura API" "quantura-api"
+  deploy_vercel_project "Quantura legacy API compatibility service" "quantura-legacy-api"
+  deploy_vercel_project "Quantura newsletter service" "quantura-newsletter"
+  deploy_vercel_project "Quantura SSR service" "quantura-ssr"
+  deploy_vercel_project "Quantura web application" "quantura"
   echo "==> Vercel production deployment complete"
   exit 0
 fi

@@ -13,8 +13,7 @@ consumers, traffic, scheduler configuration, and replacement have been verified.
 
 ## Production deploy
 
-Authenticate the Vercel CLI and ensure each service has its local
-`.vercel/project.json` link, then run:
+Authenticate the Vercel CLI, then run from the repository root:
 
 ```bash
 ./deploy.sh
@@ -28,11 +27,19 @@ The default deployment order is:
 4. `quantura-ssr`
 5. `quantura`
 
-Use a dry run to validate project links and commands without publishing:
+Use a dry run to validate project selection and commands without publishing:
 
 ```bash
 DEPLOY_DRY_RUN=true ./deploy.sh
 ```
+
+The script deploys the committed `HEAD` tree from a clean temporary snapshot and
+selects each Vercel project by name. Commit intended production changes before
+running it. This is required because every project's Root Directory is
+configured relative to the repository root, and the clean snapshot prevents
+ignored or unrelated untracked files from entering a production release.
+`VERCEL_SCOPE` defaults to the Quantura Vercel team and can be overridden for an
+authorized alternate scope.
 
 The deployment accepts the standard `VERCEL_TOKEN` environment variable in
 non-interactive environments. Runtime secrets belong in the corresponding

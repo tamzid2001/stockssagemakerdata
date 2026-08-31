@@ -45,6 +45,11 @@ def test_production_deploy_defaults_to_vercel_and_archives_google_workflow():
     assert 'if [[ "${DEPLOY_PROVIDER}" == "vercel" ]]' in deploy
     assert "Quantura API" in deploy
     assert "Quantura web application" in deploy
+    assert '--project "${project_name}" --cwd "${VERCEL_SOURCE_DIR}"' in deploy
+    assert 'git -C "${ROOT_DIR}" archive HEAD | tar -x -C "${VERCEL_SOURCE_DIR}"' in deploy
+    assert 'deploy_vercel_project "Quantura API" "quantura-api"' in deploy
+    assert 'deploy_vercel_project "Quantura web application" "quantura"' in deploy
+    assert '--cwd "${project_dir}"' not in deploy
     assert 'if [[ "${DEPLOY_PROVIDER}" != "google-legacy" ]]' in deploy
     assert "archived Google Cloud/Firebase deployment workflow" in deploy
     assert "--entry-point=onForecastCreated" not in deploy
