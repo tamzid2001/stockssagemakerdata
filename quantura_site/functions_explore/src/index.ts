@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { Request, Response } from "express";
+import helmet from "helmet";
 import admin from "firebase-admin";
 import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
@@ -135,6 +136,7 @@ const messaging = admin.messaging();
 
 const app = express();
 app.disable("x-powered-by");
+app.use(helmet());
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "25mb" }));
 
