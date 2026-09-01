@@ -59,7 +59,7 @@ function cookieHeader(values: string[]): string {
 
 function symbol(value: unknown, optionContract = false): string {
   const result = String(value || "").trim().toUpperCase();
-  const pattern = optionContract ? /^[A-Z0-9.\-]{10,32}$/ : /^[A-Z][A-Z0-9.\-]{0,14}$/;
+  const pattern = optionContract ? /^[A-Z0-9.\-]{10,32}$/ : /^(?:\^[A-Z0-9.\-]{1,23}|[A-Z0-9][A-Z0-9.^=\-]{0,23})$/;
   if (!pattern.test(result)) {
     throw new AlpacaError("invalid_request", optionContract ? "Select a valid options contract." : "Enter a valid ticker symbol.", 400);
   }

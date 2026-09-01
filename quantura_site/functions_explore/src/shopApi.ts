@@ -54,7 +54,7 @@ type RateRecord = {
   resetAtMs: number;
 };
 
-type SubscriptionTier = "go" | "plus" | "business" | "pro";
+type SubscriptionTier = "pro" | "quant" | "research";
 type SubscriptionCycle = "monthly" | "yearly";
 type SubscriptionPlan = {
   tier: SubscriptionTier;
@@ -68,61 +68,47 @@ const checkoutRateLimiter = new Map<string, RateRecord>();
 const SECRET_NAME_CACHE = new Map<string, string>();
 
 const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {
-  go_monthly: {
-    tier: "go",
-    cycle: "monthly",
-    amountCents: 800,
-    label: "Quantura Go Monthly",
-    description: "Ad-free plan with higher limits for forecasts, screeners, and indicator analysis.",
-  },
-  go_yearly: {
-    tier: "go",
-    cycle: "yearly",
-    amountCents: 8000,
-    label: "Quantura Go Annual",
-    description: "Annual Quantura Go plan with discounted yearly billing.",
-  },
-  plus_monthly: {
-    tier: "plus",
-    cycle: "monthly",
-    amountCents: 2000,
-    label: "Quantura Plus Monthly",
-    description: "Ad-free plan with expanded throughput and pro model access.",
-  },
-  plus_yearly: {
-    tier: "plus",
-    cycle: "yearly",
-    amountCents: 20000,
-    label: "Quantura Plus Annual",
-    description: "Annual Quantura Plus plan with discounted yearly billing.",
-  },
-  business_monthly: {
-    tier: "business",
-    cycle: "monthly",
-    amountCents: 3000,
-    label: "Quantura Business Monthly",
-    description: "Business plan with higher workspace limits and team collaboration capacity.",
-  },
-  business_yearly: {
-    tier: "business",
-    cycle: "yearly",
-    amountCents: 30000,
-    label: "Quantura Business Annual",
-    description: "Annual Quantura Business plan with discounted yearly billing.",
-  },
   pro_monthly: {
     tier: "pro",
     cycle: "monthly",
-    amountCents: 20000,
+    amountCents: 3900,
     label: "Quantura Pro Monthly",
-    description: "Highest limits, pro models, and expanded workspace controls.",
+    description: "Full forecasting, research, options, screener, alerts, and data export workflow.",
   },
   pro_yearly: {
     tier: "pro",
     cycle: "yearly",
-    amountCents: 216000,
+    amountCents: 37400,
     label: "Quantura Pro Annual",
     description: "Annual Quantura Pro plan with discounted yearly billing.",
+  },
+  quant_monthly: {
+    tier: "quant",
+    cycle: "monthly",
+    amountCents: 9900,
+    label: "Quantura Quant Monthly",
+    description: "Programmatic research with Chronos, ensemble forecasting, backtests, bulk exports, and API access.",
+  },
+  quant_yearly: {
+    tier: "quant",
+    cycle: "yearly",
+    amountCents: 95000,
+    label: "Quantura Quant Annual",
+    description: "Annual Quantura Quant plan with discounted yearly billing.",
+  },
+  research_monthly: {
+    tier: "research",
+    cycle: "monthly",
+    amountCents: 24900,
+    label: "Quantura Research Monthly",
+    description: "Research-team plan with collaboration, larger datasets, automation, and priority processing.",
+  },
+  research_yearly: {
+    tier: "research",
+    cycle: "yearly",
+    amountCents: 239000,
+    label: "Quantura Research Annual",
+    description: "Annual Quantura Research plan with discounted yearly billing.",
   },
 };
 
@@ -905,9 +891,23 @@ function findSkuByProductName(name: string): string {
 function normalizeSubscriptionTier(value: unknown): SubscriptionTier | null {
   const raw = sanitizeText(value, 60).toLowerCase();
   if (!raw) return null;
-  if (raw.includes("annual_business") || raw === "business" || raw === "quanturabusiness") return "business";
-  if (raw.includes("annual_plus") || raw === "plus" || raw === "premium") return "plus";
-  if (raw.includes("annual_go") || raw === "go" || raw === "goplan") return "go";
+  if (
+    raw.includes("annual_business") ||
+    raw === "business" ||
+    raw === "quanturabusiness" ||
+    raw === "desk" ||
+    raw === "research" ||
+    raw === "quanturaresearch"
+  ) return "research";
+  if (raw === "quant" || raw === "quanturaquant") return "quant";
+  if (
+    raw.includes("annual_plus") ||
+    raw.includes("annual_go") ||
+    raw === "plus" ||
+    raw === "premium" ||
+    raw === "go" ||
+    raw === "goplan"
+  ) return "pro";
   if (raw === "pro" || raw === "quanturapro") return "pro";
   return null;
 }

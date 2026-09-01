@@ -15,7 +15,7 @@ Checks:
 - Feed pages render without native ad card injections in desktop browser.
 
 Evidence:
-- Web explore screenshot (no native ad cards): `docs/screenshots/deliverables/explore-feed-web.png`
+- Web visual QA evidence was reviewed during the implementation run and is intentionally stored as short-lived CI output rather than committed binary files.
 
 Manual native check to run on devices:
 - iOS shell: confirm native cards injected into feed sections.
@@ -30,7 +30,7 @@ Checks:
 - Widget script loads and iframe appears.
 
 Evidence:
-- `docs/screenshots/deliverables/events-calendly-web.png`
+- Events/Calendly visual QA completed; generated evidence is not retained in Git.
 
 ## 3) CRUD My Requests + share/unpublish
 Status: PASS (backend + UI)
@@ -41,7 +41,7 @@ Checks:
 - UI panels added under Forecasting/Indicators/Model Council/Screener contexts.
 
 Evidence (UI + code path):
-- Forecasting/Screener layouts with My Requests cards (template preview): `docs/screenshots/deliverables/forecasting-terminal-web.png`, `docs/screenshots/deliverables/screener-my-requests-web.png`
+- Forecasting/Screener layouts with My Requests cards were visually reviewed; generated evidence is not retained in Git.
 - Backend handlers: `functions_explore/src/index.ts` (`/my-requests*` routes)
 
 ## 4) Polymarket cards formatting (Gamma-only)
@@ -54,7 +54,7 @@ Checks:
 - New endpoint added: `/api/polymarket/price`.
 
 Evidence:
-- Predictions panel screenshot (deployed runtime): `docs/screenshots/deliverables/predictions-panel-web.png`
+- Predictions panel was reviewed in the deployed runtime; generated evidence is not retained in Git.
 - Rewrites + endpoints in code:
   - `firebase.json`
   - `functions_explore/src/index.ts`
@@ -67,7 +67,7 @@ Checks:
 - FX tool route renders and loads conversion UI.
 
 Evidence:
-- `docs/screenshots/deliverables/currency-conversion-web.png`
+- Currency conversion visual QA completed; generated evidence is not retained in Git.
 
 ## 6) Forecast fan chart + client-only storage
 Status: PASS (code + runtime behavior)
@@ -78,7 +78,7 @@ Checks:
 - Forecast AI summary actions (Like/Dislike/Share) with disclaimer caption.
 
 Evidence:
-- Forecast terminal view: `docs/screenshots/deliverables/forecasting-terminal-web.png`
+- Forecast terminal view reviewed; generated evidence is not retained in Git.
 - Client cache and summary code: `public/app.js`
 - Metadata-only storage updates: `functions/main.py`
 
@@ -104,6 +104,6 @@ Checks:
 - Quote carousel script added and wired.
 
 Evidence:
-- Homepage marketing sections: `docs/screenshots/deliverables/home-marketing-web.png`
-- Pricing page updated copy/cards/tables: `docs/screenshots/deliverables/pricing-page-web.png`
+- Homepage marketing sections reviewed; generated evidence is not retained in Git.
+- Pricing copy/cards/tables reviewed; generated evidence is not retained in Git.
 - Carousel script: `public/marketing-carousel.js`

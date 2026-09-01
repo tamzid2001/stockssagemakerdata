@@ -1,0 +1,53 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "Quantura Developer Documentation",
+  "description": "Build with Quantura forecasts, ensemble quantiles, collaborator-aware workspaces, and licensed datasets.",
+  "colors": {
+    "primary": "#0B1526",
+    "light": "#3AB5A2",
+    "dark": "#08111F"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "docs/index",
+              "docs/get-started"
+            ]
+          },
+          {
+            "group": "Platform",
+            "pages": [
+              "docs/authentication",
+              "docs/workspaces",
+              "docs/ensemble-api",
+              "docs/data-provenance",
+              "docs/errors"
+            ]
+          },
+          {
+            "group": "Methodology and operations",
+            "pages": [
+              "docs/ensemble-forecasting",
+              "docs/quantura-forecasts-methodology",
+              "docs/quantura-forecasts-operations",
+              "docs/repository-size-maintenance"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Endpoint reference",
+        "openapi": {
+          "source": "https://quantura.studio/api/openapi.json",
+          "directory": "api-reference"
+        }
+      }
+    ]
+  }
+}

@@ -26,6 +26,7 @@ jobs:
             "/screener"
             "/dashboard"
             "/pricing"
+            "/developers/api"
             "/contact"
             "/terms"
             "/privacy"
@@ -98,6 +99,19 @@ jobs:
             echo "- ✅ \`${api_url}\` -> 200 with ok payload" >> "$GITHUB_STEP_SUMMARY"
             rm -f "$api_body"
           done
+
+          watchdog_url="${PRIMARY_BASE_URL}/api/health/watchdog"
+          watchdog_body="$(mktemp)"
+          watchdog_code="$(curl -L --max-time 30 -sS -o "$watchdog_body" -w "%{http_code}" "$watchdog_url" || true)"
+          if [[ "$watchdog_code" != "200" ]] || ! grep -q '"ok":true' "$watchdog_body"; then
+            echo "❌ ${watchdog_url} failed dependency health verification"
+            echo "- ❌ \`${watchdog_url}\` -> HTTP ${watchdog_code}" >> "$GITHUB_STEP_SUMMARY"
+            failures=$((failures + 1))
+          else
+            echo "✅ ${watchdog_url}"
+            echo "- ✅ \`${watchdog_url}\` -> API and Firestore available" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          rm -f "$watchdog_body"
 
           if [[ "$failures" -gt 0 ]]; then
             echo ""

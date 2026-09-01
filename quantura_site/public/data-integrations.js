@@ -166,6 +166,7 @@
       try {
         await downloadCsv("/api/market-data/stocks/history", body, `${body.symbol}-${body.timeframe}.csv`);
         status(historyStatus, "CSV generated and downloaded successfully.", "success");
+        void window.QuanturaProductivity?.record("historical_data_downloaded", `Historical data downloaded · ${body.symbol}`, { resource_type: "historical_dataset", resource_id: body.symbol });
       } catch (error) { status(historyStatus, error.message, "error"); }
       finally { disable(downloadButton, false); }
     });
@@ -188,6 +189,7 @@
     const historyStatus = byId("alpaca-option-history-status");
     const sourceSelect = byId("options-market-source");
     const feedSelect = byId("alpaca-options-feed");
+    let expirationTimer = 0;
     const end = new Date();
     byId("alpaca-option-end").value = isoDate(end);
     byId("alpaca-option-start").value = isoDate(new Date(end.getTime() - 7 * 86400000));
@@ -197,26 +199,42 @@
         feedSelect.disabled = yahooOnly;
         feedSelect.title = yahooOnly ? "Yahoo Finance selects its own public options feed." : "Choose an Alpaca options feed.";
       }
-      expiration.innerHTML = '<option value="">Load expirations first</option>';
+      expiration.innerHTML = '<option value="">Expirations load automatically</option>';
+      expiration.disabled = true;
       byId("alpaca-option-contract").value = "";
       historyLoad.disabled = true;
       historyDownload.disabled = true;
     };
-    sourceSelect?.addEventListener("change", syncOptionSource);
-    syncOptionSource();
-    async function loadExpirations() {
+    async function loadExpirations({ preserveSelection = true } = {}) {
       const symbol = underlying.value.trim().toUpperCase();
       if (!/^[A-Z][A-Z0-9.\-]{0,14}$/.test(symbol)) { status(statusNode, "Enter a valid underlying ticker.", "error"); return; }
+      const selectedBeforeLoad = preserveSelection ? expiration.value : "";
       disable(expirationButton, true, "Loading expirations…");
+      expiration.disabled = true;
+      expiration.innerHTML = '<option value="">Loading available expirations…</option>';
+      status(statusNode, `Loading available expirations for ${symbol}…`);
       try {
         const payload = await jsonRequest(`/api/market-data/options/expirations?underlying=${encodeURIComponent(symbol)}&source=${encodeURIComponent(sourceSelect?.value || "auto")}`);
         expiration.innerHTML = payload.expirations.map((date) => `<option value="${html(date)}">${html(date)}</option>`).join("");
-        status(statusNode, `Loaded ${payload.expirations.length} active expirations from ${payload.provider || "market data"}${payload.fallbackUsed ? " using automatic fallback" : ""}. Choose one and load the chain.`, "success");
-      } catch (error) { expiration.innerHTML = '<option value="">No expirations available</option>'; status(statusNode, error.message, "error"); }
+        expiration.disabled = false;
+        if (selectedBeforeLoad && payload.expirations.includes(selectedBeforeLoad)) expiration.value = selectedBeforeLoad;
+        status(statusNode, `Loaded ${payload.expirations.length} active expirations from ${payload.provider || "market data"}${payload.fallbackUsed ? " using automatic fallback" : ""}. Nearest expiration is selected.`, "success");
+      } catch (error) { expiration.innerHTML = '<option value="">No expirations available</option>'; status(statusNode, `${error.message} Use Refresh expirations to retry.`, "error"); }
       finally { disable(expirationButton, false); }
     }
-    expirationButton.addEventListener("click", loadExpirations);
-    underlying.addEventListener("change", () => { expiration.innerHTML = '<option value="">Load expirations first</option>'; });
+    const scheduleExpirations = (delay = 450) => {
+      window.clearTimeout(expirationTimer);
+      expirationTimer = window.setTimeout(() => void loadExpirations(), delay);
+    };
+    sourceSelect?.addEventListener("change", () => { syncOptionSource(); scheduleExpirations(0); });
+    expirationButton.addEventListener("click", () => void loadExpirations());
+    underlying.addEventListener("input", () => {
+      expiration.innerHTML = '<option value="">Waiting for a valid ticker…</option>';
+      expiration.disabled = true;
+      scheduleExpirations();
+    });
+    syncOptionSource();
+    scheduleExpirations(0);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!form.reportValidity()) return;
@@ -227,7 +245,7 @@
         const payload = await jsonRequest(`/api/market-data/options/chain?${query}`);
         const rows = Array.isArray(payload.contracts) ? payload.contracts : [];
         table(byId("alpaca-options-chain"), [
-          { key: "select", label: "Select", render: (row) => `SELECT::${row.symbol}` }, { key: "symbol", label: "Contract" },
+          { key: "symbol", label: "Contract" },
           { key: "type", label: "Type" }, { key: "strike", label: "Strike", render: (row) => number(row.strike, 2) },
           { key: "bid", label: "Bid", render: (row) => number(row.bid) }, { key: "ask", label: "Ask", render: (row) => number(row.ask) },
           { key: "last", label: "Last", render: (row) => number(row.last) }, { key: "volume", label: "Volume", render: (row) => number(row.volume, 0) },
@@ -235,18 +253,29 @@
           { key: "delta", label: "Delta", render: (row) => number(row.delta) }, { key: "gamma", label: "Gamma", render: (row) => number(row.gamma) },
           { key: "theta", label: "Theta", render: (row) => number(row.theta) }, { key: "vega", label: "Vega", render: (row) => number(row.vega) },
         ], rows, 250);
-        byId("alpaca-options-chain").querySelectorAll("td:first-child").forEach((cell) => {
-          const marker = cell.textContent || "";
-          if (!marker.startsWith("SELECT::")) return;
-          const symbol = marker.slice(8);
-          const contract = rows.find((row) => row.symbol === symbol);
-          cell.innerHTML = `<button class="task-chip" type="button" data-contract="${html(symbol)}">Select</button>`;
-          cell.querySelector("button").addEventListener("click", () => {
+        const chainRows = byId("alpaca-options-chain").querySelectorAll("tbody tr");
+        const chooseContract = (tableRow, contract) => {
+          const symbol = String(contract.symbol || "");
+          chainRows.forEach((row) => { row.setAttribute("aria-selected", "false"); row.classList.remove("is-selected"); });
+          tableRow.setAttribute("aria-selected", "true");
+          tableRow.classList.add("is-selected");
             byId("alpaca-option-contract").value = symbol;
             byId("alpaca-selected-contract").innerHTML = `<strong>${html(symbol)}</strong><span>${html(contract.type)} · $${html(number(contract.strike, 2))} · expires ${html(contract.expiration)}</span>`;
             historyLoad.disabled = false;
             historyDownload.disabled = true;
             status(historyStatus, "Contract selected. Choose a range and load history.");
+        };
+        chainRows.forEach((tableRow, index) => {
+          const contract = rows[index];
+          if (!contract) return;
+          tableRow.tabIndex = 0;
+          tableRow.setAttribute("aria-selected", "false");
+          tableRow.setAttribute("aria-label", `Select ${contract.symbol} ${contract.type} contract at strike ${contract.strike}`);
+          tableRow.addEventListener("click", () => chooseContract(tableRow, contract));
+          tableRow.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            chooseContract(tableRow, contract);
           });
         });
         status(statusNode, `Loaded ${rows.length.toLocaleString()} ${byId("alpaca-options-type").value} contracts from ${payload.provider || "market data"}${payload.fallbackUsed ? " using automatic fallback" : ""}.`, "success");
@@ -273,7 +302,7 @@
     });
     historyDownload.addEventListener("click", async () => {
       const body = optionHistoryBody(); disable(historyDownload, true, "Generating CSV…");
-      try { await downloadCsv("/api/market-data/options/history", body, `${body.contractSymbol}-${body.timeframe}.csv`); status(historyStatus, "Valid options-history CSV generated and downloaded.", "success"); }
+      try { await downloadCsv("/api/market-data/options/history", body, `${body.contractSymbol}-${body.timeframe}.csv`); status(historyStatus, "Valid options-history CSV generated and downloaded.", "success"); void window.QuanturaProductivity?.record("options_history_downloaded", `Options history downloaded · ${body.contractSymbol}`, { resource_type: "option_contract", resource_id: body.contractSymbol }); }
       catch (error) { status(historyStatus, error.message, "error"); }
       finally { disable(historyDownload, false); }
     });
@@ -489,6 +518,7 @@
       try {
         await downloadFile("/api/sports/prediction-markets/export", body, format, `${source()}-${mode()}-sports.${format}`);
         status(providerStatus, `${format.toUpperCase()} generated and downloaded successfully.`, "success");
+        void window.QuanturaProductivity?.record("prediction_market_dataset_downloaded", `Prediction-market dataset downloaded · ${source()}`, { resource_type: "prediction_market_dataset", resource_id: source() });
       } catch (error) { status(providerStatus, error.message, "error"); }
       finally { disable(button, false); }
     }

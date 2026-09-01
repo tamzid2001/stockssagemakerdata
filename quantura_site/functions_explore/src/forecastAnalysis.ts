@@ -102,11 +102,15 @@ export type ForecastAnalysisContext = {
 
 export type ForecastAgentSections = {
   forecastDistribution: string;
+  marketContext: string;
   extremeBearCase: string;
   bearCase: string;
   baseCase: string;
   bullCase: string;
   extremeBullCase: string;
+  bullishStoryScenario: string;
+  baseStoryScenario: string;
+  bearishStoryScenario: string;
   technicalConfirmation: string;
   forecastUncertainty: string;
   overallBias: "Strongly Bullish" | "Moderately Bullish" | "Neutral / Mixed" | "Moderately Bearish" | "Strongly Bearish";
@@ -444,6 +448,8 @@ export const FORECAST_ANALYSIS_SYSTEM_PROMPT = [
   "Technical Confirmation / Conflict must explain whether indicators confirm or contradict the distribution, including exhaustion risks.",
   "Forecast Uncertainty must analyze both the P25-P75 central range and P1-P99 extreme range, including whether each expands, contracts, or remains stable.",
   "Compare upside, downside, and contradictory evidence before choosing Overall Bias: Strongly Bullish, Moderately Bullish, Neutral / Mixed, Moderately Bearish, or Strongly Bearish.",
+  "When current web context is explicitly enabled, Market Context must separate current, cited search evidence from the numerical model evidence and call out contradictions. When it is disabled, say that no live context was requested.",
+  "Bullish, base, and bearish story scenarios are hypothetical narratives only. Label them Hypothetical Headline Scenario, never BREAKING NEWS or an event that has already occurred, and never confuse them with actual searched headlines.",
   "Never imply certainty, guaranteed returns, support/resistance guarantees, or investment advice. Do not add unsupported facts, news, fundamentals, or prices.",
   "Return valid JSON matching the supplied schema.",
 ].join(" ");
@@ -453,11 +459,15 @@ export const FORECAST_ANALYSIS_RESPONSE_SCHEMA = {
   additionalProperties: false,
   properties: {
     forecastDistribution: { type: "string", minLength: 1, maxLength: 1400 },
+    marketContext: { type: "string", minLength: 1, maxLength: 1400 },
     extremeBearCase: { type: "string", minLength: 1, maxLength: 1400 },
     bearCase: { type: "string", minLength: 1, maxLength: 1400 },
     baseCase: { type: "string", minLength: 1, maxLength: 1400 },
     bullCase: { type: "string", minLength: 1, maxLength: 1400 },
     extremeBullCase: { type: "string", minLength: 1, maxLength: 1400 },
+    bullishStoryScenario: { type: "string", minLength: 1, maxLength: 700 },
+    baseStoryScenario: { type: "string", minLength: 1, maxLength: 700 },
+    bearishStoryScenario: { type: "string", minLength: 1, maxLength: 700 },
     technicalConfirmation: { type: "string", minLength: 1, maxLength: 1400 },
     forecastUncertainty: { type: "string", minLength: 1, maxLength: 1400 },
     overallBias: {
@@ -468,11 +478,15 @@ export const FORECAST_ANALYSIS_RESPONSE_SCHEMA = {
   },
   required: [
     "forecastDistribution",
+    "marketContext",
     "extremeBearCase",
     "bearCase",
     "baseCase",
     "bullCase",
     "extremeBullCase",
+    "bullishStoryScenario",
+    "baseStoryScenario",
+    "bearishStoryScenario",
     "technicalConfirmation",
     "forecastUncertainty",
     "overallBias",
@@ -480,7 +494,7 @@ export const FORECAST_ANALYSIS_RESPONSE_SCHEMA = {
   ],
 } as const;
 
-export function buildForecastAgentRequest(context: ForecastAnalysisContext): {
+export function buildForecastAgentRequest(context: ForecastAnalysisContext, options: { enableMarketContext?: boolean } = {}): {
   systemPrompt: string;
   userPayload: Record<string, unknown>;
   responseSchema: typeof FORECAST_ANALYSIS_RESPONSE_SCHEMA;
@@ -489,6 +503,9 @@ export function buildForecastAgentRequest(context: ForecastAnalysisContext): {
     systemPrompt: FORECAST_ANALYSIS_SYSTEM_PROMPT,
     userPayload: {
       task: "Analyze the complete five-quantile Meta Prophet distribution, its two uncertainty ranges, technical confirmation, and all five scenarios before selecting a bias.",
+      marketContextPolicy: options.enableMarketContext
+        ? "LIVE MODE: use the approved web-search tool for current, relevant market context. Cite sources and distinguish retrieved facts from model-derived hypothetical scenarios."
+        : "QUANTITATIVE-ONLY MODE: no live search was requested. Do not invent current news or external context.",
       ...context,
     },
     responseSchema: FORECAST_ANALYSIS_RESPONSE_SCHEMA,
@@ -524,11 +541,15 @@ export function parseForecastAgentSections(value: unknown): ForecastAgentSection
   ]);
   const result = {
     forecastDistribution: text(parsed.forecastDistribution, 1400),
+    marketContext: text(parsed.marketContext, 1400),
     extremeBearCase: text(parsed.extremeBearCase, 1400),
     bearCase: text(parsed.bearCase, 1400),
     baseCase: text(parsed.baseCase, 1400),
     bullCase: text(parsed.bullCase, 1400),
     extremeBullCase: text(parsed.extremeBullCase, 1400),
+    bullishStoryScenario: text(parsed.bullishStoryScenario, 700),
+    baseStoryScenario: text(parsed.baseStoryScenario, 700),
+    bearishStoryScenario: text(parsed.bearishStoryScenario, 700),
     technicalConfirmation: text(parsed.technicalConfirmation, 1400),
     forecastUncertainty: text(parsed.forecastUncertainty, 1400),
     overallBias: text(parsed.overallBias, 40),
@@ -536,11 +557,15 @@ export function parseForecastAgentSections(value: unknown): ForecastAgentSection
   };
   if (
     !result.forecastDistribution ||
+    !result.marketContext ||
     !result.extremeBearCase ||
     !result.bearCase ||
     !result.baseCase ||
     !result.bullCase ||
     !result.extremeBullCase ||
+    !result.bullishStoryScenario ||
+    !result.baseStoryScenario ||
+    !result.bearishStoryScenario ||
     !result.technicalConfirmation ||
     !result.forecastUncertainty ||
     !result.overallAssessment ||
@@ -555,6 +580,8 @@ export function renderForecastAgentMarkdown(sections: ForecastAgentSections): st
   return [
     "### Forecast Distribution",
     sections.forecastDistribution,
+    "### Current Market Context",
+    sections.marketContext,
     "### Extreme Bear Case",
     sections.extremeBearCase,
     "### Bear Case",
@@ -565,6 +592,12 @@ export function renderForecastAgentMarkdown(sections: ForecastAgentSections): st
     sections.bullCase,
     "### Extreme Bull Case",
     sections.extremeBullCase,
+    "### Hypothetical Headline Scenario — Bullish",
+    sections.bullishStoryScenario,
+    "### Hypothetical Headline Scenario — Base",
+    sections.baseStoryScenario,
+    "### Hypothetical Headline Scenario — Bearish",
+    sections.bearishStoryScenario,
     "### Technical Confirmation / Conflict",
     sections.technicalConfirmation,
     "### Forecast Uncertainty",

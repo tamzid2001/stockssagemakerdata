@@ -1,0 +1,30 @@
+---
+title: "Errors, polling, and retries"
+description: "Handle structured API errors and asynchronous forecast failures safely."
+---
+
+# Errors, polling, and retries
+
+API errors use a stable envelope:
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Rate limit exceeded.",
+    "request_id": "00000000-0000-4000-8000-000000000000"
+  }
+}
+```
+
+Common status codes:
+
+- `401` — missing, invalid, expired, or revoked credential.
+- `403` — scope, workspace role, plan, or license gate denied the request.
+- `404` — resource not found or not visible to this identity.
+- `422` — configuration, data, horizon, model, or quantile validation failed.
+- `429` — request or compute quota exceeded.
+
+Retry only transient failures. Reuse an `Idempotency-Key` when retrying forecast creation so a network timeout does not launch duplicate inference.
+
+Worker failures are structured by model and retryability. Public responses never include raw stack traces, secret values, authorization headers, or private filesystem paths.

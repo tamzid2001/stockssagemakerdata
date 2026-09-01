@@ -1,0 +1,74 @@
+{
+  "schemaVersion": "2026-09-01",
+  "defaultQuantiles": [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99],
+  "maxRequestedQuantiles": 21,
+  "models": {
+    "prophet": {
+      "name": "Meta Prophet",
+      "checkpoint": null,
+      "defaultWeight": 0.2,
+      "quantileSupport": { "type": "requested" },
+      "maxPredictionLength": 365,
+      "maxContextLength": 10000,
+      "defaultDevice": "cpu",
+      "featureEntitlement": "meta_prophet"
+    },
+    "toto": {
+      "name": "Toto 2.0",
+      "checkpoint": "Datadog/Toto-2.0-4m",
+      "defaultWeight": 0.2,
+      "quantileSupport": {
+        "type": "bounded_native",
+        "native": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        "minimum": 0.1,
+        "maximum": 0.9,
+        "interpolateWithinRange": true,
+        "extrapolate": false
+      },
+      "maxPredictionLength": 1024,
+      "maxContextLength": 4096,
+      "defaultDevice": "auto",
+      "featureEntitlement": "forecast_ensemble"
+    },
+    "granite": {
+      "name": "IBM Granite PatchTST-FM-r2",
+      "checkpoint": "ibm-granite/granite-timeseries-patchtst-fm-r2",
+      "defaultWeight": 0.2,
+      "quantileSupport": { "type": "requested" },
+      "maxPredictionLength": 720,
+      "maxContextLength": 4096,
+      "defaultDevice": "cpu",
+      "featureEntitlement": "forecast_ensemble"
+    },
+    "chronos": {
+      "name": "Amazon Chronos-2",
+      "checkpoint": "amazon/chronos-2",
+      "defaultWeight": 0.2,
+      "quantileSupport": { "type": "requested_verified_native_range" },
+      "maxPredictionLength": 512,
+      "maxContextLength": 2048,
+      "defaultDevice": "auto",
+      "featureEntitlement": "chronos_2"
+    },
+    "timesfm": {
+      "name": "Google TimesFM 3.0",
+      "checkpoint": "google/timesfm-3.0-pytorch",
+      "defaultWeight": 0.2,
+      "quantileSupport": {
+        "type": "bounded_native",
+        "native": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        "minimum": 0.1,
+        "maximum": 0.9,
+        "interpolateWithinRange": true,
+        "extrapolate": false
+      },
+      "maxPredictionLength": 1024,
+      "maxContextLength": 16384,
+      "defaultDevice": "auto",
+      "featureEntitlement": "forecast_ensemble",
+      "requiresHfAccess": true,
+      "requiresCommercialLicenseForProduction": true,
+      "license": "timesfm-non-commercial-license-v1.0"
+    }
+  }
+}

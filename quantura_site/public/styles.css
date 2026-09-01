@@ -3531,6 +3531,23 @@ textarea {
   gap: 4px;
 }
 
+.productivity-calendar-wrap > .productivity-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.developer-key-grid { align-items: start; }
+.api-scope-fieldset { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 14px 0; }
+.api-scope-fieldset legend { padding: 0 7px; font-weight: 800; }
+.api-scope-grid { display: grid; gap: 8px; max-height: 330px; overflow: auto; }
+.api-scope-option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; align-items: start; padding: 9px; border: 1px solid var(--line); border-radius: 10px; }
+.api-scope-option span { display: grid; gap: 2px; }
+.api-scope-option small { color: var(--ink-2); }
+.api-key-secret { display: grid; gap: 10px; margin: 12px 0; padding: 14px; border: 1px solid rgba(79, 140, 255, 0.38); border-radius: 12px; background: rgba(79, 140, 255, 0.09); }
+.api-key-secret code { display: block; overflow-wrap: anywhere; user-select: all; }
+.api-key-card code { color: var(--ink-2); }
+
 .kanban-host {
   min-height: 280px;
   width: 100%;
@@ -3836,6 +3853,23 @@ textarea {
   background: rgba(58, 181, 162, 0.16);
   border-color: rgba(58, 181, 162, 0.3);
 }
+
+.calendar-task[data-calendar-kind="interaction"] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 5px;
+  background: rgba(79, 140, 255, 0.13);
+  border-color: rgba(79, 140, 255, 0.3);
+}
+
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.calendar-legend span { display: inline-flex; align-items: center; gap: 5px; }
 
 .calendar-task--more {
   background: rgba(18, 24, 42, 0.04);
@@ -9111,15 +9145,188 @@ html .toast[data-variant="warn"] {
   margin-top: 12px;
 }
 
+.forecast-market-context-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--ink-2);
+  font-size: 0.88rem;
+}
+
+.forecast-market-context-toggle input {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
+.forecast-context-sources {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper-2) 78%, var(--surface));
+  font-size: 0.86rem;
+}
+
+.forecast-context-sources ul {
+  margin: 8px 0 0 18px;
+}
+
 .forecast-run-meta {
   display: grid;
   gap: 6px;
   margin-top: 10px;
 }
 
+.ensemble-forecast-shell {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 18px);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.07);
+}
+
+.ensemble-forecast-shell > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.ensemble-forecast-shell > summary::-webkit-details-marker { display: none; }
+.ensemble-forecast-shell > summary::after { content: "+"; font-size: 1.35rem; color: var(--ink-2); }
+.ensemble-forecast-shell[open] > summary::after { content: "−"; }
+.ensemble-forecast-shell > summary strong { display: block; margin-top: 3px; font-size: 1.05rem; }
+
+.ensemble-forecast-body {
+  padding: 0 20px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.ensemble-forecast-body > p { margin: 16px 0; }
+
+.ensemble-model-fieldset,
+.ensemble-quantile-fieldset {
+  margin-top: 18px;
+  padding: 0;
+  border: 0;
+}
+
+.ensemble-model-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ensemble-model-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--paper-2) 74%, var(--surface));
+}
+
+.ensemble-model-card.is-unavailable { opacity: 0.62; }
+.ensemble-model-card.is-disabled .ensemble-model-weight { opacity: 0.48; }
+
+.ensemble-model-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-weight: 800;
+}
+
+.ensemble-model-toggle input { margin-top: 3px; }
+.ensemble-model-name { min-width: 0; overflow-wrap: anywhere; }
+.ensemble-model-capability { min-height: 42px; }
+
+.ensemble-model-weight input {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.ensemble-weight-summary,
+.ensemble-result-actions,
+.ensemble-preset-row {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ensemble-weight-summary { justify-content: space-between; align-items: center; }
+.ensemble-preset-row .field { min-width: min(230px, 100%); flex: 1; }
+
+.ensemble-quantile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ensemble-quantile-chips label { cursor: pointer; }
+.ensemble-quantile-chips input { position: absolute; opacity: 0; pointer-events: none; }
+.ensemble-quantile-chips span {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-weight: 800;
+}
+
+.ensemble-quantile-chips input:checked + span {
+  color: var(--accent-ink, var(--ink));
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+
+.ensemble-quantile-chips input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.ensemble-advanced-settings {
+  margin: 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.ensemble-advanced-settings > summary { cursor: pointer; font-weight: 800; }
+.ensemble-advanced-settings[open] > .form-grid { margin-top: 12px; }
+
+.ensemble-job-status {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.ensemble-results {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper-2) 68%, var(--surface));
+}
+
+.ensemble-chart { min-height: 380px; margin-top: 14px; }
+.ensemble-results table td:not(:first-child),
+.ensemble-results table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.ensemble-results table th:first-child { min-width: 150px; }
+
 @media (max-width: 1100px) {
   .forecast-snapshot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .forecast-scenario-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ensemble-model-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -9131,6 +9338,12 @@ html .toast[data-variant="warn"] {
   .forecast-range-grid { grid-template-columns: 1fr; }
   .forecast-statistics-table { min-width: 1040px; }
   .forecast-date-line { display: grid; gap: 5px; }
+  .ensemble-forecast-shell > summary { align-items: flex-start; padding: 16px; }
+  .ensemble-forecast-shell > summary > .small { display: none; }
+  .ensemble-forecast-body { padding: 0 14px 16px; }
+  .ensemble-model-grid { grid-template-columns: 1fr; }
+  .ensemble-result-actions > * { width: 100%; justify-content: center; text-align: center; }
+  .ensemble-chart { min-height: 300px; }
 }
 
 /* Quantura brand, notification center, and compact mobile navigation */
@@ -9896,4 +10109,23 @@ html .toast[data-variant="warn"] {
   .feature-checkbox-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* The professional design system is imported before this legacy stylesheet's
+   original :root block. Re-bridge its semantic variables at the end of the
+   cascade so the default dark theme never inherits light-era text/surface
+   colors. The explicit light theme keeps its higher-specificity overrides. */
+:root:not([data-theme="light"]) {
+  --ink: var(--q-text);
+  --ink-2: #dbe6f5;
+  --graphite: var(--q-muted);
+  --paper: var(--q-bg);
+  --paper-2: var(--q-bg-elevated);
+  --surface-solid: var(--q-surface);
+  --surface: var(--q-surface);
+  --line: var(--q-border);
+  --header-bg: rgba(7, 16, 31, 0.96);
+  --bg: var(--q-bg);
+  --glass-text: var(--q-text);
+  --glass-muted: var(--q-muted);
 }

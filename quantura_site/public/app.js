@@ -576,7 +576,6 @@
       label: "Nano Scout",
       personality: "efficient",
       helper: "Ultra-low-cost triage and quick breadth scans.",
-      pricing: { input: 0.05, cached_input: 0.005, output: 0.4 },
     },
     {
       id: "gpt-5-mini",
@@ -585,7 +584,6 @@
       label: "Balanced Analyst",
       personality: "balanced",
       helper: "Fast all-round screening for most workflows.",
-      pricing: { input: 0.25, cached_input: 0.025, output: 2.0 },
     },
     {
       id: "gpt-5",
@@ -594,7 +592,6 @@
       label: "Research Core",
       personality: "deep_research",
       helper: "Higher-depth thesis and cross-factor reasoning.",
-      pricing: { input: 1.25, cached_input: 0.125, output: 10.0 },
     },
     {
       id: "gpt-5.1",
@@ -603,16 +600,14 @@
       label: "Macro Strategist",
       personality: "momentum",
       helper: "Stronger macro synthesis and scenario framing.",
-      pricing: { input: 1.25, cached_input: 0.125, output: 10.0 },
     },
     {
       id: "gpt-5.2",
       provider: "openai",
-      tier: "Desk",
+      tier: "Research",
       label: "Contrarian Strategist",
       personality: "contrarian",
       helper: "Looks for crowded trades and asymmetric reversals.",
-      pricing: { input: 1.75, cached_input: 0.175, output: 14.0 },
     },
     {
       id: "claude-sonnet-4-5",
@@ -621,7 +616,6 @@
       label: "Claude Sonnet 4.5",
       personality: "balanced",
       helper: "Strong reasoning and synthesis for forecast review.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "claude-opus-4-5",
@@ -630,7 +624,6 @@
       label: "Claude Opus 4.5",
       personality: "deep_research",
       helper: "High-depth long-form synthesis for premium analysis.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "amazon.nova-lite-v1:0",
@@ -639,7 +632,6 @@
       label: "Nova Flow",
       personality: "balanced",
       helper: "Amazon Nova lightweight reasoning path.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "amazon.nova-pro-v1:0",
@@ -648,7 +640,6 @@
       label: "Nova Operator",
       personality: "deep_research",
       helper: "Amazon Nova high-depth analysis path.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "gemini-2.0-flash",
@@ -657,7 +648,6 @@
       label: "Gemini 2.0 Flash",
       personality: "balanced",
       helper: "Google Gemini fast-response path.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "deepseek-chat",
@@ -666,7 +656,6 @@
       label: "DeepSeek Chat",
       personality: "balanced",
       helper: "DeepSeek baseline analysis path.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "qwen-plus",
@@ -675,7 +664,6 @@
       label: "Qwen Plus",
       personality: "balanced",
       helper: "Qwen balanced analysis path.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "mistral-small-latest",
@@ -684,7 +672,6 @@
       label: "Mistral Small",
       personality: "balanced",
       helper: "Mistral low-latency reasoning path.",
-      pricing: { input: null, cached_input: null, output: null },
     },
     {
       id: "sonar",
@@ -693,7 +680,6 @@
       label: "Perplexity Sonar",
       personality: "research",
       helper: "Perplexity web-grounded answer path.",
-      pricing: { input: null, cached_input: null, output: null },
     },
   ];
   const DEFAULT_LLM_ALLOWED_MODELS = [
@@ -714,22 +700,6 @@
       workspace_limit: 0,
       ad_free: false,
     },
-    go: {
-      allowed_models: ["gpt-5-nano", "gpt-5-mini"],
-      weekly_limit: 10,
-      daily_limit: 10,
-      volatility_alerts: true,
-      workspace_limit: 1,
-      ad_free: true,
-    },
-    plus: {
-      allowed_models: ["gpt-5-mini", "gpt-5", "claude-sonnet-4-5"],
-      weekly_limit: 25,
-      daily_limit: 25,
-      volatility_alerts: true,
-      workspace_limit: 3,
-      ad_free: true,
-    },
     pro: {
       allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1", "claude-sonnet-4-5"],
       weekly_limit: 60,
@@ -738,7 +708,15 @@
       workspace_limit: 8,
       ad_free: true,
     },
-    business: {
+    quant: {
+      allowed_models: ["gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "claude-sonnet-4-5"],
+      weekly_limit: 150,
+      daily_limit: 150,
+      volatility_alerts: true,
+      workspace_limit: 0,
+      ad_free: true,
+    },
+    research: {
       allowed_models: [
         "gpt-5-nano",
         "gpt-5-mini",
@@ -756,26 +734,22 @@
       workspace_limit: 30,
       ad_free: true,
     },
-    desk: {
-      allowed_models: ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-5.1", "gpt-5.2", "claude-sonnet-4-5", "claude-opus-4-5"],
-      weekly_limit: 150,
-      daily_limit: 150,
-      volatility_alerts: true,
-      workspace_limit: 30,
-      ad_free: true,
-    },
   };
   const DEFAULT_NATIVE_IAP_PRODUCT_IDS = Object.freeze({
     ios: Object.freeze({
       go: "goplan",
       plus: "premium",
       pro: "pro",
+      quant: "quanturaquant",
+      research: "quanturaresearch",
       business: "businessplan",
       desk: "businessplan",
       forecast: "goplan",
       annual_go: "annualgoplan",
       annual_plus: "annualplusplan",
       annual_pro: "pro",
+      annual_quant: "quanturaquantannual",
+      annual_research: "quanturaresearchannual",
       annual_business: "annualbusinessplan",
       default: "pro",
     }),
@@ -783,12 +757,16 @@
       go: "goplan",
       plus: "premium",
       pro: "quanturapro",
+      quant: "quanturaquant",
+      research: "quanturaresearch",
       business: "quanturabusiness",
       desk: "quanturabusiness",
       forecast: "goplan",
       annual_go: "goplanyearly",
       annual_plus: "annualplusplan",
       annual_pro: "quanturapro",
+      annual_quant: "quanturaquantannual",
+      annual_research: "quanturaresearchannual",
       annual_business: "annualbusinessplan",
       default: "quanturapro",
     }),
@@ -1752,6 +1730,30 @@
     forecastOutput: document.getElementById("forecast-output"),
     forecastScenarioHost: document.getElementById("forecast-scenario-host"),
     forecastAiHost: document.getElementById("forecast-ai-host"),
+    ensembleForecastSettings: document.getElementById("ensemble-forecast-settings"),
+    ensembleForecastForm: document.getElementById("ensemble-forecast-form"),
+    ensembleSourceType: document.getElementById("ensemble-source-type"),
+    ensembleTicker: document.getElementById("ensemble-ticker"),
+    ensembleModelList: document.getElementById("ensemble-model-list"),
+    ensembleWeightStatus: document.getElementById("ensemble-weight-status"),
+    ensembleNormalizeWeights: document.getElementById("ensemble-normalize-weights"),
+    ensembleQuantileStatus: document.getElementById("ensemble-quantile-status"),
+    ensembleCustomQuantiles: document.getElementById("ensemble-custom-quantiles"),
+    ensemblePresetSelect: document.getElementById("ensemble-preset-select"),
+    ensembleLoadPreset: document.getElementById("ensemble-load-preset"),
+    ensemblePresetName: document.getElementById("ensemble-preset-name"),
+    ensembleSavePreset: document.getElementById("ensemble-save-preset"),
+    ensembleRunButton: document.getElementById("ensemble-run-button"),
+    ensembleForecastStatus: document.getElementById("ensemble-forecast-status"),
+    ensembleForecastResults: document.getElementById("ensemble-forecast-results"),
+    ensembleResultState: document.getElementById("ensemble-result-state"),
+    ensembleResultMeta: document.getElementById("ensemble-result-meta"),
+    ensembleForecastChart: document.getElementById("ensemble-forecast-chart"),
+    ensembleResultTable: document.getElementById("ensemble-result-table"),
+    ensembleDownloadCsv: document.getElementById("ensemble-download-csv"),
+    ensembleDownloadJson: document.getElementById("ensemble-download-json"),
+    ensembleCopyConfig: document.getElementById("ensemble-copy-config"),
+    ensembleRunAgain: document.getElementById("ensemble-run-again"),
     forecastLoadSelect: document.getElementById("forecast-load-select"),
     forecastLoadButton: document.getElementById("forecast-load-button"),
     forecastLoadStatus: document.getElementById("forecast-load-status"),
@@ -1853,7 +1855,6 @@
     foundryPriceAlertSession: document.getElementById("foundry-price-alert-session"),
     foundryPriceAlertBoundaries: Array.from(document.querySelectorAll("[data-foundry-alert-boundary]")),
     foundryPriceAlertStatus: document.getElementById("foundry-price-alert-status"),
-    foundryNotes: document.getElementById("foundry-notes"),
     foundryModelMetricsBlock: document.getElementById("foundry-model-metrics-block"),
     foundryHistoryFields: document.getElementById("foundry-history-fields"),
     foundryFileField: document.getElementById("foundry-file-field"),
@@ -1890,7 +1891,6 @@
     sportsFoundryMinuteHistoryStart: document.getElementById("sports-market-history-start"),
     sportsFoundryMinuteHistoryEnd: document.getElementById("sports-market-history-end"),
     sportsFoundryTitle: document.getElementById("sports-foundry-title"),
-    sportsFoundryNotes: document.getElementById("sports-foundry-notes"),
     sportsFoundryHistoryMeta: document.getElementById("sports-foundry-history-meta"),
     sportsFoundryHistoryPreview: document.getElementById("sports-foundry-history-preview"),
     sportsFoundryGameGap: document.getElementById("sports-foundry-game-gap"),
@@ -1930,10 +1930,11 @@
 	    taskDue: document.getElementById("task-due"),
 	    taskStatus: document.getElementById("task-status"),
 	    taskAssignee: document.getElementById("task-assignee"),
-	    taskNotes: document.getElementById("task-notes"),
 	    taskStatusText: document.getElementById("task-status-text"),
 	    productivityBoard: document.getElementById("productivity-board"),
 	    tasksCalendar: document.getElementById("tasks-calendar"),
+	    calendarExport: document.getElementById("calendar-export"),
+	    calendarExportStatus: document.getElementById("calendar-export-status"),
 	    notificationsEnable: document.getElementById("notifications-enable"),
     notificationsRefresh: document.getElementById("notifications-refresh"),
     notificationsSendTest: document.getElementById("notifications-send-test"),
@@ -2241,6 +2242,7 @@
     promoModalShown: false,
     taskCalendarCursor: null,
     taskCalendarTasks: [],
+    taskCalendarInteractions: [],
 	    unsubscribeOrders: null,
 	    unsubscribeAdmin: null,
 	    unsubscribeAdminAutopilot: null,
@@ -2249,6 +2251,7 @@
 	    unsubscribeAutopilot: null,
 	    unsubscribePredictions: null,
 	    unsubscribeTasks: null,
+	    unsubscribeCalendarInteractions: null,
 	    unsubscribeScreenerRuns: null,
       unsubscribeAIAgents: null,
       unsubscribeAIFollows: null,
@@ -3227,7 +3230,7 @@
 
     const preferredByRouter = {
       terminal: ["forecast", "/forecasting", "options", "/options", "news"],
-      dashboard: ["orders", "profile", "productivity", "collaboration", "notifications"],
+      dashboard: ["orders", "profile", "developer", "productivity", "collaboration", "notifications"],
     };
     const preferredByPath = {
       "/screener": ["/forecasting", "/screener", "/research", "/historical-data"],
@@ -3689,6 +3692,50 @@
     }
   };
 
+  const PRODUCTIVITY_INTERACTIONS = Object.freeze({
+    forecast_request: ["forecast_generated", "Forecast generated"],
+    forecast_plotted: ["forecast_generated", "Forecast chart reviewed"],
+    forecast_ai_analysis_generated: ["forecast_ai_analysis_generated", "AI forecast analysis generated"],
+    screener_request: ["screener_run_created", "Screener run created"],
+    screener_csv_downloaded: ["screener_exported", "Screener CSV exported"],
+    download_history: ["historical_data_downloaded", "Historical dataset downloaded"],
+    predictions_upload: ["prediction_csv_analyzed", "Prediction CSV analyzed"],
+    task_created: ["task_created", "Task created"],
+    task_updated: ["task_updated", "Task updated"],
+    task_moved: ["task_completed", "Task status changed"],
+    task_drag_moved: ["task_completed", "Task status changed"],
+  });
+
+  const recordProductivityInteraction = async (name, params = {}) => {
+    const definition = PRODUCTIVITY_INTERACTIONS[String(name || "").trim()] || (Array.isArray(name) ? name : null);
+    if (!definition || !hasFullAccount()) return;
+    const currentUser = typeof firebase !== "undefined" && firebase.auth ? firebase.auth().currentUser : null;
+    if (!currentUser || currentUser.isAnonymous) return;
+    try {
+      const token = await currentUser.getIdToken();
+      const eventName = Array.isArray(definition) ? definition[0] : String(name || "");
+      const title = Array.isArray(definition) ? definition[1] : String(params.title || eventName).replaceAll("_", " ");
+      await fetch("/api/calendar/interactions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          event_name: eventName,
+          title,
+          occurred_at: new Date().toISOString(),
+          route: window.location.pathname,
+          workspace_id: String(params.workspace_id || state.activeWorkspaceId || currentUser.uid),
+          resource_type: String(params.resource_type || params.type || ""),
+          resource_id: String(params.resource_id || params.run_id || params.forecast_id || ""),
+          idempotency_key: `${eventName}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`,
+        }),
+      });
+    } catch (_error) {
+      // Activity recording is non-blocking and never interrupts the user's primary action.
+    }
+  };
+
+  window.QuanturaProductivity = Object.freeze({ record: (eventName, title, params = {}) => recordProductivityInteraction([eventName, title], params) });
+
   const logEvent = (name, params = {}) => {
     const analytics = getAnalytics();
     if (analytics) {
@@ -3700,6 +3747,7 @@
     }
     const metaEvent = emitMetaPixelEvent(name, params);
     forwardMetaConversionEvent(metaEvent);
+    void recordProductivityInteraction(name, params);
   };
 
   const setUserId = (uid) => {
@@ -6582,17 +6630,16 @@
 
   const SUBSCRIPTION_TIER_RANK = Object.freeze({
     free: 0,
-    go: 1,
-    plus: 2,
-    pro: 3,
-    business: 4,
-    desk: 4,
+    pro: 1,
+    quant: 2,
+    research: 3,
   });
 
   const normalizeSubscriptionTier = (value) => {
     const raw = String(value || "").trim().toLowerCase();
     if (!raw) return "free";
-    if (raw === "desk") return "business";
+    if (["go", "plus", "premium"].includes(raw)) return "pro";
+    if (["business", "desk"].includes(raw)) return "research";
     if (raw in SUBSCRIPTION_TIER_RANK) return raw;
     return "free";
   };
@@ -6607,6 +6654,8 @@
     parts.push(String(meta?.productId || meta?.sku || "").trim().toLowerCase());
     const bag = parts.filter(Boolean).join(" ");
 
+    if (bag.includes("quanturaresearch") || bag.includes("research")) return "research";
+    if (bag.includes("quanturaquant") || bag.includes(" quant")) return "quant";
     if (
       bag.includes("annualbusinessplan") ||
       bag.includes("businessplan") ||
@@ -6614,11 +6663,11 @@
       bag.includes("quantura business") ||
       bag.includes("business")
     ) {
-      return "business";
+      return "research";
     }
     if (bag.includes("quanturapro") || bag.includes(" pro")) return "pro";
-    if (bag.includes("annualplusplan") || bag.includes("premium") || bag.includes("plus")) return "plus";
-    if (bag.includes("goplanyearly") || bag.includes("annualgoplan") || bag.includes("goplan") || bag.includes(" go")) return "go";
+    if (bag.includes("annualplusplan") || bag.includes("premium") || bag.includes("plus")) return "pro";
+    if (bag.includes("goplanyearly") || bag.includes("annualgoplan") || bag.includes("goplan") || bag.includes(" go")) return "pro";
     return "free";
   };
 
@@ -8605,12 +8654,11 @@
 	      const title = escapeHtml(task.title || "Untitled");
 	      const due = task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "";
 	      const assignee = escapeHtml(task.assigneeEmail || "");
-	      const notes = escapeHtml(String(task.notes || "").trim());
 	      const meta = [due ? `Due ${due}` : "", assignee ? `Assignee: ${assignee}` : ""].filter(Boolean).join(" · ");
 	      const actions = editable
 	        ? `
 	          <div class="task-actions">
-              <button class="task-chip" type="button" data-action="task-edit" data-task-id="${escapeHtml(task.id)}" data-title="${escapeHtml(task.title || "")}" data-notes="${escapeHtml(task.notes || "")}" data-due="${escapeHtml(task.dueDate || "")}" data-assignee="${escapeHtml(task.assigneeEmail || "")}" data-status="${escapeHtml(task.status || "backlog")}">Edit</button>
+              <button class="task-chip" type="button" data-action="task-edit" data-task-id="${escapeHtml(task.id)}" data-title="${escapeHtml(task.title || "")}" data-due="${escapeHtml(task.dueDate || "")}" data-assignee="${escapeHtml(task.assigneeEmail || "")}" data-status="${escapeHtml(task.status || "backlog")}">Edit</button>
               <div class="task-move-group">
 	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="backlog" ${task.status === "backlog" ? "disabled aria-current=\"true\"" : ""}>Backlog</button>
 	              <button class="task-chip" type="button" data-action="task-move" data-task-id="${escapeHtml(task.id)}" data-to="doing" ${task.status === "doing" ? "disabled aria-current=\"true\"" : ""}>Doing</button>
@@ -8624,7 +8672,6 @@
 	        <div class="task-card" draggable="${editable ? "true" : "false"}" data-task-id="${escapeHtml(task.id)}">
 	          <div class="task-title">${title}</div>
 	          ${meta ? `<div class="small task-meta muted">${meta}</div>` : ""}
-            ${notes ? `<div class="small task-notes muted">${notes}</div>` : ""}
 	          ${actions}
 	        </div>
 	      `;
@@ -8688,13 +8735,22 @@
 	    const gridStart = new Date(year, month, 1 - offset);
 	    const todayKey = toDateKey(new Date());
 
-	    const tasksByDate = new Map();
+	    const itemsByDate = new Map();
 	    for (const t of state.taskCalendarTasks) {
 	      const dueKey = String(t?.dueDate || "").slice(0, 10);
 	      if (!/^\d{4}-\d{2}-\d{2}$/.test(dueKey)) continue;
-	      const list = tasksByDate.get(dueKey) || [];
-	      list.push(t);
-	      tasksByDate.set(dueKey, list);
+	      const list = itemsByDate.get(dueKey) || [];
+	      list.push({ kind: "task", title: t?.title || "Untitled task", status: t?.status || "backlog", timestamp: `${dueKey}T00:00:00.000Z`, raw: t });
+	      itemsByDate.set(dueKey, list);
+	    }
+	    for (const interaction of state.taskCalendarInteractions || []) {
+	      const timestamp = String(interaction?.occurred_at || interaction?.occurredAt || "");
+	      const parsed = new Date(timestamp);
+	      if (!Number.isFinite(parsed.getTime())) continue;
+	      const key = parsed.toISOString().slice(0, 10);
+	      const list = itemsByDate.get(key) || [];
+	      list.push({ kind: "interaction", title: interaction?.title || interaction?.event_name || "Quantura activity", status: "activity", timestamp: parsed.toISOString(), raw: interaction });
+	      itemsByDate.set(key, list);
 	    }
 
 	    const dow = weekStartMonday ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -8705,14 +8761,15 @@
 	      const key = toDateKey(dt);
 	      const inMonth = dt.getMonth() === month;
 	      const isToday = key === todayKey;
-	      const items = tasksByDate.get(key) || [];
+	      const items = (itemsByDate.get(key) || []).sort((left, right) => String(left.timestamp).localeCompare(String(right.timestamp)));
 
-	      const summary = items.slice(0, 2).map((task) => {
-	        const title = escapeHtml(task?.title || "Untitled");
-	        const status = escapeHtml(String(task?.status || "backlog"));
-	        return `<div class="calendar-task" data-status="${status}">${title}</div>`;
+	      const summary = items.slice(0, 3).map((item) => {
+	        const title = escapeHtml(item?.title || "Untitled");
+	        const status = escapeHtml(String(item?.status || "backlog"));
+	        const icon = item.kind === "interaction" ? '<i class="iconoir-flash" aria-hidden="true"></i>' : '<i class="iconoir-task-list" aria-hidden="true"></i>';
+	        return `<div class="calendar-task" data-status="${status}" data-calendar-kind="${item.kind}">${icon}<span>${title}</span></div>`;
 	      });
-	      const overflow = items.length > 2 ? `<div class="calendar-task calendar-task--more">+${items.length - 2} more</div>` : "";
+	      const overflow = items.length > 3 ? `<div class="calendar-task calendar-task--more">+${items.length - 3} more</div>` : "";
 
 	      cells.push(`
 	        <div class="calendar-cell${inMonth ? "" : " calendar-cell--out"}${isToday ? " calendar-cell--today" : ""}">
@@ -8739,15 +8796,69 @@
 	            <button class="cta secondary small" type="button" data-action="calendar-next" aria-label="Next month">Next</button>
 	          </div>
 	        </div>
-	        <div class="calendar-grid" role="grid" aria-label="Task calendar">
+	        <div class="calendar-grid" role="grid" aria-label="Workspace task and product activity calendar">
 	          ${dow.map((d) => `<div class="calendar-dow" role="columnheader">${escapeHtml(d)}</div>`).join("")}
 	          ${cells.join("")}
 	        </div>
-	        <div class="small muted" style="margin-top:10px;">
-	          Tip: add a due date in the Create task form. Tasks are visible to workspace collaborators.
+	        <div class="small muted calendar-legend" style="margin-top:10px;">
+	          <span><i class="iconoir-task-list" aria-hidden="true"></i> Workspace due date</span>
+	          <span><i class="iconoir-flash" aria-hidden="true"></i> Your Quantura activity</span>
 	        </div>
 	      </div>
 	    `;
+	  };
+
+	  const startCalendarInteractions = (db, user) => {
+	    if (state.unsubscribeCalendarInteractions) state.unsubscribeCalendarInteractions();
+	    state.taskCalendarInteractions = [];
+	    if (!user || user.isAnonymous || !ui.tasksCalendar) {
+	      renderTaskCalendar(state.taskCalendarTasks);
+	      return;
+	    }
+	    state.unsubscribeCalendarInteractions = db.collection("users").doc(user.uid).collection("calendar_interactions")
+	      .orderBy("occurred_at", "desc").limit(500).onSnapshot((snapshot) => {
+	        state.taskCalendarInteractions = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+	        renderTaskCalendar(state.taskCalendarTasks);
+	      }, () => {
+	        state.taskCalendarInteractions = [];
+	        renderTaskCalendar(state.taskCalendarTasks);
+	      });
+	  };
+
+	  const exportProductivityCalendar = () => {
+	    const taskRows = (state.taskCalendarTasks || []).filter((task) => task?.dueDate).map((task) => ({
+	      timestamp: `${String(task.dueDate).slice(0, 10)}T00:00:00.000Z`, type: "task_due", title: task.title || "Untitled task",
+	      status: task.status || "backlog", workspace_id: state.activeWorkspaceId || state.user?.uid || "", resource_type: "task", resource_id: task.id || "",
+	    }));
+	    const interactionRows = (state.taskCalendarInteractions || []).map((item) => ({
+	      timestamp: item.occurred_at || item.occurredAt || "", type: item.event_name || "activity", title: item.title || "Quantura activity",
+	      status: "recorded", workspace_id: item.workspace_id || state.user?.uid || "", resource_type: item.resource_type || "", resource_id: item.resource_id || "",
+	    }));
+	    const rows = [...taskRows, ...interactionRows].filter((item) => Number.isFinite(Date.parse(item.timestamp))).sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+	    if (!rows.length) {
+	      if (ui.calendarExportStatus) ui.calendarExportStatus.textContent = "There are no calendar entries to export yet.";
+	      return;
+	    }
+	    const safeCell = (value) => {
+	      let clean = String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+	      if (/^[=+\-@]/.test(clean)) clean = `'${clean}`;
+	      return `"${clean.replace(/"/g, '""')}"`;
+	    };
+	    const headers = ["timestamp_utc", "date_utc", "time_utc", "type", "title", "status", "workspace_id", "resource_type", "resource_id"];
+	    const csv = [headers.join(","), ...rows.map((row) => {
+	      const parsed = new Date(row.timestamp);
+	      const values = { ...row, timestamp_utc: parsed.toISOString(), date_utc: parsed.toISOString().slice(0, 10), time_utc: parsed.toISOString().slice(11, 19) };
+	      return headers.map((header) => safeCell(values[header])).join(",");
+	    })].join("\r\n");
+	    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+	    const anchor = document.createElement("a");
+	    anchor.href = url;
+	    anchor.download = `quantura-productivity-calendar-${new Date().toISOString().slice(0, 10)}.csv`;
+	    document.body.appendChild(anchor);
+	    anchor.click();
+	    anchor.remove();
+	    URL.revokeObjectURL(url);
+	    if (ui.calendarExportStatus) ui.calendarExportStatus.textContent = `Exported ${rows.length.toLocaleString()} calendar entries in UTC.`;
 	  };
 
 	  const startWorkspaceTasks = (db, workspaceId) => {
@@ -10652,7 +10763,8 @@
     String(value || "")
       .trim()
       .toUpperCase()
-      .replace(/[^A-Z0-9.\\-]/g, "");
+      .replace(/[^A-Z0-9.^=\\-]/g, "")
+      .slice(0, 24);
 
   const parseQuantilesInput = (raw) => {
     const parts = Array.isArray(raw) ? raw : String(raw || "").split(",");
@@ -14411,9 +14523,10 @@
     return headers;
   };
 
-  const apiRequestJson = async (path, { method = "GET", body = undefined } = {}) => {
+  const apiRequestJson = async (path, { method = "GET", body = undefined, headers: additionalHeaders = {} } = {}) => {
     const includeJson = body !== undefined && body !== null && method !== "GET" && method !== "HEAD";
     const headers = await buildApiAuthHeaders({ includeJson });
+    Object.assign(headers, additionalHeaders || {});
     const response = await fetch(path, {
       method,
       headers,
@@ -14422,10 +14535,494 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const message = String(payload?.detail || payload?.error || payload?.message || `Request failed (${response.status})`).trim();
-      throw new Error(message || `Request failed (${response.status})`);
+      const message = String(payload?.error?.message || payload?.detail || payload?.message || `Request failed (${response.status})`).trim();
+      const error = new Error(message || `Request failed (${response.status})`);
+      error.code = String(payload?.error?.code || `HTTP_${response.status}`);
+      error.requestId = String(payload?.error?.request_id || response.headers.get("x-request-id") || "");
+      throw error;
     }
     return payload;
+  };
+
+  const ensembleUiState = {
+    capabilities: null,
+    presets: [],
+    lastRequest: null,
+    forecastId: "",
+    pollTimer: 0,
+    capabilitiesLoaded: false,
+  };
+
+  const ensembleQuantileKey = (value) => Number(Number(value).toPrecision(12)).toString();
+
+  const ensembleQuantileLabel = (value) => {
+    const quantile = Number(value);
+    const percent = quantile * 100;
+    if (Number.isInteger(percent)) return `P${String(percent).padStart(2, "0")}`;
+    return `Q${ensembleQuantileKey(quantile)}`;
+  };
+
+  const setEnsembleStatus = (message, tone = "") => {
+    if (!ui.ensembleForecastStatus) return;
+    ui.ensembleForecastStatus.textContent = String(message || "");
+    ui.ensembleForecastStatus.dataset.tone = tone;
+  };
+
+  const describeEnsembleCapability = (model) => {
+    const support = model?.quantile_support || {};
+    if (support.type === "bounded_native") return "Native P10–P90; interpolation only within that range.";
+    if (support.type === "requested_verified_native_range") return "Requested quantiles, verified against the loaded checkpoint.";
+    return "Requested quantiles supported.";
+  };
+
+  const describeEnsembleUnavailableReason = (reason) => {
+    const labels = {
+      access_not_approved: "Hugging Face access not approved",
+      commercial_license_required: "Commercial license required",
+      plan_upgrade_required: "Plan upgrade required",
+    };
+    return labels[String(reason || "")] || "Unavailable in this environment";
+  };
+
+  const renderEnsembleModelCapabilities = (capabilities) => {
+    if (!ui.ensembleModelList) return;
+    const models = Array.isArray(capabilities?.models) ? capabilities.models : [];
+    ui.ensembleModelList.innerHTML = models
+      .map((model) => {
+        const available = Boolean(model?.available);
+        const defaultWeight = Number(model?.default_weight ?? 0.2);
+        const reason = available ? "Available" : describeEnsembleUnavailableReason(model?.unavailable_reason);
+        return `<article class="ensemble-model-card ${available ? "" : "is-unavailable is-disabled"}" data-ensemble-model="${escapeHtml(model.id)}" title="${escapeHtml(describeEnsembleCapability(model))}">
+          <label class="ensemble-model-toggle">
+            <input type="checkbox" name="ensemble_model_enabled" value="${escapeHtml(model.id)}" ${available ? "checked" : "disabled"} />
+            <span class="ensemble-model-name">${escapeHtml(model.name)}</span>
+          </label>
+          <div class="small muted ensemble-model-capability">${escapeHtml(describeEnsembleCapability(model))}</div>
+          <div class="small"><strong>${escapeHtml(reason)}</strong>${model?.evaluation_only ? " · evaluation only" : ""}</div>
+          <label class="ensemble-model-weight small">Weight<input type="number" name="ensemble_model_weight" data-model-weight="${escapeHtml(model.id)}" min="0" step="0.01" value="${escapeHtml(defaultWeight)}" ${available ? "" : "disabled"} /></label>
+        </article>`;
+      })
+      .join("");
+    updateEnsembleWeightsAndSupport();
+  };
+
+  const getEnsembleSelections = () => {
+    const output = {};
+    (ensembleUiState.capabilities?.models || []).forEach((model) => {
+      const card = ui.ensembleModelList?.querySelector(`[data-ensemble-model="${model.id}"]`);
+      const enabled = Boolean(card?.querySelector('input[name="ensemble_model_enabled"]')?.checked) && Boolean(model.available);
+      const weight = Number(card?.querySelector("[data-model-weight]")?.value ?? 0);
+      output[model.id] = { enabled, weight: Number.isFinite(weight) ? weight : Number.NaN };
+    });
+    return output;
+  };
+
+  const getEnsembleQuantiles = () => {
+    const values = [...(ui.ensembleForecastForm?.querySelectorAll('input[name="ensemble_quantile"]:checked') || [])].map((input) => Number(input.value));
+    const custom = String(ui.ensembleCustomQuantiles?.value || "")
+      .split(/[\s,;]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map(Number);
+    if (custom.some((value) => !Number.isFinite(value) || value <= 0 || value >= 1)) throw new Error("Custom quantiles must be numbers strictly between 0 and 1.");
+    const unique = new Map();
+    [...values, ...custom].forEach((value) => unique.set(ensembleQuantileKey(value), Number(value)));
+    const result = [...unique.values()].sort((left, right) => left - right);
+    if (!result.length) throw new Error("Select at least one forecast quantile.");
+    const maximum = Number(ensembleUiState.capabilities?.max_requested_quantiles || 21);
+    if (result.length > maximum) throw new Error(`Select no more than ${maximum} quantiles.`);
+    return result;
+  };
+
+  const ensembleModelSupportsQuantile = (model, quantile) => {
+    const support = model?.quantile_support || {};
+    if (support.minimum === undefined) return true;
+    return quantile >= Number(support.minimum) && quantile <= Number(support.maximum);
+  };
+
+  const updateEnsembleWeightsAndSupport = () => {
+    if (!ensembleUiState.capabilities || !ui.ensembleModelList) return;
+    const selections = getEnsembleSelections();
+    let total = 0;
+    Object.entries(selections).forEach(([modelId, selection]) => {
+      const card = ui.ensembleModelList.querySelector(`[data-ensemble-model="${modelId}"]`);
+      card?.classList.toggle("is-disabled", !selection.enabled);
+      const input = card?.querySelector("[data-model-weight]");
+      if (input) input.disabled = !selection.enabled || !ensembleUiState.capabilities.models.find((model) => model.id === modelId)?.available;
+      if (selection.enabled && Number.isFinite(selection.weight) && selection.weight >= 0) total += selection.weight;
+    });
+    const normalized = Object.entries(selections)
+      .filter(([, selection]) => selection.enabled && Number.isFinite(selection.weight) && selection.weight > 0 && total > 0)
+      .map(([modelId, selection]) => `${modelId} ${(selection.weight / total * 100).toFixed(1)}%`);
+    if (ui.ensembleWeightStatus) ui.ensembleWeightStatus.textContent = normalized.length
+      ? `Normalized central weights: ${normalized.join(" · ")}`
+      : "Enable at least one available model with a positive weight.";
+    try {
+      const quantiles = getEnsembleQuantiles();
+      const unsupported = quantiles.filter((quantile) => !ensembleUiState.capabilities.models.some((model) => {
+        const selection = selections[model.id];
+        return model.available && selection?.enabled && selection.weight > 0 && ensembleModelSupportsQuantile(model, quantile);
+      }));
+      if (ui.ensembleQuantileStatus) ui.ensembleQuantileStatus.textContent = unsupported.length
+        ? `Unsupported by the enabled weighted models: ${unsupported.map(ensembleQuantileLabel).join(", ")}.`
+        : "Weights are normalized independently for each quantile. Toto and TimesFM never contribute outside P10–P90.";
+      if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = !normalized.length || Boolean(unsupported.length);
+    } catch (error) {
+      if (ui.ensembleQuantileStatus) ui.ensembleQuantileStatus.textContent = error.message;
+      if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = true;
+    }
+  };
+
+  const syncEnsembleSourceFields = () => {
+    const type = String(ui.ensembleSourceType?.value || "ticker");
+    document.querySelectorAll("[data-ensemble-source]").forEach((field) => {
+      field.hidden = field.dataset.ensembleSource !== type;
+    });
+    const horizon = document.getElementById("ensemble-horizon-mode");
+    if (horizon && type === "workspace_dataset" && horizon.value === "trading_sessions") horizon.value = "frequency_periods";
+  };
+
+  const buildEnsembleRequest = () => {
+    const form = ui.ensembleForecastForm;
+    if (!form) throw new Error("The ensemble form is unavailable.");
+    const data = new FormData(form);
+    const sourceType = String(data.get("source_type") || "ticker");
+    const source = sourceType === "workspace_dataset"
+      ? {
+          type: "workspace_dataset",
+          dataset_id: String(data.get("dataset_id") || "").trim(),
+          timestamp_column: String(data.get("timestamp_column") || "timestamp").trim(),
+          target_column: String(data.get("target_column") || "target").trim(),
+          frequency: String(data.get("frequency") || "infer").trim(),
+          timezone: "UTC",
+        }
+      : {
+          type: "ticker",
+          symbol: normalizeTicker(data.get("ticker") || ui.forecastTicker?.value || state.tickerContext.ticker || ""),
+          provider: String(data.get("provider") || "auto"),
+          field: "close",
+          start: "2000-01-01",
+          frequency: "1Day",
+        };
+    if (sourceType === "workspace_dataset" && !source.dataset_id) throw new Error("Enter a workspace dataset ID.");
+    if (sourceType === "ticker" && !source.symbol) throw new Error("Enter a ticker.");
+    const models = getEnsembleSelections();
+    const enabled = Object.values(models).filter((model) => model.enabled);
+    if (!enabled.length || !enabled.some((model) => Number.isFinite(model.weight) && model.weight > 0)) throw new Error("Enable at least one model with a positive weight.");
+    if (enabled.some((model) => !Number.isFinite(model.weight) || model.weight < 0)) throw new Error("Model weights must be finite and nonnegative.");
+    const contextRaw = String(data.get("context_length") || "").trim();
+    return {
+      workspace_id: state.activeWorkspaceId || state.user?.uid || "",
+      source,
+      prediction_length: Number(data.get("prediction_length") || 30),
+      horizon_mode: String(data.get("horizon_mode") || "trading_sessions"),
+      quantiles: getEnsembleQuantiles(),
+      transform: String(data.get("transform") || "auto"),
+      context_length: contextRaw ? Number(contextRaw) : null,
+      frequency: String(data.get("frequency") || "1D").trim() || "1D",
+      calendar: sourceType === "ticker" ? "NYSE" : "NONE",
+      model_failure_policy: String(data.get("model_failure_policy") || "fail"),
+      models,
+    };
+  };
+
+  const renderEnsembleProgress = (job) => {
+    if (!ui.ensembleForecastResults) return;
+    ui.ensembleForecastResults.hidden = false;
+    const status = String(job?.status || "queued");
+    if (ui.ensembleResultState) ui.ensembleResultState.textContent = titleCaseLabel(status);
+    const progress = job?.progress || {};
+    const completed = Number(progress.completed_models || 0);
+    const total = Number(progress.total_models || 0);
+    const current = String(progress.current_model || "");
+    setEnsembleStatus(status === "queued"
+      ? "Forecast queued. The worker will claim the immutable job snapshot."
+      : `Running model ${Math.min(completed + 1, total || 1)} of ${total || 1}${current ? `: ${current}` : ""}.`, "working");
+    if (ui.ensembleResultMeta) ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id || "")}</span><span><strong>Completed:</strong> ${completed}/${total}</span>`;
+  };
+
+  const renderEnsembleChart = async (job) => {
+    if (!ui.ensembleForecastChart || !window.Plotly) return;
+    const rows = Array.isArray(job?.predictions) ? job.predictions : [];
+    const quantiles = Array.isArray(job?.quantiles) ? job.quantiles.map(Number).sort((a, b) => a - b) : [];
+    if (!rows.length || !quantiles.length) return;
+    const quantileValues = (quantile) => rows.map((row) => Number(row?.quantiles?.[ensembleQuantileKey(quantile)]));
+    const traces = [];
+    const addBand = (lower, upper, name, color) => {
+      if (lower === undefined || upper === undefined || lower === upper) return;
+      traces.push({ type: "scatter", mode: "lines", x: rows.map((row) => row.timestamp), y: quantileValues(upper), line: { width: 0 }, hoverinfo: "skip", showlegend: false });
+      traces.push({ type: "scatter", mode: "lines", x: rows.map((row) => row.timestamp), y: quantileValues(lower), line: { width: 0 }, fill: "tonexty", fillcolor: color, name });
+    };
+    addBand(quantiles[0], quantiles[quantiles.length - 1], `${ensembleQuantileLabel(quantiles[0])}–${ensembleQuantileLabel(quantiles[quantiles.length - 1])}`, "rgba(67, 97, 238, 0.10)");
+    const lowerCentral = quantiles.filter((value) => value <= 0.25).at(-1);
+    const upperCentral = quantiles.find((value) => value >= 0.75);
+    addBand(lowerCentral, upperCentral, `${ensembleQuantileLabel(lowerCentral)}–${ensembleQuantileLabel(upperCentral)}`, "rgba(67, 97, 238, 0.20)");
+    const median = quantiles.slice().sort((left, right) => Math.abs(left - 0.5) - Math.abs(right - 0.5))[0];
+    traces.push({ type: "scatter", mode: "lines", x: rows.map((row) => row.timestamp), y: quantileValues(median), name: `${ensembleQuantileLabel(median)} ensemble`, line: { width: 2.5, color: "#4361ee" } });
+    const source = ensembleUiState.lastRequest?.source || {};
+    if (source.type === "ticker" && typeof apiFetchTickerHistory === "function") {
+      try {
+        const history = await apiFetchTickerHistory({ ticker: source.symbol, interval: "1d", start: "", end: "" });
+        const dateKey = extractDateKey(history || []);
+        const sample = (history || []).find((row) => row && typeof row === "object") || {};
+        const closeKey = Object.keys(sample).find((key) => /^(?:close|adjusted_close|adj_close|price)$/i.test(String(key || ""))) || "";
+        const tail = (history || []).slice(-160);
+        if (dateKey && closeKey && tail.length) traces.unshift({ type: "scatter", mode: "lines", x: tail.map((row) => row[dateKey]), y: tail.map((row) => Number(row[closeKey])), name: "Historical actual", line: { width: 2, color: "#64748b" } });
+      } catch (_error) {
+        // The final ensemble remains usable when an optional history overlay is unavailable.
+      }
+    }
+    const dark = isDarkMode();
+    await window.Plotly.react(ui.ensembleForecastChart, traces, {
+      font: { family: "Manrope, sans-serif", color: dark ? "rgba(246,244,238,.92)" : "#12182a" },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
+      margin: { l: 62, r: 24, t: 26, b: 58 }, height: 420, hovermode: "x unified",
+      xaxis: { type: "date", title: { text: "Date" }, rangeslider: { visible: true, thickness: 0.12 } },
+      yaxis: { title: { text: source.type === "ticker" ? "Price" : "Target" } },
+      legend: { orientation: "h", y: -0.25 },
+    }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
+  };
+
+  const renderCompletedEnsemble = async (job) => {
+    if (!ui.ensembleForecastResults) return;
+    ensembleUiState.lastRequest = ensembleUiState.lastRequest || {
+      workspace_id: job.workspace_id,
+      source: job.source,
+      prediction_length: job.prediction_length,
+      horizon_mode: job.horizon_mode,
+      quantiles: job.quantiles,
+      transform: job.transform,
+      context_length: job.context_length,
+      frequency: job.frequency,
+      calendar: job.calendar,
+      model_failure_policy: job.model_failure_policy,
+      models: job.models,
+    };
+    ui.ensembleForecastResults.hidden = false;
+    const quantiles = Array.isArray(job?.quantiles) ? job.quantiles.map(Number) : [];
+    const predictions = Array.isArray(job?.predictions) ? job.predictions : [];
+    if (ui.ensembleResultState) ui.ensembleResultState.textContent = "Completed";
+    if (ui.ensembleResultMeta) {
+      const models = Object.entries(job?.models || {}).filter(([, value]) => value?.enabled).map(([id]) => id);
+      ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id)}</span><span><strong>Models:</strong> ${escapeHtml(models.join(", "))}</span><span><strong>Horizon:</strong> ${escapeHtml(job.prediction_length)} ${escapeHtml(String(job.horizon_mode || "").replaceAll("_", " "))}</span><span><strong>Transform:</strong> ${escapeHtml(job.transform || "auto")}</span>`;
+    }
+    if (ui.ensembleResultTable) {
+      const headers = ["Date", ...quantiles.map(ensembleQuantileLabel)];
+      const body = predictions.map((row) => `<tr><td>${escapeHtml(formatIsoDate(row.timestamp))}</td>${quantiles.map((quantile) => {
+        const value = Number(row?.quantiles?.[ensembleQuantileKey(quantile)]);
+        return `<td>${Number.isFinite(value) ? escapeHtml(value.toLocaleString(undefined, { maximumFractionDigits: 6 })) : "—"}</td>`;
+      }).join("")}</tr>`).join("");
+      ui.ensembleResultTable.innerHTML = `<table class="data-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+    const base = `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/download`;
+    if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = `${base}?format=csv`;
+    if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = `${base}?format=json`;
+    setEnsembleStatus("Final ensemble complete. Component prediction arrays remain private; downloads contain the final ensemble only.", "success");
+    await renderEnsembleChart(job);
+  };
+
+  const stopEnsemblePolling = () => {
+    if (ensembleUiState.pollTimer) window.clearTimeout(ensembleUiState.pollTimer);
+    ensembleUiState.pollTimer = 0;
+  };
+
+  const pollEnsembleForecast = async (forecastId, { immediate = true } = {}) => {
+    stopEnsemblePolling();
+    const check = async () => {
+      try {
+        const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(forecastId)}`);
+        const job = response.data || {};
+        if (job.status === "completed") {
+          if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
+          await renderCompletedEnsemble(job);
+          return;
+        }
+        if (job.status === "failed") {
+          if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
+          if (ui.ensembleResultState) ui.ensembleResultState.textContent = "Failed";
+          setEnsembleStatus(`Forecast failed${job?.error?.model ? ` while running ${job.error.model}` : ""}. Retry or change the configuration.`, "error");
+          return;
+        }
+        renderEnsembleProgress(job);
+        ensembleUiState.pollTimer = window.setTimeout(check, 3000);
+      } catch (error) {
+        if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
+        setEnsembleStatus(error.message || "Unable to read forecast status.", "error");
+      }
+    };
+    if (immediate) await check(); else ensembleUiState.pollTimer = window.setTimeout(check, 3000);
+  };
+
+  const loadEnsembleCapabilities = async () => {
+    if (ensembleUiState.capabilitiesLoaded) return;
+    setEnsembleStatus("Loading model availability for your plan…");
+    const workspace = state.activeWorkspaceId || state.user?.uid || "";
+    const response = await apiRequestJson(`/api/v1/ensemble-forecasts/models?workspace_id=${encodeURIComponent(workspace)}`);
+    ensembleUiState.capabilities = response.data || {};
+    ensembleUiState.capabilitiesLoaded = true;
+    renderEnsembleModelCapabilities(ensembleUiState.capabilities);
+    setEnsembleStatus("Model availability loaded. Configure the ensemble and submit a durable job.");
+  };
+
+  const loadEnsemblePresets = async () => {
+    if (!ui.ensemblePresetSelect) return;
+    const workspace = state.activeWorkspaceId || state.user?.uid || "";
+    const response = await apiRequestJson(`/api/v1/ensemble-forecast-presets?workspace_id=${encodeURIComponent(workspace)}`);
+    ensembleUiState.presets = Array.isArray(response.data) ? response.data : [];
+    ui.ensemblePresetSelect.innerHTML = `<option value="">No preset selected</option>${ensembleUiState.presets.map((preset) => `<option value="${escapeHtml(preset.preset_id)}">${escapeHtml(preset.name)}</option>`).join("")}`;
+  };
+
+  const applyEnsemblePreset = (configuration) => {
+    if (!configuration || !ui.ensembleForecastForm) return;
+    const set = (id, value) => { const element = document.getElementById(id); if (element && value !== undefined && value !== null) element.value = String(value); };
+    set("ensemble-prediction-length", configuration.prediction_length);
+    set("ensemble-horizon-mode", configuration.horizon_mode);
+    set("ensemble-context-length", configuration.context_length);
+    set("ensemble-transform", configuration.transform);
+    set("ensemble-failure-policy", configuration.failure_policy);
+    set("ensemble-frequency", configuration.frequency);
+    Object.entries(configuration.models || {}).forEach(([modelId, selection]) => {
+      const card = ui.ensembleModelList?.querySelector(`[data-ensemble-model="${modelId}"]`);
+      const checkbox = card?.querySelector('input[name="ensemble_model_enabled"]');
+      const weight = card?.querySelector("[data-model-weight]");
+      if (checkbox && !checkbox.disabled) checkbox.checked = Boolean(selection?.enabled);
+      if (weight) weight.value = String(selection?.weight ?? 0);
+    });
+    const selected = new Set((configuration.quantiles || []).map((value) => ensembleQuantileKey(value)));
+    ui.ensembleForecastForm.querySelectorAll('input[name="ensemble_quantile"]').forEach((input) => { input.checked = selected.has(ensembleQuantileKey(input.value)); });
+    const presetValues = new Set([...ui.ensembleForecastForm.querySelectorAll('input[name="ensemble_quantile"]')].map((input) => ensembleQuantileKey(input.value)));
+    if (ui.ensembleCustomQuantiles) ui.ensembleCustomQuantiles.value = [...selected].filter((value) => !presetValues.has(value)).join(", ");
+    updateEnsembleWeightsAndSupport();
+  };
+
+  const downloadEnsembleResult = async (url) => {
+    const headers = await buildApiAuthHeaders();
+    const response = await fetch(url, { headers, credentials: "same-origin" });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.error?.message || "Unable to download this forecast.");
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition") || "";
+    const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || "quantura-ensemble-forecast";
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  const bindEnsembleForecastUi = () => {
+    if (!ui.ensembleForecastSettings || ui.ensembleForecastSettings.dataset.bound === "1") return;
+    ui.ensembleForecastSettings.dataset.bound = "1";
+    syncEnsembleSourceFields();
+    ui.ensembleSourceType?.addEventListener("change", syncEnsembleSourceFields);
+    ui.ensembleForecastSettings.addEventListener("toggle", async () => {
+      if (!ui.ensembleForecastSettings.open) return;
+      try {
+        await ensureSessionUser({ reason: "ensemble_capabilities_requires_session", message: "Sign in to configure the ensemble." });
+        await Promise.all([loadEnsembleCapabilities(), loadEnsemblePresets().catch(() => undefined)]);
+        if (ui.ensembleTicker && !ui.ensembleTicker.value) ui.ensembleTicker.value = normalizeTicker(ui.forecastTicker?.value || state.tickerContext.ticker || "");
+      } catch (error) {
+        setEnsembleStatus(error.message || "Unable to load ensemble capabilities.", "error");
+      }
+    });
+    ui.ensembleModelList?.addEventListener("input", updateEnsembleWeightsAndSupport);
+    ui.ensembleForecastForm?.addEventListener("input", (event) => {
+      if (event.target.matches('input[name="ensemble_quantile"], #ensemble-custom-quantiles')) updateEnsembleWeightsAndSupport();
+    });
+    ui.ensembleNormalizeWeights?.addEventListener("click", () => {
+      const selections = getEnsembleSelections();
+      const total = Object.values(selections).filter((selection) => selection.enabled && selection.weight > 0).reduce((sum, selection) => sum + selection.weight, 0);
+      if (total <= 0) return;
+      Object.entries(selections).forEach(([modelId, selection]) => {
+        if (!selection.enabled || selection.weight <= 0) return;
+        const input = ui.ensembleModelList?.querySelector(`[data-ensemble-model="${modelId}"] [data-model-weight]`);
+        if (input) input.value = String(Number((selection.weight / total).toFixed(6)));
+      });
+      updateEnsembleWeightsAndSupport();
+    });
+    ui.ensembleForecastForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = true;
+      try {
+        await ensureSessionUser({ reason: "ensemble_forecast_requires_session", message: "Sign in to run an ensemble forecast." });
+        await loadEnsembleCapabilities();
+        const request = buildEnsembleRequest();
+        ensembleUiState.lastRequest = request;
+        setEnsembleStatus("Creating immutable forecast job…", "working");
+        const response = await apiRequestJson("/api/v1/ensemble-forecasts", { method: "POST", body: request, headers: { "Idempotency-Key": `web-${Date.now()}-${createSecureIdChunk(12)}` } });
+        const job = response.data || {};
+        ensembleUiState.forecastId = String(job.forecast_id || "");
+        if (!ensembleUiState.forecastId) throw new Error("Forecast creation did not return an ID.");
+        history.replaceState({}, "", `${window.location.pathname}?panel=forecast&ensembleForecastId=${encodeURIComponent(ensembleUiState.forecastId)}`);
+        if (job.status === "completed") await renderCompletedEnsemble(job);
+        else {
+          renderEnsembleProgress(job);
+          await pollEnsembleForecast(ensembleUiState.forecastId, { immediate: false });
+        }
+        logEvent("ensemble_forecast_created", { model_count: Object.values(request.models).filter((model) => model.enabled).length, quantile_count: request.quantiles.length, prediction_length: request.prediction_length });
+      } catch (error) {
+        if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
+        setEnsembleStatus(error.message || "Unable to create ensemble forecast.", "error");
+        showToast(error.message || "Unable to create ensemble forecast.", "warn");
+      }
+    });
+    ui.ensembleSavePreset?.addEventListener("click", async () => {
+      try {
+        const name = String(ui.ensemblePresetName?.value || "").trim();
+        if (!name) throw new Error("Enter a preset name.");
+        const request = buildEnsembleRequest();
+        await apiRequestJson("/api/v1/ensemble-forecast-presets", { method: "POST", body: { workspace_id: request.workspace_id, name, configuration: request } });
+        await loadEnsemblePresets();
+        if (ui.ensemblePresetName) ui.ensemblePresetName.value = "";
+        showToast("Ensemble preset saved.");
+      } catch (error) { showToast(error.message || "Unable to save preset.", "warn"); }
+    });
+    ui.ensembleLoadPreset?.addEventListener("click", () => {
+      const preset = ensembleUiState.presets.find((item) => item.preset_id === ui.ensemblePresetSelect?.value);
+      if (!preset) return showToast("Select a saved preset.", "warn");
+      applyEnsemblePreset(preset.configuration);
+      showToast("Preset loaded. Availability is revalidated when you run it.");
+    });
+    [ui.ensembleDownloadCsv, ui.ensembleDownloadJson].forEach((link) => link?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      try { await downloadEnsembleResult(link.href); } catch (error) { showToast(error.message || "Download failed.", "warn"); }
+    }));
+    ui.ensembleCopyConfig?.addEventListener("click", async () => {
+      if (!ensembleUiState.lastRequest) return showToast("Run or configure a forecast first.", "warn");
+      await navigator.clipboard.writeText(JSON.stringify(ensembleUiState.lastRequest, null, 2));
+      showToast("API request copied.");
+    });
+    ui.ensembleRunAgain?.addEventListener("click", async () => {
+      const originalId = ensembleUiState.forecastId;
+      if (!originalId) return;
+      ui.ensembleRunAgain.disabled = true;
+      try {
+        setEnsembleStatus("Creating a reproducible run from the stored immutable input and checkpoint configuration…", "working");
+        const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(originalId)}/reproduce`, { method: "POST", body: {} });
+        const job = response.data || {};
+        ensembleUiState.forecastId = String(job.forecast_id || "");
+        if (!ensembleUiState.forecastId) throw new Error("Reproduction did not return a forecast ID.");
+        history.replaceState({}, "", `${window.location.pathname}?panel=forecast&ensembleForecastId=${encodeURIComponent(ensembleUiState.forecastId)}`);
+        renderEnsembleProgress(job);
+        await pollEnsembleForecast(ensembleUiState.forecastId, { immediate: false });
+      } catch (error) {
+        setEnsembleStatus(error.message || "Unable to reproduce this forecast.", "error");
+      } finally {
+        ui.ensembleRunAgain.disabled = false;
+      }
+    });
+    const forecastId = String(getQueryParam("ensembleForecastId") || "").trim();
+    if (forecastId) {
+      ui.ensembleForecastSettings.open = true;
+      ensembleUiState.forecastId = forecastId;
+      window.setTimeout(() => pollEnsembleForecast(forecastId).catch(() => undefined), 400);
+    }
+    window.addEventListener("beforeunload", stopEnsemblePolling, { once: true });
   };
 
   const buildSourceRequestId = (type, sourceId) => {
@@ -18251,11 +18848,6 @@
           ? `<div class="small" style="margin-top:8px;"><strong>Best candidate:</strong> ${escapeHtml(String(autopilot.bestCandidate.candidateName))}</div>`
           : ""
       }
-      ${
-        String(run.notes || "").trim()
-          ? `<div class="small" style="margin-top:8px;"><strong>Notes:</strong> ${escapeHtml(String(run.notes || ""))}</div>`
-          : ""
-      }
       ${renderFoundryModelMetricsTable(modelMetrics)}
       ${
         Object.keys(files).length
@@ -18405,7 +18997,6 @@
     }
     const ticker = normalizeTicker(ui.foundryTicker?.value || "");
     const interval = "1d";
-    const notes = String(ui.foundryNotes?.value || "").trim();
     const modelMetrics = collectFoundryModelMetrics();
     const priceAlert = collectFoundryPriceAlertConfig();
     const workspaceId = String(state.activeWorkspaceId || state.user?.uid || "").trim();
@@ -18422,7 +19013,6 @@
         .trim(),
       ticker,
       interval,
-      notes,
       modelMetrics,
       priceAlert,
       workspaceId,
@@ -19398,7 +19988,6 @@
       statKey,
       targetGameId,
       title: String(ui.sportsFoundryTitle?.value || "").trim(),
-      notes: String(ui.sportsFoundryNotes?.value || "").trim(),
       workspaceId: String(state.activeWorkspaceId || state.user?.uid || "").trim(),
     });
     const run = payload?.run && typeof payload.run === "object" ? payload.run : null;
@@ -19714,10 +20303,9 @@
 
   const getCurrentAiTierKey = () => {
     if (!hasFullAccount()) return "free";
-    if (isAdminUser()) return "business";
+    if (isAdminUser()) return "research";
     if (!state.userHasPaidPlan) return "free";
-    const tier = normalizeSubscriptionTier(state.userSubscriptionTier);
-    return tier === "free" ? "go" : tier;
+    return normalizeSubscriptionTier(state.userSubscriptionTier);
   };
 
   const getCurrentAiTierConfig = () => {
@@ -19732,7 +20320,7 @@
     const tiers = state.remoteFlags.aiUsageTiers && typeof state.remoteFlags.aiUsageTiers === "object"
       ? state.remoteFlags.aiUsageTiers
       : AI_USAGE_TIER_DEFAULTS;
-    const normalizedKey = key === "desk" ? "business" : key;
+    const normalizedKey = key;
     const config =
       tiers[normalizedKey] && typeof tiers[normalizedKey] === "object"
         ? tiers[normalizedKey]
@@ -20357,11 +20945,9 @@
     if (ui.screenerModelMeta) {
       const tierLabelMap = {
         free: "Free",
-        go: "Go",
-        plus: "Plus",
         pro: "Pro",
-        business: "Business",
-        desk: "Business",
+        quant: "Quant",
+        research: "Research",
       };
       const tierLabel = tierLabelMap[tier.key] || "Free";
       const hasNova = tier.allowedModels.some((modelId) => String(modelId).startsWith("amazon.nova"));
@@ -22733,7 +23319,7 @@
     };
   };
 
-  const runForecastAiAnalysis = async ({ forecastDoc = null, requestId = "", regenerate = false, notify = false } = {}) => {
+  const runForecastAiAnalysis = async ({ forecastDoc = null, requestId = "", regenerate = false, notify = false, enableMarketContext = false } = {}) => {
     const doc = forecastDoc && typeof forecastDoc === "object" ? forecastDoc : null;
     const targetId = String(requestId || doc?.id || state.tickerContext.forecastId || "").trim();
     if (!doc || !targetId) return null;
@@ -22752,6 +23338,8 @@
       cached: false,
       latencyMs: null,
       error: "",
+      marketContextEnabled: Boolean(enableMarketContext),
+      citations: [],
       requestToken,
     };
     renderForecastDetails(doc);
@@ -22761,7 +23349,12 @@
         method: "POST",
         headers,
         credentials: "same-origin",
-        body: JSON.stringify({ ...context.apiInput, regenerate: Boolean(regenerate) }),
+        body: JSON.stringify({
+          ...context.apiInput,
+          regenerate: Boolean(regenerate),
+          analysisMode: "live",
+          enableMarketContext: Boolean(enableMarketContext),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -22778,6 +23371,8 @@
         model: String(payload?.model || "gpt-5.6-luna").trim(),
         cached: Boolean(payload?.cached),
         latencyMs: Number.isFinite(Number(payload?.latencyMs)) ? Number(payload.latencyMs) : null,
+        marketContextEnabled: Boolean(payload?.marketContextEnabled),
+        citations: Array.isArray(payload?.citations) ? payload.citations.slice(0, 16) : [],
         error: "",
         requestToken,
       };
@@ -22798,6 +23393,8 @@
           cached: false,
           latencyMs: null,
           error: message,
+          marketContextEnabled: Boolean(enableMarketContext),
+          citations: [],
           requestToken,
         };
         renderForecastDetails(doc);
@@ -22818,6 +23415,16 @@
     const error = String(isCurrent ? summary.error || "" : "").trim();
     const answer = String(isCurrent ? summary.text || "" : "").trim();
     const model = String(isCurrent ? summary.model || "gpt-5.6-luna" : "gpt-5.6-luna").trim();
+    const marketContextEnabled = Boolean(isCurrent && summary.marketContextEnabled);
+    const citations = (isCurrent && Array.isArray(summary.citations) ? summary.citations : []).map((citation) => {
+      try {
+        const url = new URL(String(citation?.url || ""));
+        if (!/^https?:$/.test(url.protocol)) return null;
+        return { url: url.href, title: String(citation?.title || url.hostname).trim().slice(0, 180) };
+      } catch (_error) {
+        return null;
+      }
+    }).filter(Boolean).slice(0, 8);
     const latencyMs = Number(isCurrent ? summary.latencyMs : NaN);
     const buttonLabel = answer ? "Regenerate Analysis" : "Generate AI Analysis";
     return `
@@ -22840,11 +23447,13 @@
                   : `<div class="forecast-ai-empty">Generate an AI interpretation of all five forecast scenarios, both uncertainty ranges, and the technical indicators. Nothing is sent until you choose to generate it.</div>`
           }
         </div>
+        ${citations.length ? `<div class="forecast-context-sources"><strong>Current context sources</strong><ul>${citations.map((citation) => `<li><a href="${escapeHtml(citation.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(citation.title)}</a></li>`).join("")}</ul></div>` : ""}
         <div class="forecast-ai-actions">
+          <label class="forecast-market-context-toggle"><input type="checkbox" data-forecast-market-context ${marketContextEnabled ? "checked" : ""} ${loading ? "disabled" : ""}/> Include current, search-grounded market context</label>
           <button class="cta primary" type="button" data-action="forecast-ai-generate" data-regenerate="${answer ? "true" : "false"}" ${
             loading || !forecastId || !context.valid ? "disabled" : ""
           }>${loading ? "Analyzing forecast..." : buttonLabel}</button>
-          ${answer && isCurrent ? `<span class="small muted">${summary.cached ? "Cached for this forecast version" : "Generated now"}${Number.isFinite(latencyMs) ? ` · ${Math.round(latencyMs)}ms` : ""}</span>` : ""}
+          ${answer && isCurrent ? `<span class="small muted">${summary.cached ? "Cached for this forecast version and context policy" : "Generated now"}${marketContextEnabled ? " · current web context used" : " · quantitative data only"}${Number.isFinite(latencyMs) ? ` · ${Math.round(latencyMs)}ms` : ""}</span>` : ""}
         </div>
         ${!context.valid ? `<div class="small muted" style="margin-top:8px;">${escapeHtml(context.error || "Complete forecast data is required.")}</div>` : ""}
       </section>
@@ -23009,6 +23618,7 @@
       )}</div>`,
       `<div class="small meta-line">${icon("magic-wand")}<strong>Service:</strong> ${escapeHtml(labelForecastService(forecastDoc.service))}</div>`,
       forecastDoc.engine ? `<div class="small meta-line">${icon("electronics-chip")}<strong>Engine:</strong> ${escapeHtml(forecastDoc.engine)}</div>` : "",
+      forecastDoc.sourceUsed ? `<div class="small meta-line">${icon("database")}<strong>Market data:</strong> ${escapeHtml(String(forecastDoc.sourceUsed))}${forecastDoc.assetClass ? ` · ${escapeHtml(String(forecastDoc.assetClass).replaceAll("_", " "))}` : ""}</div>` : "",
       quantileLabel ? `<div class="small meta-line">${icon("percentage")}<strong>Bands:</strong> ${escapeHtml(quantileLabel)}</div>` : "",
     ]
       .filter(Boolean)
@@ -25006,6 +25616,8 @@
           renderTaskCalendar(state.taskCalendarTasks);
         });
 
+	    ui.calendarExport?.addEventListener("click", exportProductivityCalendar);
+
 		    document.addEventListener("click", async (event) => {
 		      const plotButton = event.target.closest('[data-action="plot-forecast"]');
 		      if (!plotButton) return;
@@ -26143,7 +26755,6 @@
 	      const dueDate = String(ui.taskDue?.value || "").trim();
 	      const status = String(ui.taskStatus?.value || "backlog");
 	      const assigneeEmail = String(ui.taskAssignee?.value || "").trim();
-	      const notes = String(ui.taskNotes?.value || "").trim().slice(0, 4000);
 	      if (assigneeEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeEmail)) {
 	        showToast("Enter a valid assignee email address.", "warn");
 	        ui.taskAssignee?.focus();
@@ -26158,7 +26769,6 @@
 	        const collection = db.collection("users").doc(workspaceId).collection("tasks");
 	        const payload = {
 	            title,
-	            notes,
 	            status,
 	            dueDate: dueDate || null,
 	            assigneeEmail: assigneeEmail || "",
@@ -26173,7 +26783,6 @@
 	        }
 	        if (ui.taskStatusText) ui.taskStatusText.textContent = editingTaskId ? "Task updated." : "Task created.";
 	        if (ui.taskTitle) ui.taskTitle.value = "";
-	        if (ui.taskNotes) ui.taskNotes.value = "";
 	        if (ui.taskAssignee) ui.taskAssignee.value = "";
 	        if (ui.taskDue) ui.taskDue.value = "";
 	        if (ui.taskStatus) ui.taskStatus.value = "backlog";
@@ -26200,7 +26809,6 @@
 	        }
 	        ui.taskForm.dataset.editingTaskId = String(edit.dataset.taskId || "");
 	        if (ui.taskTitle) ui.taskTitle.value = String(edit.dataset.title || "");
-	        if (ui.taskNotes) ui.taskNotes.value = String(edit.dataset.notes || "");
 	        if (ui.taskDue) ui.taskDue.value = String(edit.dataset.due || "").slice(0, 10);
 	        if (ui.taskAssignee) ui.taskAssignee.value = String(edit.dataset.assignee || "");
 	        if (ui.taskStatus) ui.taskStatus.value = String(edit.dataset.status || "backlog");
@@ -27081,6 +27689,8 @@
       }
     });
 
+    bindEnsembleForecastUi();
+
 		    ui.forecastForm?.addEventListener("submit", async (event) => {
 		      event.preventDefault();
           let sessionUser = null;
@@ -27107,10 +27717,12 @@
             return;
           }
           syncTickerInputs(ticker, { source: "forecast_form" });
-		      const payload = {
-		        ticker,
+	      const payload = {
+	        ticker,
 	        horizon: Number(formData.get("horizon")),
 	        interval: formData.get("interval"),
+	        source: formData.get("source") || "auto",
+	        assetClass: formData.get("assetClass") || "equity",
 	        service: "prophet",
 	        quantiles,
           workspaceId: state.activeWorkspaceId || sessionUser?.uid || state.user?.uid || "",
@@ -27200,6 +27812,9 @@
                 service: String(payload.service || "prophet"),
                 quantileSchemaVersion: String(data.quantileSchemaVersion || "meta_prophet_v2_p1_p25_p50_p75_p99"),
                 engine: String(data.engine || ""),
+                sourceRequested: String(data.sourceRequested || payload.source || "auto"),
+                sourceUsed: String(data.sourceUsed || "yahoo"),
+                assetClass: String(data.assetClass || payload.assetClass || "equity"),
                 status: String(data.status || "completed"),
                 serviceMessage: [String(data.serviceMessage || "").trim(), historyLoadMessage].filter(Boolean).join(" "),
                 metrics:
@@ -27336,6 +27951,7 @@
               requestId: forecastId,
               regenerate: String(button.dataset.regenerate || "") === "true",
               notify: true,
+              enableMarketContext: Boolean(ui.forecastAiHost.querySelector("[data-forecast-market-context]")?.checked),
             });
           });
           ui.forecastAiHost.dataset.bound = "1";
@@ -28421,7 +29037,6 @@
           targetGame: game,
           historicalRowCount: Number(context?.historical?.rowCount || 0),
           title: String(ui.sportsFoundryTitle?.value || "").trim(),
-          notes: String(ui.sportsFoundryNotes?.value || "").trim(),
         };
         triggerDownload("sports_forecast_input.json", JSON.stringify(payload, null, 2), {
           mimeType: "application/json;charset=utf-8;",
@@ -28527,7 +29142,6 @@
       }
 
       const fileInput = document.getElementById("predictions-file");
-      const notesInput = document.getElementById("predictions-notes");
       const tickerInput = ui.predictionsTicker;
       if (!fileInput?.files?.length) {
         showToast("Select a predictions.csv file.", "warn");
@@ -28554,7 +29168,6 @@
           userId: state.user.uid,
           title: file.name,
           status: "uploaded",
-          notes: notesInput?.value || "",
           ticker: metaTicker,
           fileUrl: url,
           filePath: path,
@@ -28564,7 +29177,6 @@
         await db.collection("prediction_uploads").add(doc);
         ui.predictionsStatus.textContent = "Upload complete.";
         fileInput.value = "";
-        if (notesInput) notesInput.value = "";
         if (tickerInput) tickerInput.value = metaTicker;
         logEvent("predictions_upload", { file: file.name });
         showToast("Predictions uploaded.");
@@ -29123,7 +29735,8 @@
 				        if (state.unsubscribeForecasts) state.unsubscribeForecasts();
 				        if (state.unsubscribeAutopilot) state.unsubscribeAutopilot();
 				        if (state.unsubscribePredictions) state.unsubscribePredictions();
-				        if (state.unsubscribeTasks) state.unsubscribeTasks();
+		        if (state.unsubscribeTasks) state.unsubscribeTasks();
+                if (state.unsubscribeCalendarInteractions) state.unsubscribeCalendarInteractions();
                 if (state.unsubscribeScreenerRuns) state.unsubscribeScreenerRuns();
                 if (state.unsubscribeAIAgents) state.unsubscribeAIAgents();
                 if (state.unsubscribeAIFollows) state.unsubscribeAIFollows();
@@ -29188,6 +29801,7 @@
 
 	      startUserOrders(db, user);
 	      subscribeSharedWorkspaces(db, user);
+	      startCalendarInteractions(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
 		      setActiveWorkspaceId(activeWorkspaceId);
 		      renderWorkspaceSelect(user);

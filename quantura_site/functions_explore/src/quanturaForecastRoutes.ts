@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { Router, Request, Response } from "express";
 import admin from "firebase-admin";
+import { authenticatePlatformRequest, type PlatformApiScope } from "./apiAccess";
+import { PLAN_ENTITLEMENTS } from "./planEntitlements";
 
 import {
   FORECAST_API_SCOPES,
@@ -49,9 +51,10 @@ type JsonRecord = Record<string, unknown>;
 type ApiPrincipal = {
   keyId: string;
   customerId: string;
-  scopes: ForecastApiScope[];
+  scopes: string[];
   tier: string;
   rateLimitPerMinute: number;
+  platformKey: boolean;
 };
 
 type RouteOptions = {
@@ -99,7 +102,7 @@ function limitFrom(value: unknown, maximum = 500): number {
 function errorStatus(error: unknown): number {
   const message = text((error as any)?.message || error, 300);
   if (/unauthenticated|api_key_(missing|invalid|revoked|expired)/.test(message)) return 401;
-  if (/insufficient_scope/.test(message)) return 403;
+  if (/insufficient_scope|plan_upgrade_required/.test(message)) return 403;
   if (/not_found/.test(message)) return 404;
   if (/already_exists|immutable|transition|only_draft|only_pending/.test(message)) return 409;
   if (/rate_limit/.test(message)) return 429;
@@ -122,6 +125,7 @@ function sendError(res: Response, error: unknown, requestId: string, status = er
     API_KEY_REVOKED: "The API key has been revoked.",
     API_KEY_EXPIRED: "The API key has expired.",
     INSUFFICIENT_SCOPE: "The API key does not have the required scope.",
+    PLAN_UPGRADE_REQUIRED: "The current plan does not include this API operation.",
     RATE_LIMITED: "Rate limit exceeded.",
     FORECAST_NOT_FOUND: "Forecast not found.",
     CURSOR_INVALID: "The pagination cursor is invalid.",
@@ -154,6 +158,17 @@ function extractApiKey(req: Request): string {
 async function authenticateApiKey(req: Request, options: RouteOptions): Promise<ApiPrincipal> {
   const rawKey = extractApiKey(req);
   if (!rawKey) throw new Error("api_key_missing");
+  if (rawKey.startsWith("qnt_live_")) {
+    const platform = await authenticatePlatformRequest(req, { db: options.db, auth: options.auth });
+    return {
+      keyId: platform.tokenId || `session_${platform.userId}`,
+      customerId: platform.userId,
+      scopes: platform.tokenScopes,
+      tier: platform.plan,
+      rateLimitPerMinute: PLAN_ENTITLEMENTS[platform.plan].apiReadPerMinute,
+      platformKey: true,
+    };
+  }
   const pepper = text(process.env.QUANTURA_FORECAST_API_KEY_PEPPER, 2000);
   const keyId = hashForecastApiKey(rawKey, pepper);
   const snapshot = await options.db.collection(API_KEYS).doc(keyId).get();
@@ -166,7 +181,23 @@ async function authenticateApiKey(req: Request, options: RouteOptions): Promise<
     scopes,
     tier: text(value.tier, 80) || "developer",
     rateLimitPerMinute: Math.min(Math.max(Math.floor(Number(value.rate_limit_per_minute) || 60), 1), 10_000),
+    platformKey: false,
   };
+}
+
+function principalHasForecastScope(principal: ApiPrincipal, scope: ForecastApiScope): boolean {
+  if (hasRequiredScope(principal.scopes as ForecastApiScope[], scope)) return true;
+  // The platform API uses a smaller shared scope vocabulary. Translate those
+  // scopes only for platform keys; legacy forecast API keys must continue to
+  // satisfy their exact, independently granted forecast scopes.
+  if (!principal.platformKey) return false;
+  const platformFallbacks: Partial<Record<ForecastApiScope, PlatformApiScope[]>> = {
+    "forecasts:history": ["forecasts:read"],
+    "forecasts:resolved": ["forecasts:read"],
+    "forecasts:bulk": ["datasets:read"],
+    "forecasts:admin": ["forecasts:write"],
+  };
+  return (platformFallbacks[scope] || []).some((candidate) => principal.scopes.includes(candidate));
 }
 
 async function enforceRateLimit(options: RouteOptions, principal: ApiPrincipal): Promise<{ remaining: number; resetAt: string }> {
@@ -227,7 +258,10 @@ function enterprise(options: RouteOptions, scope: ForecastApiScope, handler: Ent
     let records = 0;
     try {
       principal = await authenticateApiKey(req, options);
-      if (!hasRequiredScope(principal.scopes, scope)) throw new Error("insufficient_scope");
+      if (!principalHasForecastScope(principal, scope)) throw new Error("insufficient_scope");
+      if (principal.platformKey && !PLAN_ENTITLEMENTS[principal.tier as keyof typeof PLAN_ENTITLEMENTS]?.features.includes("api")) {
+        throw new Error("plan_upgrade_required");
+      }
       const rate = await enforceRateLimit(options, principal);
       setApiHeaders(res, requestId, principal.rateLimitPerMinute, rate.remaining, rate.resetAt);
       records = Number(await handler(req, res, principal, requestId)) || 0;
@@ -561,6 +595,22 @@ export async function runForecastLifecycleJob(options: RouteOptions, jobName: st
 }
 
 export function registerQuanturaForecastRoutes(router: Router, options: RouteOptions): void {
+  const serveDatasetRelease: EnterpriseHandler = async (req, res) => {
+    const version = text(req.params.version, 120);
+    const snapshot = await options.db.collection(DATASET_RELEASES).doc(version).get();
+    if (!snapshot.exists) throw new Error("dataset_release_not_found");
+    const manifest = plain(snapshot.data());
+    const format = text(req.query.format, 20).toLowerCase();
+    if (format === "jsonl" || format === "csv") {
+      const objectPath = text(plain(manifest.objects)[format], 500);
+      const [url] = await admin.storage().bucket().file(objectPath).getSignedUrl({ action: "read", expires: Date.now() + 10 * 60 * 1000 });
+      res.status(200).json({ data: { dataset_version: version, format, download_url: url, expires_in_seconds: 600 }, meta: publicMeta(1) });
+      return 1;
+    }
+    res.status(200).json({ data: manifest, meta: publicMeta(1) });
+    return 1;
+  };
+
   router.get("/forecasts/public/categories", (_req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=900");
     res.status(200).json({ data: FORECAST_CATEGORIES, meta: publicMeta(FORECAST_CATEGORIES.length) });
@@ -716,21 +766,10 @@ export function registerQuanturaForecastRoutes(router: Router, options: RouteOpt
     return rows.length;
   }));
 
-  router.get("/v1/datasets/releases/:version", enterprise(options, "forecasts:bulk", async (req, res) => {
-    const version = text(req.params.version, 120);
-    const snapshot = await options.db.collection(DATASET_RELEASES).doc(version).get();
-    if (!snapshot.exists) throw new Error("dataset_release_not_found");
-    const manifest = plain(snapshot.data());
-    const format = text(req.query.format, 20).toLowerCase();
-    if (format === "jsonl" || format === "csv") {
-      const objectPath = text(plain(manifest.objects)[format], 500);
-      const [url] = await admin.storage().bucket().file(objectPath).getSignedUrl({ action: "read", expires: Date.now() + 10 * 60 * 1000 });
-      res.status(200).json({ data: { dataset_version: version, format, download_url: url, expires_in_seconds: 600 }, meta: publicMeta(1) });
-      return 1;
-    }
-    res.status(200).json({ data: manifest, meta: publicMeta(1) });
-    return 1;
-  }));
+  router.get("/v1/dataset-releases/:version", enterprise(options, "forecasts:bulk", serveDatasetRelease));
+  // Backward-compatible alias. Keep out of the canonical OpenAPI surface because
+  // its parameterized path is ambiguous with /datasets/:datasetId/schema.
+  router.get("/v1/datasets/releases/:version", enterprise(options, "forecasts:bulk", serveDatasetRelease));
 
   router.post("/forecasts/admin", async (req, res) => {
     const requestId = crypto.randomUUID();

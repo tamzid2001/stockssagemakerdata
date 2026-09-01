@@ -1,0 +1,47 @@
+---
+title: "Get started"
+description: "Authenticate, inspect access, and submit an asynchronous ensemble forecast."
+---
+
+# Get started
+
+Create a personal API key in **Account → Developer → API Keys**. Copy the secret when it is created; Quantura does not return it again.
+
+## Inspect effective access
+
+```bash
+curl \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/me/access"
+```
+
+The response describes the token scopes, personal plan, accessible workspaces, and current role in each workspace.
+
+## Submit a forecast
+
+Forecast inference is asynchronous. A successful request returns HTTP `202` and a server-generated forecast identifier.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: pltr-balanced-30-sessions" \
+  "https://quantura.studio/api/v1/ensemble-forecasts" \
+  -d '{
+    "source": {"type": "ticker", "symbol": "PLTR", "field": "close"},
+    "prediction_length": 30,
+    "horizon_mode": "trading_sessions",
+    "quantiles": [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99],
+    "transform": "auto",
+    "models": {
+      "prophet": {"enabled": true, "weight": 0.5},
+      "chronos": {"enabled": true, "weight": 0.5}
+    }
+  }'
+```
+
+Poll the returned `status_url` until the job is `completed` or `failed`. Use the download endpoint for CSV or JSON after completion.
+
+<Warning>
+  Model availability depends on the current workspace plan, runtime, and licensing. Query `GET /api/v1/forecast/models` before building a model selector.
+</Warning>

@@ -1,0 +1,29 @@
+---
+title: "Authentication and API keys"
+description: "Use scoped bearer credentials without exposing secrets in URLs or client bundles."
+---
+
+# Authentication and API keys
+
+Send credentials in the `Authorization` header:
+
+```http
+Authorization: Bearer qnt_live_...
+```
+
+Never place API keys in query strings, browser storage, client-side bundles, screenshots, or logs.
+
+## Key lifecycle
+
+API keys support a name, scopes, optional expiration, last-used timestamp, replacement, and immediate revocation. The plaintext secret is returned only at creation. Quantura stores a keyed digest and a non-secret prefix for identification.
+
+## Scopes
+
+Use the narrowest scopes required by the integration. Relevant forecast scopes are:
+
+- `forecasts:read` to read authorized forecast jobs and results.
+- `forecasts:write` to create compute jobs or presets when the workspace role and plan permit it.
+- `workspaces:read` to list current workspace access.
+- `datasets:read` to inspect or download permitted datasets.
+
+Scopes do not replace workspace authorization. Quantura also evaluates current membership, role, resource ownership, and plan entitlement on every request.

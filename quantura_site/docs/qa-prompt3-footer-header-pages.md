@@ -31,7 +31,4 @@ Date: 2026-02-25
 
 ## Screenshots
 
-- Contact: `docs/screenshots/prompt3/contact.png`
-- About: `docs/screenshots/prompt3/about.png`
-- Events: `docs/screenshots/prompt3/events.png`
-- Shop: `docs/screenshots/prompt3/shop.png`
+- Visual QA evidence was reviewed during the implementation run and is intentionally not retained in Git. Generated screenshots belong in short-lived CI artifacts so repository history remains small.
