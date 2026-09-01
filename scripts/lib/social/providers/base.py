@@ -57,7 +57,23 @@ class SocialProvider:
         auth: Any = None,
         timeout: int = 30,
     ):
+        import re
         import requests
+        from urllib.parse import urlparse
+
+        try:
+            if "/../" in url or re.search(r"/%2e%2e/", url, re.IGNORECASE):
+                raise ValueError("Invalid path")
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                raise ValueError("Invalid protocol")
+            if not parsed.hostname:
+                raise ValueError("Invalid host")
+            allowed_domains = ["graph.facebook.com", "api.linkedin.com", "api.x.com", "open.tiktokapis.com"]
+            if parsed.hostname.lower() not in allowed_domains:
+                raise ValueError("Invalid host")
+        except Exception:
+            raise ValueError("Invalid URL")
 
         response = requests.request(
             method=method.upper(),
