@@ -178,7 +178,9 @@ const resolveTemplate = (pathname) => {
 
   if (route === "/ticker" || route.startsWith("/ticker/")) return "ticker.html";
 
-  return templateFromRoute(route);
+  const templateResult = templateFromRoute(route);
+  if (templateResult && (templateResult.includes("..") || path.isAbsolute(templateResult))) return null;
+  return templateResult;
 };
 
 const REMOVED_TERMINAL_ROUTES = new Set([
