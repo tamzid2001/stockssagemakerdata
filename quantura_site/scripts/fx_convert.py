@@ -6,11 +6,41 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 DEFAULT_BASE = os.environ.get("QUANTURA_MARKET_DATA_BASE", "http://127.0.0.1:8090").rstrip("/")
+
+
+def build_validated_url(
+    base_url: str,
+    amount: float,
+    from_currency: str,
+    to_currency: str,
+) -> str:
+    try:
+        if "/../" in base_url or re.search(r"/%2e%2e/", base_url, re.IGNORECASE):
+            raise ValueError("Invalid path")
+        
+        parsed = urlparse(base_url)
+        
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Invalid protocol")
+        if not parsed.hostname:
+            raise ValueError("Invalid host")
+        
+        query = {
+            "amount": amount,
+            "from": from_currency,
+            "to": to_currency,
+        }
+        parsed = parsed._replace(query=urlencode(query))
+        
+        return urlunparse(parsed)
+    except Exception:
+        raise ValueError("Invalid URL")
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,14 +62,12 @@ def main() -> int:
         print("Currencies must be 3-letter codes (e.g., USD EUR).", file=sys.stderr)
         return 2
 
-    query = urlencode(
-        {
-            "amount": args.amount,
-            "from": from_code,
-            "to": to_code,
-        }
+    url = build_validated_url(
+        f"{args.base.rstrip('/')}/fx/convert",
+        args.amount,
+        from_code,
+        to_code,
     )
-    url = f"{args.base.rstrip('/')}/fx/convert?{query}"
 
     request = Request(url, headers={"Accept": "application/json"})
     try:
