@@ -187,6 +187,10 @@ async function authenticateApiKey(req: Request, options: RouteOptions): Promise<
 
 function principalHasForecastScope(principal: ApiPrincipal, scope: ForecastApiScope): boolean {
   if (hasRequiredScope(principal.scopes as ForecastApiScope[], scope)) return true;
+  // The platform API uses a smaller shared scope vocabulary. Translate those
+  // scopes only for platform keys; legacy forecast API keys must continue to
+  // satisfy their exact, independently granted forecast scopes.
+  if (!principal.platformKey) return false;
   const platformFallbacks: Partial<Record<ForecastApiScope, PlatformApiScope[]>> = {
     "forecasts:history": ["forecasts:read"],
     "forecasts:resolved": ["forecasts:read"],
