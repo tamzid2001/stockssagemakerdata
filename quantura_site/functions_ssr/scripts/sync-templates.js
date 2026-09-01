@@ -8,7 +8,11 @@ const walk = async (dir) => {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   const out = [];
   for (const entry of entries) {
-    const full = path.join(dir, entry.name);
+    const full = path.resolve(dir, entry.name);
+    const relative = path.relative(path.resolve(dir), full);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error('Invalid path');
+    }
     if (entry.isDirectory()) {
       out.push(...(await walk(full)));
     } else {
