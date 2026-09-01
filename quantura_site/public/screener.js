@@ -296,7 +296,9 @@
     refs.pageLabel.textContent = `Page ${current.page.toLocaleString()} of ${Number(payload.pageCount || 1).toLocaleString()}`;
     refs.previous.disabled = current.page <= 1;
     refs.next.disabled = current.page >= Number(payload.pageCount || 1);
-    refs.tableBody.innerHTML = items.map(rowHtml).join("");
+    refs.tableBody.textContent = "";
+    const sanitizedHtml = DOMPurify.sanitize(items.map(rowHtml).join(""));
+    refs.tableBody.insertAdjacentHTML("beforeend", sanitizedHtml);
     disableExport(false);
     setView(items.length ? "table" : "empty");
   }
