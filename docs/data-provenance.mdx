@@ -1,0 +1,20 @@
+---
+title: "Data provenance and licensing"
+description: "Interpret source, freshness, transform, model, and redistribution metadata."
+---
+
+# Data provenance and licensing
+
+Quantura responses preserve machine-readable provenance where applicable:
+
+- source provider and source dataset;
+- source and ingestion timestamps;
+- asset class, units, currency, and timezone;
+- forecast model, checkpoint, version, and quantile methodology;
+- immutable dataset or source hash;
+- as-of timestamp and freshness;
+- derived/raw classification and redistribution status.
+
+Retrievability is not the same as redistribution permission. Provider records may be classified as `allowed`, `restricted`, or `review_required` depending on verified terms and the intended use.
+
+Quantura can expose its own forecasts and derived analytics only where the underlying provider agreement permits the requested delivery. Private trading logic and alpha fields are excluded from normal customer and training-data responses by default.

@@ -40,6 +40,15 @@ export type AlpacaLatestPrice = {
   session: AlpacaBar["session"];
 };
 
+export type AlpacaAsset = {
+  symbol: string;
+  name: string;
+  exchange: string;
+  assetClass: string;
+  status: string;
+  tradable: boolean;
+};
+
 export type StockHistoryInput = {
   symbol: string;
   start: string;
@@ -275,6 +284,19 @@ export class AlpacaClient {
       limit: 1,
     });
     return { account: true, marketData: result.rows.length > 0, feed: result.feed };
+  }
+
+  async getAsset(symbolValue: string): Promise<AlpacaAsset> {
+    const symbol = normalizeSymbol(symbolValue);
+    const payload = await this.request(`/v2/assets/${encodeURIComponent(symbol)}`, { trading: true });
+    return {
+      symbol: String(payload.symbol || symbol).toUpperCase(),
+      name: String(payload.name || symbol).trim(),
+      exchange: String(payload.exchange || "").trim(),
+      assetClass: String(payload.class || payload.asset_class || "us_equity").trim(),
+      status: String(payload.status || "").trim(),
+      tradable: payload.tradable === true,
+    };
   }
 
   async getStockBars(input: StockHistoryInput): Promise<{ symbol: string; timeframe: string; feed: string; adjustment: string; session: string; rows: AlpacaBar[] }> {

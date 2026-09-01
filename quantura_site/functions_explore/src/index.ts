@@ -7,9 +7,12 @@ import { GoogleAuth } from "google-auth-library";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { registerMarketDataRoutes } from "./marketDataRoutes";
+import { registerMarketSearchRoutes } from "./marketSearch";
 import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
+import { registerPlatformApiRoutes } from "./platformApiRoutes";
+import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
 import { registerAwsIntegrationRoutes, resolveUserAutopilotAwsConfig } from "./awsIntegration";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 import { runIndicatorAnalysis } from "./indicators";
@@ -646,6 +649,7 @@ const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
 registerMarketDataRoutes(ROUTES);
+registerMarketSearchRoutes(ROUTES);
 registerPolymarketMlbRoutes(ROUTES);
 registerPredictionMarketDataRoutes(ROUTES);
 registerAwsIntegrationRoutes(ROUTES, { db, auth });
@@ -653,6 +657,19 @@ registerQuanturaForecastRoutes(ROUTES, {
   db,
   auth,
   adminEmails: [ADMIN_EMAIL.toLowerCase()],
+  publicOrigin: PUBLIC_ORIGIN,
+});
+registerEnsembleForecastRoutes(ROUTES, {
+  db,
+  auth,
+  publicOrigin: PUBLIC_ORIGIN,
+});
+// Register concrete dataset routes before the generic catalog
+// `/v1/datasets/:datasetId` route so Express cannot shadow trajectory/release
+// endpoints with the dynamic dataset id matcher.
+registerPlatformApiRoutes(ROUTES, {
+  db,
+  auth,
   publicOrigin: PUBLIC_ORIGIN,
 });
 
@@ -956,7 +973,7 @@ function parseLimit(input: unknown): number {
 function normalizeTicker(value: unknown): string {
   const raw = asString(value).trim().toUpperCase();
   if (!raw) return "";
-  return raw.replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
+  return raw.replace(/[^A-Z0-9.^=\-]/g, "").slice(0, 24);
 }
 
 function extractYahooFieldValue(value: unknown): unknown {
@@ -6288,7 +6305,7 @@ async function invokeOpenAiLlm(payload: {
   background: boolean;
   tools?: unknown[];
   jsonSchema?: unknown;
-}): Promise<{ text: string; usage: Record<string, unknown>; responseId: string; status: string }> {
+}): Promise<{ text: string; usage: Record<string, unknown>; citations: Array<Record<string, unknown>>; responseId: string; status: string }> {
   const openAiApiKey = await getOpenAiApiKey();
   if (!openAiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
   const requestedTools = Array.isArray(payload.tools) ? payload.tools : [];
@@ -6378,6 +6395,7 @@ async function invokeOpenAiLlm(payload: {
     return {
       text,
       usage: extractResponsesUsage(body),
+      citations: extractResponsesCitations(body),
       responseId,
       status,
     };
@@ -6957,6 +6975,7 @@ async function invokeLlmWithFallback(rawPayload: Record<string, unknown>): Promi
           text: ensureProviderText(currentProvider, result.text),
           latencyMs: Date.now() - startedAt,
           usage: result.usage,
+          citations: result.citations,
           attempted: [...errors],
           modelAdjustedFrom: modelPick.adjustedFrom || undefined,
           responseId: result.responseId || undefined,
@@ -7921,6 +7940,33 @@ ROUTES.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "quantura-api", ts: new Date().toISOString() });
 });
 
+ROUTES.get("/health/watchdog", async (_req, res) => {
+  const checkedAt = new Date().toISOString();
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  try {
+    const firestoreCheck = db.collection("quantura_runtime_health").limit(1).get();
+    const timeout = new Promise<never>((_resolve, reject) => {
+      setTimeout(() => reject(new Error("health_check_timeout")), 4_000);
+    });
+    await Promise.race([firestoreCheck, timeout]);
+    res.status(200).json({
+      ok: true,
+      service: "quantura-api",
+      dependencies: { firestore: "available" },
+      checkedAt,
+      deployment: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || "unknown",
+    });
+  } catch (_error) {
+    res.status(503).json({
+      ok: false,
+      service: "quantura-api",
+      dependencies: { firestore: "unavailable" },
+      checkedAt,
+    });
+  }
+});
+
 ROUTES.post("/forecast/run", async (req, res) => {
   try {
     const user = await verifyRequestUser(req, true);
@@ -7942,17 +7988,56 @@ ROUTES.post("/forecast/run", async (req, res) => {
       return;
     }
 
-    const history = await fetchYahooHistoryBars({
-      ticker,
-      interval,
-      start: body.start,
-      end: body.end,
-    });
+    const requestedSource = ["auto", "alpaca", "yahoo"].includes(sanitizeText(body.source, 30).toLowerCase())
+      ? sanitizeText(body.source, 30).toLowerCase()
+      : "auto";
+    const assetClass = sanitizeText(body.assetClass || body.asset_class, 40).toLowerCase() || "equity";
+    let sourceUsed = "yahoo";
+    let history: Awaited<ReturnType<typeof fetchYahooHistoryBars>>;
+    const yahooOnlySymbol = /[=^]/.test(ticker) || !["equity", "etf"].includes(assetClass);
+    if (requestedSource === "alpaca" || (requestedSource === "auto" && !yahooOnlySymbol)) {
+      try {
+        const alpacaHistory = await new AlpacaClient().getStockBars({
+          symbol: ticker,
+          start: sanitizeText(body.start, 40) || new Date(Date.now() - 365 * 86400000).toISOString(),
+          end: sanitizeText(body.end, 40) || new Date().toISOString(),
+          timeframe: interval,
+          adjustment: "raw",
+          session: "all",
+          limit: interval === "1h" ? 2000 : 5000,
+        });
+        const dateKey = interval === "1h" ? "Datetime" : "Date";
+        history = {
+          ticker,
+          interval,
+          rows: alpacaHistory.rows.map((row) => ({
+            [dateKey]: row.timestamp,
+            Open: row.open,
+            High: row.high,
+            Low: row.low,
+            Close: row.close,
+            "Adj Close": row.close,
+            Volume: row.volume,
+          })),
+          source: "alpaca_market_data",
+          actualStart: alpacaHistory.rows[0]?.timestamp || "",
+          actualEnd: alpacaHistory.rows.at(-1)?.timestamp || "",
+          clipped: false,
+        };
+        sourceUsed = "alpaca";
+      } catch (error) {
+        if (requestedSource === "alpaca") throw error;
+        history = await fetchYahooHistoryBars({ ticker, interval, start: body.start, end: body.end });
+      }
+    } else {
+      history = await fetchYahooHistoryBars({ ticker, interval, start: body.start, end: body.end });
+    }
     const forecast = buildForecastFromHistory({
       ticker,
       interval,
       horizon,
       quantiles: META_PROPHET_FORECAST_QUANTILES,
+      assetClass,
       historyRows: history.rows,
     });
 
@@ -7968,6 +8053,9 @@ ROUTES.post("/forecast/run", async (req, res) => {
       interval,
       horizon,
       service: "prophet",
+      sourceRequested: requestedSource,
+      sourceUsed,
+      assetClass,
       engine: forecast.engine,
       quantileSchemaVersion: "meta_prophet_v2_p1_p25_p50_p75_p99",
       status: "completed",
@@ -8019,6 +8107,9 @@ ROUTES.post("/forecast/run", async (req, res) => {
       interval,
       horizon,
       service: "prophet",
+      sourceRequested: requestedSource,
+      sourceUsed,
+      assetClass,
       engine: forecast.engine,
       quantileSchemaVersion: "meta_prophet_v2_p1_p25_p50_p75_p99",
       status: "completed",
@@ -9072,8 +9163,21 @@ ROUTES.post("/forecast-analysis", async (req, res) => {
       }
     }
 
+    const analysisMode = sanitizeText(payload.analysisMode, 20).toLowerCase() === "backtest" ? "backtest" : "live";
+    const marketContextRequested = asBoolean(payload.enableMarketContext, false);
+    if (analysisMode === "backtest" && marketContextRequested) {
+      res.status(400).json({
+        error: "live_tool_forbidden_in_backtest",
+        message: "Current web search is disabled in backtest mode to prevent future-information leakage.",
+      });
+      return;
+    }
+    const enableMarketContext = analysisMode === "live" && marketContextRequested;
     const context = buildForecastAnalysisContext(payload);
-    const contextHash = forecastAnalysisHash(context);
+    const baseContextHash = forecastAnalysisHash(context);
+    const contextHash = crypto.createHash("sha256")
+      .update(`${baseContextHash}:${analysisMode}:${enableMarketContext ? "market-context-v1" : "quant-only-v1"}`)
+      .digest("hex");
     const regenerate = asBoolean(payload.regenerate, false);
     const cacheId = viewer?.uid
       ? crypto.createHash("sha256").update(`${viewer.uid}:${contextHash}`).digest("hex")
@@ -9098,13 +9202,16 @@ ROUTES.post("/forecast-analysis", async (req, res) => {
           markdown: sanitizeText(data.markdown, 12000),
           provider: sanitizeText(data.provider, 80),
           model: sanitizeText(data.model, 120),
+          analysisMode,
+          marketContextEnabled: enableMarketContext,
+          citations: Array.isArray(data.citations) ? data.citations : [],
           latencyMs: 0,
         });
         return;
       }
     }
 
-    const request = buildForecastAgentRequest(context);
+    const request = buildForecastAgentRequest(context, { enableMarketContext });
     const llm = await invokeLlmWithFallback({
       provider: "openai",
       model: FORECAST_ANALYSIS_MODEL,
@@ -9117,7 +9224,7 @@ ROUTES.post("/forecast-analysis", async (req, res) => {
       params: {
         temperature: 0.2,
         maxTokens: 1800,
-        webSearch: false,
+        webSearch: enableMarketContext,
         stream: false,
         background: false,
         jsonSchema: {
@@ -9140,6 +9247,9 @@ ROUTES.post("/forecast-analysis", async (req, res) => {
         model: llm.model,
         sections,
         markdown,
+        analysisMode,
+        marketContextEnabled: enableMarketContext,
+        citations: Array.isArray(llm.citations) ? llm.citations.slice(0, 16) : [],
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -9154,6 +9264,9 @@ ROUTES.post("/forecast-analysis", async (req, res) => {
       markdown,
       provider: llm.provider,
       model: llm.model,
+      analysisMode,
+      marketContextEnabled: enableMarketContext,
+      citations: Array.isArray(llm.citations) ? llm.citations.slice(0, 16) : [],
       usage: llm.usage,
       latencyMs: Number.isFinite(Number(llm.latencyMs)) ? Number(llm.latencyMs) : Date.now() - startedAt,
     });

@@ -1,0 +1,15 @@
+# Python 3.12 production worker lock. Heavy dependencies are installed when
+# building the immutable worker image, never during a web/API request.
+numpy==2.5.2
+scipy==1.18.1
+pandas==2.3.3
+torch==2.13.0
+prophet==1.4.0
+pandas-market-calendars==5.4.0
+toto-2==2.0.0
+granite-tsfm==0.0.0
+chronos-forecasting==2.3.1
+timesfm==3.0.0
+huggingface-hub==1.29.0
+httpx==0.28.1
+pytest==8.4.2

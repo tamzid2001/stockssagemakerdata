@@ -185,7 +185,7 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
     client = (PUBLIC / "data-integrations.js").read_text()
 
     for text in [
-        "<title>Sports Market Forecasting | Quantura</title>",
+        "<title>Quantura Forecasting | Cross-Asset Forecast Intelligence</title>",
         "Prediction Market Historical Data",
         "Raw provider data",
         "Normalized data",
@@ -217,16 +217,166 @@ def test_pricing_describes_platform_features_without_generic_model_pricing():
     pricing = (PAGES / "pricing.html").read_text().lower()
     for required in [
         "prediction csv",
-        "quantile anomaly analysis",
-        "historical equities",
+        "anomaly analysis",
+        "historical equity",
         "options",
-        "mlb polymarket",
+        "polymarket us/kalshi",
         "aws/sagemaker",
         "billed separately by aws",
+        "$39/month",
+        "$374/year",
+        "$99/month",
+        "$950/year",
+        "$249/month",
+        "$2,390/year",
+        "enterprise data licensing",
     ]:
         assert required in pricing
-    for removed in ["gpt-5", "gpt token", "llm token", "ai model access"]:
+    for removed in ["gpt token", "llm token", "ai model access", "quantura go", "quantura plus", "quantura business", "quantura desk"]:
         assert removed not in pricing
+
+
+def test_platform_api_keys_collaboration_and_openapi_are_discoverable():
+    dashboard = (PAGES / "dashboard.html").read_text()
+    docs = (PAGES / "developers-api.html").read_text()
+    client = (PUBLIC / "platform-api.js").read_text()
+    backend = (ROOT / "functions_explore" / "src" / "apiAccess.ts").read_text()
+    openapi = (ROOT / "functions_explore" / "src" / "openapi.ts").read_text()
+    for marker in ['data-panel="developer"', 'id="api-key-form"', 'id="api-key-scopes"', 'id="api-key-list"']:
+        assert marker in dashboard
+    for marker in ["Workspaces &amp; collaborators", "List accessible workspaces", "Read shared forecasts", "Viewer policy", "Dataset catalog"]:
+        assert marker in docs
+    assert 'Authorization: `Bearer ${token}`' in client
+    assert "Copy this key now. It will not be shown again." in client
+    assert 'const KEY_PREFIX = "qnt_live_"' in backend
+    assert "createHmac" in backend
+    assert "api_key_revoked" in backend
+    assert '"/workspaces/{workspace_id}/{resource}"' in openapi
+    assert '"/datasets/forecast-trajectories"' in openapi
+
+
+def test_shared_screener_is_lazy_and_market_headlines_panel_is_removed():
+    forecasting = (PAGES / "forecasting.html").read_text()
+    dedicated = (PAGES / "screener.html").read_text()
+    lazy_loader = (PUBLIC / "screener-panel-lazy.js").read_text()
+    workspace_loader = (PUBLIC / "screener-workspace-loader.js").read_text()
+    screener_client = (PUBLIC / "screener.js").read_text()
+    vercel = json.loads((ROOT / "vercel.json").read_text())
+    assert 'data-panel="screener"' in forecasting
+    assert 'id="forecasting-screener-workspace"' in forecasting
+    assert '/screener.js' in dedicated
+    assert 'script.src = "/screener-workspace-loader.js' in lazy_loader
+    assert 'data-panel-target="screener"' in lazy_loader
+    assert 'new URLSearchParams(window.location.search).get("panel") === "screener"' in lazy_loader
+    assert "window.QuanturaScreenerWorkspace = Object.freeze({ mount })" in workspace_loader
+    assert 'params.set("panel", "screener")' in screener_client
+    assert "screener-plus.js" not in forecasting
+    assert 'data-panel="market-headlines"' not in forecasting
+    assert next(item for item in vercel["redirects"] if item["source"] == "/market-headlines")["destination"] == "/forecasting"
+
+
+def test_five_model_ensemble_is_integrated_into_existing_forecast_workspace():
+    forecasting = (PAGES / "forecasting.html").read_text()
+    client = (PUBLIC / "app.js").read_text()
+    backend = (ROOT / "functions_explore" / "src" / "ensembleForecastRoutes.ts").read_text()
+    workflow = (ROOT.parent / ".github" / "workflows" / "ensemble-forecast.yml").read_text()
+    docs = (PAGES / "developers-api.html").read_text()
+    assert forecasting.count('id="forecast-form"') == 1
+    for marker in [
+        'id="ensemble-forecast-form"',
+        'id="ensemble-model-list"',
+        'id="ensemble-custom-quantiles"',
+        'id="ensemble-prediction-length"',
+        'id="ensemble-forecast-results"',
+        'id="ensemble-download-csv"',
+    ]:
+        assert marker in forecasting
+    for model in ["Prophet", "Toto 2.0", "Granite", "Chronos-2", "TimesFM 3.0"]:
+        assert model in forecasting
+    assert 'addEventListener("toggle"' in client
+    assert 'apiRequestJson("/api/v1/ensemble-forecasts"' in client
+    assert "pollEnsembleForecast" in client
+    assert "Component prediction arrays remain private" in client
+    assert 'router.post("/v1/ensemble-forecasts"' in backend
+    assert 'router.get("/v1/ensemble-forecasts/:forecastId"' in backend
+    assert "effective_weights_by_quantile" in backend
+    assert "forecast_job_id" in workflow
+    assert "Raw datasets were not passed through workflow inputs." in workflow
+    assert "Five-model ensemble forecasting" in docs
+
+
+def test_ensemble_timesfm_gating_and_server_only_persistence_are_explicit():
+    backend = (ROOT / "functions_explore" / "src" / "ensembleForecastRoutes.ts").read_text()
+    registry = json.loads((ROOT / "functions_explore" / "src" / "ensembleModelRegistry.json").read_text())
+    rules = (ROOT / "firestore.rules").read_text()
+    assert 'envTrue("TIMESFM_HF_ACCESS_APPROVED")' in backend
+    assert 'envTrue("TIMESFM_COMMERCIAL_LICENSED")' in backend
+    assert 'envTrue("ALLOW_NONCOMMERCIAL_TIMESFM")' in backend
+    assert registry["models"]["timesfm"]["quantileSupport"]["extrapolate"] is False
+    assert registry["models"]["toto"]["quantileSupport"]["extrapolate"] is False
+    for collection in [
+        "ensemble_forecast_jobs",
+        "ensemble_forecast_results",
+        "ensemble_forecast_presets",
+        "ensemble_forecast_cache",
+        "ensemble_forecast_idempotency",
+    ]:
+        assert f"match /{collection}/" in rules
+
+
+def test_cross_asset_search_and_optional_search_grounded_analysis_are_explicit():
+    forecasting = (PAGES / "forecasting.html").read_text()
+    client = (PUBLIC / "market-search.js").read_text()
+    analysis_client = (PUBLIC / "app.js").read_text()
+    backend = (ROOT / "functions_explore" / "src" / "marketSearch.ts").read_text()
+    prompt = (ROOT / "functions_explore" / "src" / "forecastAnalysis.ts").read_text()
+    for marker in ['id="market-search-query"', 'id="market-search-source"', 'id="market-search-results"', 'id="forecast-source"']:
+        assert marker in forecasting
+    for source in ["alpaca", "yahoo", "polymarket_us", "kalshi"]:
+        assert source in backend
+    assert "/api/market-search" in client
+    assert "data-forecast-market-context" in analysis_client
+    assert 'analysisMode: "live"' in analysis_client
+    assert "live_tool_forbidden_in_backtest" in (ROOT / "functions_explore" / "src" / "index.ts").read_text()
+    assert "Hypothetical Headline Scenario" in prompt
+
+
+def test_options_expirations_auto_load_and_contract_rows_are_accessible():
+    client = (PUBLIC / "data-integrations.js").read_text()
+    forecasting = (PAGES / "forecasting.html").read_text()
+    assert "scheduleExpirations" in client
+    assert "loadExpirations" in client
+    assert 'setAttribute("aria-selected", "true")' in client
+    assert 'event.key !== "Enter" && event.key !== " "' in client
+    assert ">Select</th>" not in forecasting
+    assert "Refresh expirations" in forecasting
+
+
+def test_product_interactions_calendar_and_safe_csv_export_are_present():
+    dashboard = (PAGES / "dashboard.html").read_text()
+    client = (PUBLIC / "app.js").read_text()
+    backend = (ROOT / "functions_explore" / "src" / "platformApiRoutes.ts").read_text()
+    assert 'id="calendar-export"' in dashboard
+    assert "calendar_interactions" in client
+    assert "quantura-productivity-calendar" in client
+    assert "if (/^[=+\\-@]/.test(clean))" in client
+    assert 'router.post("/calendar/interactions"' in backend
+    assert "foundry-notes" not in (PAGES / "forecasting.html").read_text()
+
+
+def test_prediction_market_runners_and_watchdog_are_independent():
+    polymarket = (ROOT.parent / ".github" / "workflows" / "polymarket-quantile-forecast.yml").read_text()
+    kalshi = (ROOT.parent / ".github" / "workflows" / "kalshi-quantile-forecast.yml").read_text()
+    runner = (ROOT / "scripts" / "prediction_market_quantile_runner.py").read_text()
+    smoke = (ROOT.parent / ".github" / "workflows" / "quantura-live-smoke.yml").read_text()
+    assert "group: polymarket-quantile-forecast" in polymarket
+    assert "group: kalshi-quantile-forecast" in kalshi
+    assert "runs-on: ubuntu-latest" in polymarket and "runs-on: ubuntu-latest" in kalshi
+    assert "PROVIDER: polymarket_us" in polymarket and 'choices=("polymarket_us", "kalshi")' in runner
+    assert "PROVIDER: kalshi" in kalshi and 'choices=("polymarket_us", "kalshi")' in runner
+    for quantile in ["p1", "p25", "p50", "p75", "p99"]:
+        assert quantile in runner
+    assert "/api/health/watchdog" in smoke
 
 
 def test_prediction_csv_analysis_is_available_from_forecast_foundry():

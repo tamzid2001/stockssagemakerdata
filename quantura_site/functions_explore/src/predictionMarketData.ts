@@ -1291,6 +1291,35 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
   });
 }
 
+export async function searchPredictionMarkets(
+  source: PredictionMarketSource,
+  query: string,
+  limit = 10
+): Promise<PredictionMarketContract[]> {
+  const cleanQuery = text(query, 160).toLowerCase();
+  if (cleanQuery.length < 2) return [];
+  const categories = source === "polymarket_us" ? await polymarketCategories() : (await kalshiSeriesIndex()).categories;
+  const preferred = categories.filter((category) => [category.id, category.label, category.sport]
+    .some((value) => text(value, 160).toLowerCase().includes(cleanQuery)));
+  const candidates = [...preferred, ...categories.filter((category) => !preferred.includes(category))].slice(0, 6);
+  const settled = await Promise.allSettled(candidates.map((category) => source === "polymarket_us"
+    ? polymarketContracts({ category: category.id, status: "any", search: cleanQuery, dateFrom: "", dateTo: "", page: 1, pageSize: Math.min(limit, 20) })
+    : kalshiContracts({ category: category.id, status: "any", search: cleanQuery, dateFrom: "", dateTo: "", page: 1, pageSize: Math.min(limit, 20) })));
+  const deduplicated = new Map<string, PredictionMarketContract>();
+  for (const result of settled) {
+    if (result.status !== "fulfilled") continue;
+    for (const contract of result.value.items) {
+      const haystack = [contract.eventTitle, contract.marketTitle, contract.outcome, contract.providerSymbol, contract.homeTeam, contract.awayTeam]
+        .filter(Boolean).join(" ").toLowerCase();
+      if (!haystack.includes(cleanQuery)) continue;
+      deduplicated.set(`${contract.source}:${contract.contractId}`, contract);
+      if (deduplicated.size >= limit) break;
+    }
+    if (deduplicated.size >= limit) break;
+  }
+  return [...deduplicated.values()];
+}
+
 function sendPredictionMarketError(res: { status: (status: number) => { json: (payload: JsonRecord) => void } }, error: unknown): void {
   const safe = error instanceof PredictionMarketDataError
     ? error

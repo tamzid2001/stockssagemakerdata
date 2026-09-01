@@ -45,6 +45,7 @@
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260824a"></script>
     <script defer src="/data-integrations.js?v=20260824a"></script>
+    <script defer src="/platform-api.js?v=20260831a"></script>
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -87,7 +88,8 @@
 	          </div>
 			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
 			            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
-			            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
+		            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
+		            <a class="sidebar-link" href="/dashboard?panel=developer" data-panel-target="developer"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>Developer</span></a>
 		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
 		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
 		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Notifications</span></a>
@@ -258,6 +260,31 @@
         </div>
       </section>
 
+      <section class="section panel hidden" data-panel="developer" id="developer">
+        <div class="container">
+          <div class="section-title">
+            <div><div class="eyebrow">Account / Developer</div><h2>API Keys</h2><p class="small">Create personal credentials for Quantura's versioned API. Workspace roles and plan access are evaluated dynamically on every request.</p></div>
+            <a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>API documentation</span></a>
+          </div>
+          <div class="content-grid developer-key-grid">
+            <form id="api-key-form" class="card" autocomplete="off">
+              <h3>Create API key</h3>
+              <div class="field"><label class="label" for="api-key-name">Name</label><input id="api-key-name" maxlength="120" placeholder="Research notebook" required /></div>
+              <div class="field"><label class="label" for="api-key-expiration">Expiration (optional)</label><input id="api-key-expiration" type="date" /></div>
+              <fieldset class="api-scope-fieldset"><legend>Scopes</legend><div id="api-key-scopes" class="api-scope-grid"><span class="small muted">Sign in to load available scopes.</span></div></fieldset>
+              <button class="cta" type="submit">Create API Key</button>
+              <p id="api-key-status" class="small muted" role="status" aria-live="polite">The full secret is shown once and is never stored in plaintext.</p>
+            </form>
+            <section class="card" aria-labelledby="api-key-list-title">
+              <div class="card-head"><div><h3 id="api-key-list-title">Your keys</h3><p class="small muted">Revoke or replace credentials immediately.</p></div><button class="cta secondary small" id="api-key-refresh" type="button">Refresh</button></div>
+              <div id="api-key-secret" class="api-key-secret hidden" role="status" aria-live="polite"></div>
+              <div id="api-key-list" class="order-list"><div class="empty-state">Sign in to manage API keys.</div></div>
+            </section>
+          </div>
+          <div class="notice small">Viewer collaborators may use their own key for read-only resources in a shared workspace even when their personal plan does not grant unrestricted API access. Removing the membership revokes that workspace access immediately.</div>
+        </div>
+      </section>
+
       <section class="section panel hidden" data-panel="notifications" id="notifications">
         <div class="container">
           <div class="section-title">
@@ -369,10 +396,6 @@
                   </select>
                 </div>
               </div>
-              <div class="field">
-                <label class="label" for="task-notes">Notes (optional)</label>
-                <textarea id="task-notes" rows="3" placeholder="Context, handoff, or checklist..."></textarea>
-              </div>
               <button class="cta" type="submit" data-analytics="task_create">Add task</button>
               <p class="small" id="task-status-text"></p>
             </form>
@@ -388,10 +411,11 @@
 
           <div class="card productivity-calendar-wrap">
             <div class="productivity-head">
-              <h3>Calendar</h3>
-              <p class="small">Due-date view for this workspace.</p>
+              <div><h3>Activity calendar</h3><p class="small">Workspace due dates and your recorded Quantura product activity.</p></div>
+              <button class="cta secondary small" id="calendar-export" type="button"><i class="iconoir-download" aria-hidden="true"></i><span>Export CSV</span></button>
             </div>
-            <div id="tasks-calendar" class="tasks-calendar small muted">Tasks with due dates will appear here.</div>
+            <p class="small muted" id="calendar-export-status" role="status" aria-live="polite"></p>
+            <div id="tasks-calendar" class="tasks-calendar small muted">Tasks and recorded interactions will appear here.</div>
           </div>
 
         </div>

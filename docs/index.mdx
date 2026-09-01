@@ -1,0 +1,26 @@
+---
+title: "Quantura developer platform"
+description: "Forecast, quantile, workspace, and dataset APIs built for reproducible quantitative research."
+---
+
+# Quantura developer platform
+
+Quantura provides authenticated access to quantitative forecasts, immutable probability histories, collaborator-aware workspaces, and provenance-rich datasets.
+
+The stable public contract is versioned under `https://quantura.studio/api/v1`. The machine-readable OpenAPI 3.1 document is available at `https://quantura.studio/api/openapi.json`.
+
+## Core principles
+
+- API keys are server-generated, shown once, and stored as non-reversible digests.
+- Workspace access is evaluated on every request, so role changes and removals take effect without rotating a token.
+- Forecast inputs, configurations, model checkpoints, and results are persisted for reproducibility.
+- Public ensemble results contain the final ensemble, not internal component-model prediction arrays.
+- Provider provenance and redistribution status remain attached to data products.
+
+## Interactive reference
+
+The Quantura website hosts an interactive Scalar reference at [quantura.studio/developers/api](https://quantura.studio/developers/api). Mintlify generates the endpoint reference in this documentation from the same OpenAPI document.
+
+<Note>
+  The interactive renderer is Scalar. The underlying contract is OpenAPI 3.1, commonly known as the Swagger specification format.
+</Note>

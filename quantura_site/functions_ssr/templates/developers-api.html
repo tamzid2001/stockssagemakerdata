@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura API Documentation</title>
+    <meta name="description" content="Authentication, collaborator-aware workspaces, forecast data, dataset provenance, pagination, rate limits, and the Quantura v1 API reference." />
+    <link rel="canonical" href="https://quantura.studio/developers/api" />
+    <meta name="robots" content="index, follow" />
+    <link rel="stylesheet" href="/styles.css?v=20260831a" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260405b" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script defer src="/vercel-observability.js"></script>
+  </head>
+  <body>
+    <header class="header"><div class="container nav"><a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a><nav class="nav-links" aria-label="Primary navigation"><a href="/forecasting">Forecasting</a><a href="/screener">Screener</a><a href="/pricing">Pricing</a><a href="/contact">Contact</a></nav><div class="nav-actions"><a class="cta secondary" href="/dashboard?panel=developer">Manage API keys</a></div></div></header>
+    <main>
+      <section class="section"><div class="container">
+        <div class="section-title"><div><div class="eyebrow">Quantura Developer Platform</div><h1>Forecast Intelligence API</h1><p>Versioned access to forecasts, quantile datasets, screeners, prediction-market exports, and collaborator-aware workspace resources.</p></div><a class="cta" href="/api/openapi.json">Download OpenAPI JSON</a></div>
+        <div class="content-grid">
+          <article class="card"><h2>Getting started</h2><ol class="compact-list"><li>Sign in and open <a href="/dashboard?panel=developer">Account / Developer</a>.</li><li>Create a scoped key and copy it once.</li><li>Send it in the <code>Authorization: Bearer</code> header.</li><li>Call <code>GET /api/v1/me/access</code> to inspect effective access.</li></ol></article>
+          <article class="card"><h2>Workspaces &amp; collaborators</h2><p class="small">API keys identify a user; they do not freeze a workspace role. Quantura checks current membership, role, resource ownership, and plan on every request. Viewer access is GET-only in the shared workspace and does not reduce permissions in the viewer's personal workspace.</p></article>
+        </div>
+        <div class="content-grid" style="margin-top:18px;">
+          <article class="card"><h3>cURL</h3><pre><code>curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  https://quantura.studio/api/v1/me/access</code></pre></article>
+          <article class="card"><h3>Python</h3><pre><code>import os, requests
+r = requests.get(
+  "https://quantura.studio/api/v1/workspaces",
+  headers={"Authorization": f"Bearer {os.environ['QUANTURA_API_KEY']}"},
+)
+r.raise_for_status()</code></pre></article>
+          <article class="card"><h3>JavaScript / TypeScript</h3><pre><code>const response = await fetch(
+  "https://quantura.studio/api/v1/datasets",
+  { headers: { Authorization: `Bearer ${process.env.QUANTURA_API_KEY}` } },
+);
+if (!response.ok) throw new Error(`API ${response.status}`);</code></pre></article>
+        </div>
+        <div class="notice small" style="margin-top:18px;"><strong>Data provenance and licensing:</strong> responses identify sources, units, timestamps, derivation, and redistribution status where applicable. A provider marked <code>review_required</code> is not represented as cleared for raw redistribution.</div>
+      </div></section>
+      <section class="section" aria-labelledby="dataset-catalog-title"><div class="container"><div class="section-title"><div><div class="eyebrow">Dataset catalog</div><h2 id="dataset-catalog-title">Machine-readable data products</h2><p>Catalog metadata is available through <code>GET /api/v1/datasets</code> with <code>datasets:read</code>.</p></div></div><div class="content-grid">
+        <article class="card"><h3>Quantura Forecast Quantiles</h3><p class="small">Quantura-created point-in-time P1/P25/P50/P75/P99 distributions for supported assets and contracts.</p><dl class="forecast-stat-list"><div><dt>Type</dt><dd>Derived</dd></div><div><dt>API</dt><dd>Available</dd></div><div><dt>Redistribution</dt><dd>Quantura outputs only</dd></div></dl></article>
+        <article class="card"><h3>Prediction Market Canvas Time Series</h3><p class="small">Provider-qualified contract observations normalized to decimal 0–1 targets and UTC timestamps.</p><dl class="forecast-stat-list"><div><dt>Type</dt><dd>Normalized</dd></div><div><dt>Sources</dt><dd>Polymarket US, Kalshi</dd></div><div><dt>Redistribution</dt><dd>Terms review required</dd></div></dl></article>
+        <article class="card"><h3>Historical Market Data</h3><p class="small">Provider-sourced OHLCV and options observations with explicit source, units, timestamp, and freshness metadata.</p><dl class="forecast-stat-list"><div><dt>Type</dt><dd>Raw/provider-sourced</dd></div><div><dt>Sources</dt><dd>Alpaca, Yahoo Finance</dd></div><div><dt>Redistribution</dt><dd>Terms review required</dd></div></dl></article>
+      </div></div></section>
+      <section class="section"><div class="container"><div class="section-title"><div><div class="eyebrow">Collaborator examples</div><h2>Workspace-scoped API access</h2><p>Viewer permissions apply only inside the shared workspace and are re-evaluated on every request.</p></div></div><div class="content-grid">
+        <article class="card"><h3>List accessible workspaces</h3><pre><code>curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  https://quantura.studio/api/v1/workspaces</code></pre></article>
+        <article class="card"><h3>Read shared forecasts</h3><pre><code>curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/workspaces/$WORKSPACE_ID/forecasts?limit=50"</code></pre></article>
+        <article class="card"><h3>Read shared CSV analysis</h3><pre><code>curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/workspaces/$WORKSPACE_ID/prediction-analyses"</code></pre></article>
+      </div><div class="notice small" style="margin-top:18px;"><strong>Viewer policy:</strong> GET/read requests to currently shared resources are allowed when the token has the matching read scope. POST, PATCH, and DELETE operations are denied. Removing the collaborator immediately removes access for the same token. The viewer's own workspace still follows their personal plan and permissions.</div></div></section>
+      <section class="section" aria-labelledby="ensemble-api-title"><div class="container">
+        <div class="section-title"><div><div class="eyebrow">Durable inference</div><h2 id="ensemble-api-title">Five-model ensemble forecasting</h2><p>Create an immutable asynchronous job, poll its status, then download the final ensemble. Component-model arrays are not included in standard customer responses.</p></div></div>
+        <div class="content-grid">
+          <article class="card"><h3>1. Model capabilities</h3><pre><code>curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  https://quantura.studio/api/v1/ensemble-forecasts/models</code></pre><p class="small">Availability reflects the caller's plan and runtime licensing. Toto and TimesFM contribute within P10–P90 only.</p></article>
+          <article class="card"><h3>2. Create a forecast</h3><pre><code>curl -X POST \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: research-run-001" \
+  -d '{
+    "source":{"type":"ticker","symbol":"AAPL"},
+    "prediction_length":30,
+    "horizon_mode":"trading_sessions",
+    "quantiles":[0.01,0.1,0.25,0.5,0.75,0.9,0.99],
+    "transform":"auto",
+    "models":{
+      "prophet":{"enabled":true,"weight":0.2},
+      "toto":{"enabled":true,"weight":0.2},
+      "granite":{"enabled":true,"weight":0.2},
+      "chronos":{"enabled":true,"weight":0.2},
+      "timesfm":{"enabled":false,"weight":0}
+    }
+  }' https://quantura.studio/api/v1/ensemble-forecasts</code></pre></article>
+          <article class="card"><h3>3. Poll and download</h3><pre><code>curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  https://quantura.studio/api/v1/ensemble-forecasts/$FORECAST_ID
+
+curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/ensemble-forecasts/$FORECAST_ID/download?format=csv" \
+  --output forecast.csv
+
+curl -X POST -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  https://quantura.studio/api/v1/ensemble-forecasts/$FORECAST_ID/reproduce</code></pre><p class="small">A successful create returns HTTP 202 unless an identical immutable result is safely reused. Reproduction uses the original input snapshot and pinned checkpoints while re-evaluating current access and licensing.</p></article>
+        </div>
+        <div class="content-grid" style="margin-top:18px;">
+          <article class="card"><h3>Python</h3><pre><code>import os, time, requests
+headers = {"Authorization": f"Bearer {os.environ['QUANTURA_API_KEY']}"}
+job = requests.post(
+  "https://quantura.studio/api/v1/ensemble-forecasts",
+  headers=headers,
+  json=request_body,
+).json()["data"]
+while job["status"] in {"queued", "running"}:
+    time.sleep(3)
+    job = requests.get(f"https://quantura.studio{job['status_url']}", headers=headers).json()["data"]</code></pre></article>
+          <article class="card"><h3>JavaScript / TypeScript</h3><pre><code>const created = await fetch("/api/v1/ensemble-forecasts", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.QUANTURA_API_KEY}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(requestBody),
+});
+const { data: job } = await created.json();</code></pre></article>
+          <article class="card"><h3>Important behavior</h3><ul class="compact-list small"><li>Weights are normalized independently for each requested quantile.</li><li>Unsupported tails are never extrapolated.</li><li>NYSE trading-session horizons exclude exchange holidays.</li><li>TimesFM production availability requires a separate commercial-license flag.</li><li>Workspace datasets are authorized server-side.</li></ul></article>
+        </div>
+      </div></section>
+      <section class="section" aria-labelledby="api-reference-title"><div class="container"><div class="section-title"><div><div class="eyebrow">OpenAPI 3.1</div><h2 id="api-reference-title">Interactive API reference</h2><p>Use synthetic credentials in examples. Never paste production secrets into shared screenshots or support requests.</p></div></div><div id="api-reference"></div></div></section>
+    </main>
+    <footer class="footer"><div class="container footer-grid"><div><div class="logo">QUANTURA</div><p class="small">Quantitative data, forecasts, and research infrastructure.</p></div><div class="small"><strong>Developers</strong><div><a href="/developers/api">API reference</a></div><div><a href="/dashboard?panel=developer">API keys</a></div><div><a href="/pricing">Plans</a></div></div><div class="small"><strong>Legal</strong><div><a href="/terms">Terms</a></div><div><a href="/privacy">Privacy</a></div><div><a href="/disclaimer">Disclaimer</a></div></div></div></footer>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    <script>
+      Scalar.createApiReference(document.getElementById('api-reference'), { url: '/api/openapi.json', theme: 'saturn', hideModels: false, darkMode: true });
+    </script>
+  </body>
+</html>

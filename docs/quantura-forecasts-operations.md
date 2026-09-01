@@ -1,3 +1,8 @@
+---
+title: "Forecast operations and continuity"
+description: "Secrets, backups, recovery, idempotent jobs, and operational controls."
+---
+
 # Quantura Forecasts operations and continuity
 
 ## Required environment variables

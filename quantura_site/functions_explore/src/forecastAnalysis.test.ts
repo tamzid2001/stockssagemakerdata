@@ -139,6 +139,7 @@ test("agent request contains all five series, scenarios, ranges, horizon, price,
   assert.equal(payload.ranges.extreme.upperQuantile, "P99");
   assert.equal(payload.indicators.derived.rsi14, 55);
   assert.equal(payload.forecast.trend.quantile, "P50");
+  assert.match(payload.marketContextPolicy, /no live search/i);
   for (const requirement of [
     "Forecast Distribution",
     "Extreme Bear Case",
@@ -157,11 +158,15 @@ test("agent request contains all five series, scenarios, ranges, horizon, price,
 test("structured agent output requires every five-scenario section", () => {
   const complete = {
     forecastDistribution: "Current price is within the central distribution.",
+    marketContext: "No live context was requested.",
     extremeBearCase: "P1 tail scenario.",
     bearCase: "P25 lower scenario.",
     baseCase: "P50 median scenario.",
     bullCase: "P75 upper scenario.",
     extremeBullCase: "P99 tail scenario.",
+    bullishStoryScenario: "Hypothetical upside narrative.",
+    baseStoryScenario: "Hypothetical base narrative.",
+    bearishStoryScenario: "Hypothetical downside narrative.",
     technicalConfirmation: "Indicators are mixed.",
     forecastUncertainty: "Central and extreme ranges are stable.",
     overallBias: "Neutral / Mixed",

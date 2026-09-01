@@ -121,7 +121,7 @@ function sanitizeText(value: unknown, maxLen = 600): string {
 function normalizeTicker(value: unknown): string {
   const raw = asString(value).trim().toUpperCase();
   if (!raw) return "";
-  return raw.replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
+  return raw.replace(/[^A-Z0-9.^=\-]/g, "").slice(0, 24);
 }
 
 function extractYahooFieldValue(value: unknown): unknown {
@@ -595,7 +595,7 @@ function inverseStandardNormal(p: number): number {
   );
 }
 
-function nextForecastDates(lastDate: Date, horizon: number, interval: HistoryInterval): string[] {
+function nextForecastDates(lastDate: Date, horizon: number, interval: HistoryInterval, assetClass = "equity"): string[] {
   const out: string[] = [];
   let cursor = new Date(lastDate.getTime());
   while (out.length < horizon) {
@@ -606,7 +606,7 @@ function nextForecastDates(lastDate: Date, horizon: number, interval: HistoryInt
     }
     cursor = new Date(cursor.getTime() + DAY_MS);
     const weekday = cursor.getUTCDay();
-    if (weekday === 0 || weekday === 6) continue;
+    if (assetClass !== "crypto" && (weekday === 0 || weekday === 6)) continue;
     out.push(formatDayKey(cursor));
   }
   return out;
@@ -693,12 +693,14 @@ export function buildForecastFromHistory(input: {
   interval?: unknown;
   horizon: unknown;
   quantiles: unknown;
+  assetClass?: unknown;
   historyRows: Array<Record<string, unknown>>;
 }): ForecastRunResponse {
   const ticker = normalizeTicker(input.ticker);
   const interval = normalizeHistoryInterval(input.interval);
   const horizon = Math.max(1, Math.min(interval === "1h" ? 240 : 365, Math.floor(asFinite(input.horizon, 0))));
   const quantiles = normalizeForecastQuantiles(input.quantiles);
+  const assetClass = sanitizeText(input.assetClass, 40).toLowerCase() || "equity";
   const closes = extractCloseSeries(input.historyRows);
   const dates = extractDateSeries(input.historyRows, interval);
   if (!ticker) throw new Error("Ticker is required.");
@@ -713,7 +715,7 @@ export function buildForecastFromHistory(input: {
     .filter((value) => Number.isFinite(value));
   const drift = average(returns);
   const volatility = Math.max(stddev(returns), 0.0001);
-  const futureDates = nextForecastDates(lastDate, horizon, interval);
+  const futureDates = nextForecastDates(lastDate, horizon, interval, assetClass);
 
   // Quantiles are closed-form percentiles of the existing log-normal return model:
   // exp(log(lastClose) + drift * h + z(q) * volatility * sqrt(h)).

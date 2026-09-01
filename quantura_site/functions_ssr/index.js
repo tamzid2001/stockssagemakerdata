@@ -113,7 +113,6 @@ const resolveTemplate = (pathname) => {
     "/news",
     "/historical-data",
     "/historical-prices",
-    "/market-headlines",
     "/options",
     "/saved-forecasts",
     "/forecast",
@@ -148,6 +147,7 @@ const resolveTemplate = (pathname) => {
   if (dashboardAliases.has(route)) return "dashboard.html";
 
   if (route === "/screener") return "screener.html";
+  if (route === "/developers/api" || route === "/docs/api") return "developers-api.html";
   if (route === "/research") return "research.html";
   if (route === "/pricing") return "pricing.html";
   if (route === "/purchase") return "pricing.html";

@@ -1,0 +1,103 @@
+name: Polymarket Quantile Forecast
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      category:
+        description: "Optional provider category id; blank scans a bounded category sample"
+        required: false
+        default: ""
+      max_markets:
+        description: "Maximum real contracts processed in this run"
+        required: true
+        type: number
+        default: 12
+      lookback_days:
+        description: "Historical lookback (maximum 90 days)"
+        required: true
+        type: number
+        default: 30
+      frequency:
+        description: "Normalized observation frequency"
+        required: true
+        type: choice
+        options: [1m, 5m, 15m, 30m, 1h, 1d]
+        default: 1h
+      horizon_steps:
+        description: "Forecast horizon in selected-frequency steps"
+        required: true
+        type: number
+        default: 24
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polymarket-quantile-forecast
+  cancel-in-progress: false
+
+jobs:
+  forecast:
+    name: Discover, normalize, forecast, and validate Polymarket US contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PROVIDER: polymarket_us
+      API_ORIGIN: https://quantura.studio
+      CATEGORY: ${{ inputs.category || '' }}
+      MAX_MARKETS: ${{ inputs.max_markets || 12 }}
+      LOOKBACK_DAYS: ${{ inputs.lookback_days || 30 }}
+      FREQUENCY: ${{ inputs.frequency || '1h' }}
+      HORIZON_STEPS: ${{ inputs.horizon_steps || 24 }}
+      OUTPUT_DIR: artifacts/polymarket-quantile-forecast
+    steps:
+      - name: Checkout authoritative code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Run bounded Polymarket forecast pipeline
+        run: |
+          python quantura_site/scripts/prediction_market_quantile_runner.py \
+            --provider "$PROVIDER" \
+            --api-origin "$API_ORIGIN" \
+            --category "$CATEGORY" \
+            --max-categories 3 \
+            --max-markets "$MAX_MARKETS" \
+            --lookback-days "$LOOKBACK_DAYS" \
+            --frequency "$FREQUENCY" \
+            --horizon-steps "$HORIZON_STEPS" \
+            --output-dir "$OUTPUT_DIR"
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ["OUTPUT_DIR"]) / "manifest.json"
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as handle:
+              handle.write("## Polymarket US Quantile Forecast\n\n")
+              if not path.exists():
+                  handle.write("The run failed before a coverage manifest could be produced.\n")
+              else:
+                  data = json.loads(path.read_text())
+                  handle.write("| Metric | Value |\n| --- | ---: |\n")
+                  for key in ("categories_discovered", "categories_scanned", "markets_discovered", "markets_eligible", "markets_processed", "forecasts_successful", "forecasts_failed", "missing_history", "invalid_series", "coverage_pct", "runtime_seconds"):
+                      handle.write(f"| {key.replace('_', ' ').title()} | {data.get(key, '')} |\n")
+                  handle.write(f"\nForecast version: `{data.get('forecast_version', '')}`  \nCommit: `{data.get('commit_sha', '')}`  \nFull-provider coverage claimed: **No**\n")
+          PY
+
+      - name: Upload provider-specific artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: polymarket-quantile-forecast-${{ github.run_id }}
+          path: artifacts/polymarket-quantile-forecast
+          if-no-files-found: error
+          retention-days: 30

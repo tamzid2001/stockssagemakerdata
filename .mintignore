@@ -1,0 +1,4 @@
+# Mintlify is configured from this repository root, but only the curated
+# developer documentation under /docs is part of the documentation site.
+quantura_site/
+ensemble_forecasting/

@@ -1,3 +1,8 @@
+---
+title: "Forecast methodology"
+description: "Prospective probabilities, immutable evidence, resolution, and calibration."
+---
+
 # Quantura Forecasts methodology
 
 ## What a forecast is

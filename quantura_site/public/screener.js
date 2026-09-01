@@ -185,6 +185,7 @@
 
   function buildParams(state) {
     const params = new URLSearchParams();
+    if (window.location.pathname === "/forecasting") params.set("panel", "screener");
     if (state.search) params.set("search", state.search);
     if (state.universe !== "all") params.set("universe", state.universe);
     if (state.marketCap !== "all") params.set("marketCap", state.marketCap);

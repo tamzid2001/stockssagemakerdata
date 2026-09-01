@@ -1,0 +1,36 @@
+---
+title: "Probabilistic ensemble forecasts"
+description: "Configure five approved time-series models, custom quantiles, and durable asynchronous execution."
+---
+
+# Probabilistic ensemble forecasts
+
+Quantura's ensemble supports these stable model identifiers:
+
+- `prophet` — Meta Prophet
+- `toto` — Datadog Toto 2.0 4M
+- `granite` — IBM Granite PatchTST-FM-r2
+- `chronos` — Amazon Chronos-2
+- `timesfm` — Google TimesFM 3.0
+
+At least one model must be enabled and at least one enabled weight must be positive. The backend normalizes weights independently for every quantile after excluding models that cannot produce that quantile.
+
+## Quantile support
+
+Prophet, Granite, and Chronos participate in requested tail quantiles when supported by their runtime. Toto and TimesFM provide native P10 through P90 quantiles and may interpolate only inside that interval. Quantura never extrapolates P01 or P99 from those bounded heads.
+
+After ensembling, deterministic monotonic rearrangement guarantees non-crossing requested quantiles.
+
+## Durable lifecycle
+
+1. The API validates permissions, plan, model capabilities, source data, and configuration.
+2. It snapshots the authorized input and returns HTTP `202`.
+3. A private worker claims the job by identifier and runs models sequentially.
+4. The UI or client polls job status.
+5. The completed response returns only final ensemble rows and effective weights by quantile.
+
+Reproduction creates a new job from the original input snapshot, stored configuration, and pinned model checkpoints while re-evaluating current authorization and license gates.
+
+## TimesFM licensing
+
+Hugging Face repository access and commercial production rights are separate conditions. TimesFM is unavailable to public production users unless the server explicitly records commercial licensing. Internal non-commercial evaluation requires a separate explicit flag and is labeled evaluation-only.

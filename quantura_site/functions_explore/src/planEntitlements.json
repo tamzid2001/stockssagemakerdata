@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "2026-08-31",
+  "plans": {
+    "free": {
+      "label": "Free",
+      "monthlyCents": 0,
+      "annualCents": 0,
+      "apiReadPerMinute": 20,
+      "forecastComputePerDay": 3,
+      "bulkExportsPerMonth": 0,
+      "backtestsPerMonth": 0,
+      "collaboratorSeats": 0,
+      "features": ["meta_prophet_limited", "quantiles", "indicators_basic", "screener_limited", "historical_limited", "prediction_csv_limited", "sports_browse_limited", "alerts_limited"]
+    },
+    "pro": {
+      "label": "Pro",
+      "monthlyCents": 3900,
+      "annualCents": 37400,
+      "apiReadPerMinute": 60,
+      "forecastComputePerDay": 50,
+      "bulkExportsPerMonth": 5,
+      "backtestsPerMonth": 0,
+      "collaboratorSeats": 0,
+      "features": ["meta_prophet", "quantiles", "indicators", "prediction_csv", "anomaly_analysis", "forecast_bias", "alerts", "historical_data", "options", "screener", "prediction_markets", "sagemaker_exports", "gpt_analysis"]
+    },
+    "quant": {
+      "label": "Quant",
+      "monthlyCents": 9900,
+      "annualCents": 95000,
+      "apiReadPerMinute": 240,
+      "forecastComputePerDay": 250,
+      "bulkExportsPerMonth": 50,
+      "backtestsPerMonth": 30,
+      "collaboratorSeats": 0,
+      "features": ["meta_prophet", "chronos_2", "forecast_ensemble", "walk_forward", "backtesting", "quantiles", "indicators", "prediction_csv", "anomaly_analysis", "forecast_bias", "alerts", "historical_data", "options", "screener", "bulk_scanning", "prediction_markets", "bulk_exports", "api", "scheduled_jobs", "sagemaker_exports", "gpt_analysis"]
+    },
+    "research": {
+      "label": "Research",
+      "monthlyCents": 24900,
+      "annualCents": 239000,
+      "apiReadPerMinute": 1000,
+      "forecastComputePerDay": 1000,
+      "bulkExportsPerMonth": 250,
+      "backtestsPerMonth": 150,
+      "collaboratorSeats": 10,
+      "features": ["meta_prophet", "chronos_2", "forecast_ensemble", "walk_forward", "backtesting", "quantiles", "indicators", "prediction_csv", "anomaly_analysis", "forecast_bias", "alerts", "historical_data", "options", "screener", "bulk_scanning", "prediction_markets", "bulk_exports", "api", "scheduled_jobs", "sagemaker_exports", "gpt_analysis", "workspaces", "auditability", "priority_processing", "team_controls", "priority_support"]
+    }
+  },
+  "legacyAliases": {
+    "go": "pro",
+    "plus": "pro",
+    "business": "research",
+    "desk": "research",
+    "premium": "pro"
+  }
+}

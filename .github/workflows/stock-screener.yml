@@ -29,8 +29,7 @@ on:
   schedule:
     - cron: "15 22 * * 1-5"
 
-permissions:
-  contents: write
+permissions: {}
 
 concurrency:
   group: quantura-full-universe-screener
@@ -48,6 +47,8 @@ jobs:
     name: Prepare current market universe
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.matrix.outputs.value }}
       universe_hash: ${{ steps.metadata.outputs.universe_hash }}
@@ -113,6 +114,8 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 75
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       max-parallel: 12
@@ -166,6 +169,8 @@ jobs:
     if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write
     steps:
       - name: Checkout authoritative code
         uses: actions/checkout@v6

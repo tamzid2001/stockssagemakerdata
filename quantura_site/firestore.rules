@@ -46,6 +46,11 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin() || canEditWorkspace(userId);
     }
 
+    match /users/{userId}/calendar_interactions/{interactionId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow write: if false;
+    }
+
     // AWS role configuration is server-only. Authenticated clients use API
     // endpoints that verify their Firebase ID token and scope every operation
     // to users/{uid}/integrations/aws.
@@ -283,6 +288,37 @@ service cloud.firestore {
     }
 
     match /quantura_forecast_slugs/{slug} {
+      allow read, write: if false;
+    }
+
+    // Heavy ensemble jobs, immutable inputs, results, presets, cache records,
+    // idempotency mappings, and usage counters are only exposed through the
+    // authenticated API. Workspace authorization is evaluated on every HTTP
+    // request; browser clients never receive direct Firestore access.
+    match /ensemble_forecast_jobs/{jobId} {
+      allow read, write: if false;
+      match /input_chunks/{chunkId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /ensemble_forecast_results/{forecastId} {
+      allow read, write: if false;
+    }
+
+    match /ensemble_forecast_presets/{presetId} {
+      allow read, write: if false;
+    }
+
+    match /ensemble_forecast_cache/{cacheId} {
+      allow read, write: if false;
+    }
+
+    match /ensemble_forecast_idempotency/{idempotencyId} {
+      allow read, write: if false;
+    }
+
+    match /ensemble_forecast_usage/{usageId} {
       allow read, write: if false;
     }
   }

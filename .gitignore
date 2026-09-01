@@ -21,3 +21,7 @@ scripts/pull-secrets.sh
 .DS_Store
 __pycache__/
 artifacts/
+.cache/huggingface/
+.huggingface/
+quantura_site/qa_screens/
+quantura_site/docs/screenshots/

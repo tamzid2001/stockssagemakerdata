@@ -1,0 +1,159 @@
+name: Quantura Ensemble Forecast Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      forecast_job_id:
+        description: "Server-generated forecast job ID (never raw user data)"
+        required: false
+        type: string
+      environment:
+        description: "Backend environment"
+        required: true
+        type: choice
+        options: [production, development, test]
+        default: production
+      smoke_mode:
+        description: "Mock is safe for routine CI; real loads approved checkpoints"
+        required: true
+        type: choice
+        options: [mock, real]
+        default: mock
+  schedule:
+    - cron: "17 10 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ensemble-forecast-${{ inputs.forecast_job_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  forecast:
+    runs-on: ${{ fromJSON(vars.ENSEMBLE_FORECAST_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 240
+    env:
+      PYTHONUNBUFFERED: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      QUANTURA_ENSEMBLE_WORKER_TOKEN: ${{ secrets.QUANTURA_ENSEMBLE_WORKER_TOKEN }}
+      QUANTURA_WORKER_API_BASE: ${{ vars.QUANTURA_WORKER_API_BASE || 'https://quantura.studio' }}
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      ALLOW_NONCOMMERCIAL_TIMESFM: ${{ vars.ALLOW_NONCOMMERCIAL_TIMESFM || 'false' }}
+
+    steps:
+      - name: Checkout authoritative code
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ensemble-forecast.lock
+
+      - name: Restore private model cache
+        if: ${{ inputs.smoke_mode == 'real' }}
+        uses: actions/cache@v4
+        with:
+          path: .cache/huggingface
+          key: ensemble-models-${{ runner.os }}-${{ hashFiles('requirements-ensemble-forecast.lock', 'quantura_site/functions_explore/src/ensembleModelRegistry.json') }}
+          restore-keys: |
+            ensemble-models-${{ runner.os }}-
+
+      - name: Install mock-smoke dependencies
+        if: ${{ inputs.smoke_mode != 'real' }}
+        run: python -m pip install --disable-pip-version-check numpy pandas pandas-market-calendars httpx pytest
+
+      - name: Install locked production inference environment
+        if: ${{ inputs.smoke_mode == 'real' }}
+        run: python -m pip install --disable-pip-version-check --requirement requirements-ensemble-forecast.lock
+
+      - name: Validate mock engine and workflow contract
+        if: ${{ inputs.forecast_job_id == '' }}
+        run: python -m pytest -q ensemble_forecasting/tests
+
+      - name: Validate Hugging Face authentication and gated access
+        if: ${{ inputs.smoke_mode == 'real' }}
+        run: |
+          python - <<'PY'
+          import os
+          import urllib.request
+
+          token = os.environ.get("HF_TOKEN", "")
+          if not token:
+              raise SystemExit("HF_TOKEN is not configured")
+          headers = {"Authorization": f"Bearer {token}", "User-Agent": "Quantura-Ensemble-Worker/1.0"}
+          for label, url in (
+              ("authentication", "https://huggingface.co/api/whoami-v2"),
+              ("TimesFM gated access", "https://huggingface.co/google/timesfm-3.0-pytorch/resolve/main/config.json"),
+          ):
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"Hugging Face {label} failed")
+          print("Hugging Face authentication and gated-file access validated.")
+          PY
+
+      - name: Run real Toto 2.0 4M smoke
+        if: ${{ inputs.smoke_mode == 'real' && inputs.forecast_job_id == '' }}
+        run: python -m ensemble_forecasting.smoke
+
+      - name: Validate worker secrets for claimed jobs
+        if: ${{ inputs.forecast_job_id != '' }}
+        run: |
+          python - <<'PY'
+          import os, re
+          job_id = os.environ.get("FORECAST_JOB_ID", "")
+          if not re.fullmatch(r"[A-Za-z0-9._:-]{1,220}", job_id):
+              raise SystemExit("forecast_job_id is invalid")
+          if len(os.environ.get("QUANTURA_ENSEMBLE_WORKER_TOKEN", "")) < 32:
+              raise SystemExit("QUANTURA_ENSEMBLE_WORKER_TOKEN is not configured")
+          if os.environ.get("INPUT_SMOKE_MODE") == "real" and not os.environ.get("HF_TOKEN"):
+              raise SystemExit("HF_TOKEN is required for real model inference")
+          print("Worker inputs and secret presence validated.")
+          PY
+        env:
+          FORECAST_JOB_ID: ${{ inputs.forecast_job_id }}
+          INPUT_SMOKE_MODE: ${{ inputs.smoke_mode }}
+
+      - name: Claim and execute forecast job
+        if: ${{ inputs.forecast_job_id != '' }}
+        env:
+          FORECAST_JOB_ID: ${{ inputs.forecast_job_id }}
+          INPUT_SMOKE_MODE: ${{ inputs.smoke_mode }}
+        run: |
+          mkdir -p artifacts
+          if [[ "${INPUT_SMOKE_MODE}" == "mock" ]]; then
+            python -m ensemble_forecasting.cli --forecast-job-id "${FORECAST_JOB_ID}" --mock | tee artifacts/worker-result.json
+          else
+            python -m ensemble_forecasting.cli --forecast-job-id "${FORECAST_JOB_ID}" | tee artifacts/worker-result.json
+          fi
+
+      - name: Upload safe worker receipt
+        if: ${{ always() && inputs.forecast_job_id != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ensemble-forecast-${{ inputs.forecast_job_id }}
+          path: artifacts/worker-result.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Write worker summary
+        if: always()
+        env:
+          FORECAST_JOB_ID: ${{ inputs.forecast_job_id }}
+          INPUT_SMOKE_MODE: ${{ inputs.smoke_mode || 'mock' }}
+        run: |
+          {
+            echo "## Quantura Ensemble Forecast Worker"
+            echo
+            echo "- Job ID: \`${FORECAST_JOB_ID:-scheduled-mock-smoke}\`"
+            echo "- Mode: \`${INPUT_SMOKE_MODE}\`"
+            echo "- Runner: \`${RUNNER_NAME}\` / \`${RUNNER_OS}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Raw datasets were not passed through workflow inputs."
+          } >> "${GITHUB_STEP_SUMMARY}"

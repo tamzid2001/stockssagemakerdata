@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sports Market Forecasting | Quantura</title>
+    <title>Quantura Forecasting | Cross-Asset Forecast Intelligence</title>
         <meta name="description" content="Analyze Meta Prophet forecast quantiles, technical indicators, deterministic scenarios, and optional balanced AI interpretation." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="stock forecasting terminal, quantile forecast, fan chart, ticker analysis, historical market data" />
@@ -43,7 +43,9 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260824a"></script>
-    <script defer src="/data-integrations.js?v=20260824a"></script>
+    <script defer src="/data-integrations.js?v=20260831a"></script>
+    <script defer src="/market-search.js?v=20260831a"></script>
+    <script defer src="/screener-panel-lazy.js?v=20260831a"></script>
     <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
@@ -97,7 +99,6 @@
               <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
               <a class="sidebar-link" href="/historical-data" data-panel-target="news"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
-              <a class="sidebar-link" href="/market-headlines" data-panel-target="market-headlines"><i class="iconoir-globe" aria-hidden="true"></i><span>Market headlines</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
 	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
 	          </nav>
@@ -119,6 +120,18 @@
           </div>
 	          <section class="section studio-section" id="terminal">
 	            <div class="container">
+	              <section class="market-search-workspace" aria-labelledby="market-search-title">
+                    <div class="market-search-heading">
+                      <div><div class="eyebrow">Universal discovery</div><h2 id="market-search-title">Search Markets / Data</h2><p class="small muted">Find supported exchange-traded instruments and live prediction-market contracts without memorizing provider syntax.</p></div>
+                    </div>
+                    <form id="market-search-form" class="market-search-form">
+                      <div class="field"><label class="label" for="market-search-query">Search asset or market</label><input id="market-search-query" type="search" minlength="2" placeholder="Company, symbol, FX pair, commodity, rate, team, or event" required /></div>
+                      <div class="field"><label class="label" for="market-search-source">Source</label><select id="market-search-source"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="polymarket_us">Polymarket US</option><option value="kalshi">Kalshi</option></select></div>
+                      <button class="cta" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Search</span></button>
+                    </form>
+                    <p id="market-search-status" class="small muted" role="status" aria-live="polite">Search results report their provider, asset class, units, and available workflow.</p>
+                    <div id="market-search-results" class="market-search-results" hidden></div>
+                  </section>
 		              <div class="studio-layout is-main-hidden" data-panels data-panel-router="terminal">
 	                <div class="studio-panel">
                   <section class="panel" data-panel="forecast">
@@ -133,6 +146,11 @@
                           <label class="label" for="forecast-ticker">Ticker</label>
                           <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
                         </div>
+	                        <div class="field">
+	                          <label class="label" for="forecast-source">Source</label>
+	                          <select id="forecast-source" name="source"><option value="auto" selected>Auto — Alpaca then Yahoo</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
+                            <input id="forecast-asset-class" name="assetClass" type="hidden" value="equity" />
+	                        </div>
 	                        <div class="field">
 	                          <label class="label" for="forecast-horizon">Forecast length</label>
 	                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
@@ -155,6 +173,113 @@
 	                      </div>
 	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
 	                    </form>
+                    <details class="ensemble-forecast-shell forecast-workspace-section" id="ensemble-forecast-settings">
+                      <summary>
+                        <span><span class="eyebrow">Advanced asynchronous forecast</span><strong>Five-model probabilistic ensemble</strong></span>
+                        <span class="small muted">Prophet · Toto 2.0 · Granite · Chronos-2 · TimesFM 3.0</span>
+                      </summary>
+                      <div class="ensemble-forecast-body">
+                        <p class="small muted">Choose the models, weights, quantiles, and horizon. Quantura runs eligible models sequentially in a durable worker and returns only the final weighted ensemble.</p>
+                        <form id="ensemble-forecast-form">
+                          <div class="form-grid">
+                            <div class="field">
+                              <label class="label" for="ensemble-source-type">Historical data source</label>
+                              <select id="ensemble-source-type" name="source_type">
+                                <option value="ticker">Market ticker</option>
+                                <option value="workspace_dataset">Workspace dataset</option>
+                              </select>
+                            </div>
+                            <div class="field" data-ensemble-source="ticker">
+                              <label class="label" for="ensemble-ticker">Ticker</label>
+                              <input id="ensemble-ticker" name="ticker" placeholder="AAPL" autocomplete="off" />
+                            </div>
+                            <div class="field" data-ensemble-source="ticker">
+                              <label class="label" for="ensemble-provider">Market-data provider</label>
+                              <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
+                            </div>
+                            <div class="field" data-ensemble-source="workspace_dataset" hidden>
+                              <label class="label" for="ensemble-dataset-id">Workspace dataset ID</label>
+                              <input id="ensemble-dataset-id" name="dataset_id" placeholder="Saved Forecast Foundry dataset ID" autocomplete="off" />
+                            </div>
+                            <div class="field" data-ensemble-source="workspace_dataset" hidden>
+                              <label class="label" for="ensemble-timestamp-column">Timestamp column</label>
+                              <input id="ensemble-timestamp-column" name="timestamp_column" value="timestamp" />
+                            </div>
+                            <div class="field" data-ensemble-source="workspace_dataset" hidden>
+                              <label class="label" for="ensemble-target-column">Target column</label>
+                              <input id="ensemble-target-column" name="target_column" value="target" />
+                            </div>
+                            <div class="field">
+                              <label class="label" for="ensemble-prediction-length">Prediction length</label>
+                              <input id="ensemble-prediction-length" name="prediction_length" type="number" min="1" max="512" value="30" required />
+                            </div>
+                            <div class="field">
+                              <label class="label" for="ensemble-horizon-mode">Horizon type</label>
+                              <select id="ensemble-horizon-mode" name="horizon_mode"><option value="trading_sessions">Trading sessions</option><option value="calendar_days">Calendar days</option><option value="frequency_periods">Dataset frequency periods</option></select>
+                            </div>
+                          </div>
+
+                          <fieldset class="field ensemble-model-fieldset">
+                            <legend class="label">Ensemble models</legend>
+                            <div id="ensemble-model-list" class="ensemble-model-grid" aria-live="polite">
+                              <div class="small muted">Loading model capabilities…</div>
+                            </div>
+                            <div class="ensemble-weight-summary">
+                              <span id="ensemble-weight-status" class="small muted">Entered weights are normalized by the backend for each requested quantile.</span>
+                              <button id="ensemble-normalize-weights" class="task-chip" type="button">Normalize weights</button>
+                            </div>
+                          </fieldset>
+
+                          <fieldset class="field ensemble-quantile-fieldset">
+                            <legend class="label">Forecast quantiles</legend>
+                            <div class="ensemble-quantile-chips" id="ensemble-quantile-chips">
+                              <label><input type="checkbox" name="ensemble_quantile" value="0.01" checked /><span>P01</span></label>
+                              <label><input type="checkbox" name="ensemble_quantile" value="0.10" checked /><span>P10</span></label>
+                              <label><input type="checkbox" name="ensemble_quantile" value="0.25" checked /><span>P25</span></label>
+                              <label><input type="checkbox" name="ensemble_quantile" value="0.50" checked /><span>P50</span></label>
+                              <label><input type="checkbox" name="ensemble_quantile" value="0.75" checked /><span>P75</span></label>
+                              <label><input type="checkbox" name="ensemble_quantile" value="0.90" checked /><span>P90</span></label>
+                              <label><input type="checkbox" name="ensemble_quantile" value="0.99" checked /><span>P99</span></label>
+                            </div>
+                            <label class="label" for="ensemble-custom-quantiles">Additional custom quantiles</label>
+                            <input id="ensemble-custom-quantiles" name="custom_quantiles" placeholder="For example: 0.05, 0.60, 0.95" autocomplete="off" />
+                            <p id="ensemble-quantile-status" class="small muted" role="status" aria-live="polite">Toto and TimesFM contribute only within P10–P90; eligible models are reweighted separately for each quantile.</p>
+                          </fieldset>
+
+                          <details class="ensemble-advanced-settings">
+                            <summary>Advanced settings</summary>
+                            <div class="form-grid">
+                              <div class="field"><label class="label" for="ensemble-context-length">Context length</label><input id="ensemble-context-length" name="context_length" type="number" min="40" max="16384" value="512" /></div>
+                              <div class="field"><label class="label" for="ensemble-transform">Target transform</label><select id="ensemble-transform" name="transform"><option value="auto">Auto</option><option value="log">Log</option><option value="none">None</option></select></div>
+                              <div class="field"><label class="label" for="ensemble-failure-policy">Model failure policy</label><select id="ensemble-failure-policy" name="model_failure_policy"><option value="fail">Fail reproducibly</option><option value="renormalize">Renormalize remaining models</option></select></div>
+                              <div class="field"><label class="label" for="ensemble-frequency">Dataset frequency</label><input id="ensemble-frequency" name="frequency" value="1D" /></div>
+                            </div>
+                          </details>
+
+                          <div class="ensemble-preset-row">
+                            <div class="field"><label class="label" for="ensemble-preset-select">Saved preset</label><select id="ensemble-preset-select"><option value="">No preset selected</option></select></div>
+                            <button id="ensemble-load-preset" class="task-chip" type="button">Load</button>
+                            <div class="field"><label class="label" for="ensemble-preset-name">Preset name</label><input id="ensemble-preset-name" maxlength="100" placeholder="Chronos heavy" /></div>
+                            <button id="ensemble-save-preset" class="task-chip" type="button">Save preset</button>
+                          </div>
+
+                          <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run ensemble forecast</span></button>
+                        </form>
+                        <div id="ensemble-forecast-status" class="ensemble-job-status small muted" role="status" aria-live="polite">Open this section to configure an asynchronous ensemble forecast.</div>
+                        <section id="ensemble-forecast-results" class="ensemble-results" aria-labelledby="ensemble-results-title" hidden>
+                          <div class="forecast-section-heading"><div><div class="eyebrow">Final ensemble</div><h3 id="ensemble-results-title">Probabilistic forecast</h3></div><span id="ensemble-result-state" class="status-pill">Queued</span></div>
+                          <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
+                          <div id="ensemble-forecast-chart" class="chart ensemble-chart" aria-label="Final ensemble forecast chart"></div>
+                          <div id="ensemble-result-table" class="table-wrap"></div>
+                          <div class="ensemble-result-actions">
+                            <a id="ensemble-download-csv" class="cta secondary small" href="#">Download CSV</a>
+                            <a id="ensemble-download-json" class="cta secondary small" href="#">Download JSON</a>
+                            <button id="ensemble-copy-config" class="task-chip" type="button">Copy API request</button>
+                            <button id="ensemble-run-again" class="task-chip" type="button">Run again</button>
+                          </div>
+                        </section>
+                      </div>
+                    </details>
                     <div class="results-panel">
                       <h3>Forecast workspace</h3>
                       <div id="forecast-output" class="panel-output small">Run a forecast to load the market snapshot, Prophet quantiles, scenario math, and uncertainty analysis.</div>
@@ -300,10 +425,6 @@
                               <p class="small muted">Notifications go only to the verified email on your private account. Monitoring stops after this forecast horizon expires.</p>
                             </fieldset>
 
-                            <div class="field">
-                              <label class="label" for="foundry-notes">Notes</label>
-                              <textarea id="foundry-notes" name="notes" placeholder="Forecast horizon, model version, assumptions, or review context"></textarea>
-                            </div>
                             <div class="hero-actions" id="foundry-primary-actions" style="margin-top: 14px; justify-content: flex-start;">
                               <button class="cta" id="foundry-prepare-button" type="submit" data-analytics="foundry_prepare_source">
                                 <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Analyze prediction CSV</span>
@@ -471,7 +592,7 @@
                           </div>
                           <div class="field">
                             <label class="label" for="alpaca-symbol">Symbol</label>
-                            <input id="alpaca-symbol" name="symbol" type="text" value="AAPL" pattern="[A-Za-z][A-Za-z0-9.\-]{0,14}" required />
+                            <input id="alpaca-symbol" name="symbol" type="text" value="AAPL" pattern="[A-Za-z0-9^][A-Za-z0-9.^=\-]{0,23}" required />
                           </div>
                           <div class="field">
                             <label class="label" for="alpaca-timeframe">Timeframe</label>
@@ -513,47 +634,6 @@
                     <div class="results-panel data-results-panel"><div class="card-head"><div><h3>Data preview</h3><p class="small muted" id="alpaca-preview-summary">No data loaded.</p></div></div><div id="alpaca-history-preview" class="responsive-table-wrap"><div class="empty-state">Choose a source, symbol, and row count, then load data.</div></div></div>
                   </section>
 
-                  <section class="panel hidden" data-panel="market-headlines">
-                    <div class="panel-header">
-                      <h2>Market headlines</h2>
-                      <p class="small">Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.</p>
-                    </div>
-                    <form id="market-headlines-form" class="card">
-                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="market-headlines-provider">Source provider</label>
-                          <select id="market-headlines-provider" name="provider">
-                            <option value="marketwatch" selected>MarketWatch Top Stories</option>
-                            <option value="economictimes">Economic Times Stocks</option>
-                            <option value="investing">Investing.com Markets</option>
-                            <option value="seekingalpha">Seeking Alpha</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="market-headlines-feed">Feed / topic</label>
-                          <select id="market-headlines-feed" name="feed">
-                            <option value="marketwatch_topstories" selected>Top stories</option>
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label class="label" for="market-headlines-limit">Headline count</label>
-                          <input id="market-headlines-limit" name="limit" type="number" min="5" max="40" value="18" />
-                        </div>
-                      </div>
-                      <p class="small muted" id="market-headlines-status">Feeds load automatically when you change the source, topic, or headline count.</p>
-                    </form>
-                    <div class="content-grid">
-                      <div class="results-panel">
-                        <h3>Headlines</h3>
-                        <div id="market-headlines-output" class="panel-output small">Select a source provider to load attributed market headlines automatically.</div>
-                      </div>
-                      <div class="results-panel">
-                        <h3>Feed access &amp; attribution</h3>
-                        <div id="market-headlines-meta" class="panel-output small">Provider attribution, feed links, terms, and source warnings will appear here.</div>
-                      </div>
-                    </div>
-                  </section>
-
                   <section class="panel hidden" data-panel="options">
                     <div class="panel-header">
                       <h2>Options</h2>
@@ -568,18 +648,18 @@
                         </div>
                         <div class="field">
                           <label class="label" for="alpaca-options-expiration">Expiration</label>
-                          <select id="alpaca-options-expiration" required><option value="">Load expirations first</option></select>
+                          <select id="alpaca-options-expiration" required disabled><option value="">Expirations load automatically</option></select>
                         </div>
                         <div class="field"><label class="label" for="alpaca-options-type">Contract type</label><select id="alpaca-options-type"><option value="call">Calls</option><option value="put">Puts</option></select></div>
                         <div class="field"><label class="label" for="alpaca-options-feed">Alpaca snapshot feed</label><select id="alpaca-options-feed"><option value="indicative">Indicative</option><option value="opra">OPRA (subscription required)</option></select><div class="small muted">Yahoo Finance chooses its public feed and does not supply Greeks.</div></div>
                       </div>
                       <div class="hero-actions workflow-actions">
-                        <button class="cta secondary" id="alpaca-options-expirations" type="button">Load expirations</button>
+                        <button class="cta secondary" id="alpaca-options-expirations" type="button">Refresh expirations</button>
                         <button class="cta" type="submit">Load options chain</button>
                       </div>
-                      <p id="alpaca-options-status" class="small muted" role="status" aria-live="polite">Choose an underlying and load expirations.</p>
+                      <p id="alpaca-options-status" class="small muted" role="status" aria-live="polite">Available expirations load automatically for a valid ticker.</p>
                     </form>
-                    <div class="results-panel options-chain-panel"><div class="card-head"><div><h3>Options chain</h3><p class="small muted">Select one contract to unlock historical data.</p></div></div><div id="alpaca-options-chain" class="responsive-table-wrap"><div class="empty-state">No contracts loaded.</div></div></div>
+                    <div class="results-panel options-chain-panel"><div class="card-head"><div><h3>Options chain</h3><p class="small muted">Choose a contract by clicking its row or focusing the row and pressing Enter or Space.</p></div></div><div id="alpaca-options-chain" class="responsive-table-wrap"><div class="empty-state">No contracts loaded.</div></div></div>
                     <form id="alpaca-option-history-form" class="card" autocomplete="off">
                       <h3>Selected contract history</h3>
                       <div class="selected-contract" id="alpaca-selected-contract">No contract selected.</div>
@@ -599,24 +679,8 @@
                     </div>
                   </section>
                   <section class="panel hidden" data-panel="screener">
-                    <div class="panel-header screener-panel-header">
-                      <h2>Quantitative Forecast Screener</h2>
-                      <p class="small">Research the validated S&amp;P 500, broad Nasdaq common-stock universe, and SPY with forecast-quantile, market-cap, earnings, and model-signal filters.</p>
-                    </div>
-                    <div class="card">
-                      <h3>Open the research table</h3>
-                      <p class="small muted">The scheduled scanner now runs in deterministic parallel chunks, validates full-universe coverage, and publishes only complete datasets. Use the dedicated Screener for responsive search, combined quantile filters, sorting, pagination, and CSV export.</p>
-                      <div class="hero-actions" style="margin-top:16px;">
-                        <a class="cta" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Open Quantitative Screener</span></a>
-                      </div>
-                    </div>
-                    <div class="results-panel">
-                      <h3>Research coverage</h3>
-                      <div class="panel-output small">
-                        <p><strong>Universe:</strong> current S&amp;P 500 constituents, eligible Nasdaq-listed common stocks, plus SPY as an ETF.</p>
-                        <p><strong>Signals:</strong> actual price versus P10/P50/P90, percentage distance, P50 model bias, last-two-P10 signal, and next earnings date where available.</p>
-                        <p><strong>Integrity:</strong> missing values remain unavailable, timestamps are explicit, and a degraded scan cannot overwrite the prior validated dataset.</p>
-                      </div>
+                    <div id="forecasting-screener-workspace" aria-live="polite">
+                      <div class="card"><p class="small muted">The full Screener loads only when this panel is opened.</p></div>
                     </div>
                   </section>
 

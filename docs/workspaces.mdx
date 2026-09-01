@@ -1,0 +1,22 @@
+---
+title: "Workspaces and collaborators"
+description: "Understand dynamic owner, editor, and viewer authorization."
+---
+
+# Workspaces and collaborators
+
+Workspace roles apply only inside the shared workspace. A user who is a Viewer in another person's workspace retains normal permissions in their own workspace.
+
+| Role | Read authorized resources | Create or modify | Manage access or billing |
+| --- | --- | --- | --- |
+| Owner | Yes | Yes | Yes |
+| Editor | Yes | When the resource policy permits | No |
+| Viewer | Yes | No | No |
+
+Viewer collaborators can use a personal API key to read resources explicitly shared through the workspace even when their personal plan does not grant unrelated standalone API compute.
+
+## Dynamic enforcement
+
+Tokens do not permanently encode workspace privileges. Every request checks the current membership and role. Removing a collaborator immediately removes access for that token on its next request.
+
+Use `GET /api/v1/me/access` to inspect effective workspace access without returning any credentials.
