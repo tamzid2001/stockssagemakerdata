@@ -48,6 +48,7 @@ DEPLOY_PROVIDER="${DEPLOY_PROVIDER:-vercel}"
 DEPLOY_DRY_RUN="${DEPLOY_DRY_RUN:-false}"
 VERCEL_CLI_VERSION="${VERCEL_CLI_VERSION:-59.10.0}"
 VERCEL_SCOPE="${VERCEL_SCOPE:-tamzid-ullahs-projects}"
+DEPLOY_COMMIT_SHA="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
 
 deploy_vercel_project() {
   local label="$1"
@@ -55,7 +56,7 @@ deploy_vercel_project() {
 
   echo "==> Deploying ${label} to Vercel production"
   if [[ "${DEPLOY_DRY_RUN}" == "true" ]]; then
-    echo "DRY RUN: vercel deploy --prod --yes --scope ${VERCEL_SCOPE} --project ${project_name} --cwd <committed-snapshot>"
+    echo "DRY RUN: vercel deploy --prod --yes --scope ${VERCEL_SCOPE} --project ${project_name} --cwd <committed-snapshot> --env GITLAB_SERVICE_VERSION=${DEPLOY_COMMIT_SHA}"
     return 0
   fi
 
@@ -64,7 +65,8 @@ deploy_vercel_project() {
   # configured root is applied exactly once. The snapshot also prevents local
   # ignored/untracked files from entering a production deployment.
   npm_config_cache="${VERCEL_NPM_CACHE}" npx --yes "vercel@${VERCEL_CLI_VERSION}" \
-    deploy --prod --yes --scope "${VERCEL_SCOPE}" --project "${project_name}" --cwd "${VERCEL_SOURCE_DIR}"
+    deploy --prod --yes --scope "${VERCEL_SCOPE}" --project "${project_name}" --cwd "${VERCEL_SOURCE_DIR}" \
+    --env "GITLAB_SERVICE_VERSION=${DEPLOY_COMMIT_SHA}" --meta "gitCommitSha=${DEPLOY_COMMIT_SHA}"
 }
 
 if [[ "${DEPLOY_PROVIDER}" == "vercel" ]]; then

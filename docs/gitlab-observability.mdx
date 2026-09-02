@@ -1,0 +1,56 @@
+---
+title: GitLab Observability
+description: Export Quantura API traces to GitLab Observability without exposing credentials.
+---
+
+Quantura's Vercel-hosted Express API supports server-side OpenTelemetry tracing to GitLab Observability. The instrumentation covers Node HTTP and Express requests and records GitLab's recommended project, service-version, and deployment-environment resource attributes.
+
+## Application tracing configuration
+
+Configure these server-side values in the deployment environment. Never use a `NEXT_PUBLIC_` prefix.
+
+| Variable | Purpose |
+| --- | --- |
+| `GITLAB_OBSERVABILITY_ENABLED` | Enables the exporter when set to `true`. |
+| `GITLAB_OTEL_HTTP_ENDPOINT` | Tenant-specific OTLP HTTP base endpoint. Quantura appends `/v1/traces`. |
+| `GITLAB_PROJECT_ID` | Numeric GitLab project identifier used for correlation. |
+| `GITLAB_PROJECT_NAME` | Human-readable GitLab project name. |
+| `OTEL_SERVICE_NAME` | Service name displayed in traces. |
+| `GITLAB_SERVICE_VERSION` | Exact deployed Git commit; `deploy.sh` supplies it per deployment. |
+
+The production endpoint is:
+
+```text
+https://140928869.otel.gitlab-o11y.com:14318
+```
+
+The application exporter follows GitLab's endpoint test, which sends OTLP trace ingestion directly to this tenant-specific endpoint. No application credential is embedded in browser code, API responses, logs, or the repository.
+
+## Safe startup behavior
+
+Tracing becomes active only when the feature flag and a valid HTTPS endpoint are present. Missing configuration leaves the Quantura API operational with tracing disabled. Invalid or unavailable observability infrastructure must not block normal API requests.
+
+## GitLab CI telemetry
+
+GitLab CI/CD telemetry is auto-wired for this project with `GITLAB_OBSERVABILITY_EXPORT=traces,metrics,logs`. The repository uses an explicit `.gitlab-ci.yml` and no longer relies on the deprecated Herokuish Auto Test stage. Application traces and CI pipeline telemetry are independent signals.
+
+## MCP access
+
+The Observability MCP endpoint is:
+
+```text
+https://140928869.mcp.gitlab-o11y.com/mcp
+```
+
+An MCP client must authenticate with a GitLab Observability API key in the `SIGNOZ-API-KEY` header. Store that query credential in the client's secure secret store; never commit it to an MCP configuration file.
+
+## Verification
+
+After deployment:
+
+1. Call `/api/health` and a representative authenticated API endpoint.
+2. Open [GitLab Observability Services](https://gitlab.com/tamzid2001/-/observability/services).
+3. Select `quantura-api` and verify traces carry `gitlab.project.id`, `gitlab.project.name`, `service.version`, and `deployment.environment.name`.
+4. Confirm authorization headers and request bodies are not captured as span attributes.
+
+GitLab Observability is currently documented by GitLab as an experimental feature, so Quantura treats export failures as non-fatal and retains Vercel runtime logs as the operational fallback.

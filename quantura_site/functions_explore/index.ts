@@ -1,4 +1,5 @@
 import "@aikidosec/firewall";
+import "./src/gitlabObservability";
 import express from "express";
 import helmet from "helmet";
 import { quanturaExploreApi, shopApi } from "./src/index";

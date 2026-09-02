@@ -32,6 +32,24 @@ def test_aikido_firewall_loads_before_express_and_stays_server_side():
     assert "NEXT_PUBLIC_AIKIDO" not in root_env
 
 
+def test_gitlab_observability_initializes_before_express_and_stays_server_side():
+    vercel_entrypoint = (ROOT / "functions_explore" / "index.ts").read_text(encoding="utf-8")
+    instrumentation = (ROOT / "functions_explore" / "src" / "gitlabObservability.ts").read_text(encoding="utf-8")
+    package = json.loads((ROOT / "functions_explore" / "package.json").read_text(encoding="utf-8"))
+    root_env = (REPOSITORY / ".env.example").read_text(encoding="utf-8")
+
+    assert vercel_entrypoint.index('import "./src/gitlabObservability";') < vercel_entrypoint.index('from "express"')
+    assert package["dependencies"]["@opentelemetry/sdk-trace-node"] == "2.11.0"
+    assert "new HttpInstrumentation()" in instrumentation
+    assert "new ExpressInstrumentation()" in instrumentation
+    assert '"gitlab.project.id"' in instrumentation
+    assert "ATTR_SERVICE_VERSION" in instrumentation
+    assert "ATTR_DEPLOYMENT_ENVIRONMENT_NAME" in instrumentation
+    assert "GITLAB_OBSERVABILITY_ENABLED=false" in root_env
+    assert "GITLAB_OTEL_HTTP_ENDPOINT=https://140928869.otel.gitlab-o11y.com:14318" in root_env
+    assert "NEXT_PUBLIC_GITLAB" not in root_env
+
+
 def test_aikido_secret_is_scoped_to_express_deployments():
     deploy = (REPOSITORY / "deploy.sh").read_text(encoding="utf-8")
 
@@ -55,6 +73,8 @@ def test_production_deploy_defaults_to_vercel_and_archives_google_workflow():
     assert 'deploy_vercel_project "Quantura API" "quantura-api"' in deploy
     assert 'deploy_vercel_project "Quantura web application" "quantura"' in deploy
     assert '--cwd "${project_dir}"' not in deploy
+    assert '--env "GITLAB_SERVICE_VERSION=${DEPLOY_COMMIT_SHA}"' in deploy
+    assert '--meta "gitCommitSha=${DEPLOY_COMMIT_SHA}"' in deploy
     assert 'if [[ "${DEPLOY_PROVIDER}" != "google-legacy" ]]' in deploy
     assert "archived Google Cloud/Firebase deployment workflow" in deploy
     assert "--entry-point=onForecastCreated" not in deploy
