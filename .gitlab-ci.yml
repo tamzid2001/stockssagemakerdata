@@ -1,0 +1,96 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - validate
+  - integration
+
+default:
+  interruptible: true
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+.node_cache: &node_cache
+  key:
+    files:
+      - quantura_site/package-lock.json
+      - quantura_site/functions_explore/package-lock.json
+  paths:
+    - .cache/npm/
+  policy: pull-push
+
+.python_cache: &python_cache
+  key:
+    files:
+      - requirements.txt
+      - requirements-forecast-intelligence.txt
+      - requirements-ensemble-forecast.lock
+  paths:
+    - .cache/pip/
+  policy: pull-push
+
+api_and_web:
+  stage: validate
+  image: node:24-bookworm-slim
+  cache: *node_cache
+  before_script:
+    - npm ci --prefix quantura_site
+    - npm ci --prefix quantura_site/functions_explore
+  script:
+    - npm test --prefix quantura_site/functions_explore
+    - npm run build --prefix quantura_site
+    - node --check quantura_site/public/app.js
+    - node --check quantura_site/public/forecasts.js
+    - node --check quantura_site/public/forecast-admin.js
+    - node --check quantura_site/functions_ssr/index.js
+
+python_regression:
+  stage: validate
+  image: python:3.11-bookworm
+  cache: *python_cache
+  before_script:
+    - python -m pip install --requirement requirements.txt pytest exchange-calendars
+  script:
+    - python -m pytest -q quantura_site/tests
+    - python -m pytest -q forecast_intelligence/tests
+
+ensemble_contract:
+  stage: validate
+  image: python:3.12-bookworm
+  cache: *python_cache
+  before_script:
+    - python -m pip install numpy pandas pandas-market-calendars httpx pytest
+  script:
+    - python -m pytest -q ensemble_forecasting/tests
+
+developer_docs:
+  stage: validate
+  image: node:24-bookworm-slim
+  cache: *node_cache
+  variables:
+    MINTLIFY_TELEMETRY_DISABLED: "1"
+  script:
+    - npx --yes mint@4.2.859 validate
+
+firestore_integration:
+  stage: integration
+  image: node:24-bookworm-slim
+  cache: *node_cache
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends default-jre-headless
+    - rm -rf /var/lib/apt/lists/*
+    - npm ci --prefix quantura_site/functions_explore
+    - npm run build --prefix quantura_site/functions_explore
+  script:
+    - >-
+      npx --yes firebase-tools@15.7.0 emulators:exec
+      --only firestore
+      --project quantura-forecast-integration
+      "node --test functions_explore/dist/quanturaForecastRoutes.integration.test.js"
+  timeout: 30m

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/apiAccess.test.js dist/dataIntegrations.test.js dist/yahooMarketData.test.js dist/predictionAnalysis.test.js dist/forecastAnalysis.test.js dist/forecastIntelligence.test.js dist/ensembleForecastRoutes.test.js dist/quanturaForecasts.test.js dist/quanturaForecastGeneration.test.js dist/quanturaForecastJobs.test.js dist/quanturaForecastRoutes.integration.test.js dist/forecastPriceAlerts.test.js dist/quantScreener.test.js",
+    "test": "npm run build && node --test dist/apiAccess.test.js dist/dataIntegrations.test.js dist/yahooMarketData.test.js dist/predictionAnalysis.test.js dist/forecastAnalysis.test.js dist/forecastIntelligence.test.js dist/ensembleForecastRoutes.test.js dist/quanturaForecasts.test.js dist/quanturaForecastGeneration.test.js dist/quanturaForecastJobs.test.js dist/quanturaForecastRoutes.integration.test.js dist/forecastPriceAlerts.test.js dist/quantScreener.test.js dist/gitlabObservability.test.js",
     "gcp-build": "npm run build",
     "start": "functions-framework --target=quanturaExploreApi --signature-type=http --source=dist/index.js --port=8080",
     "dev": "npm run build && npm run start"
@@ -19,6 +19,14 @@
     "@aws-sdk/client-sagemaker": "^3.922.0",
     "@aws-sdk/client-sts": "^3.1116.0",
     "@google-cloud/secret-manager": "^6.0.0",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/instrumentation": "0.222.0",
+    "@opentelemetry/instrumentation-express": "0.70.0",
+    "@opentelemetry/instrumentation-http": "0.222.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-trace-node": "2.11.0",
+    "@opentelemetry/semantic-conventions": "1.43.0",
     "@vercel/oidc-aws-credentials-provider": "^3.3.5",
     "adm-zip": "^0.6.0",
     "cors": "^2.8.5",

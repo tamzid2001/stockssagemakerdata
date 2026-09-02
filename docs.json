@@ -36,6 +36,7 @@
               "docs/ensemble-forecasting",
               "docs/quantura-forecasts-methodology",
               "docs/quantura-forecasts-operations",
+              "docs/gitlab-observability",
               "docs/repository-size-maintenance"
             ]
           }

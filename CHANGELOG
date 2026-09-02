@@ -1,0 +1,2079 @@
+# Changelog
+
+All notable changes to **Quantura** are documented in this file.
+
+This changelog is intended for:
+
+* GitLab releases
+* merge requests
+* enterprise technical review
+* API consumers
+* data-licensing partners
+* dataset customers
+* internal change management
+
+Quantura follows semantic-versioning principles where practical:
+
+* **MAJOR** — breaking API, schema, authentication, authorization, or licensed-dataset changes
+* **MINOR** — backward-compatible APIs, datasets, forecasting capabilities, integrations, and product features
+* **PATCH** — fixes, reliability improvements, documentation, security hardening, and UX refinements
+
+---
+
+# [Unreleased]
+
+## Added
+
+### Quantura Forecast Intelligence Platform
+
+Expanded Quantura into a multi-model probabilistic forecasting platform supporting:
+
+* Meta Prophet
+* Chronos-2
+* validated model ensembles
+* historical forecast validation
+* scenario analysis
+* forecast calibration
+* structured AI interpretation
+* API delivery
+* bulk dataset delivery
+
+Forecasting is designed around machine-readable distributions rather than a single point estimate.
+
+---
+
+### Multi-Granularity Forecasting
+
+Added support for time-series forecasting and historical analysis across multiple granularities.
+
+Supported canonical granularities include, where sufficient source history and provider support exist:
+
+* **1 minute**
+* **5 minutes**
+* **15 minutes**
+* **30 minutes**
+* **1 hour**
+* **1 day**
+
+Additional source-native intervals may be supported where explicitly available and validated.
+
+Granularity is treated as part of the forecast identity.
+
+Each forecast should preserve metadata such as:
+
+```text
+symbol
+asset_class
+source
+frequency
+as_of
+forecast_horizon
+forecast_model
+model_version
+```
+
+A 1-minute forecast must therefore remain distinguishable from:
+
+* a 5-minute forecast;
+* a 15-minute forecast;
+* an hourly forecast;
+* a daily forecast.
+
+---
+
+### Intraday Forecast Horizons
+
+Added support for intraday forecast generation.
+
+Forecast requests can express horizons in bars or normalized duration according to the selected data frequency.
+
+Examples include:
+
+```text
+frequency = 1m
+prediction_length = 15
+```
+
+for a 15-minute forward horizon, or:
+
+```text
+frequency = 1h
+prediction_length = 6
+```
+
+for a six-hour forward horizon.
+
+The numerical pipeline must never assume that:
+
+```text
+10 forecast steps
+```
+
+always means:
+
+```text
+10 trading days
+```
+
+Forecast horizon interpretation is frequency-aware.
+
+---
+
+### Trading-Day Forecast Horizons
+
+For daily market data, Quantura also supports normalized research horizons including:
+
+* 1 trading day
+* 3 trading days
+* 5 trading days
+* 10 trading days
+* 2 weeks
+* 1 month
+* 3 months
+
+Where exchange calendars apply, target dates should use trading-session-aware calculations.
+
+---
+
+### Five-Quantile Forecast Framework
+
+Standardized the primary Quantura forecast distribution around:
+
+* **P1**
+* **P25**
+* **P50**
+* **P75**
+* **P99**
+
+Forecast series must preserve:
+
+```text
+P1 <= P25 <= P50 <= P75 <= P99
+```
+
+Invalid quantile ordering should be rejected rather than silently displayed.
+
+---
+
+### Forecast Scenario Model
+
+Added deterministic scenario classification:
+
+| Quantile | Scenario     |
+| -------- | ------------ |
+| P1       | Extreme Bear |
+| P25      | Bear         |
+| P50      | Base         |
+| P75      | Bull         |
+| P99      | Extreme Bull |
+
+Each scenario can include:
+
+* forecast target
+* reference price
+* dollar change
+* percentage change
+* horizon
+* target timestamp
+
+Percentage change uses:
+
+```text
+((forecast_target - current_price) / current_price) * 100
+```
+
+Scenario names identify distribution position and do not force return direction.
+
+---
+
+### Forecast Distribution Statistics
+
+Added derived statistical metadata for forecast trajectories.
+
+Supported summaries can include:
+
+* average
+* minimum
+* maximum
+* median
+* standard deviation
+* final forecast value
+* forecast-range width
+* central-range width
+* extreme-range width
+* percentage change
+* trajectory slope
+* unusual forecast observations
+* distribution expansion or contraction
+
+These fields can be exposed through the application, API, and licensed datasets where applicable.
+
+---
+
+### Prophet + Chronos-2 Architecture
+
+Added support for multiple numerical forecasting sources.
+
+Canonical model identifiers include:
+
+```text
+prophet
+chronos_2
+ensemble
+```
+
+Quantura can preserve model provenance so enterprise customers know which forecasting process generated a particular record.
+
+---
+
+### Validated Forecast Ensembles
+
+Added an ensemble layer capable of combining multiple numerical models.
+
+Ensemble weights should be determined from historical validation rather than arbitrary fixed weighting.
+
+Potential validation metrics include:
+
+* MAE
+* RMSE
+* MASE
+* quantile loss
+* directional accuracy
+* calibration error
+* interval coverage
+
+Model-selection metadata can be retained with licensed forecast records.
+
+---
+
+### Horizon- and Frequency-Specific Model Validation
+
+Forecast performance can now be evaluated separately by:
+
+* model
+* asset
+* forecast horizon
+* data frequency
+
+For example, Chronos-2 performance at:
+
+```text
+1-minute / 30-step horizon
+```
+
+may differ from its performance at:
+
+```text
+1-day / 10-trading-day horizon
+```
+
+Quantura should not assume that one model is universally superior across every frequency.
+
+---
+
+## Added — Enterprise API
+
+### Quantura Enterprise API
+
+Expanded the versioned Quantura API as the programmatic access layer for the platform.
+
+Current public API generation should use a stable namespace such as:
+
+```text
+/api/v1
+```
+
+Enterprise capabilities include:
+
+* API-key authentication
+* scoped permissions
+* request IDs
+* customer identity
+* rate limiting
+* pagination
+* filtering
+* forecast retrieval
+* dataset retrieval
+* historical data access
+* prediction-market data
+* options data
+* bulk exports
+* usage auditing
+
+---
+
+### User API Keys
+
+Added personal/customer API credentials.
+
+Supported request authentication includes:
+
+```http
+Authorization: Bearer <API_KEY>
+```
+
+API credentials support:
+
+* secure generation
+* key identity
+* customer identity
+* scopes
+* tier
+* creation timestamp
+* optional expiration
+* revocation
+* usage tracking
+
+Raw secret values should not be persisted in recoverable plaintext.
+
+---
+
+### Scoped API Authorization
+
+Added granular API authorization.
+
+Potential scope families include:
+
+```text
+account:read
+workspaces:read
+forecasts:read
+forecasts:write
+market_data:read
+options:read
+prediction_markets:read
+datasets:read
+datasets:write
+backtests:read
+backtests:run
+alerts:read
+alerts:write
+api_usage:read
+```
+
+Only scopes corresponding to implemented functionality should be published.
+
+---
+
+### Workspace-Aware API Access
+
+API authorization is designed to account for workspace membership.
+
+Effective access should be evaluated from:
+
+```text
+API key scope
+AND
+current workspace membership
+AND
+workspace role
+AND
+resource permissions
+AND
+plan/workspace entitlement
+```
+
+This permits collaborator-safe API usage without turning workspace roles into global account permissions.
+
+---
+
+### Read-Only Collaborator API Access
+
+Workspace viewers can be permitted to retrieve shared workspace resources without receiving write privileges.
+
+Read-accessible resources may include:
+
+* forecasts
+* uploaded prediction analyses
+* saved datasets
+* forecast artifacts
+* historical results
+* shared backtests
+* workspace metadata
+
+Write, administrative, billing, and collaborator-management operations remain prohibited for read-only roles.
+
+---
+
+### Dynamic Authorization
+
+Workspace access is evaluated at request time.
+
+Changing or removing collaborator permissions should alter effective API access without requiring the user's personal API credential to be regenerated.
+
+---
+
+### API Rate Limiting
+
+Added key/customer-aware rate limits.
+
+API responses may include:
+
+```text
+X-Request-ID
+X-Quantura-API-Version
+X-RateLimit-Limit
+X-RateLimit-Remaining
+X-RateLimit-Reset
+```
+
+Rate limits may differ by:
+
+* customer
+* subscription
+* workspace
+* endpoint class
+* compute cost
+* licensing agreement
+
+---
+
+### API Usage Auditing
+
+Added structured enterprise request auditing.
+
+Tracked metadata can include:
+
+```text
+request_id
+api_key_id
+customer_id
+workspace_id
+endpoint
+method
+timestamp
+response_status
+records_returned
+latency_ms
+authentication_failure
+```
+
+This supports:
+
+* enterprise usage reporting
+* contract metering
+* abuse detection
+* debugging
+* customer support
+* security review
+
+---
+
+### Structured API Errors
+
+Standardized developer-facing failures.
+
+Example:
+
+```json
+{
+  "error": {
+    "code": "INSUFFICIENT_SCOPE",
+    "message": "The API key does not have the required scope.",
+    "request_id": "..."
+  }
+}
+```
+
+Error families may include:
+
+* invalid authentication
+* revoked key
+* expired key
+* insufficient scope
+* invalid parameters
+* unavailable provider
+* rate limiting
+* unavailable feature
+* unavailable dataset
+
+---
+
+### Cursor Pagination
+
+Added cursor-based pagination for large data collections.
+
+Potential structure:
+
+```json
+{
+  "data": [],
+  "meta": {
+    "count": 50,
+    "next_cursor": "..."
+  }
+}
+```
+
+This is particularly important for:
+
+* historical forecasts
+* large screeners
+* prediction markets
+* licensed datasets
+
+---
+
+## Added — API Documentation
+
+### OpenAPI Specification
+
+Added/expanded a machine-readable OpenAPI contract for Quantura.
+
+The OpenAPI specification is intended to define:
+
+* authentication
+* routes
+* request parameters
+* schemas
+* responses
+* scopes
+* errors
+* pagination
+* examples
+
+---
+
+### Mintlify Documentation
+
+Introduced a Mintlify-oriented developer-documentation architecture using:
+
+```text
+docs.json
++
+OpenAPI
++
+Markdown/MDX guides
+```
+
+Developer documentation is intended to cover:
+
+* Getting Started
+* Authentication
+* API Keys
+* Workspaces
+* Forecasting
+* Historical Data
+* Prediction Markets
+* Options
+* Datasets
+* Backtesting
+* Rate Limits
+* Errors
+* Data Licensing
+* API Reference
+
+---
+
+## Added — Data Licensing
+
+### Quantura Data Licensing Platform
+
+Expanded Quantura beyond interactive application usage toward commercial delivery of derived quantitative datasets.
+
+Potential delivery mechanisms include:
+
+* REST API
+* CSV
+* JSON
+* JSONL
+* object storage
+* scheduled dataset releases
+* custom enterprise feeds
+
+---
+
+### Immutable Dataset Releases
+
+Added versioned dataset releases designed for commercial delivery.
+
+A release may contain:
+
+```text
+dataset_version
+schema_version
+generated_at
+source_cutoff
+record_count
+formats
+checksums
+category_coverage
+time_coverage
+licensing_metadata
+created_by
+immutable
+```
+
+Previously issued immutable datasets should not be silently rewritten.
+
+---
+
+### Forecast Trajectory Datasets
+
+Added support for historical forecast trajectories.
+
+Potential records may preserve:
+
+```text
+forecast_id
+entity
+symbol
+asset_class
+frequency
+as_of
+horizon
+model
+p1
+p25
+p50
+p75
+p99
+created_at
+resolution_deadline
+eventual_outcome
+calibration_metrics
+```
+
+Intraday trajectories may therefore be delivered at:
+
+* 1m
+* 5m
+* 15m
+* 30m
+* 1h
+
+granularity where sufficient source history exists.
+
+---
+
+### CSV Dataset Delivery
+
+Versioned releases can include CSV artifacts suitable for:
+
+* spreadsheet analysis
+* research environments
+* SageMaker
+* data warehouses
+* downstream ETL
+
+---
+
+### JSONL Dataset Delivery
+
+Added JSONL as an enterprise/AI-oriented bulk format.
+
+This is particularly suitable for:
+
+* data pipelines
+* machine learning
+* LLM/agent evaluation datasets
+* streaming ingestion
+* large structured archives
+
+---
+
+### Dataset Checksums
+
+Added SHA-256 checksums for enterprise release artifacts.
+
+Checksums allow customers to verify that received files exactly match the generated release.
+
+---
+
+### Manifest Checksums
+
+Added integrity checking for dataset release manifests.
+
+This creates an auditable relationship between:
+
+* version
+* source cutoff
+* schema
+* data files
+* record counts
+* delivery metadata
+
+---
+
+### Licensing Metadata
+
+Dataset releases can carry dedicated licensing metadata.
+
+This provides a mechanism to associate technical data delivery with commercial agreements.
+
+---
+
+### Source / Derived Data Classification
+
+Quantura's licensing architecture distinguishes:
+
+### Source data
+
+Information acquired through upstream providers.
+
+### Quantura-derived data
+
+Examples may include:
+
+* probabilistic forecasts
+* quantile trajectories
+* calibrated predictions
+* normalized probability series
+* forecast scenarios
+* model-selection results
+* derived forecast statistics
+* machine-learning-ready transformations
+
+Raw third-party redistribution rights must be evaluated separately according to source agreements.
+
+---
+
+## Added — Historical Market Data
+
+### Multi-Provider Historical Data
+
+Added provider-aware historical market data through:
+
+* Alpaca
+* Yahoo Finance
+
+The platform can use explicit provider selection or automatic source resolution.
+
+---
+
+### Intraday Historical Data
+
+Historical datasets can support intraday sampling where the selected provider/instrument supports it.
+
+Canonical supported granularities include:
+
+* 1 minute
+* 5 minutes
+* 15 minutes
+* 30 minutes
+* 1 hour
+
+Daily history remains available where appropriate.
+
+---
+
+### Historical Data Parameters
+
+Market-history requests may support:
+
+```text
+symbol
+ticker
+source
+provider
+start
+end
+timeframe
+interval
+adjustment
+feed
+session
+limit
+format
+```
+
+---
+
+### Provider Fallback
+
+Automatic source selection may fall back from one provider to another when appropriate.
+
+Responses should disclose:
+
+```text
+provider
+source_requested
+fallback_used
+```
+
+so downstream customers retain provenance.
+
+---
+
+### CSV Historical Exports
+
+Historical time-series requests can be exported to CSV.
+
+---
+
+## Added — Cross-Asset Data
+
+### Unified Asset Discovery
+
+Expanded the product toward a unified market-search model capable of representing supported:
+
+* equities
+* ETFs
+* foreign-exchange pairs
+* commodity/futures series
+* oil/energy series
+* rates/bond proxies
+* prediction markets
+* options contracts
+
+Provider capability must be verified before an asset class is offered.
+
+---
+
+### Cross-Asset Metadata
+
+Normalized resource metadata may include:
+
+```text
+asset_id
+symbol
+name
+asset_class
+provider
+exchange
+currency
+unit
+timezone
+frequency
+history_available
+forecast_available
+```
+
+---
+
+### Frequency-Aware Calendars
+
+Forecasting and historical processing should use appropriate calendar semantics by asset class.
+
+Examples:
+
+* US equities → trading sessions
+* 24-hour series → continuous timestamps
+* prediction markets → provider/event timeline
+
+Do not apply equity-calendar assumptions universally.
+
+---
+
+## Added — Options
+
+### Automatic Expiration Discovery
+
+Options expirations are dynamically discovered for supported underlyings.
+
+---
+
+### Multi-Provider Options
+
+Provider abstraction supports:
+
+* Alpaca
+* Yahoo Finance
+
+where provider capabilities permit.
+
+---
+
+### Option Chain Retrieval
+
+Added options-chain retrieval by:
+
+```text
+underlying
+expiration
+type
+source
+feed
+```
+
+---
+
+### Historical Options Data
+
+Added historical time-series retrieval for selected option contracts.
+
+Where supported, option histories can use intraday granularities including:
+
+* 1 minute
+* 5 minutes
+* 15 minutes
+* 30 minutes
+* 1 hour
+
+depending on provider availability.
+
+---
+
+### Options CSV Export
+
+Historical option records may be delivered as CSV.
+
+---
+
+## Added — Prediction Markets
+
+### Polymarket US
+
+Added Polymarket US as a first-class prediction-market source.
+
+---
+
+### Kalshi
+
+Added Kalshi as a first-class prediction-market source.
+
+---
+
+### Provider-Neutral Prediction Market Schema
+
+Normalized contracts can include:
+
+```text
+source
+sport
+league
+event_id
+market_id
+contract_id
+provider_symbol
+event_title
+market_title
+outcome
+event_start
+expiration_time
+status
+current_price
+bid
+ask
+volume
+open_interest
+liquidity
+```
+
+---
+
+### Normalized Historical Observations
+
+Prediction-market observations can include:
+
+```text
+source
+event_id
+market_id
+contract_id
+item_id
+timestamp
+price
+bid
+ask
+midpoint
+last_trade
+spread
+spread_pct
+volume
+open_interest
+liquidity
+minutes_to_event
+seconds_to_event
+status
+```
+
+---
+
+### Probability Normalization
+
+Binary-market values are normalized into a consistent probability range:
+
+```text
+0.0 to 1.0
+```
+
+where appropriate.
+
+Source-native values may also be retained separately for provenance.
+
+---
+
+### Intraday Prediction-Market Granularity
+
+Prediction-market historical datasets support:
+
+* raw observations
+* 1 minute
+* 5 minutes
+* 15 minutes
+* 30 minutes
+* 1 hour
+
+and, where needed:
+
+* daily
+* final observation
+
+This makes prediction-market datasets compatible with both short-horizon and longer-horizon forecasting workflows.
+
+---
+
+### Prediction-Market Forecasting
+
+Normalized market series can be used as inputs to Quantura's forecasting layer.
+
+Prediction-market forecasts may expose:
+
+* P1
+* P25
+* P50
+* P75
+* P99
+
+where the forecasting methodology supports those quantiles.
+
+---
+
+### Missing Interval Handling
+
+Added explicit policies for incomplete interval data:
+
+```text
+leave
+forward_fill
+drop
+```
+
+No missing-data transformation should occur silently.
+
+---
+
+### Pregame / Pre-Event Filtering
+
+Prediction-market datasets can be restricted to observations occurring before an event begins.
+
+This reduces post-event or in-event leakage in forecasting datasets.
+
+---
+
+### Time-to-Event Features
+
+Normalized records may expose:
+
+```text
+minutes_to_event
+seconds_to_event
+```
+
+for time-to-event forecasting.
+
+---
+
+### Prediction-Market Dataset Validation
+
+Added validation metadata including:
+
+* markets
+* observations
+* missing targets removed
+* duplicates resolved
+* invalid timestamps removed
+* invalid probability rows removed
+* post-start rows removed
+* future rows removed
+* target range
+* timezone
+* readiness state
+
+---
+
+## Added — SageMaker
+
+### SageMaker Canvas-Ready Datasets
+
+Prediction-market and other supported time-series datasets can be generated in machine-learning-ready format.
+
+Canonical time-series fields include:
+
+```text
+item_id
+timestamp
+target
+```
+
+with optional covariates.
+
+---
+
+### Intraday SageMaker Datasets
+
+Canvas-oriented datasets may be generated at:
+
+```text
+1m
+5m
+15m
+30m
+1h
+```
+
+frequencies when source data supports those intervals.
+
+This enables workflows such as:
+
+* very-short-horizon forecasting
+* intraday probability forecasting
+* event-market forecasting
+* hourly financial time-series modeling
+
+---
+
+### Bring-Your-Own AWS
+
+Added account-level AWS integration.
+
+Configuration includes:
+
+```text
+AWS account ID
+AWS region
+IAM role ARN
+SageMaker execution role ARN
+S3 bucket
+```
+
+---
+
+### OIDC-Based AWS Authentication
+
+Quantura uses Vercel OIDC and AWS STS role assumption for supported customer AWS integrations.
+
+Long-lived customer AWS secret keys are not required for this architecture.
+
+---
+
+### SageMaker Connection Verification
+
+The backend can verify:
+
+* role assumption
+* AWS identity
+* expected account
+* SageMaker access
+
+before enabling forecasting workflows.
+
+---
+
+## Added — Forecast Lifecycle
+
+### Forecast History
+
+Forecast records can preserve revisions over time rather than only the newest value.
+
+This creates historical forecast trajectories suitable for:
+
+* model evaluation
+* calibration
+* enterprise licensing
+* AI training
+* temporal analysis
+
+---
+
+### Forecast Resolution
+
+Forecast lifecycle operations support resolution metadata.
+
+---
+
+### Forecast Scoring
+
+Resolved forecasts can be scored using appropriate probabilistic metrics.
+
+---
+
+### Forecast Calibration
+
+Added calibration aggregation to measure whether predicted probabilities align with observed frequencies.
+
+Potential metrics include:
+
+* Brier score
+* log score
+* empirical calibration
+
+---
+
+### Scheduled Lifecycle Jobs
+
+Automated jobs may support:
+
+```text
+expire
+resolve
+score
+calibration
+feed
+backfill-search
+```
+
+and combined lifecycle processing.
+
+---
+
+## Added — Screener
+
+### Quantitative Screener
+
+Expanded Quantura's screener into a filterable research/data surface.
+
+Potential dimensions include:
+
+* symbol search
+* universe
+* market capitalization
+* forecast position
+* quantile position
+* forecast bias
+* earnings window
+* forecast availability
+* model
+* sort
+* pagination
+
+---
+
+### Forecasting Integration
+
+The Forecasting Screener and dedicated Screener experience are intended to share one authoritative component/service implementation.
+
+---
+
+### Screener API
+
+Screener data can be exposed through authenticated API access where plan and workspace permissions allow.
+
+---
+
+## Added — Forecast Alerts
+
+### Quantile Boundary Alerts
+
+Users can monitor whether realized prices cross configured forecast levels.
+
+Potential boundaries include:
+
+* P1
+* P25
+* P50
+* P75
+* P99
+* other native quantiles from uploaded forecasts
+
+---
+
+### Email Notifications
+
+Added server-side delivery for qualifying forecast boundary events.
+
+---
+
+### Persistent Alert State
+
+Alert configurations can retain:
+
+* forecast ID
+* symbol
+* monitored levels
+* enabled state
+* previous observed state
+* crossing history
+* expiry
+
+---
+
+## Added — AI Forecast Analysis
+
+### GPT-5.6 Forecast Interpretation
+
+Added an optional AI analysis layer for structured forecast interpretation.
+
+GPT-5.6 is not treated as the underlying numerical forecasting engine.
+
+The numerical forecast comes from:
+
+```text
+Prophet
++
+Chronos-2
++
+validated ensemble logic
+```
+
+The AI layer interprets supplied quantitative evidence.
+
+---
+
+### Structured Analysis Input
+
+AI-analysis payloads can include:
+
+```text
+asset
+as_of
+frequency
+horizon
+current_price
+prophet_forecast
+chronos_forecast
+ensemble
+quantile_distribution
+validation_metrics
+model_agreement
+contextual_information
+```
+
+---
+
+### Optional RAG and Tool Use
+
+Current/live analysis may use approved:
+
+* internal data tools
+* market-data retrieval
+* web search
+* RAG
+* contextual information sources
+
+where configured.
+
+Historical backtesting must remain point-in-time safe.
+
+---
+
+### Market Narrative Scenarios
+
+Added support for contextual:
+
+* bullish scenario
+* base scenario
+* bearish scenario
+
+generated from forecast distributions and relevant retrieved information.
+
+Generated future narratives must be labeled hypothetical and never presented as actual published news.
+
+---
+
+## Added — Backtesting
+
+### Forecast Backtesting
+
+Added infrastructure for historical walk-forward forecast evaluation.
+
+Evaluation should preserve the as-of nature of every historical prediction.
+
+---
+
+### Intraday Walk-Forward Evaluation
+
+Forecast validation may operate on:
+
+* 1-minute
+* 5-minute
+* 15-minute
+* 30-minute
+* hourly
+
+series where sufficient history exists.
+
+---
+
+### Trade Backtesting
+
+Forecast-derived signals can be evaluated separately through deterministic trading simulation.
+
+---
+
+### Point-in-Time Safety
+
+Historical backtesting must prevent:
+
+* future prices in model input
+* future forecasts
+* future documents
+* live web-search leakage
+* same-bar impossible execution
+* validation/test overlap
+
+---
+
+### Transaction Cost Modeling
+
+Trade backtesting can account for:
+
+* spread
+* slippage
+* commission
+* position size
+* holding horizon
+* stop
+* target
+
+---
+
+### Performance Metrics
+
+Backtests may expose:
+
+* return
+* number of trades
+* win rate
+* average win
+* average loss
+* expectancy
+* profit factor
+* maximum drawdown
+* Sharpe ratio
+* Sortino ratio
+* exposure
+* transaction costs
+
+---
+
+## Added — GitHub Automation
+
+### Prediction-Market Forecast Workflows
+
+Separate automation pipelines are planned/implemented for:
+
+* Polymarket forecast generation
+* Kalshi forecast generation
+
+These workflows should remain independently schedulable and observable.
+
+---
+
+### Intraday Scheduled Forecast Jobs
+
+Automation may produce supported forecast datasets at:
+
+* 1-minute
+* 5-minute
+* 15-minute
+* 30-minute
+* hourly
+
+granularities.
+
+Actual scheduling should account for:
+
+* API quotas
+* compute costs
+* dataset size
+* provider limits
+* available runner capacity
+
+---
+
+### Forecast Run Manifests
+
+Automated forecast jobs should report:
+
+```text
+source
+frequency
+markets_discovered
+markets_processed
+forecasts_successful
+forecasts_failed
+coverage_percent
+runtime
+forecast_version
+commit_sha
+```
+
+---
+
+## Changed
+
+### Quantura Repositioned as a Data and Forecast Platform
+
+Quantura's product architecture now centers on:
+
+```text
+Search
+→ Historical Data
+→ Forecast
+→ Quantiles
+→ Validation
+→ Analysis
+→ API
+→ Dataset
+→ Licensing
+```
+
+rather than disconnected financial tools.
+
+---
+
+### Intraday Data Elevated to Core Product Capability
+
+One-minute through hourly data is now treated as a first-class capability across applicable:
+
+* historical market data
+* forecast generation
+* prediction-market datasets
+* SageMaker datasets
+* options histories
+* backtesting
+* enterprise dataset delivery
+
+---
+
+### Forecasting Became Frequency-Aware
+
+Forecast configuration no longer assumes a single daily horizon model.
+
+A forecast must account for:
+
+```text
+frequency
+prediction_length
+horizon
+target_timestamp
+calendar
+```
+
+---
+
+### Forecast Intelligence Became Multi-Model
+
+Numerical forecasts can originate from:
+
+* Prophet
+* Chronos-2
+* validated ensemble
+
+with explicit model provenance.
+
+---
+
+### Prediction Markets Promoted to Core Data Infrastructure
+
+Polymarket US and Kalshi are treated as data and forecasting sources rather than isolated sports utilities.
+
+---
+
+### API Positioned as an Enterprise Delivery Surface
+
+The API is now treated as a core licensing/distribution interface rather than only an internal website backend.
+
+---
+
+### Dataset Releases Made Reproducible
+
+Enterprise dataset releases increasingly include:
+
+* schema version
+* source cutoff
+* time coverage
+* frequency
+* record counts
+* checksums
+* immutable release metadata
+
+---
+
+### AWS Integration Moved Toward Role-Based Credentials
+
+AWS workflows use assumed-role/OIDC patterns instead of requiring stored customer AWS access keys.
+
+---
+
+## Security
+
+### API-Key Hashing
+
+Enterprise API keys are represented server-side using secure hashed identifiers.
+
+---
+
+### API Key Revocation
+
+Keys can be invalidated independently.
+
+---
+
+### API Key Expiration
+
+Optional credential expiration is supported by the enterprise authorization architecture.
+
+---
+
+### Scoped Access
+
+API operations are constrained by explicit scopes and effective resource permissions.
+
+---
+
+### Workspace Isolation
+
+Collaborator access is resource-scoped rather than globally applied to the user's account.
+
+---
+
+### Rate Limiting
+
+Enterprise API access supports per-key/customer limits.
+
+---
+
+### Request Auditing
+
+API activity can be traced through request IDs and usage records.
+
+---
+
+### AWS OIDC
+
+Customer AWS integration can use temporary assumed-role credentials rather than static access keys.
+
+---
+
+### Backend Provider Secrets
+
+Third-party provider credentials remain server-side.
+
+---
+
+### Dataset Integrity
+
+Enterprise files can be verified with SHA-256 checksums.
+
+---
+
+## Reliability
+
+### Quantile Ordering Validation
+
+Forecasts that violate:
+
+```text
+P1 <= P25 <= P50 <= P75 <= P99
+```
+
+should be rejected.
+
+---
+
+### Frequency Validation
+
+Requests must use supported/valid interval representations.
+
+Unsupported frequency/provider combinations should produce explicit errors rather than silently substituting data.
+
+---
+
+### Timestamp Normalization
+
+Cross-provider datasets use normalized timestamps, preferably UTC for machine-readable delivery.
+
+---
+
+### Probability Validation
+
+Prediction-market values must remain inside the supported probability domain.
+
+---
+
+### Duplicate Resolution
+
+Dataset processing resolves duplicate item/timestamp combinations deterministically.
+
+---
+
+### Missing Data Policies
+
+Missing observations are handled only according to explicitly selected policies.
+
+---
+
+### Provider Retry Logic
+
+Transient upstream failures can use bounded retries.
+
+---
+
+### Request Size Limits
+
+Large dataset operations enforce reasonable:
+
+* contract limits
+* row limits
+* date-range limits
+* pagination limits
+
+to prevent unbounded processing.
+
+---
+
+## Documentation
+
+### Enterprise Wiki
+
+Added enterprise-oriented repository documentation positioning Quantura as a:
+
+* forecast intelligence platform
+* market-data platform
+* prediction-market dataset provider
+* API product
+* data-licensing platform
+
+---
+
+### Mintlify
+
+Introduced a Mintlify-oriented documentation structure centered on:
+
+```text
+docs.json
+```
+
+and OpenAPI-generated reference documentation.
+
+---
+
+### API Reference
+
+API documentation should expose:
+
+* authentication
+* scopes
+* endpoints
+* parameters
+* schemas
+* examples
+* errors
+* pagination
+* rate limits
+
+---
+
+### Data Licensing Documentation
+
+Documentation distinguishes:
+
+* Quantura-derived datasets
+* source-provider data
+* redistribution status
+* provenance
+
+---
+
+# [1.0.0] — Platform Foundation
+
+## Added
+
+### Quantura Web Platform
+
+Established the initial production Quantura application.
+
+---
+
+### Forecast Foundry
+
+Added workflows for:
+
+* historical data ingestion
+* structured forecasting datasets
+* SageMaker forecasting
+* prediction CSV processing
+* saved output analysis
+
+---
+
+### SageMaker Integration
+
+Added AWS-backed machine-learning forecasting workflows.
+
+---
+
+### Authentication
+
+Added authenticated application accounts.
+
+---
+
+### Persistence
+
+Added persistent storage for:
+
+* forecast requests
+* saved outputs
+* user resources
+* research artifacts
+
+---
+
+### Production Deployment
+
+Established production hosting and server-side API infrastructure.
+
+---
+
+### Research Automation
+
+Added repository automation for scheduled research and data-processing workflows.
+
+---
+
+# Current Platform Scope
+
+Quantura's principal product areas are now:
+
+## Forecast Intelligence
+
+* Prophet
+* Chronos-2
+* validated ensembles
+* P1/P25/P50/P75/P99
+* intraday through daily forecasting
+* forecast calibration
+* historical validation
+* scenario analysis
+
+## Historical Market Data
+
+* 1-minute through hourly data where available
+* daily historical series
+* Alpaca
+* Yahoo Finance
+* provider provenance
+* CSV exports
+
+## Cross-Asset Data
+
+* equities
+* ETFs
+* forex
+* commodity/futures series
+* energy/oil
+* rate/bond proxies
+* supported additional time-series assets
+
+## Prediction Markets
+
+* Polymarket US
+* Kalshi
+* normalized histories
+* intraday resampling
+* quantile forecasting
+* Canvas-ready datasets
+
+## Options
+
+* automatic expirations
+* contract discovery
+* historical options data
+* provider-aware data access
+* intraday history where supported
+
+## Backtesting
+
+* walk-forward forecasts
+* intraday testing
+* deterministic trade simulation
+* point-in-time controls
+
+## AWS / SageMaker
+
+* secure role connection
+* SageMaker forecasting
+* S3 integration
+* Canvas-ready datasets
+
+## Enterprise API
+
+* API keys
+* scopes
+* collaborators
+* rate limits
+* request IDs
+* auditing
+* dataset access
+
+## Data Licensing
+
+* historical forecast trajectories
+* derived forecast intelligence
+* calibrated forecasts
+* prediction-market datasets
+* CSV
+* JSONL
+* immutable releases
+* checksums
+* enterprise feeds
+
+## AI Forecast Analysis
+
+* GPT-5.6
+* structured forecast interpretation
+* optional RAG
+* approved tools
+* hypothetical market narratives
+
+---
+
+# Data Schema Change Policy
+
+Previously published immutable licensed datasets must not be silently modified.
+
+When a schema changes:
+
+1. preserve the previous release;
+2. introduce a new schema version;
+3. document additions/removals;
+4. provide migration notes;
+5. identify the first dataset using the new schema.
+
+Example:
+
+```text
+forecast_trajectories_v1
+forecast_trajectories_v2
+```
+
+---
+
+# Frequency Change Policy
+
+Changes to supported granularity should be considered schema/product changes when they alter expected dataset semantics.
+
+Every licensed time-series dataset should explicitly identify:
+
+```text
+frequency
+timezone
+calendar
+aggregation_method
+missing_value_policy
+source_provider
+```
+
+For aggregated bars, documentation should specify how values are derived.
+
+For example:
+
+```text
+open   = first valid observation
+high   = maximum
+low    = minimum
+close  = last valid observation
+volume = sum where appropriate
+```
+
+Prediction-market probability aggregation should use a separately documented methodology appropriate to that dataset.
+
+---
+
+# API Change Policy
+
+Breaking API changes should not silently alter established `/v1` behavior.
+
+Prefer a new major API version when backward compatibility cannot reasonably be maintained.
+
+Example:
+
+```text
+/api/v1
+/api/v2
+```
+
+---
+
+# Enterprise Change-Control Policy
+
+The following should always receive explicit changelog entries:
+
+* API authentication changes
+* authorization changes
+* workspace/collaborator permission changes
+* new data providers
+* removed data providers
+* supported frequency changes
+* forecasting-model changes
+* quantile methodology changes
+* dataset schema changes
+* dataset delivery changes
+* source-provenance changes
+* rate-limit changes
+* licensing metadata changes
+* historical-data corrections
+
+---
+
+# Release Integrity
+
+Enterprise releases should record where applicable:
+
+```text
+Git commit SHA
+deployment version
+API version
+dataset schema version
+forecast model version
+supported frequency
+generation timestamp
+source cutoff
+dataset checksums
+```
+
+This allows a customer to trace:
+
+```text
+source code
+→ deployed service
+→ API behavior
+→ generated forecast
+→ licensed dataset
+```
+
+---
+
+# GitLab Release Template
+
+Each future GitLab release should use:
+
+## Added
+
+New capabilities.
+
+## Changed
+
+Behavioral or architectural changes.
+
+## Fixed
+
+Bug fixes.
+
+## Security
+
+Security changes.
+
+## API
+
+API-specific changes.
+
+## Data
+
+Dataset/schema/provider/frequency changes.
+
+## Migration Notes
+
+Only when a customer or developer must take action.
+
+---
+
+# About Quantura
+
+**Quantura is a probabilistic financial and prediction-market intelligence platform that transforms historical data into validated multi-horizon forecasts, quantile distributions, machine-learning-ready datasets, and enterprise data products delivered through interactive workflows, authenticated APIs, and versioned bulk releases.**
+
+Quantura supports both longer-horizon analysis and **intraday forecasting from one-minute through hourly granularity**, subject to the availability and quality of the underlying source series.
