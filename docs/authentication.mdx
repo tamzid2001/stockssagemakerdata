@@ -1,29 +1,66 @@
 ---
 title: "Authentication and API keys"
-description: "Use scoped bearer credentials without exposing secrets in URLs or client bundles."
+description: "Create a scoped Quantura API key, copy it once, and authenticate read-only CSV and forecast integrations safely."
 ---
 
 # Authentication and API keys
 
-Send credentials in the `Authorization` header:
+Quantura API keys use the `qnt_live_` prefix and are sent as bearer credentials:
 
 ```http
 Authorization: Bearer qnt_live_...
 ```
 
-Never place API keys in query strings, browser storage, client-side bundles, screenshots, or logs.
+Never place API keys in query strings, browser storage, client-side bundles, screenshots, analytics events, or logs.
+
+## Get your API key
+
+1. Sign in to Quantura.
+2. Open **Account / Developer** from the dashboard, or use the **Manage API keys** action on the developer API page.
+3. Choose **Create API key** and give the key a descriptive name.
+4. For an integration that only lists and downloads uploaded CSV files, grant `datasets:read`. Add `workspaces:read` when the integration needs to discover shared workspaces.
+5. Copy the `qnt_live_...` secret immediately. The plaintext secret is shown only once.
+6. Store the key in a server-side secret manager or environment variable such as `QUANTURA_API_KEY`.
+
+The public developer page is available at `/developers/api`. The machine-readable endpoint reference is generated from `/api/openapi.json` and is also used by the Mintlify endpoint reference.
+
+## CSV download quickstart
+
+```bash
+export QUANTURA_API_KEY="qnt_live_..."
+
+curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/uploads/csv?limit=50"
+```
+
+See [Uploaded CSV API](/docs/uploaded-csv-api) for listing, metadata, single-file downloads, bulk ZIP downloads, filters, and collaborator behavior.
 
 ## Key lifecycle
 
 API keys support a name, scopes, optional expiration, last-used timestamp, replacement, and immediate revocation. The plaintext secret is returned only at creation. Quantura stores a keyed digest and a non-secret prefix for identification.
 
+Replacing a key creates a new secret and revokes the replaced credential. Revoking a key takes effect immediately for future requests.
+
 ## Scopes
 
-Use the narrowest scopes required by the integration. Relevant forecast scopes are:
+Use the narrowest scopes required by the integration. Relevant read scopes are:
 
-- `forecasts:read` to read authorized forecast jobs and results.
-- `forecasts:write` to create compute jobs or presets when the workspace role and plan permit it.
+- `datasets:read` to inspect or download permitted uploaded CSVs and dataset metadata.
 - `workspaces:read` to list current workspace access.
-- `datasets:read` to inspect or download permitted datasets.
+- `forecasts:read` to read authorized Quantura Forecast / Q Forecast jobs and results.
+- `predictions:read` to read authorized prediction-analysis resources.
 
-Scopes do not replace workspace authorization. Quantura also evaluates current membership, role, resource ownership, and plan entitlement on every request.
+Write/compute scopes such as `forecasts:write`, `datasets:write`, or SageMaker execution scopes are **not required** for a CSV retrieval client.
+
+Scopes do not replace workspace authorization. Quantura also evaluates current membership, role, resource ownership, and plan entitlement on every request. A viewer collaborator may read resources that are currently shared with them, but the same key does not gain permission to modify the owner's workspace.
+
+## Recommended secret handling
+
+```python
+import os
+
+api_key = os.environ["QUANTURA_API_KEY"]
+headers = {"Authorization": f"Bearer {api_key}"}
+```
+
+Do not commit a real key to Git, paste it into Codex prompts, or place it in public examples. Use a placeholder such as `qnt_live_REPLACE_ME` in documentation and tests.
