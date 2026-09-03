@@ -433,6 +433,38 @@ def test_notifications_page_has_functional_inbox_and_delivery_controls():
     assert "MODEL_COUNCIL_OUTPUT_DISCLAIMER" not in client
 
 
+def test_notifications_wait_for_an_active_service_worker_before_subscribing():
+    client = (PUBLIC / "app.js").read_text()
+    worker = (PUBLIC / "firebase-messaging-sw.js").read_text()
+    ensure_start = client.index("const ensureMessagingServiceWorker")
+    ensure_end = client.index("const loadVapidKey", ensure_start)
+    ensure_worker = client[ensure_start:ensure_end]
+    assert "navigator.serviceWorker.ready" in ensure_worker
+    assert "activeRegistration?.active" in ensure_worker
+    assert 'self.addEventListener("install"' in worker
+    assert "self.skipWaiting()" in worker
+    assert 'self.addEventListener("activate"' in worker
+    assert "clients.claim()" in worker
+
+
+def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
+    client = (PUBLIC / "app.js").read_text()
+    ssr = (ROOT / "functions_ssr" / "index.js").read_text()
+    assert 'const QUANTURA_ICON_URL = "/favicon.svg?v=20260903a"' in client
+    assert 'const PUBLIC_SHELL_ASSET_VERSION = "20260903a"' in ssr
+    assert ".replace(/\\/assets\\/quantura-icon\\.svg/g" in ssr
+    assert "node.innerHTML = '<a href=\"mailto:hello@quantura.studio\">hello@quantura.studio</a>'" in client
+    for marker in [
+        ">Q Forecast<",
+        ">Quantitative Screener<",
+        ">Quantura Forecasts<",
+        ">API reference<",
+        ">Developer documentation<",
+        ">Data licensing<",
+    ]:
+        assert marker in client
+
+
 def test_blog_index_lists_every_current_generated_post():
     import json
     from datetime import date
