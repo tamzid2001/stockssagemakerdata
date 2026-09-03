@@ -2435,8 +2435,8 @@
   // React-style hook analogue for this vanilla app: subscribe to Remote Config updates.
   const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
 
-  const QUANTURA_ICON_URL = "/assets/quantura-icon.svg";
-  const QUANTURA_FAVICON_URL = "/favicon.svg?v=20260405b";
+  const QUANTURA_ICON_URL = "/favicon.svg?v=20260903a";
+  const QUANTURA_FAVICON_URL = "/favicon.svg?v=20260903a";
 
   const hasSessionUser = (user = state.user) => Boolean(user?.uid);
   const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);
@@ -9830,12 +9830,46 @@
     if (!roots.length) return;
     roots.forEach((root) => {
       if (!(root instanceof HTMLElement)) return;
-      if (root.querySelector(".footer-contact-block")) return;
-      const node = document.createElement("p");
+      let node = root.querySelector(".footer-contact-block");
+      if (!(node instanceof HTMLElement)) {
+        node = document.createElement("p");
+        root.appendChild(node);
+      }
       node.className = "small footer-contact-block";
-      node.innerHTML =
-        '1603 Robertson PL, Bronx, New York 10465<br /><a href="mailto:hello@quantura.studio">hello@quantura.studio</a>';
-      root.appendChild(node);
+      node.innerHTML = '<a href="mailto:hello@quantura.studio">hello@quantura.studio</a>';
+    });
+  };
+
+  const normalizeFooterNavigation = () => {
+    document.querySelectorAll(".footer .footer-grid").forEach((grid) => {
+      if (!(grid instanceof HTMLElement)) return;
+      const columns = Array.from(grid.children);
+      const platform = columns[1];
+      const resources = columns[2];
+      if (platform instanceof HTMLElement) {
+        platform.className = "small";
+        platform.innerHTML = `
+          <strong>Platform</strong>
+          <div><a href="/forecasting">Q Forecast</a></div>
+          <div><a href="/screener">Quantitative Screener</a></div>
+          <div><a href="/forecasts">Quantura Forecasts</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/dashboard">Workspace</a></div>
+          <div><a href="/pricing">Plans</a></div>
+        `;
+      }
+      if (resources instanceof HTMLElement) {
+        resources.className = "small";
+        resources.innerHTML = `
+          <strong>Developers &amp; company</strong>
+          <div><a href="/developers/api">API reference</a></div>
+          <div><a href="/dashboard?panel=developer">API keys</a></div>
+          <div><a href="https://quantura.mintlify.app/" target="_blank" rel="noopener noreferrer">Developer documentation</a></div>
+          <div><a href="/contact">Data licensing</a></div>
+          <div><a href="/about">About</a></div>
+          <div><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/disclaimer">Disclaimer</a></div>
+        `;
+      }
     });
   };
 
@@ -24252,7 +24286,30 @@
     if (!("serviceWorker" in navigator)) {
       throw new Error("Service workers are not available in this browser.");
     }
-    return navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+      scope: "/",
+      updateViaCache: "none",
+    });
+    if (registration.active) return registration;
+
+    let timeoutId = null;
+    try {
+      const activeRegistration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => {
+          timeoutId = window.setTimeout(
+            () => reject(new Error("Notification service worker did not become active. Refresh and try again.")),
+            15000
+          );
+        }),
+      ]);
+      if (!activeRegistration?.active) {
+        throw new Error("Notification service worker is not active. Refresh and try again.");
+      }
+      return activeRegistration;
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    }
   };
 
   const loadVapidKey = async (functions) => {
@@ -25262,6 +25319,7 @@
       normalizeTopNavigation();
       normalizeFooterSocialLinks();
       normalizeFooterContactInfo();
+      normalizeFooterNavigation();
       removeWebsiteFootnotes();
       initPricingBillingToggle();
       initializeToggleSelects();
@@ -29633,7 +29691,16 @@
 	      }
 	      try {
 	        setNotificationStatus("Sending test notification...");
-          const cachedToken = String(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "").trim();
+          let cachedToken = String(safeLocalStorageGet(FCM_TOKEN_CACHE_KEY) || "").trim();
+          if (!isNativeApp() && !cachedToken) {
+            if (!isPushChannelAvailable() || !messaging) {
+              throw new Error("Push notifications are not supported on this device.");
+            }
+            setNotificationStatus("Activating notifications on this device...");
+            cachedToken = await registerNotificationToken(functions, messaging, { forceRefresh: false });
+            setNotificationTokenPreview(cachedToken);
+            setNotificationStatus("Sending test notification...");
+          }
           let sent = 0;
           let attempted = 0;
           let usedFallback = false;

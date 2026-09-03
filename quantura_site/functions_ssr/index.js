@@ -78,6 +78,12 @@ const injectRemoteConfig = (html, { initialFetchResponse }) => {
   return `${payload}\n${html}`;
 };
 
+const PUBLIC_SHELL_ASSET_VERSION = "20260903a";
+const injectPublicShellAssets = (html) =>
+  String(html || "")
+    .replace(/\/app\.js\?v=[A-Za-z0-9._-]+/g, `/app.js?v=${PUBLIC_SHELL_ASSET_VERSION}`)
+    .replace(/\/assets\/quantura-icon\.svg/g, `/favicon.svg?v=${PUBLIC_SHELL_ASSET_VERSION}`);
+
 const normalizePath = (rawPath) => {
   const pathname = String(rawPath || "/").split("?")[0] || "/";
   if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
@@ -487,6 +493,7 @@ const ssrHandler = async (req, res) => {
   html = renderForecastHubMetadata(html, requestPath);
   html = await renderForecastMetadata(html, requestPath);
   html = renderGenericForecastMetadata(html, requestPath);
+  html = injectPublicShellAssets(html);
   const rendered = injectRemoteConfig(html, { initialFetchResponse });
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   // HTML varies by functional cookie (qs_rcid). Avoid long-lived CDN caching across users.

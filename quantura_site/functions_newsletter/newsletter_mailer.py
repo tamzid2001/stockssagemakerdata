@@ -17,7 +17,7 @@ from google.cloud import secretmanager
 
 DEFAULT_SITE_ORIGIN = "https://quantura.studio"
 DEFAULT_SUPPORT_EMAIL = "hello@quantura.studio"
-DEFAULT_MAILING_ADDRESS = "1603 Robertson PL, Bronx, New York 10465"
+DEFAULT_MAILING_ADDRESS = ""
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 DEFAULT_MAX_SEND = 500
 DAILY_SEND_CAP = 2000
@@ -777,7 +777,11 @@ def send_email_campaign_batch(
     cfg = MODE_CONFIGS[clean_mode]
     site_origin = str(os.environ.get("PUBLIC_SITE_ORIGIN") or DEFAULT_SITE_ORIGIN).rstrip("/") or DEFAULT_SITE_ORIGIN
     support_email = str(os.environ.get("NEWSLETTER_SUPPORT_EMAIL") or DEFAULT_SUPPORT_EMAIL).strip() or DEFAULT_SUPPORT_EMAIL
-    mailing_address = str(os.environ.get("NEWSLETTER_MAILING_ADDRESS") or DEFAULT_MAILING_ADDRESS).strip() or DEFAULT_MAILING_ADDRESS
+    mailing_address = str(os.environ.get("NEWSLETTER_MAILING_ADDRESS") or DEFAULT_MAILING_ADDRESS).strip()
+    if not mailing_address:
+        raise RuntimeError(
+            "NEWSLETTER_MAILING_ADDRESS must be configured with an approved business mailing address before sending campaigns."
+        )
     campaign_payload = payload if isinstance(payload, dict) else {}
 
     if recipients:

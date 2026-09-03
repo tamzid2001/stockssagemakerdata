@@ -1,5 +1,13 @@
 /* global importScripts, firebase, self, clients */
 
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(clients.claim());
+});
+
 importScripts("https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/12.9.0/firebase-messaging-compat.js");
 importScripts("/__/firebase/init.js?useEmulator=false");
@@ -17,8 +25,8 @@ if (messaging) {
     const title = notification.title || "Quantura update";
     const options = {
       body: notification.body || "You have a new Quantura update.",
-      icon: notification.icon || "/assets/quantura-icon.svg",
-      badge: "/assets/quantura-icon.svg",
+      icon: notification.icon || "/favicon.svg?v=20260903a",
+      badge: "/favicon.svg?v=20260903a",
       data: payload?.data || {},
       tag: notification.tag || "quantura-webpush",
     };
