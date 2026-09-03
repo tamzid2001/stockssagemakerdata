@@ -107,6 +107,41 @@ test("Alpaca options chain joins contracts to supported snapshot fields", async 
   assert.deepEqual(chain[0], { symbol: "AAPL260918C00200000", underlying: "AAPL", expiration: "2026-09-18", strike: 200, type: "call", bid: 12.1, ask: 12.4, last: 12.2, volume: 150, openInterest: 900, impliedVolatility: 0.31, delta: 0.55, gamma: 0.03, theta: -0.08, vega: 0.19 });
 });
 
+test("Alpaca option expirations override the provider's upcoming-weekend default and follow pagination", async () => {
+  withAlpacaEnvironment();
+  const requestedUrls: string[] = [];
+  const client = new AlpacaClient({ fetchImpl: (async (input: string | URL | Request) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    const parsed = new URL(url);
+    if (!parsed.searchParams.get("page_token")) {
+      return Response.json({
+        option_contracts: [
+          { symbol: "AAPL260904C00200000", expiration_date: "2026-09-04" },
+          { symbol: "AAPL260918C00200000", expiration_date: "2026-09-18" },
+        ],
+        next_page_token: "next-expirations",
+      });
+    }
+    return Response.json({
+      option_contracts: [
+        { symbol: "AAPL261016C00200000", expiration_date: "2026-10-16" },
+        { symbol: "AAPL260918P00200000", expiration_date: "2026-09-18" },
+      ],
+      next_page_token: null,
+    });
+  }) as typeof fetch });
+
+  const expirations = await client.listOptionExpirations("AAPL");
+  assert.deepEqual(expirations, ["2026-09-04", "2026-09-18", "2026-10-16"]);
+  assert.equal(requestedUrls.length, 2);
+  const first = new URL(requestedUrls[0]);
+  assert.ok(first.searchParams.get("expiration_date_gte"));
+  assert.ok(first.searchParams.get("expiration_date_lte"));
+  assert.equal(first.searchParams.get("limit"), "10000");
+  assert.equal(new URL(requestedUrls[1]).searchParams.get("page_token"), "next-expirations");
+});
+
 test("Alpaca option history uses the supported bars contract without a snapshot feed parameter", async () => {
   withAlpacaEnvironment();
   let requestedUrl = "";

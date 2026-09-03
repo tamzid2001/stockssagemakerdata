@@ -148,7 +148,16 @@ export function registerMarketDataRoutes(router: Router): void {
       let provider: "alpaca" | "yahoo" = source === "yahoo" ? "yahoo" : "alpaca";
       let fallbackUsed = false;
       let expirations: string[];
-      if (source === "yahoo") expirations = await yahoo.listOptionExpirations(underlying);
+      if (source === "yahoo") {
+        try {
+          expirations = await yahoo.listOptionExpirations(underlying);
+        } catch (error) {
+          if (error instanceof AlpacaError && error.code === "invalid_request") throw error;
+          provider = "alpaca";
+          fallbackUsed = true;
+          expirations = await alpaca.listOptionExpirations(underlying);
+        }
+      }
       else if (source === "alpaca") expirations = await alpaca.listOptionExpirations(underlying);
       else {
         try {
@@ -182,7 +191,16 @@ export function registerMarketDataRoutes(router: Router): void {
       let provider: "alpaca" | "yahoo" = source === "yahoo" ? "yahoo" : "alpaca";
       let fallbackUsed = false;
       let contracts;
-      if (source === "yahoo") contracts = await yahoo.getOptionChain(input);
+      if (source === "yahoo") {
+        try {
+          contracts = await yahoo.getOptionChain(input);
+        } catch (error) {
+          if (error instanceof AlpacaError && error.code === "invalid_request") throw error;
+          provider = "alpaca";
+          fallbackUsed = true;
+          contracts = await alpaca.getOptionChain(input);
+        }
+      }
       else if (source === "alpaca") contracts = await alpaca.getOptionChain(input);
       else {
         try {

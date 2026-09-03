@@ -352,6 +352,12 @@ def test_options_expirations_auto_load_and_contract_rows_are_accessible():
     assert 'event.key !== "Enter" && event.key !== " "' in client
     assert ">Select</th>" not in forecasting
     assert "Refresh expirations" in forecasting
+    assert "Load expirations" not in forecasting
+
+
+def test_static_pages_do_not_shadow_authoritative_forecasting_or_dashboard_ssr_routes():
+    assert not (PUBLIC / "forecasting.html").exists()
+    assert not (PUBLIC / "dashboard.html").exists()
 
 
 def test_product_interactions_calendar_and_safe_csv_export_are_present():
