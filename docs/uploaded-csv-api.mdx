@@ -1,0 +1,165 @@
+---
+title: "Uploaded CSV API"
+description: "List, inspect, and download CSV files you own or can read in a shared Quantura workspace."
+---
+
+# Uploaded CSV API
+
+The Uploaded CSV API is a **read/download-only** integration surface for CSV files a Quantura user owns or can access through a shared workspace. It is designed for simple retrieval, cataloging, and export workflows rather than forecast execution.
+
+Use a scoped `qnt_live_...` bearer key with `datasets:read`. Add `workspaces:read` if your client needs to enumerate shared workspaces.
+
+```http
+Authorization: Bearer qnt_live_...
+```
+
+## List uploaded CSVs
+
+```bash
+curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/uploads/csv?limit=50"
+```
+
+The list endpoint returns a stable upload ID, safe filename information, size and integrity metadata when available, CSV dimensions, date/time coverage when unambiguous, inferred granularity, quantile columns, and a server-authorized download endpoint.
+
+Supported list filters should include `workspace_id`, `ticker`, `source`, `from`, `to`, `sort`, `limit`, and `cursor`. Clients should treat unknown metadata as `null`, not as an error.
+
+## CSV metadata
+
+```bash
+CSV_ID="qcsv_example"
+
+curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/uploads/csv/$CSV_ID"
+```
+
+A metadata object can include:
+
+```json
+{
+  "id": "qcsv_example",
+  "workspace_id": "workspace-id",
+  "original_filename": "forecast.csv",
+  "display_filename": "forecast.csv",
+  "content_type": "text/csv",
+  "size_bytes": 12345,
+  "sha256": "...",
+  "uploaded_at": "2026-09-03T15:00:00Z",
+  "source_type": "prediction_csv",
+  "ticker": "AAPL",
+  "asset_class": "equity",
+  "forecast_brand": "Quantura Forecast",
+  "forecast_kind": "ensemble",
+  "row_count": 100,
+  "column_count": 7,
+  "data_cell_count": 700,
+  "populated_data_cell_count": 698,
+  "columns": ["date", "p1", "p10", "p25", "p50", "p90", "p99"],
+  "date_column": "date",
+  "first_timestamp": "2026-09-04T00:00:00Z",
+  "last_timestamp": "2026-12-31T00:00:00Z",
+  "inferred_granularity": "1d",
+  "quantile_columns": ["p1", "p10", "p25", "p50", "p90", "p99"],
+  "metadata_status": "complete",
+  "metadata_warnings": [],
+  "download_endpoint": "/api/v1/uploads/csv/qcsv_example/download"
+}
+```
+
+The example above illustrates the schema. Returned values must be derived from the actual upload and file contents; they are not default values.
+
+## Metadata accuracy rules
+
+Quantura does not fabricate file metadata:
+
+- Ticker, asset class, source, model, and forecast type are returned only when upload/job provenance or a high-confidence parser establishes them.
+- A file containing quantile columns is not automatically labeled an ensemble forecast.
+- Row and cell counts come from parsed CSV records rather than newline estimates.
+- SHA-256 refers to the actual stored file bytes when present.
+- A date/time range is returned only when the date column can be parsed without inventing missing information.
+- If a timestamp has no year or is otherwise ambiguous, absolute timestamps remain `null` and `metadata_warnings` explains why.
+- Internal object paths, credentials, prompts, and private storage details are never returned.
+
+## Download one CSV
+
+```bash
+curl -fL \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -o "quantura-$CSV_ID.csv" \
+  "https://quantura.studio/api/v1/uploads/csv/$CSV_ID/download"
+```
+
+The server re-checks the token, scope, current workspace membership, and resource ownership before serving or redirecting to the file. A download URL must not grant access after authorization is lost.
+
+## Download all accessible CSVs
+
+```bash
+curl -fL \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -o quantura-csv-exports.zip \
+  "https://quantura.studio/api/v1/uploads/csv/download-all"
+```
+
+Bulk export applies the same authorization rules as single-file download. A ZIP must contain only the CSVs the caller is authorized to read. Filters from the list endpoint may be supported for scoped exports.
+
+## Shared workspaces
+
+API keys identify a user; they do not freeze a collaborator role. Quantura evaluates the user's current access on every request.
+
+A viewer collaborator with the required read scope may list metadata and download CSVs from a workspace that is currently shared with them. Viewer access is read-only. Removing the collaborator removes future access for the same API key.
+
+To discover available workspace IDs:
+
+```bash
+curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  https://quantura.studio/api/v1/workspaces
+```
+
+Then pass `workspace_id` to the CSV list endpoint, or use the explicit workspace route when available:
+
+```text
+/api/v1/workspaces/{workspaceId}/uploads/csv
+```
+
+## Pagination
+
+List clients should follow the opaque `next_cursor` returned in response metadata. Do not decode or construct cursors in client code.
+
+```python
+import os
+import requests
+
+base = "https://quantura.studio/api/v1/uploads/csv"
+headers = {"Authorization": f"Bearer {os.environ['QUANTURA_API_KEY']}"}
+params = {"limit": 100}
+
+while True:
+    response = requests.get(base, headers=headers, params=params, timeout=30)
+    response.raise_for_status()
+    payload = response.json()
+    for csv_file in payload["data"]:
+        print(csv_file["id"], csv_file["original_filename"])
+    cursor = payload.get("meta", {}).get("next_cursor")
+    if not cursor:
+        break
+    params["cursor"] = cursor
+```
+
+## Common errors
+
+- `401` — key missing, invalid, expired, or revoked.
+- `403` — key lacks `datasets:read`, workspace access is missing, or the current plan/role does not permit the request.
+- `404` — CSV upload does not exist or is intentionally hidden from the caller.
+- `429` — API rate limit exceeded.
+
+Use the request ID returned by the API when investigating an error. Never include the plaintext API secret in a support request.
+
+## OpenAPI and interactive docs
+
+The machine-readable API definition is available at:
+
+```text
+https://quantura.studio/api/openapi.json
+```
+
+The Quantura developer page at `/developers/api` renders the interactive endpoint reference and links signed-in users to API key management.
