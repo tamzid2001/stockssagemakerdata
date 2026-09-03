@@ -321,5 +321,24 @@ service cloud.firestore {
     match /ensemble_forecast_usage/{usageId} {
       allow read, write: if false;
     }
+
+    // Workspace records, mutable memberships, uploaded CSV metadata, and
+    // administrative audit events are server-authorized. The HTTP API checks
+    // current membership, API scope, explicit capability, and resource scope.
+    match /workspaces/{workspaceId} {
+      allow read, write: if false;
+    }
+
+    match /workspace_memberships/{membershipId} {
+      allow read, write: if false;
+    }
+
+    match /uploaded_csvs/{csvId} {
+      allow read, write: if false;
+    }
+
+    match /workspace_audit_logs/{eventId} {
+      allow read, write: if false;
+    }
   }
 }

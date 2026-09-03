@@ -80,6 +80,28 @@
     },
   });
   window.__quanturaFunctionsClient = createVercelFunctionsClient();
+  const quanturaApi = async (path, { method = "GET", body, responseType = "json" } = {}) => {
+    const currentUser = typeof firebase !== "undefined" && typeof firebase.auth === "function" ? firebase.auth().currentUser : null;
+    if (!currentUser) throw new Error("Sign in to use workspace APIs.");
+    const token = await currentUser.getIdToken();
+    const headers = { Accept: responseType === "blob" ? "*/*" : "application/json", Authorization: `Bearer ${token}` };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const response = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (responseType === "blob" && response.ok) return { blob: await response.blob(), response };
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.error) {
+      const error = new Error(payload?.error?.message || payload?.message || `Request failed (${response.status}).`);
+      error.code = String(payload?.error?.code || `http_${response.status}`).toLowerCase();
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  };
   const META_STANDARD_EVENTS = new Set([
     "PageView",
     "CustomizeProduct",
@@ -840,7 +862,7 @@
       signin_manage_notifications: "Sign in to manage notifications",
       account: "Account",
       leaderboard_profile: "Public profile",
-      sidebar_forecast: "Meta Prophet Forecast",
+      sidebar_forecast: "Q Forecast",
       sidebar_trending: "Trending",
       sidebar_news_data: "Historical Data Download",
       sidebar_corporate_events: "Earnings calendar",
@@ -849,7 +871,7 @@
       sidebar_options: "Options",
       sidebar_learn_more: "Forecast guide",
       sidebar_screener: "Screener",
-      panel_forecast_title: "Meta Prophet Forecast",
+      panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Generate the full forecast distribution, inspect technical confirmation, compare signed scenarios, and request balanced AI interpretation only when you choose.",
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.",
@@ -898,7 +920,7 @@
       signin_manage_notifications: "Inicia sesion para gestionar notificaciones",
       account: "Cuenta",
       leaderboard_profile: "Perfil publico",
-      sidebar_forecast: "Meta Prophet Pronostico",
+      sidebar_forecast: "Q Forecast",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
       sidebar_corporate_events: "Calendario de resultados",
@@ -907,7 +929,7 @@
       sidebar_options: "Opciones",
       sidebar_learn_more: "Mas informacion",
       sidebar_screener: "Screener",
-      panel_forecast_title: "Meta Prophet Pronostico",
+      panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
       panel_market_headlines_subtitle: "Titulares RSS atribuidos con seleccion de proveedor, enlaces de fuente y espacios publicitarios nativos entre grupos de articulos.",
@@ -956,7 +978,7 @@
       signin_manage_notifications: "Connectez-vous pour gerer les notifications",
       account: "Compte",
       leaderboard_profile: "Profil public",
-      sidebar_forecast: "Meta Prophet Prevision",
+      sidebar_forecast: "Q Forecast",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
       sidebar_corporate_events: "Calendrier des resultats",
@@ -965,7 +987,7 @@
       sidebar_options: "Options",
       sidebar_learn_more: "En savoir plus",
       sidebar_screener: "Screener",
-      panel_forecast_title: "Meta Prophet Prevision",
+      panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
       panel_market_headlines_subtitle: "Titres RSS attribues avec selection du fournisseur, liens source et emplacements publicitaires natifs entre groupes d articles.",
@@ -1014,7 +1036,7 @@
       signin_manage_notifications: "Zum Verwalten von Benachrichtigungen anmelden",
       account: "Konto",
       leaderboard_profile: "Offentliches Profil",
-      sidebar_forecast: "Meta Prophet Forecast",
+      sidebar_forecast: "Q Forecast",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
       sidebar_corporate_events: "Ergebnis-Kalender",
@@ -1023,7 +1045,7 @@
       sidebar_options: "Optionen",
       sidebar_learn_more: "Mehr erfahren",
       sidebar_screener: "Screener",
-      panel_forecast_title: "Meta Prophet Forecast",
+      panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
       panel_market_headlines_subtitle: "Zugeordnete RSS-Marktschlagzeilen mit Anbieterauswahl, Quellenlinks und nativen Anzeigenplatzen zwischen Artikelgruppen.",
@@ -1072,7 +1094,7 @@
       signin_manage_notifications: "سجل الدخول لادارة الاشعارات",
       account: "الحساب",
       leaderboard_profile: "الملف العام",
-      sidebar_forecast: "Meta Prophet التوقع",
+      sidebar_forecast: "Q Forecast",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
       sidebar_corporate_events: "تقويم الأرباح",
@@ -1081,7 +1103,7 @@
       sidebar_options: "الخيارات",
       sidebar_learn_more: "اعرف المزيد",
       sidebar_screener: "الفلتر",
-      panel_forecast_title: "Meta Prophet التوقع",
+      panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
       panel_market_headlines_title: "ابرز عناوين السوق",
       panel_market_headlines_subtitle: "عناوين RSS منسوبة مع اختيار المزود وروابط المصدر ومواضع اعلانات اصلية بين مجموعات المقالات.",
@@ -1130,7 +1152,7 @@
       signin_manage_notifications: "নোটিফিকেশন পরিচালনা করতে সাইন ইন করুন",
       account: "অ্যাকাউন্ট",
       leaderboard_profile: "পাবলিক প্রোফাইল",
-      sidebar_forecast: "Meta Prophet ফোরকাস্ট",
+      sidebar_forecast: "Q Forecast",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
       sidebar_corporate_events: "আর্নিংস ক্যালেন্ডার",
@@ -1139,7 +1161,7 @@
       sidebar_options: "অপশন",
       sidebar_learn_more: "আরও জানুন",
       sidebar_screener: "স্ক্রিনার",
-      panel_forecast_title: "Meta Prophet ফোরকাস্ট",
+      panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
       panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
       panel_market_headlines_subtitle: "অ্যাট্রিবিউটেড RSS মার্কেট হেডলাইন, প্রোভাইডার নির্বাচন, সোর্স লিংক এবং আর্টিকেল গ্রুপের মাঝে নেটিভ অ্যাড স্লট।",
@@ -1918,10 +1940,34 @@
     featureVoteAutopilotStatus: document.getElementById("feature-vote-autopilot-status"),
     savedForecastsList: document.getElementById("saved-forecasts-list"),
     workspaceSelect: document.getElementById("workspace-select"),
+    workspaceSelects: Array.from(document.querySelectorAll("[data-workspace-select]")),
+    workspaceSummary: document.getElementById("workspace-summary"),
+    workspaceNewToggle: document.getElementById("workspace-new-toggle"),
+    workspaceCreateForm: document.getElementById("workspace-create-form"),
+    workspaceCreateName: document.getElementById("workspace-create-name"),
+    workspaceCreateDescription: document.getElementById("workspace-create-description"),
+    workspaceCreateCancel: document.getElementById("workspace-create-cancel"),
+    workspaceCreateStatus: document.getElementById("workspace-create-status"),
+    workspaceGeneralForm: document.getElementById("workspace-general-form"),
+    workspaceGeneralName: document.getElementById("workspace-general-name"),
+    workspaceGeneralDescription: document.getElementById("workspace-general-description"),
+    workspaceGeneralStatus: document.getElementById("workspace-general-status"),
+    workspaceMembersRefresh: document.getElementById("workspace-members-refresh"),
+    workspaceCsvRefresh: document.getElementById("workspace-csv-refresh"),
+    workspaceCsvDownloadAll: document.getElementById("workspace-csv-download-all"),
+    workspaceCsvStatus: document.getElementById("workspace-csv-status"),
+    workspaceCsvList: document.getElementById("workspace-csv-list"),
+    workspaceAuditRefresh: document.getElementById("workspace-audit-refresh"),
+    workspaceAuditList: document.getElementById("workspace-audit-list"),
     dashboardAuthLink: document.getElementById("dashboard-auth-link"),
     collabInviteForm: document.getElementById("collab-invite-form"),
     collabInviteEmail: document.getElementById("collab-invite-email"),
     collabInviteRole: document.getElementById("collab-invite-role"),
+    collabCsvScope: document.getElementById("collab-csv-scope"),
+    collabSelectedCsvField: document.getElementById("collab-selected-csv-field"),
+    collabSelectedCsvIds: document.getElementById("collab-selected-csv-ids"),
+    collabCustomPermissions: document.getElementById("collab-custom-permissions"),
+    collabPermissionOptions: document.getElementById("collab-permission-options"),
     collabInviteStatus: document.getElementById("collab-invite-status"),
     collabInvitesList: document.getElementById("collab-invites-list"),
 	    collabCollaboratorsList: document.getElementById("collab-collaborators-list"),
@@ -2355,6 +2401,9 @@
     myRequestsLoadedAt: 0,
     myRequestsPanelState: {},
     sharedWorkspaces: [],
+    workspacePermissions: [],
+    workspaceCsvs: [],
+    workspaceCollaborators: [],
     unsubscribeSharedWorkspaces: null,
     authStateBootstrapped: false,
     postSignInReloadInFlight: false,
@@ -5954,16 +6003,34 @@
     };
 
 	  const buildWorkspaceOptions = (user) => {
-	    const opts = [];
-	    if (!user) return opts;
-	    opts.push({ id: user.uid, label: isAnonymousUser(user) ? "Guest workspace" : "My workspace" });
-    state.sharedWorkspaces.forEach((ws) => {
-      const id = ws.workspaceUserId || ws.id;
-      if (!id) return;
-      const label = ws.workspaceEmail ? `Shared: ${ws.workspaceEmail}` : `Shared workspace ${id.slice(0, 6)}`;
-      opts.push({ id, label });
-    });
-    return opts;
+	    if (!user) return [];
+      const byId = new Map();
+      state.sharedWorkspaces.forEach((workspace) => {
+        const id = String(workspace?.id || workspace?.workspaceId || workspace?.workspaceUserId || "").trim();
+        if (!id) return;
+        const role = String(workspace?.role || (id === user.uid ? "owner" : "viewer"));
+        const name = String(workspace?.name || (id === user.uid ? "Personal Workspace" : workspace?.workspaceEmail || `Workspace ${id.slice(0, 8)}`));
+        byId.set(id, { id, label: role === "owner" ? name : `${name} · ${role}`, workspace: { ...workspace, id, role, name } });
+      });
+      if (!byId.has(user.uid)) {
+        byId.set(user.uid, { id: user.uid, label: isAnonymousUser(user) ? "Guest workspace" : "Personal Workspace", workspace: { id: user.uid, role: "owner", name: "Personal Workspace", permissions: [] } });
+      }
+      return [...byId.values()];
+    };
+
+  const activeWorkspaceRecord = () => buildWorkspaceOptions(state.user).find((item) => item.id === state.activeWorkspaceId)?.workspace || null;
+
+  const renderWorkspaceSummary = () => {
+    const workspace = activeWorkspaceRecord();
+    if (ui.workspaceSummary) {
+      ui.workspaceSummary.innerHTML = workspace
+        ? `<div><dt>Role</dt><dd>${escapeHtml(titleCaseLabel(workspace.role || "viewer"))}</dd></div><div><dt>Workspace ID</dt><dd><code>${escapeHtml(workspace.id)}</code></dd></div>`
+        : `<div><dt>Role</dt><dd>—</dd></div><div><dt>Workspace ID</dt><dd>—</dd></div>`;
+    }
+    if (ui.workspaceGeneralName) ui.workspaceGeneralName.value = String(workspace?.name || "");
+    if (ui.workspaceGeneralDescription) ui.workspaceGeneralDescription.value = String(workspace?.description || "");
+    const canEdit = Boolean(workspace?.permissions?.includes("workspace.settings.write") || workspace?.role === "owner");
+    ui.workspaceGeneralForm?.querySelectorAll("input, textarea, button").forEach((control) => { control.disabled = !canEdit; });
   };
 
   const resolveActiveWorkspaceId = (user) => {
@@ -5983,64 +6050,42 @@
   };
 
   const renderWorkspaceSelect = (user) => {
-    if (!ui.workspaceSelect) return;
-    ui.workspaceSelect.innerHTML = "";
+    const selects = ui.workspaceSelects?.length ? ui.workspaceSelects : ui.workspaceSelect ? [ui.workspaceSelect] : [];
+    if (!selects.length) return;
     if (!user) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "Sign in to manage workspaces";
-      ui.workspaceSelect.appendChild(opt);
-      ui.workspaceSelect.disabled = true;
+      selects.forEach((select) => {
+        select.innerHTML = `<option value="">Sign in to manage workspaces</option>`;
+        select.disabled = true;
+      });
       return;
     }
 
     const options = buildWorkspaceOptions(user);
     const active = resolveActiveWorkspaceId(user);
-    options.forEach((item) => {
-      const opt = document.createElement("option");
-      opt.value = item.id;
-      opt.textContent = item.label;
-      ui.workspaceSelect.appendChild(opt);
+    selects.forEach((select) => {
+      select.innerHTML = "";
+      options.forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = item.label;
+        select.appendChild(opt);
+      });
+      select.value = active;
+      select.disabled = options.length <= 1;
     });
-    ui.workspaceSelect.value = active;
-    ui.workspaceSelect.disabled = options.length <= 1;
+    renderWorkspaceSummary();
   };
 
-  const subscribeSharedWorkspaces = (db, user) => {
-    if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
-    state.sharedWorkspaces = [];
-    if (!user) {
-      renderWorkspaceSelect(null);
-      return;
-    }
-
-    state.unsubscribeSharedWorkspaces = db
-      .collection("users")
-      .doc(user.uid)
-      .collection("shared_workspaces")
-      .onSnapshot(
-        (snapshot) => {
-          state.sharedWorkspaces = snapshot.docs.map((doc) => ({ id: doc.id, workspaceUserId: doc.id, ...doc.data() }));
-          renderWorkspaceSelect(user);
-          const resolved = resolveActiveWorkspaceId(user);
-	          if (resolved !== state.activeWorkspaceId) {
-	            setActiveWorkspaceId(resolved);
-	            logEvent("workspace_resolved", { workspace_id: resolved });
-	          }
-	          if (resolved) {
-	            startUserForecasts(db, resolved);
-              startScreenerRuns(db, resolved);
-	            startWorkspaceTasks(db, resolved);
-              fetchMyRequestsList({ force: true }).then(() => {
-                renderMyRequestsPanels();
-              });
-	          }
-	        },
-	        () => {
-	          // Ignore workspace subscription errors.
-	        }
-	      );
-	  };
+  const refreshWorkspaces = async (user = state.user) => {
+    if (!user) return [];
+    const payload = await quanturaApi("/api/v1/workspaces");
+    state.sharedWorkspaces = Array.isArray(payload?.data) ? payload.data : [];
+    renderWorkspaceSelect(user);
+    const resolved = resolveActiveWorkspaceId(user);
+    if (resolved !== state.activeWorkspaceId) setActiveWorkspaceId(resolved);
+    renderWorkspaceSummary();
+    return state.sharedWorkspaces;
+  };
 
   const ensureInitialPageView = () => {
     if (state.initialPageViewSent) return;
@@ -8469,8 +8514,31 @@
     });
   };
 
+  const workspaceHasPermission = (permission) => {
+    const workspace = activeWorkspaceRecord();
+    return Boolean(workspace && (workspace.role === "owner" || workspace.permissions?.includes(permission)));
+  };
+
+  const permissionLabel = (permission) => String(permission || "").split(".").map(titleCaseLabel).join(" · ");
+
+  const renderPermissionOptions = () => {
+    if (!ui.collabPermissionOptions) return;
+    ui.collabPermissionOptions.innerHTML = state.workspacePermissions.length
+      ? state.workspacePermissions.map((permission) => `<label><input type="checkbox" value="${escapeHtml(permission)}" data-collab-permission /> <span>${escapeHtml(permissionLabel(permission))}</span></label>`).join("")
+      : `<span class="small muted">No permissions available.</span>`;
+  };
+
+  const loadWorkspacePermissions = async () => {
+    if (!hasSessionUser()) return [];
+    const payload = await quanturaApi("/api/v1/workspace-permissions");
+    state.workspacePermissions = Array.isArray(payload?.data) ? payload.data.map(String) : [];
+    renderPermissionOptions();
+    return state.workspacePermissions;
+  };
+
   const renderCollaborators = (collaborators) => {
     if (!ui.collabCollaboratorsList) return;
+    state.workspaceCollaborators = Array.isArray(collaborators) ? collaborators : [];
     state.collaboratorCount = Array.isArray(collaborators) ? collaborators.length : 0;
     ui.collabCollaboratorsList.innerHTML = "";
     if (!Array.isArray(collaborators) || collaborators.length === 0) {
@@ -8479,27 +8547,40 @@
     }
 
     collaborators.forEach((collab) => {
+      const permissions = Array.isArray(collab.permissions) ? collab.permissions : [];
+      const csvScope = collab.resource_scope?.csv || { mode: "all", ids: [] };
       const card = document.createElement("div");
       card.className = "order-card";
       card.innerHTML = `
         <div class="order-header">
           <div>
-            <div class="order-title">${escapeHtml(collab.email || collab.userId || "Collaborator")}</div>
+            <div class="order-title">${escapeHtml(collab.display_name || collab.email || collab.user_id || "Collaborator")}</div>
+            <div class="small muted">${escapeHtml(collab.email || collab.user_id || "")}</div>
             <div class="small">Role: ${escapeHtml(collab.role || "viewer")}</div>
           </div>
           <span class="status completed">active</span>
         </div>
+        <details class="workspace-member-editor">
+          <summary>Edit permissions</summary>
+          <div class="field"><label class="label">Permission preset</label><select data-member-role><option value="viewer">Viewer</option><option value="analyst">Analyst</option><option value="editor">Editor</option><option value="admin">Admin</option><option value="custom">Custom</option></select></div>
+          <div class="field"><label class="label">CSV access</label><select data-member-csv-scope><option value="all">All workspace CSVs</option><option value="selected">Selected CSVs only</option><option value="none">No CSV access</option></select></div>
+          <div class="field ${csvScope.mode === "selected" ? "" : "hidden"}" data-member-selected-field><label class="label">Selected CSV IDs</label><textarea rows="2" data-member-selected-ids>${escapeHtml((csvScope.ids || []).join(", "))}</textarea></div>
+          <div class="workspace-permission-grid" data-member-permissions>${state.workspacePermissions.map((permission) => `<label><input type="checkbox" value="${escapeHtml(permission)}" ${permissions.includes(permission) ? "checked" : ""} /> <span>${escapeHtml(permissionLabel(permission))}</span></label>`).join("")}</div>
+          <div class="hero-actions"><button class="cta secondary small" type="button" data-action="save-collaborator" data-collaborator-id="${escapeHtml(collab.id || collab.user_id || "")}">Save access</button></div>
+        </details>
         <div class="order-actions" style="grid-template-columns: 1fr;">
-          <button class="cta secondary small" type="button" data-action="remove-collaborator" data-collaborator-id="${escapeHtml(collab.userId || "")}">
-            Remove
-          </button>
+          <button class="cta danger small" type="button" data-action="remove-collaborator" data-collaborator-id="${escapeHtml(collab.id || collab.user_id || "")}">Remove collaborator</button>
         </div>
       `;
+      const roleSelect = card.querySelector("[data-member-role]");
+      const scopeSelect = card.querySelector("[data-member-csv-scope]");
+      if (roleSelect) roleSelect.value = collab.role || "viewer";
+      if (scopeSelect) scopeSelect.value = csvScope.mode || "all";
       ui.collabCollaboratorsList.appendChild(card);
     });
   };
 
-  const refreshCollaboration = async (functions) => {
+  const refreshCollaboration = async (_functions) => {
     if (!ui.collabInvitesList && !ui.collabCollaboratorsList) return;
     if (!hasSessionUser()) return;
     if (isAnonymousUser()) {
@@ -8520,21 +8601,86 @@
       return;
     }
     try {
-      const listInvites = functions.httpsCallable("list_collab_invites");
-      const listCollaborators = functions.httpsCallable("list_collaborators");
-      const [invitesRes, collabsRes] = await Promise.all([
-        ui.collabInvitesList ? listInvites({ meta: buildMeta() }) : Promise.resolve({ data: { invites: [] } }),
-        ui.collabCollaboratorsList ? listCollaborators({ meta: buildMeta() }) : Promise.resolve({ data: { collaborators: [] } }),
-      ]);
-      const invites = invitesRes.data?.invites || [];
-      const collaborators = collabsRes.data?.collaborators || [];
-      renderCollabInvites(invites);
+      await loadWorkspacePermissions().catch(() => []);
+      const workspaceId = state.activeWorkspaceId || state.user.uid;
+      const collabsRes = await quanturaApi(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/collaborators`);
+      const invites = [];
+      const collaborators = collabsRes.data || [];
+      if (ui.collabInvitesList) renderCollabInvites(invites);
       renderCollaborators(collaborators);
       logEvent("collaboration_loaded", { invites: invites.length, collaborators: collaborators.length });
     } catch (error) {
       if (ui.collabInvitesList) ui.collabInvitesList.textContent = "Unable to load invites.";
       if (ui.collabCollaboratorsList) ui.collabCollaboratorsList.textContent = "Unable to load collaborators.";
     }
+  };
+
+  const csvActionButtons = (record) => {
+    const canRename = workspaceHasPermission("csv.rename");
+    const canCopy = workspaceHasPermission("csv.copy");
+    const canMove = workspaceHasPermission("csv.move");
+    const canDelete = workspaceHasPermission("csv.delete");
+    const destinations = buildWorkspaceOptions(state.user).filter((item) => item.id !== record.workspace_id && (item.workspace?.role === "owner" || item.workspace?.permissions?.includes("csv.upload")));
+    const picker = destinations.length && (canCopy || canMove)
+      ? `<label class="workspace-csv-destination"><span class="small muted">Destination</span><select data-csv-destination>${destinations.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`).join("")}</select></label>`
+      : "";
+    return `${picker}<div class="hero-actions">
+      <button class="cta secondary small" type="button" data-action="csv-download" data-csv-id="${escapeHtml(record.id)}">Download</button>
+      ${canRename ? `<button class="cta secondary small" type="button" data-action="csv-rename" data-csv-id="${escapeHtml(record.id)}">Rename</button>` : ""}
+      ${canCopy && destinations.length ? `<button class="cta secondary small" type="button" data-action="csv-copy" data-csv-id="${escapeHtml(record.id)}">Copy</button>` : ""}
+      ${canMove && destinations.length ? `<button class="cta secondary small" type="button" data-action="csv-move" data-csv-id="${escapeHtml(record.id)}">Move</button>` : ""}
+      ${canDelete ? `<button class="cta danger small" type="button" data-action="csv-delete" data-csv-id="${escapeHtml(record.id)}">Delete</button>` : ""}
+    </div>`;
+  };
+
+  const renderWorkspaceCsvs = (records) => {
+    if (!ui.workspaceCsvList) return;
+    state.workspaceCsvs = Array.isArray(records) ? records : [];
+    if (!state.workspaceCsvs.length) {
+      ui.workspaceCsvList.innerHTML = `<div class="empty-state">No CSV files are available in this workspace.</div>`;
+      return;
+    }
+    ui.workspaceCsvList.innerHTML = state.workspaceCsvs.map((record) => `
+      <article class="workspace-csv-card" data-csv-card="${escapeHtml(record.id)}">
+        <div><h4>${escapeHtml(record.display_filename || record.original_filename || record.id)}</h4><p class="small muted"><code>${escapeHtml(record.id)}</code> · ${Number(record.row_count || 0).toLocaleString()} rows · ${escapeHtml(formatFileSize(Number(record.size_bytes || 0)) || "Size unknown")}</p><p class="small">${escapeHtml(record.ticker || "Ticker unknown")} · ${escapeHtml(record.inferred_granularity || "Granularity unknown")} · ${escapeHtml(formatTimestamp(record.uploaded_at) || "Upload time unknown")}</p></div>
+        <details><summary>Metadata</summary><div class="small muted">Columns: ${escapeHtml((record.columns || []).join(", ") || "Unknown")}</div><div class="small muted">SHA-256: <code>${escapeHtml(record.sha256 || "Unavailable")}</code></div></details>
+        ${csvActionButtons(record)}
+      </article>`).join("");
+  };
+
+  const refreshWorkspaceCsvs = async () => {
+    if (!ui.workspaceCsvList || !hasSessionUser()) return [];
+    const workspaceId = state.activeWorkspaceId || state.user.uid;
+    if (ui.workspaceCsvStatus) ui.workspaceCsvStatus.textContent = "Loading authorized CSVs…";
+    try {
+      const payload = await quanturaApi(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/uploads/csv?limit=500`);
+      renderWorkspaceCsvs(payload.data || []);
+      if (ui.workspaceCsvStatus) ui.workspaceCsvStatus.textContent = `${(payload.data || []).length.toLocaleString()} CSV file${(payload.data || []).length === 1 ? "" : "s"} available.`;
+      return payload.data || [];
+    } catch (error) {
+      ui.workspaceCsvList.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load workspace CSVs.")}</div>`;
+      if (ui.workspaceCsvStatus) ui.workspaceCsvStatus.textContent = "";
+      return [];
+    }
+  };
+
+  const refreshWorkspaceAudit = async () => {
+    if (!ui.workspaceAuditList || !hasSessionUser()) return [];
+    const workspaceId = state.activeWorkspaceId || state.user.uid;
+    try {
+      const payload = await quanturaApi(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/audit-log?limit=50`);
+      const rows = payload.data || [];
+      ui.workspaceAuditList.innerHTML = rows.length ? rows.map((row) => `<div class="order-card"><div class="order-header"><div><div class="order-title">${escapeHtml(titleCaseLabel(String(row.action || "activity").replaceAll("_", " ")))}</div><div class="small muted">${escapeHtml(formatTimestamp(row.timestamp) || "")}${row.resource_id ? ` · ${escapeHtml(row.resource_id)}` : ""}</div></div></div></div>`).join("") : `<div class="empty-state">No audit events yet.</div>`;
+      return rows;
+    } catch (error) {
+      ui.workspaceAuditList.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "Unable to load audit events.")}</div>`;
+      return [];
+    }
+  };
+
+  const refreshWorkspacePanel = async () => {
+    renderWorkspaceSummary();
+    await Promise.all([refreshCollaboration(), refreshWorkspaceCsvs(), refreshWorkspaceAudit()]);
   };
 
   const startUserOrders = (db, user) => {
@@ -9505,7 +9651,6 @@
         autopilot: "/autopilot",
         "sports-autopilot": "/sports-forecasting",
         news: "/historical-data",
-        "market-headlines": "/market-headlines",
         options: "/options",
         screener: "/forecasting",
       },
@@ -23708,7 +23853,7 @@
           </div>
           <p class="small">${escapeHtml(workspace.indicatorAgreement.explanation)}</p>
           <p class="small muted">Forecast direction: ${escapeHtml(titleCaseLabel(workspace.indicatorAgreement.forecastDirection))} · Indicator direction: ${escapeHtml(titleCaseLabel(workspace.indicatorAgreement.indicatorDirection))}</p>
-          ${Object.keys(workspace.indicatorData || {}).length ? "" : `<a class="cta secondary small" href="#technical-indicators">Calculate technical indicators</a>`}
+          ${Object.keys(workspace.indicatorData || {}).length ? "" : `<span class="small muted">No indicator snapshot was included in this run.</span>`}
         </section>`
       : "";
 
@@ -25061,6 +25206,54 @@
     }
   };
 
+  const initializeToggleSelects = () => {
+    document.querySelectorAll("select[data-toggle-select]").forEach((select) => {
+      if (select.dataset.toggleSelectReady === "true") return;
+      select.dataset.toggleSelectReady = "true";
+      select.classList.add("toggle-select-native");
+      const group = document.createElement("div");
+      group.className = "toggle-select-group";
+      group.setAttribute("role", "radiogroup");
+      group.setAttribute("aria-label", select.getAttribute("aria-label") || select.closest(".field")?.querySelector("label")?.textContent?.trim() || "Selection");
+      const buttons = Array.from(select.options).map((option, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "toggle-select-option";
+        button.dataset.value = option.value;
+        button.textContent = option.textContent || option.value;
+        button.setAttribute("role", "radio");
+        button.addEventListener("click", () => {
+          if (select.disabled || option.disabled) return;
+          select.value = option.value;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          button.focus();
+        });
+        button.addEventListener("keydown", (event) => {
+          if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const direction = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1;
+          const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + direction + buttons.length) % buttons.length;
+          buttons[nextIndex]?.click();
+        });
+        group.appendChild(button);
+        return button;
+      });
+      const sync = () => {
+        buttons.forEach((button) => {
+          const active = button.dataset.value === select.value;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-checked", active ? "true" : "false");
+          button.setAttribute("aria-disabled", select.disabled ? "true" : "false");
+          button.disabled = select.disabled;
+          button.tabIndex = active ? 0 : -1;
+        });
+      };
+      select.addEventListener("change", sync);
+      select.insertAdjacentElement("afterend", group);
+      sync();
+    });
+  };
+
   const initializeUiShell = () => {
       publishShopRuntimeBridge();
       applyTheme(resolveThemePreference(), { persist: false });
@@ -25071,6 +25264,7 @@
       normalizeFooterContactInfo();
       removeWebsiteFootnotes();
       initPricingBillingToggle();
+      initializeToggleSelects();
       bindSolveNowModalTriggers();
       removeHeaderSolveNowCta();
       ensureHeaderNotificationsCta();
@@ -25209,12 +25403,6 @@
           if (!ticker) return;
           scheduleSideDataRefresh(ticker, { force: !state.panelAutoloaded.news });
           state.panelAutoloaded.news = true;
-        }
-
-        if (next === "market-headlines") {
-          const first = !state.panelAutoloaded.marketHeadlines;
-          state.panelAutoloaded.marketHeadlines = true;
-          loadMarketHeadlinesFeed(functions, { force: first, notify: false });
         }
 
         if (next === "ticker-query") {
@@ -26598,13 +26786,13 @@
 			      window.location.href = hasFullAccount() ? "/dashboard" : "/account";
 			    });
 
-	    ui.workspaceSelect?.addEventListener("change", () => {
+	    (ui.workspaceSelects?.length ? ui.workspaceSelects : ui.workspaceSelect ? [ui.workspaceSelect] : []).forEach((workspaceSelect) => workspaceSelect.addEventListener("change", async () => {
 	      if (!hasSessionUser()) {
 	        showToast("Workspace is still initializing.", "warn");
 	        renderWorkspaceSelect(state.user);
 	        return;
 	      }
-	      const next = String(ui.workspaceSelect.value || "");
+	      const next = String(workspaceSelect.value || "");
 	      const allowed = new Set(buildWorkspaceOptions(state.user).map((o) => o.id));
 	      if (!allowed.has(next)) {
 	        showToast("Workspace is not available.", "warn");
@@ -26613,6 +26801,7 @@
 	      }
 		      setActiveWorkspaceId(next);
 		      logEvent("workspace_switched", { workspace_id: next });
+		      renderWorkspaceSummary();
 		      startUserForecasts(db, next);
           startScreenerRuns(db, next);
 		      startWorkspaceTasks(db, next);
@@ -26622,8 +26811,60 @@
           fetchMyRequestsList({ force: true }).then(() => {
             renderMyRequestsPanels();
           });
+		      await refreshWorkspacePanel();
 		      showToast("Workspace updated.");
-		    });
+		    }));
+
+      ui.workspaceNewToggle?.addEventListener("click", () => {
+        ui.workspaceCreateForm?.classList.toggle("hidden");
+        if (!ui.workspaceCreateForm?.classList.contains("hidden")) ui.workspaceCreateName?.focus();
+      });
+      ui.workspaceCreateCancel?.addEventListener("click", () => ui.workspaceCreateForm?.classList.add("hidden"));
+      ui.workspaceCreateForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const name = String(ui.workspaceCreateName?.value || "").trim();
+        if (!name) return;
+        const submit = ui.workspaceCreateForm.querySelector('button[type="submit"]');
+        if (submit) submit.disabled = true;
+        if (ui.workspaceCreateStatus) ui.workspaceCreateStatus.textContent = "Creating workspace…";
+        try {
+          const payload = await quanturaApi("/api/v1/workspaces", { method: "POST", body: { name, description: String(ui.workspaceCreateDescription?.value || "").trim() } });
+          await refreshWorkspaces();
+          setActiveWorkspaceId(String(payload.data?.id || state.user.uid));
+          renderWorkspaceSelect(state.user);
+          ui.workspaceCreateForm.reset();
+          ui.workspaceCreateForm.classList.add("hidden");
+          await refreshWorkspacePanel();
+          showToast("Workspace created.");
+        } catch (error) {
+          if (ui.workspaceCreateStatus) ui.workspaceCreateStatus.textContent = error.message || "Unable to create workspace.";
+          showToast(error.message || "Unable to create workspace.", "warn");
+        } finally {
+          if (submit) submit.disabled = false;
+        }
+      });
+
+      ui.workspaceGeneralForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const workspaceId = state.activeWorkspaceId || state.user?.uid;
+        if (!workspaceId) return;
+        const submit = ui.workspaceGeneralForm.querySelector('button[type="submit"]');
+        if (submit) submit.disabled = true;
+        try {
+          await quanturaApi(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}`, { method: "PATCH", body: { name: String(ui.workspaceGeneralName?.value || "").trim(), description: String(ui.workspaceGeneralDescription?.value || "").trim() } });
+          await refreshWorkspaces();
+          if (ui.workspaceGeneralStatus) ui.workspaceGeneralStatus.textContent = "Workspace saved.";
+          showToast("Workspace saved.");
+        } catch (error) {
+          if (ui.workspaceGeneralStatus) ui.workspaceGeneralStatus.textContent = error.message || "Unable to save workspace.";
+          showToast(error.message || "Unable to save workspace.", "warn");
+        } finally {
+          if (submit) submit.disabled = false;
+        }
+      });
+
+      ui.collabInviteRole?.addEventListener("change", () => ui.collabCustomPermissions?.classList.toggle("hidden", ui.collabInviteRole.value !== "custom"));
+      ui.collabCsvScope?.addEventListener("change", () => ui.collabSelectedCsvField?.classList.toggle("hidden", ui.collabCsvScope.value !== "selected"));
 
 	    ui.collabInviteForm?.addEventListener("submit", async (event) => {
 	      event.preventDefault();
@@ -26656,14 +26897,15 @@
 	        showToast("Enter an email address.", "warn");
 	        return;
 	      }
-	      if (ui.collabInviteStatus) ui.collabInviteStatus.textContent = "Sending invite...";
+	      if (ui.collabInviteStatus) ui.collabInviteStatus.textContent = "Adding collaborator…";
 	      try {
-	        const createInvite = functions.httpsCallable("create_collab_invite");
-	        const result = await createInvite({ email, role, meta: buildMeta() });
-	        const inviteId = result.data?.inviteId || "";
-	        if (ui.collabInviteStatus) ui.collabInviteStatus.textContent = inviteId ? `Invite sent (ID: ${inviteId}).` : "Invite sent.";
-	        showToast("Invite sent.");
-	        logEvent("collab_invite_sent", { role });
+	        const permissions = role === "custom" ? Array.from(ui.collabPermissionOptions?.querySelectorAll('input[data-collab-permission]:checked') || []).map((input) => input.value) : undefined;
+          const selectedIds = String(ui.collabSelectedCsvIds?.value || "").split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
+          const resource_scope = { csv: { mode: String(ui.collabCsvScope?.value || "all"), ids: selectedIds }, forecasts: { mode: "all", ids: [] } };
+          await quanturaApi(`/api/v1/workspaces/${encodeURIComponent(state.activeWorkspaceId || state.user.uid)}/collaborators`, { method: "POST", body: { email, role, permissions, resource_scope } });
+	        if (ui.collabInviteStatus) ui.collabInviteStatus.textContent = "Collaborator added.";
+	        showToast("Collaborator added.");
+	        logEvent("collaborator_added", { role });
 	        if (ui.collabInviteEmail) ui.collabInviteEmail.value = "";
 	        await refreshCollaboration(functions);
 	      } catch (error) {
@@ -26672,42 +26914,42 @@
 	      }
 	    });
 
+		    document.addEventListener("change", (event) => {
+          const scope = event.target.closest("[data-member-csv-scope]");
+          if (scope) scope.closest(".workspace-member-editor")?.querySelector("[data-member-selected-field]")?.classList.toggle("hidden", scope.value !== "selected");
+        });
+
 		    document.addEventListener("click", async (event) => {
-		      const acceptButton = event.target.closest('[data-action="accept-collab-invite"]');
-		      if (acceptButton) {
-		        const inviteId = acceptButton.dataset.inviteId;
-		        if (!inviteId) return;
-	        if (!hasFullAccount()) {
-	          showToast("Create a full account to accept collaborator invites.", "warn");
-	          return;
-	        }
-	        acceptButton.disabled = true;
-	        try {
-	          const acceptInvite = functions.httpsCallable("accept_collab_invite");
-	          await acceptInvite({ inviteId, meta: buildMeta() });
-	          showToast("Invite accepted.");
-	          logEvent("collab_invite_accepted", { invite_id: inviteId });
-	          await refreshCollaboration(functions);
-	        } catch (error) {
-	          showToast(error.message || "Unable to accept invite.", "warn");
-	        } finally {
-	          acceptButton.disabled = false;
-	        }
-	        return;
-	      }
+          const saveButton = event.target.closest('[data-action="save-collaborator"]');
+          if (saveButton) {
+            const editor = saveButton.closest(".workspace-member-editor");
+            const collaboratorId = saveButton.dataset.collaboratorId;
+            const role = String(editor?.querySelector("[data-member-role]")?.value || "viewer");
+            const mode = String(editor?.querySelector("[data-member-csv-scope]")?.value || "all");
+            const ids = String(editor?.querySelector("[data-member-selected-ids]")?.value || "").split(/[\s,]+/).map((value) => value.trim()).filter(Boolean);
+            const permissions = role === "custom" ? Array.from(editor?.querySelectorAll("[data-member-permissions] input:checked") || []).map((input) => input.value) : undefined;
+            saveButton.disabled = true;
+            try {
+              await quanturaApi(`/api/v1/workspaces/${encodeURIComponent(state.activeWorkspaceId || state.user.uid)}/collaborators/${encodeURIComponent(collaboratorId)}`, { method: "PATCH", body: { role, permissions, resource_scope: { csv: { mode, ids }, forecasts: { mode: "all", ids: [] } } } });
+              await refreshCollaboration(functions);
+              showToast("Collaborator access updated.");
+            } catch (error) {
+              showToast(error.message || "Unable to update collaborator.", "warn");
+            } finally {
+              saveButton.disabled = false;
+            }
+            return;
+          }
 
 	      const removeButton = event.target.closest('[data-action="remove-collaborator"]');
 	      if (!removeButton) return;
 	      const collaboratorUserId = removeButton.dataset.collaboratorId;
 	      if (!collaboratorUserId) return;
-	      if (!hasFullAccount()) {
-	        showToast("Create a full account to manage collaborators.", "warn");
-	        return;
-	      }
+          const confirmed = await openConfirmModal({ title: "Remove collaborator?", message: "Their workspace access will end immediately. Their personal Quantura account and API key remain valid elsewhere.", confirmLabel: "Remove", danger: true });
+          if (!confirmed) return;
 	      removeButton.disabled = true;
 	      try {
-	        const remove = functions.httpsCallable("remove_collaborator");
-	        await remove({ collaboratorUserId, meta: buildMeta() });
+            await quanturaApi(`/api/v1/workspaces/${encodeURIComponent(state.activeWorkspaceId || state.user.uid)}/collaborators/${encodeURIComponent(collaboratorUserId)}`, { method: "DELETE" });
 	        showToast("Collaborator removed.");
 	        logEvent("collaborator_removed", { collaborator_id: collaboratorUserId });
 	        await refreshCollaboration(functions);
@@ -26717,6 +26959,80 @@
 	        removeButton.disabled = false;
 		      }
 	    });
+
+      ui.workspaceMembersRefresh?.addEventListener("click", () => refreshCollaboration(functions));
+      ui.workspaceCsvRefresh?.addEventListener("click", () => refreshWorkspaceCsvs());
+      ui.workspaceAuditRefresh?.addEventListener("click", () => refreshWorkspaceAudit());
+
+      const downloadAuthorizedFile = async (path, fallbackName) => {
+        const { blob, response } = await quanturaApi(path, { responseType: "blob" });
+        const disposition = String(response.headers.get("content-disposition") || "");
+        const headerName = disposition.match(/filename="?([^";]+)"?/i)?.[1] || "";
+        const filename = (headerName || fallbackName || "quantura-download").replace(/[/\\\r\n]/g, "-");
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+
+      ui.workspaceCsvDownloadAll?.addEventListener("click", async () => {
+        const workspaceId = state.activeWorkspaceId || state.user?.uid;
+        if (!workspaceId) return;
+        ui.workspaceCsvDownloadAll.disabled = true;
+        try {
+          await downloadAuthorizedFile(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/uploads/csv/download-all`, `quantura-${workspaceId}-csvs.zip`);
+          showToast("Authorized CSV archive downloaded.");
+        } catch (error) {
+          showToast(error.message || "Unable to download CSV archive.", "warn");
+        } finally {
+          ui.workspaceCsvDownloadAll.disabled = false;
+        }
+      });
+
+      document.addEventListener("click", async (event) => {
+        const actionButton = event.target.closest('[data-action^="csv-"]');
+        if (!actionButton || !actionButton.closest("#workspace-csv-list")) return;
+        const action = String(actionButton.dataset.action || "").replace("csv-", "");
+        const csvId = String(actionButton.dataset.csvId || "");
+        const record = state.workspaceCsvs.find((item) => item.id === csvId);
+        if (!csvId || !record) return;
+        const workspaceId = state.activeWorkspaceId || state.user.uid;
+        actionButton.disabled = true;
+        try {
+          if (action === "download") {
+            await downloadAuthorizedFile(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}/uploads/csv/${encodeURIComponent(csvId)}/download`, record.display_filename || record.original_filename || `${csvId}.csv`);
+            showToast("CSV downloaded.");
+            return;
+          }
+          if (action === "rename") {
+            const nextName = await openTextInputModal({ title: "Rename CSV", label: "Display filename", placeholder: "Forecast.csv", initialValue: record.display_filename || record.original_filename || "", confirmLabel: "Rename" });
+            if (!nextName) return;
+            await quanturaApi(`/api/v1/uploads/csv/${encodeURIComponent(csvId)}`, { method: "PATCH", body: { display_filename: nextName } });
+            showToast("CSV renamed.");
+          } else if (action === "copy" || action === "move") {
+            const destination = String(actionButton.closest("[data-csv-card]")?.querySelector("[data-csv-destination]")?.value || "");
+            if (!destination) throw new Error("Choose a destination workspace.");
+            const confirmed = await openConfirmModal({ title: `${titleCaseLabel(action)} CSV?`, message: `${titleCaseLabel(action)} ${record.display_filename || record.original_filename} ${action === "move" ? "to" : "into"} the selected workspace?`, confirmLabel: titleCaseLabel(action), danger: false });
+            if (!confirmed) return;
+            await quanturaApi(`/api/v1/uploads/csv/${encodeURIComponent(csvId)}/${action}`, { method: "POST", body: { destination_workspace_id: destination } });
+            showToast(`CSV ${action === "move" ? "moved" : "copied"}.`);
+          } else if (action === "delete") {
+            const confirmed = await openConfirmModal({ title: "Delete CSV?", message: "This removes the workspace resource and stored file. This cannot be undone.", confirmLabel: "Delete", danger: true });
+            if (!confirmed) return;
+            await quanturaApi(`/api/v1/uploads/csv/${encodeURIComponent(csvId)}`, { method: "DELETE" });
+            showToast("CSV deleted.");
+          }
+          await Promise.all([refreshWorkspaceCsvs(), refreshWorkspaceAudit()]);
+        } catch (error) {
+          showToast(error.message || `Unable to ${action} CSV.`, "warn");
+        } finally {
+          actionButton.disabled = false;
+        }
+      });
 
     const syncProductivityAccess = (user = state.user) => {
       if (!ui.taskForm) return;
@@ -29800,7 +30116,12 @@
 			      }
 
 	      startUserOrders(db, user);
-	      subscribeSharedWorkspaces(db, user);
+	      if (state.unsubscribeSharedWorkspaces) state.unsubscribeSharedWorkspaces();
+          state.unsubscribeSharedWorkspaces = () => {};
+	      await refreshWorkspaces(user).catch(() => {
+            state.sharedWorkspaces = [];
+            renderWorkspaceSelect(user);
+          });
 	      startCalendarInteractions(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
 		      setActiveWorkspaceId(activeWorkspaceId);
@@ -29817,7 +30138,7 @@
           await seedDefaultAIAgents(db, activeWorkspaceId).catch(() => {});
           await seedAdminPresetScreenerRuns(db, activeWorkspaceId).catch(() => {});
           startAIAgents(db, activeWorkspaceId);
-	      refreshCollaboration(functions);
+	      await refreshWorkspacePanel();
 
         const pendingShare = String(getPendingShareId() || "").trim();
         if (pendingShare && window.location.pathname === "/screener") {

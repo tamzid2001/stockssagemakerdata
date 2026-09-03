@@ -1,0 +1,62 @@
+---
+title: "Quantura MCP server"
+description: "Connect an AI client to Quantura's authenticated, OpenAPI-derived read tools and documentation search."
+---
+
+# Quantura MCP server
+
+Quantura's Mintlify documentation exposes a hosted Model Context Protocol endpoint at:
+
+```text
+https://quantura.mintlifysite.com/mcp
+```
+
+The verified Mintlify fallback endpoint is `https://quantura.mintlify.app/mcp`. Both endpoints identify the same Quantura Developer Documentation server; use the branded `mintlifysite.com` endpoint by default.
+
+Mintlify adds documentation search and page retrieval automatically. Quantura additionally marks a deliberately small allowlist of authenticated, read-only OpenAPI operations as MCP tools:
+
+- `quantura_get_my_access`
+- `quantura_list_workspaces`
+- `quantura_list_uploaded_csvs`
+- `quantura_get_uploaded_csv`
+
+These tools still apply the API key's scopes, current workspace membership, fine-grained permissions, and resource-specific scope on every request. The MCP allowlist does not include API-key management, collaborator changes, uploads, downloads, move/copy/delete operations, or administrative APIs.
+
+## Authentication
+
+Connect the MCP client to the public transport URL without adding a Quantura API key to the MCP transport itself:
+
+```json
+{
+  "mcpServers": {
+    "quantura": {
+      "type": "http",
+      "url": "https://quantura.mintlifysite.com/mcp"
+    }
+  }
+}
+```
+
+The documentation search and page-retrieval tools are public and read-only. When an enabled OpenAPI tool calls a protected Quantura API operation, the OpenAPI bearer security scheme tells the MCP client to request a Quantura API credential from the user.
+
+Create that credential under **Account → Developer → API Keys**. Store it only in the MCP client's supported secret/credential facility. Never put a live key in a repository, prompt, query string, or checked-in MCP configuration.
+
+## Verify the endpoint
+
+An MCP client should discover the public documentation tools plus the approved Quantura API allowlist. A direct protocol check can initialize the server without credentials:
+
+```bash
+curl -X POST https://quantura.mintlifysite.com/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"quantura-docs-check","version":"1.0.0"}}}'
+```
+
+Do not append a key to this URL or send one in a query string.
+
+## Direct API reference
+
+- Interactive reference: [quantura.studio/developers/api](https://quantura.studio/developers/api)
+- OpenAPI 3.1 document: [quantura.studio/api/openapi.json](https://quantura.studio/api/openapi.json)
+
+The OpenAPI document is the source of truth for parameter and response schemas. MCP exposure remains opt-in per operation through `x-mint.mcp` metadata.

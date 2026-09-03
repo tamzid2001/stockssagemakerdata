@@ -90,19 +90,21 @@ def test_removed_routes_and_assets_stay_removed():
     assert not (PAGES / "tools/fx.html").exists()
 
 
-def test_meta_prophet_is_the_only_forecast_indicator_workspace_and_ai_is_opt_in():
+def test_q_forecast_has_no_standalone_indicators_panel_and_ai_is_opt_in():
     forecasting = (PAGES / "forecasting.html").read_text()
     screener = (PAGES / "screener.html").read_text()
     client = (PUBLIC / "app.js").read_text()
     backend = (ROOT / "functions_explore" / "src" / "index.ts").read_text()
     analysis = (ROOT / "functions_explore" / "src" / "forecastAnalysis.ts").read_text()
 
-    assert "Meta Prophet Forecast" in forecasting
-    assert 'id="technical-indicators"' in forecasting
+    assert "Quantura Forecast" in forecasting
+    assert ">Q Forecast<" in forecasting
+    assert "Meta Prophet Forecast" not in forecasting
+    assert 'id="technical-indicators"' not in forecasting
     assert 'id="forecast-ai-host"' in forecasting
     assert 'data-panel="indicators"' not in forecasting
     assert 'data-panel-target="indicators"' not in forecasting
-    assert '/forecasting#technical-indicators' in screener
+    assert '/forecasting#technical-indicators' not in screener
 
     assert "buildForecastWorkspaceContext" in client
     assert "((target - market.currentPrice) / market.currentPrice) * 100" in client

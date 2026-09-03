@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Forecasting | Cross-Asset Forecast Intelligence</title>
-        <meta name="description" content="Analyze Meta Prophet forecast quantiles, technical indicators, deterministic scenarios, and optional balanced AI interpretation." />
+        <meta name="description" content="Use Quantura Forecast for multi-model probabilistic quantiles, deterministic scenarios, and optional balanced AI interpretation." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="stock forecasting terminal, quantile forecast, fan chart, ticker analysis, historical market data" />
         <link rel="canonical" href="https://quantura.studio/forecasting" />
@@ -94,8 +94,9 @@
     <main>
       <div class="app-layout">
         <aside class="app-sidebar">
+	          <div class="sidebar-card workspace-sidebar-switcher"><label class="small" for="forecast-workspace-select"><strong>Workspace</strong></label><select id="forecast-workspace-select" data-workspace-select><option>Sign in to load</option></select><a class="cta secondary small" href="/collaboration"><i class="iconoir-settings" aria-hidden="true"></i><span>Workspace settings</span></a></div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
-	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Meta Prophet Forecast</span></a>
+	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Q Forecast</span></a>
               <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
               <a class="sidebar-link" href="/historical-data" data-panel-target="news"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
@@ -137,8 +138,8 @@
                   <section class="panel" data-panel="forecast">
 	                    <div class="panel-header">
 	                      <div class="eyebrow">Unified quantitative workspace</div>
-	                      <h2>Meta Prophet Forecast</h2>
-	                      <p class="small">Generate a complete forecast distribution, inspect technical confirmation, compare signed bull/base/bear scenarios, and request balanced AI interpretation only when you choose.</p>
+	                      <h2>Quantura Forecast</h2>
+	                      <p class="small">Generate a multi-model forecast distribution, compare mathematically signed scenarios, and request balanced AI interpretation only when you choose.</p>
 	                    </div>
 	                    <form id="forecast-form" class="card">
 	                      <div class="form-grid">
@@ -148,7 +149,7 @@
                         </div>
 	                        <div class="field">
 	                          <label class="label" for="forecast-source">Source</label>
-	                          <select id="forecast-source" name="source"><option value="auto" selected>Auto — Alpaca then Yahoo</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
+	                          <select id="forecast-source" name="source" data-toggle-select><option value="auto" selected>Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
                             <input id="forecast-asset-class" name="assetClass" type="hidden" value="equity" />
 	                        </div>
 	                        <div class="field">
@@ -158,7 +159,7 @@
 	                        </div>
                         <div class="field">
                           <label class="label" for="forecast-interval">Timeframe</label>
-                          <select id="forecast-interval" name="interval">
+                          <select id="forecast-interval" name="interval" data-toggle-select>
                             <option value="1d">Daily</option>
                             <option value="1h">Hourly</option>
                           </select>
@@ -282,57 +283,8 @@
                     </details>
                     <div class="results-panel">
                       <h3>Forecast workspace</h3>
-                      <div id="forecast-output" class="panel-output small">Run a forecast to load the market snapshot, Prophet quantiles, scenario math, and uncertainty analysis.</div>
+                      <div id="forecast-output" class="panel-output small">Run Q Forecast to load the market snapshot, ensemble quantiles, scenario math, and uncertainty analysis.</div>
                     </div>
-                    <section class="forecast-workspace-section" id="technical-indicators" aria-labelledby="technical-indicators-title">
-                      <div class="panel-header forecast-subsection-header">
-                        <div>
-                          <div class="eyebrow">Confirmation layer</div>
-                          <h3 id="technical-indicators-title">Technical Indicators</h3>
-                          <p class="small">Calculate indicators for the active forecast ticker. Price overlays remain on the upper pane while oscillators use independent lower panes.</p>
-                        </div>
-                      </div>
-                      <form id="technicals-form" class="card forecast-indicator-form">
-                        <div class="form-grid">
-                          <div class="field">
-                            <label class="label" for="technicals-ticker">Ticker</label>
-                            <input id="technicals-ticker" name="ticker" placeholder="MSFT" required />
-                          </div>
-                          <div class="field">
-                            <label class="label" for="technicals-interval">Interval</label>
-                            <select id="technicals-interval" name="interval"><option value="1d">Daily</option><option value="1h">Hourly</option></select>
-                          </div>
-                          <div class="field">
-                            <label class="label" for="technicals-lookback">Lookback (days)</label>
-                            <input id="technicals-lookback" name="lookback" type="number" min="30" max="365" value="120" />
-                          </div>
-                        </div>
-                        <fieldset class="field indicator-field">
-                          <legend class="label">Indicators</legend>
-                          <div class="checkbox-grid indicator-toggle-grid">
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="RSI" checked /><span class="indicator-toggle-label">RSI</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MACD" checked /><span class="indicator-toggle-label">MACD</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="SMA" checked /><span class="indicator-toggle-label">SMA</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="EMA" checked /><span class="indicator-toggle-label">EMA</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="BBANDS" checked /><span class="indicator-toggle-label">Bollinger</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ATR" /><span class="indicator-toggle-label">ATR</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ADX" /><span class="indicator-toggle-label">ADX</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="CCI" /><span class="indicator-toggle-label">CCI</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="MFI" /><span class="indicator-toggle-label">MFI</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="OBV" /><span class="indicator-toggle-label">OBV</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="ROC" /><span class="indicator-toggle-label">Momentum / ROC</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="STOCH" /><span class="indicator-toggle-label">Stochastic</span></label>
-                            <label class="indicator-toggle"><input type="checkbox" name="indicators" value="WILLR" /><span class="indicator-toggle-label">Williams %R</span></label>
-                          </div>
-                        </fieldset>
-                        <button class="cta" type="submit" data-analytics="technicals_submit"><i class="iconoir-sigma-function" aria-hidden="true"></i><span>Calculate indicators</span></button>
-                      </form>
-                      <div class="results-panel forecast-indicator-results">
-                        <div class="card-head"><div><h3>Indicator output</h3><p class="small muted">Deterministic calculations load without calling the AI service.</p></div></div>
-                        <div id="technicals-output" class="panel-output small">Select indicators and calculate them for the active ticker.</div>
-                        <div id="indicator-chart" class="chart" aria-label="Technical indicator chart"></div>
-                      </div>
-                    </section>
                     <div id="forecast-scenario-host" class="forecast-workspace-section">
                       <section class="results-panel">
                         <div class="eyebrow">Scenario analysis</div>

@@ -79,7 +79,8 @@
 
     <main>
       <div class="app-layout">
-        <aside class="app-sidebar">
+	        <aside class="app-sidebar">
+	          <div class="sidebar-card workspace-sidebar-switcher"><label class="small" for="workspace-sidebar-select"><strong>Workspace</strong></label><select id="workspace-sidebar-select" data-workspace-select><option>Sign in to load</option></select><a class="cta secondary small" href="/collaboration"><i class="iconoir-settings" aria-hidden="true"></i><span>Workspace settings</span></a></div>
 	          <div class="sidebar-card">
 	            <div class="small"><strong>Shortcuts</strong></div>
 	            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
@@ -264,7 +265,7 @@
         <div class="container">
           <div class="section-title">
             <div><div class="eyebrow">Account / Developer</div><h2>API Keys</h2><p class="small">Create personal credentials for Quantura's versioned API. Workspace roles and plan access are evaluated dynamically on every request.</p></div>
-            <a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>API documentation</span></a>
+            <div class="hero-actions"><a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>Interactive API docs</span></a><a class="cta secondary" href="/api/openapi.json"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>OpenAPI</span></a></div>
           </div>
           <div class="content-grid developer-key-grid">
             <form id="api-key-form" class="card" autocomplete="off">
@@ -282,6 +283,7 @@
             </section>
           </div>
           <div class="notice small">Viewer collaborators may use their own key for read-only resources in a shared workspace even when their personal plan does not grant unrestricted API access. Removing the membership revokes that workspace access immediately.</div>
+          <div class="notice small"><strong>AI clients:</strong> connect to <a href="https://quantura.mintlifysite.com/mcp"><code>https://quantura.mintlifysite.com/mcp</code></a>. Only approved read-only workspace and CSV metadata operations are exposed as tools.</div>
         </div>
       </section>
 
@@ -424,50 +426,71 @@
       <section class="section panel hidden" data-panel="collaboration" id="collaboration">
         <div class="container">
           <div class="section-title">
-            <h2>Workspace collaboration</h2>
-            <p class="small">Share forecast runs, prediction analyses, screener research, and assigned review work inside a private workspace.</p>
+            <div><div class="eyebrow">Workspace settings</div><h2>Workspaces &amp; collaboration</h2><p class="small">Organize CSVs and research inside isolated workspaces with live, fine-grained access controls.</p></div>
+            <button class="cta" id="workspace-new-toggle" type="button"><i class="iconoir-plus" aria-hidden="true"></i><span>New Workspace</span></button>
           </div>
 
           <div class="content-grid">
             <div class="card">
               <h3>Active workspace</h3>
-              <p class="small">Saved analyses, forecast runs, and workspace tasks follow the selected workspace across the platform.</p>
+              <p class="small">CSV uploads, forecasts, analyses, and exports follow this workspace context.</p>
               <div class="field">
                 <label class="label" for="workspace-select">Workspace</label>
-                <select id="workspace-select"></select>
+                <select id="workspace-select" data-workspace-select></select>
               </div>
+              <dl class="workspace-summary" id="workspace-summary"><div><dt>Role</dt><dd>—</dd></div><div><dt>Workspace ID</dt><dd>—</dd></div></dl>
               <p class="small muted" id="workspace-hint">Switching workspaces reloads the research and tasks shared with that team.</p>
             </div>
 
-            <div class="card">
-              <h3>Invite a collaborator</h3>
-              <p class="small">Sign in with a full account to invite teammates. Viewer access is read-only; editors can contribute to shared research workflows.</p>
-              <form id="collab-invite-form" class="auth-form">
-                <label class="label" for="collab-invite-email">Email</label>
-                <input id="collab-invite-email" type="email" placeholder="collaborator@domain.com" required />
-                <label class="label" for="collab-invite-role">Role</label>
-                <select id="collab-invite-role">
-                  <option value="viewer">Viewer (read-only)</option>
-                  <option value="editor">Editor (advanced)</option>
-                </select>
-                <div class="auth-actions" style="margin-top: 14px;">
-                  <button class="cta" type="submit" data-analytics="collab_invite_submit">Send invite</button>
-                </div>
-                <p class="small" id="collab-invite-status"></p>
-              </form>
-            </div>
+            <form class="card hidden" id="workspace-create-form">
+              <h3>Create workspace</h3>
+              <div class="field"><label class="label" for="workspace-create-name">Name</label><input id="workspace-create-name" maxlength="80" placeholder="Institutional Research" required /></div>
+              <div class="field"><label class="label" for="workspace-create-description">Description</label><textarea id="workspace-create-description" maxlength="500" rows="3" placeholder="Forecast datasets and research exports"></textarea></div>
+              <div class="hero-actions"><button class="cta" type="submit">Create</button><button class="cta secondary" id="workspace-create-cancel" type="button">Cancel</button></div>
+              <p class="small muted" id="workspace-create-status" role="status" aria-live="polite"></p>
+            </form>
+
+            <form class="card" id="workspace-general-form">
+              <h3>General</h3>
+              <div class="field"><label class="label" for="workspace-general-name">Workspace name</label><input id="workspace-general-name" maxlength="80" required /></div>
+              <div class="field"><label class="label" for="workspace-general-description">Description</label><textarea id="workspace-general-description" maxlength="500" rows="3"></textarea></div>
+              <button class="cta secondary" type="submit">Save workspace</button>
+              <p class="small muted" id="workspace-general-status" role="status" aria-live="polite"></p>
+            </form>
           </div>
 
           <div class="content-grid" style="margin-top: 24px;">
             <div class="card">
-              <h3>Invites for you</h3>
-              <div id="collab-invites-list" class="small">No invites yet.</div>
+              <h3>Add a collaborator</h3>
+              <p class="small">Add an existing Quantura account. Access is checked again on every web and API request.</p>
+              <form id="collab-invite-form" class="auth-form">
+                <div class="field"><label class="label" for="collab-invite-email">Email</label><input id="collab-invite-email" type="email" placeholder="collaborator@domain.com" required /></div>
+                <div class="field"><label class="label" for="collab-invite-role">Permission preset</label><select id="collab-invite-role"><option value="viewer">Viewer — read only</option><option value="analyst">Analyst — create</option><option value="editor">Editor — organize</option><option value="admin">Admin — manage</option><option value="custom">Custom</option></select></div>
+                <div class="field"><label class="label" for="collab-csv-scope">CSV access</label><select id="collab-csv-scope"><option value="all">All workspace CSVs</option><option value="selected">Selected CSVs only</option><option value="none">No CSV access</option></select></div>
+                <div class="field hidden" id="collab-selected-csv-field"><label class="label" for="collab-selected-csv-ids">Selected CSV IDs</label><textarea id="collab-selected-csv-ids" rows="2" placeholder="csv_123, csv_456"></textarea></div>
+                <fieldset class="workspace-permissions hidden" id="collab-custom-permissions"><legend>Custom permissions</legend><div id="collab-permission-options" class="workspace-permission-grid"><span class="small muted">Loading permissions…</span></div></fieldset>
+                <div class="auth-actions" style="margin-top: 14px;">
+                  <button class="cta" type="submit" data-analytics="collab_invite_submit">Add collaborator</button>
+                </div>
+                <p class="small" id="collab-invite-status"></p>
+              </form>
             </div>
             <div class="card">
-              <h3>Your collaborators</h3>
+              <div class="card-head"><div><h3>Members</h3><p class="small muted">Edit permissions or remove access immediately.</p></div><button class="cta secondary small" id="workspace-members-refresh" type="button">Refresh</button></div>
               <div id="collab-collaborators-list" class="small">No collaborators yet.</div>
             </div>
           </div>
+
+          <section class="results-panel workspace-csv-panel" aria-labelledby="workspace-csv-heading" style="margin-top: 24px;">
+            <div class="card-head"><div><div class="eyebrow">Workspace data</div><h3 id="workspace-csv-heading">CSV Library</h3><p class="small muted">Download, rename, move, copy, or delete files when your current permissions allow it.</p></div><div class="hero-actions"><button class="cta secondary small" id="workspace-csv-download-all" type="button"><i class="iconoir-download" aria-hidden="true"></i><span>Download authorized ZIP</span></button><button class="cta secondary small" id="workspace-csv-refresh" type="button">Refresh</button></div></div>
+            <p class="small muted" id="workspace-csv-status" role="status" aria-live="polite"></p>
+            <div id="workspace-csv-list" class="workspace-csv-list"><div class="empty-state">Sign in to load workspace CSVs.</div></div>
+          </section>
+
+          <section class="card" style="margin-top: 24px;" aria-labelledby="workspace-audit-heading">
+            <div class="card-head"><div><h3 id="workspace-audit-heading">Audit Log</h3><p class="small muted">Administrative and CSV actions for this workspace.</p></div><button class="cta secondary small" id="workspace-audit-refresh" type="button">Refresh</button></div>
+            <div id="workspace-audit-list" class="order-list"><div class="empty-state">No audit events loaded.</div></div>
+          </section>
         </div>
       </section>
 

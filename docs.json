@@ -8,6 +8,22 @@
     "light": "#3AB5A2",
     "dark": "#08111F"
   },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "mcp",
+      "add-mcp",
+      "cursor",
+      "vscode"
+    ],
+    "display": "header"
+  },
+  "seo": {
+    "metatags": {
+      "canonical": "https://quantura.mintlifysite.com"
+    }
+  },
   "navigation": {
     "tabs": [
       {
@@ -24,9 +40,11 @@
             "group": "Platform",
             "pages": [
               "docs/authentication",
-              "docs/uploaded-csv-api",
               "docs/workspaces",
+              "docs/workspace-collaboration",
+              "docs/uploaded-csv-api",
               "docs/ensemble-api",
+              "docs/mcp",
               "docs/data-provenance",
               "docs/errors"
             ]

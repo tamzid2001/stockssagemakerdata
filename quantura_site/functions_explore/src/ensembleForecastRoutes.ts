@@ -4,6 +4,7 @@ import type admin from "firebase-admin";
 import {
   authenticatePlatformRequest,
   authorizeWorkspaceAction,
+  requireWorkspacePermission,
   resolveWorkspaceAccess,
   writeApiAudit,
   type ApiPrincipal,
@@ -60,7 +61,7 @@ function apiError(error: unknown): { status: number; code: string; message: stri
   const raw = text((error as any)?.message || error, 300).toLowerCase();
   const code = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "INVALID_REQUEST";
   if (/api_key_(missing|invalid|revoked|expired)|worker_token_invalid/.test(raw)) return { status: 401, code, message: "Authentication failed." };
-  if (/insufficient_scope|workspace_(forbidden|read_only)|plan_upgrade|required_entitlement|commercial_license/.test(raw)) return { status: 403, code, message: "This identity is not authorized for the requested operation." };
+  if (/insufficient_scope|workspace_(forbidden|read_only|permission_denied|resource_forbidden|owner_required)|plan_upgrade|required_entitlement|commercial_license/.test(raw)) return { status: 403, code, message: "This identity is not authorized for the requested operation." };
   if (/not_found/.test(raw)) return { status: 404, code, message: "The requested forecast resource was not found." };
   if (/already|idempotency_conflict|claim_conflict/.test(raw)) return { status: 409, code, message: "The request conflicts with the current forecast state." };
   if (/rate_limit|quota|concurrent/.test(raw)) return { status: 429, code, message: "The forecast compute limit has been reached." };
@@ -551,11 +552,13 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
   router.get("/v1/forecast/models", wrap(options, async (req, res, principal, requestId) => {
     const access = await resolveWorkspaceAccess(options.db, principal, text(req.query.workspace_id || principal.userId, 220));
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
+    requireWorkspacePermission(access, "forecast.read");
     sendData(res, publicModelCapabilities(access.plan), requestId);
   }));
   router.get("/v1/ensemble-forecasts/models", wrap(options, async (req, res, principal, requestId) => {
     const access = await resolveWorkspaceAccess(options.db, principal, text(req.query.workspace_id || principal.userId, 220));
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
+    requireWorkspacePermission(access, "forecast.read");
     sendData(res, publicModelCapabilities(access.plan), requestId);
   }));
 
@@ -565,6 +568,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
+    requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(body, access.plan);
     const materialized = await materializeSource(options, principal, workspaceId, body.source);
     const sourceHash = datasetHash(materialized.rows, materialized.source);
@@ -661,7 +665,10 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const original = plain(originalSnapshot.data());
     const workspaceId = text(original.workspace_id, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
+    authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
+    requireWorkspacePermission(access, "forecast.read", originalId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
+    requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(plain(original.request), access.plan);
     await enforceComputeQuota(options, access.plan, workspaceId);
     const rows = await loadInputRows(originalRef);
@@ -717,6 +724,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const data = plain(job.data());
     const access = await resolveWorkspaceAccess(options.db, principal, data.workspace_id);
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
+    requireWorkspacePermission(access, "forecast.read", forecastId);
     const result = text(data.status, 40) === "completed" ? await options.db.collection(RESULTS).doc(forecastId).get() : null;
     sendData(res, publicEnsembleJob(forecastId, data, result?.exists ? plain(result.data()) : null), requestId);
   }));
@@ -728,6 +736,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const data = plain(job.data());
     const access = await resolveWorkspaceAccess(options.db, principal, data.workspace_id);
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
+    requireWorkspacePermission(access, "forecast.read", forecastId);
     const payload = plain(result.data());
     const format = text(req.query.format || "csv", 20).toLowerCase();
     const filename = `quantura-ensemble-${forecastId}`;
@@ -756,6 +765,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const workspaceId = text(req.query.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
+    requireWorkspacePermission(access, "forecast.read");
     const snapshot = await options.db.collection(PRESETS).where("workspace_id", "==", workspaceId).limit(100).get();
     sendData(res, snapshot.docs.map((doc) => ({ preset_id: doc.id, ...plain(doc.data()) })), requestId, { count: snapshot.size });
   }));
@@ -765,6 +775,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
+    requireWorkspacePermission(access, "forecast.create");
     const name = text(body.name, 100);
     if (!name) throw new Error("preset_name_required");
     const configuration = normalizeEnsembleConfiguration(plain(body.configuration), access.plan);
@@ -781,6 +792,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     if (!snapshot.exists) throw new Error("preset_not_found");
     const access = await resolveWorkspaceAccess(options.db, principal, snapshot.data()?.workspace_id);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "delete");
+    requireWorkspacePermission(access, "forecast.delete");
     await ref.delete();
     sendData(res, { deleted: true, preset_id: snapshot.id }, requestId);
   }));

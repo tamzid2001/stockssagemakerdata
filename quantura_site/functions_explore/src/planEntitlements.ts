@@ -9,6 +9,7 @@ export type PlanEntitlement = {
   forecastComputePerDay: number;
   bulkExportsPerMonth: number;
   backtestsPerMonth: number;
+  workspaceLimit: number;
   collaboratorSeats: number;
   features: string[];
 };

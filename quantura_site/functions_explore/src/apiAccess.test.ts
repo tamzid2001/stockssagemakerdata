@@ -8,6 +8,7 @@ import {
   resolveWorkspaceAccess,
   validatePlatformScopes,
   type ApiPrincipal,
+  permissionsForRole,
 } from "./apiAccess";
 
 type RecordValue = Record<string, any>;
@@ -66,11 +67,17 @@ test("scope validation rejects unknown or duplicate scope input", () => {
 
 test("viewer and editor permissions remain workspace-scoped", () => {
   const token = principal();
-  const viewerAccess = { workspaceId: "owner", role: "viewer" as const, plan: "research" as const, capabilities: [] };
+  const viewerAccess = {
+    workspaceId: "owner", role: "viewer" as const, plan: "research" as const, capabilities: [],
+    permissions: permissionsForRole("viewer"), resourceScope: { csv: { mode: "all" as const, ids: [] }, forecasts: { mode: "all" as const, ids: [] } },
+    ownerUserId: "owner", name: "Owner", slug: "owner", legacyPersonal: true,
+  };
   authorizeWorkspaceAction(token, viewerAccess, "forecasts:read", "read");
   assert.throws(() => authorizeWorkspaceAction(token, viewerAccess, "forecasts:write", "write"), /read_only/);
-  const editorAccess = { ...viewerAccess, role: "editor" as const };
+  const editorAccess = { ...viewerAccess, role: "editor" as const, permissions: permissionsForRole("editor") };
   authorizeWorkspaceAction(token, editorAccess, "forecasts:write", "write");
+  const analystAccess = { ...viewerAccess, role: "analyst" as const, permissions: permissionsForRole("analyst") };
+  authorizeWorkspaceAction(token, analystAccess, "forecasts:write", "write");
   const ownAccess = { ...viewerAccess, workspaceId: token.userId, role: "owner" as const, plan: token.plan };
   assert.throws(() => authorizeWorkspaceAction(token, ownAccess, "forecasts:write", "write"), /plan_upgrade_required/);
   assert.throws(() => authorizeWorkspaceAction(token, ownAccess, "forecasts:read", "read"), /plan_upgrade_required/);
@@ -81,7 +88,11 @@ test("viewer and editor permissions remain workspace-scoped", () => {
 
 test("a free collaborator API key keeps shared read access but not shared writes", () => {
   const token = principal();
-  const sharedViewer = { workspaceId: "owner", role: "viewer" as const, plan: "free" as const, capabilities: [] };
+  const sharedViewer = {
+    workspaceId: "owner", role: "viewer" as const, plan: "free" as const, capabilities: [],
+    permissions: permissionsForRole("viewer"), resourceScope: { csv: { mode: "all" as const, ids: [] }, forecasts: { mode: "all" as const, ids: [] } },
+    ownerUserId: "owner", name: "Owner", slug: "owner", legacyPersonal: true,
+  };
   authorizeWorkspaceAction(token, sharedViewer, "forecasts:read", "read");
   assert.throws(() => authorizeWorkspaceAction(token, sharedViewer, "forecasts:write", "write"), /plan_upgrade_required/);
 });

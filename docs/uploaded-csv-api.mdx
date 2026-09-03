@@ -5,9 +5,9 @@ description: "List, inspect, and download CSV files you own or can read in a sha
 
 # Uploaded CSV API
 
-The Uploaded CSV API is a **read/download-only** integration surface for CSV files a Quantura user owns or can access through a shared workspace. It is designed for simple retrieval, cataloging, and export workflows rather than forecast execution.
+The Uploaded CSV API lists, stores, organizes, and downloads CSV files inside authorized Quantura workspaces. Read and write actions are separately protected by API scopes, current workspace membership, explicit workspace permissions, and resource-specific scope.
 
-Use a scoped `qnt_live_...` bearer key with `datasets:read`. Add `workspaces:read` if your client needs to enumerate shared workspaces.
+Use a scoped `qnt_live_...` bearer key with `datasets:read` for retrieval and `datasets:write` for upload/organization. Add `workspaces:read` or `workspaces:write` when using workspace and collaborator endpoints.
 
 ```http
 Authorization: Bearer qnt_live_...
@@ -102,6 +102,54 @@ curl -fL \
 
 Bulk export applies the same authorization rules as single-file download. A ZIP must contain only the CSVs the caller is authorized to read. Filters from the list endpoint may be supported for scoped exports.
 
+The ZIP also includes `manifest.json`, `manifest.csv`, and `manifest_summary.json` so automated consumers can verify identifiers, file names, sizes, checksums, and record count before ingestion.
+
+## Upload
+
+The API accepts bounded UTF-8 CSV text or base64 bytes. Do not send both representations.
+
+```bash
+python - <<'PY'
+import base64, json, os, pathlib, requests
+
+path = pathlib.Path("forecast.csv")
+payload = {
+    "workspace_id": os.environ["QUANTURA_WORKSPACE_ID"],
+    "filename": path.name,
+    "content_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
+}
+response = requests.post(
+    "https://quantura.studio/api/v1/uploads/csv",
+    headers={"Authorization": f"Bearer {os.environ['QUANTURA_API_KEY']}"},
+    json=payload,
+    timeout=60,
+)
+response.raise_for_status()
+print(response.json()["data"]["id"])
+PY
+```
+
+## Rename, move, and copy
+
+```bash
+curl -X PATCH -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"display_filename":"AAPL Forecast.csv"}' \
+  "https://quantura.studio/api/v1/uploads/csv/$CSV_ID"
+
+curl -X POST -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"destination_workspace_id":"ws_destination"}' \
+  "https://quantura.studio/api/v1/uploads/csv/$CSV_ID/move"
+
+curl -X POST -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"destination_workspace_id":"ws_destination"}' \
+  "https://quantura.studio/api/v1/uploads/csv/$CSV_ID/copy"
+```
+
+Move requires permission to modify the source and upload to the destination. Copy preserves the source and creates a new destination resource with provenance. Bulk variants accept up to 100 unique IDs at `/uploads/csv/bulk-move` and `/uploads/csv/bulk-copy` and return explicit per-file results.
+
 ## Shared workspaces
 
 API keys identify a user; they do not freeze a collaborator role. Quantura evaluates the user's current access on every request.
@@ -162,4 +210,4 @@ The machine-readable API definition is available at:
 https://quantura.studio/api/openapi.json
 ```
 
-The Quantura developer page at `/developers/api` renders the interactive endpoint reference and links signed-in users to API key management.
+The Quantura developer page at `/developers/api` renders the interactive endpoint reference and links signed-in users to API key management. See [Quantura MCP server](/docs/mcp) for the safe OpenAPI-derived tool allowlist.

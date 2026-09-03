@@ -1,0 +1,77 @@
+---
+title: "Workspace collaboration"
+description: "Assign fine-grained workspace permissions and resource-specific CSV access without changing a collaborator's personal Quantura account."
+---
+
+# Workspace collaboration
+
+Quantura evaluates collaboration access from the current workspace membership on every web and API request. An API key identifies a user; it does not permanently encode a workspace role. Removing a membership therefore removes that key's access to the workspace on its next request without disabling the collaborator's personal account or access to other workspaces.
+
+## Permission presets
+
+| Preset | Intended use | Mutation access |
+| --- | --- | --- |
+| Viewer | Review shared CSVs, forecasts, and analyses | None |
+| Analyst | Upload data and create analyses/forecasts | Create only |
+| Editor | Organize existing data | Rename, copy, and move; delete remains owner-controlled |
+| Admin | Manage most workspace settings and memberships | Broad, except protected owner actions and CSV deletion |
+| Custom | Explicit least-privilege assignment | Only selected capabilities |
+
+The API returns the explicit `permissions` array for each membership. Backend checks—not hidden buttons or client state—are authoritative.
+
+## Resource-specific CSV access
+
+CSV scope can be configured independently of the role:
+
+- `all` — the collaborator may exercise their granted CSV permissions on every CSV in the workspace.
+- `selected` — only the listed CSV IDs are visible.
+- `none` — no CSV is visible, even if the role normally includes CSV permissions.
+
+```json
+{
+  "role": "custom",
+  "permissions": ["workspace.read", "csv.list", "csv.read", "csv.download"],
+  "resource_scope": {
+    "csv": {
+      "mode": "selected",
+      "ids": ["csv_123", "csv_456"]
+    },
+    "forecasts": {
+      "mode": "all",
+      "ids": []
+    }
+  }
+}
+```
+
+## Add a collaborator
+
+The user must already have a Quantura account. Pending email invitations continue to use the website invitation flow; the versioned collaborator endpoint activates an existing account directly.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"analyst@example.com","role":"viewer"}' \
+  "https://quantura.studio/api/v1/workspaces/$WORKSPACE_ID/collaborators"
+```
+
+## Update or remove access
+
+```bash
+curl -X PATCH \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"role":"analyst"}' \
+  "https://quantura.studio/api/v1/workspaces/$WORKSPACE_ID/collaborators/$COLLABORATOR_ID"
+
+curl -X DELETE \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  "https://quantura.studio/api/v1/workspaces/$WORKSPACE_ID/collaborators/$COLLABORATOR_ID"
+```
+
+Only the owner or a member with the required member-management capability may perform these actions. A non-owner can grant only a subset of permissions they are themselves allowed to grant. The owner cannot be removed or downgraded through collaborator endpoints.
+
+## Viewer API example
+
+A Viewer can combine a personal key's `workspaces:read` and `datasets:read` scopes with current workspace permissions to read a shared CSV. The same request fails after the owner removes that membership. Viewer access never grants write operations or unrestricted access to unrelated Quantura data.

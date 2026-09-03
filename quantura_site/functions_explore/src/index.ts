@@ -12,7 +12,9 @@ import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
 import { registerPlatformApiRoutes } from "./platformApiRoutes";
+import { authenticatePlatformRequest, requireWorkspacePermission, resolveWorkspaceAccess } from "./apiAccess";
 import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
+import { isAllowedUserCsvImportStoragePath } from "./uploadedCsv";
 import { registerAwsIntegrationRoutes, resolveUserAutopilotAwsConfig } from "./awsIntegration";
 import { runScheduledFiscaldataRefresh } from "./schedules/refreshFiscaldata";
 import { runIndicatorAnalysis } from "./indicators";
@@ -12380,11 +12382,20 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
   try {
     const user = await requireFoundryUser(req);
     const body = asPlainObject(req.body);
+    const principal = await authenticatePlatformRequest(req, { db, auth });
+    if (principal.userId !== user.uid) throw new Error("workspace_forbidden");
+    const requestedWorkspaceId = sanitizeText(body.workspaceId, 220) || user.uid;
+    const workspaceAccess = await resolveWorkspaceAccess(db, principal, requestedWorkspaceId);
+    requireWorkspacePermission(workspaceAccess, "csv.upload");
     const filePath = sanitizeText(body.filePath, 1000).replace(/^\/+/, "");
     let csvText = asString(body.csvText);
     if (!csvText.trim()) {
       if (!filePath) {
         res.status(400).json({ error: "missing_csv_text" });
+        return;
+      }
+      if (!isAllowedUserCsvImportStoragePath(filePath, user.uid)) {
+        res.status(403).json({ error: "storage_path_forbidden" });
         return;
       }
       csvText = await readStorageTextArtifact(filePath);
@@ -12415,7 +12426,7 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
 
     const baseDoc: Record<string, unknown> = {
       userId: user.uid,
-      workspaceId: sanitizeText(body.workspaceId, 220) || user.uid,
+      workspaceId: workspaceAccess.workspaceId,
       notes: sanitizeText(body.notes, 2000),
       modelMetrics,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -12538,6 +12549,10 @@ ROUTES.post("/autopilot/datasets/upload", async (req, res) => {
       return;
     }
     if (code === "full_account_required") {
+      res.status(403).json({ error: code });
+      return;
+    }
+    if (/^workspace_(forbidden|permission_denied|resource_forbidden|archived)$/.test(code)) {
       res.status(403).json({ error: code });
       return;
     }
