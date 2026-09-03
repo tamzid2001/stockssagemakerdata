@@ -364,18 +364,34 @@ export class AlpacaClient {
 
   async listOptionContracts(input: { underlying: string; expiration?: string; type?: string; limit?: number }): Promise<Array<Record<string, unknown>>> {
     const underlying = normalizeSymbol(input.underlying);
-    const query = new URLSearchParams({ underlying_symbols: underlying, status: "active", limit: "1000" });
-    if (input.expiration) query.set("expiration_date", String(input.expiration));
+    const maxRows = Math.max(1, Math.min(Number(input.limit) || 2000, 10000));
+    const query = new URLSearchParams({ underlying_symbols: underlying, status: "active", limit: String(maxRows) });
+    if (input.expiration) {
+      query.set("expiration_date", String(input.expiration));
+    } else {
+      // Alpaca otherwise defaults expiration_date_lte to the upcoming weekend,
+      // which makes a healthy option chain look like it has only one expiry.
+      const today = new Date();
+      const latest = new Date(today.getTime());
+      latest.setUTCFullYear(latest.getUTCFullYear() + 5);
+      query.set("expiration_date_gte", today.toISOString().slice(0, 10));
+      query.set("expiration_date_lte", latest.toISOString().slice(0, 10));
+    }
     const type = String(input.type || "").toLowerCase();
     if (type === "call" || type === "put") query.set("type", type);
-    const maxRows = Math.max(1, Math.min(Number(input.limit) || 2000, 10000));
     const contracts: Array<Record<string, unknown>> = [];
     let pageToken = "";
+    const seenPageTokens = new Set<string>();
     do {
       if (pageToken) query.set("page_token", pageToken);
       const payload = await this.request("/v2/options/contracts", { trading: true, query });
       contracts.push(...(Array.isArray(payload.option_contracts) ? payload.option_contracts as Array<Record<string, unknown>> : []));
-      pageToken = String(payload.next_page_token || "");
+      const nextPageToken = String(payload.next_page_token || "");
+      if (nextPageToken && seenPageTokens.has(nextPageToken)) {
+        throw new AlpacaError("upstream", "Alpaca returned a repeated options pagination token.", 502);
+      }
+      if (nextPageToken) seenPageTokens.add(nextPageToken);
+      pageToken = nextPageToken;
     } while (pageToken && contracts.length < maxRows);
     return contracts.slice(0, maxRows);
   }
