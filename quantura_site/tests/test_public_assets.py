@@ -446,6 +446,15 @@ def test_notifications_wait_for_an_active_service_worker_before_subscribing():
     assert 'self.addEventListener("activate"' in worker
     assert "clients.claim()" in worker
 
+    vercel_config = (ROOT / "vercel.json").read_text()
+    firebase_config = (ROOT / "firebase.json").read_text()
+    assert vercel_config.index('"source": "/(.*).js"') < vercel_config.index(
+        '"source": "/firebase-messaging-sw.js"'
+    )
+    assert firebase_config.index('"source": "**/*.js"') < firebase_config.index(
+        '"source": "/firebase-messaging-sw.js"'
+    )
+
 
 def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
     client = (PUBLIC / "app.js").read_text()
