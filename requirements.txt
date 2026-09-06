@@ -8,4 +8,4 @@ openai==1.54.3
 requests>=2.33.0
 
 h11==0.16.0
-anyio==4.4.0
+anyio==4.14.2
