@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
 const express = require("express");
+const helmet = require("helmet");
 
 const { onRequest } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2/options");
@@ -502,6 +503,7 @@ const ssrHandler = async (req, res) => {
 };
 
 const vercelApp = express();
+vercelApp.use(helmet());
 vercelApp.use(ssrHandler);
 
 module.exports = vercelApp;
