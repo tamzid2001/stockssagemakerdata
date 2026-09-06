@@ -11937,11 +11937,12 @@ def get_ticker_news(req: https_fn.CallableRequest) -> dict[str, Any]:
     if not news_items:
         try:
             import xml.etree.ElementTree as ET
+            import defusedxml.ElementTree as DefusedET
 
             rss_url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
             rss = requests.get(rss_url, headers=_yahoo_headers(), timeout=10)
             if rss.status_code < 400 and rss.text:
-                root = ET.fromstring(rss.text)
+                root = DefusedET.fromstring(rss.text)
                 for item in root.findall(".//item")[:10]:
                     title = (item.findtext("title") or "").strip()
                     link = (item.findtext("link") or "").strip()
