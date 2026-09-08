@@ -425,12 +425,37 @@ def test_notifications_page_has_functional_inbox_and_delivery_controls():
         'data-notification-filter="unread"',
         'id="notifications-enable"',
         'id="notifications-send-test"',
-        'id="notifications-privacy-host"',
+        'id="notifications-preferences-host"',
     ]:
         assert marker in dashboard
     assert "loadNotificationFeed" in client
     assert "markAllNotificationsRead" in client
     assert "MODEL_COUNCIL_OUTPUT_DISCLAIMER" not in client
+
+
+def test_notifications_do_not_request_or_store_location_context():
+    dashboard = (PAGES / "dashboard.html").read_text()
+    client = (PUBLIC / "app.js").read_text()
+    backend = (ROOT / "functions_explore" / "src" / "index.ts").read_text()
+    combined_ui = f"{dashboard}\n{client}".lower()
+
+    for obsolete in [
+        "allow coarse location",
+        "ip-derived region",
+        "capture coarse location",
+        "notifications-location-optin",
+        "notifications-ip-optin",
+        "notifications-coarse-country",
+        "notifications-timezone",
+        "navigator.geolocation",
+        "ipapi.co/json",
+    ]:
+        assert obsolete not in combined_ui
+
+    assert 'id="notifications-preferences-host"' in dashboard
+    assert 'role="switch"' in client
+    assert "notificationPrivacy: admin.firestore.FieldValue.delete()" in backend
+    assert "fetchIpDerivedRegion" not in backend
 
 
 def test_notifications_wait_for_an_active_service_worker_before_subscribing():
@@ -459,8 +484,8 @@ def test_notifications_wait_for_an_active_service_worker_before_subscribing():
 def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
     client = (PUBLIC / "app.js").read_text()
     ssr = (ROOT / "functions_ssr" / "index.js").read_text()
-    assert 'const QUANTURA_ICON_URL = "/favicon.svg?v=20260903a"' in client
-    assert 'const PUBLIC_SHELL_ASSET_VERSION = "20260903a"' in ssr
+    assert 'const QUANTURA_ICON_URL = "/favicon.svg?v=20260903b"' in client
+    assert 'const PUBLIC_SHELL_ASSET_VERSION = "20260903b"' in ssr
     assert ".replace(/\\/assets\\/quantura-icon\\.svg/g" in ssr
     assert "node.innerHTML = '<a href=\"mailto:hello@quantura.studio\">hello@quantura.studio</a>'" in client
     for marker in [

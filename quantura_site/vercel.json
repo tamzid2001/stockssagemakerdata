@@ -5,6 +5,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
+    { "source": "/assets/logo.png", "destination": "/favicon.svg", "permanent": true },
     { "source": "/trading", "destination": "/dashboard", "permanent": true },
     { "source": "/purchase", "destination": "/pricing", "permanent": true },
     { "source": "/forecast", "destination": "/forecasting", "permanent": false },

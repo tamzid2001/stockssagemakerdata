@@ -78,10 +78,11 @@ const injectRemoteConfig = (html, { initialFetchResponse }) => {
   return `${payload}\n${html}`;
 };
 
-const PUBLIC_SHELL_ASSET_VERSION = "20260903a";
+const PUBLIC_SHELL_ASSET_VERSION = "20260903b";
 const injectPublicShellAssets = (html) =>
   String(html || "")
     .replace(/\/app\.js\?v=[A-Za-z0-9._-]+/g, `/app.js?v=${PUBLIC_SHELL_ASSET_VERSION}`)
+    .replace(/\/styles\.css\?v=[A-Za-z0-9._-]+/g, `/styles.css?v=${PUBLIC_SHELL_ASSET_VERSION}`)
     .replace(/\/assets\/quantura-icon\.svg/g, `/favicon.svg?v=${PUBLIC_SHELL_ASSET_VERSION}`);
 
 const normalizePath = (rawPath) => {

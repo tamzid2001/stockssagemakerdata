@@ -92,5 +92,6 @@ firestore_integration:
       npx --yes firebase-tools@15.7.0 emulators:exec
       --only firestore
       --project quantura-forecast-integration
-      "node --test functions_explore/dist/quanturaForecastRoutes.integration.test.js"
+      --config quantura_site/firebase.json
+      "node --test quantura_site/functions_explore/dist/quanturaForecastRoutes.integration.test.js"
   timeout: 30m

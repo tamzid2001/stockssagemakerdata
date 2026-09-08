@@ -40,8 +40,10 @@ def test_gitlab_observability_initializes_before_express_and_stays_server_side()
 
     assert vercel_entrypoint.index('import "./src/gitlabObservability";') < vercel_entrypoint.index('from "express"')
     assert package["dependencies"]["@opentelemetry/sdk-trace-node"] == "2.11.0"
-    assert "new HttpInstrumentation()" in instrumentation
-    assert "new ExpressInstrumentation()" in instrumentation
+    assert "app.use(observeGitLabRequest)" in vercel_entrypoint
+    assert "new OTLPMetricExporter" in instrumentation
+    assert "new OTLPLogExporter" in instrumentation
+    assert "waitUntil(flushGitLabObservability())" in instrumentation
     assert '"gitlab.project.id"' in instrumentation
     assert "ATTR_SERVICE_VERSION" in instrumentation
     assert "ATTR_DEPLOYMENT_ENVIRONMENT_NAME" in instrumentation
