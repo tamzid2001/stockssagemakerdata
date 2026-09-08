@@ -1,9 +1,9 @@
 ---
 title: GitLab Observability
-description: Export Quantura API traces to GitLab Observability without exposing credentials.
+description: Export correlated Quantura API traces, request metrics, and safe request logs to GitLab Observability.
 ---
 
-Quantura's Vercel-hosted Express API supports server-side OpenTelemetry tracing to GitLab Observability. The instrumentation covers Node HTTP and Express requests and records GitLab's recommended project, service-version, and deployment-environment resource attributes.
+Quantura's primary Vercel-hosted Express API exports OpenTelemetry server request traces, request counts, latency histograms, and correlated request-completion logs. All three signals carry GitLab project, service-version, and deployment-environment resource attributes. This is not a blanket export of arbitrary console output, uploaded data, or other services' logs.
 
 ## Application tracing configuration
 
@@ -12,7 +12,7 @@ Configure these server-side values in the deployment environment. Never use a `N
 | Variable | Purpose |
 | --- | --- |
 | `GITLAB_OBSERVABILITY_ENABLED` | Enables the exporter when set to `true`. |
-| `GITLAB_OTEL_HTTP_ENDPOINT` | Tenant-specific OTLP HTTP base endpoint. Quantura appends `/v1/traces`. |
+| `GITLAB_OTEL_HTTP_ENDPOINT` | Tenant-specific OTLP HTTP base endpoint. Signal exporters append `/v1/traces`, `/v1/metrics`, or `/v1/logs`. |
 | `GITLAB_PROJECT_ID` | Numeric GitLab project identifier used for correlation. |
 | `GITLAB_PROJECT_NAME` | Human-readable GitLab project name. |
 | `OTEL_SERVICE_NAME` | Service name displayed in traces. |
@@ -29,6 +29,14 @@ The application exporter follows GitLab's endpoint test, which sends OTLP trace 
 ## Safe startup behavior
 
 Tracing becomes active only when the feature flag and a valid HTTPS endpoint are present. Missing configuration leaves the Quantura API operational with tracing disabled. Invalid or unavailable observability infrastructure must not block normal API requests.
+
+Exports are bounded and flushed after the response using Vercel's `waitUntil` lifecycle. Only server-defined route templates, HTTP methods/statuses, elapsed time, and generated request/trace IDs are recorded. Raw URLs, query strings, headers, bodies, cookies, IP addresses, account identifiers, and raw error messages are deliberately excluded. Automatic outbound HTTP tracing is not enabled because provider URLs may contain sensitive identifiers. Unmatched paths use the fixed label `unmatched`.
+
+## Query credentials and documentation secrets
+
+The repository's encrypted GitHub Actions secrets contain `GITLAB_OBSERVABILITY_API_KEY`, `SIGNOZ_API_KEY`, and `MINTLIFY_API_KEY`. They are not browser variables and are not needed by the public website build. The first two are service-account query keys used with `SIGNOZ-API-KEY`; they are not GitLab source-control tokens or SigNoz ingestion keys.
+
+The GitLab query API is `https://140928869.gitlab-o11y.com/api/v1`. The separate SigNoz instance is `https://suited-macaque.us2.signoz.cloud`. Configuring the latter's query key does not send application telemetry to SigNoz Cloud; that would require its distinct ingestion configuration.
 
 ## GitLab CI telemetry
 
@@ -52,5 +60,10 @@ After deployment:
 2. Open [GitLab Observability Services](https://gitlab.com/tamzid2001/-/observability/services).
 3. Select `quantura-api` and verify traces carry `gitlab.project.id`, `gitlab.project.name`, `service.version`, and `deployment.environment.name`.
 4. Confirm authorization headers and request bodies are not captured as span attributes.
+5. Query `http.server.request.count` and `http.server.request.duration` metrics, and the `HTTP request completed` logs for the same service/version. An HTTP success from ingestion alone does not establish searchable retention: verify through the query API/dashboard as well.
+
+The manual `observability-verification.yml` GitHub Action requests production API health and runs `scripts/verify_gitlab_telemetry.py`. It fails unless all three service-scoped queries return positive data within the last 30 minutes, and prints counts/status only—not individual customer records.
+
+The SSR, newsletter, Python compatibility APIs, model workers, and Vercel platform/build logs require separate instrumentation or a correctly authenticated collector/drain before claiming complete platform-wide coverage. CI telemetry configuration must be checked in GitLab; an application deployment does not run a GitLab pipeline by itself.
 
 GitLab Observability is currently documented by GitLab as an experimental feature, so Quantura treats export failures as non-fatal and retains Vercel runtime logs as the operational fallback.

@@ -1,0 +1,6 @@
+# Retain source/history in Git, but do not upload this unused 3.9 MB legacy logo.
+# Its old public URL redirects to the current favicon brand asset.
+quantura_site/public/assets/logo.png
+.venv*/
+**/__pycache__/
+**/.pytest_cache/

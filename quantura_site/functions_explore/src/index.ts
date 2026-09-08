@@ -803,57 +803,6 @@ function requestIpAddress(req: Request): string {
   return socketIp.slice(0, 120);
 }
 
-function normalizeTimezone(value: unknown): string {
-  return sanitizeText(value, 80).replace(/[^A-Za-z0-9_./+\-]/g, "");
-}
-
-function normalizeCoarseLocation(
-  value: unknown
-): { lat: number | null; lon: number | null; countryCode: string; accuracyM: number | null; capturedAt: string } | null {
-  if (!value || typeof value !== "object") return null;
-  const payload = value as Record<string, unknown>;
-  const latNum = asFinite(payload.lat, NaN);
-  const lonNum = asFinite(payload.lon, NaN);
-  const accNum = asFinite(payload.accuracyM, NaN);
-  const countryRaw = asString(payload.countryCode).trim().toUpperCase();
-  const countryCode = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : "";
-  const captured = asString(payload.capturedAt);
-  const capturedAt = Number.isFinite(Date.parse(captured)) ? new Date(captured).toISOString() : new Date().toISOString();
-  return {
-    lat: Number.isFinite(latNum) ? Number(latNum.toFixed(1)) : null,
-    lon: Number.isFinite(lonNum) ? Number(lonNum.toFixed(1)) : null,
-    countryCode,
-    accuracyM: Number.isFinite(accNum) ? Math.max(0, Math.round(accNum)) : null,
-    capturedAt,
-  };
-}
-
-async function fetchIpDerivedRegion(ipAddress: string): Promise<{ region: string; countryCode: string }> {
-  const ip = String(ipAddress || "").trim();
-  if (!ip) return { region: "", countryCode: "" };
-  const safeIp = ip.replace(/[^0-9a-fA-F:.]/g, "");
-  if (!safeIp) return { region: "", countryCode: "" };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2500);
-  try {
-    const response = await fetch(`https://ipapi.co/${encodeURIComponent(safeIp)}/json/`, {
-      method: "GET",
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) return { region: "", countryCode: "" };
-    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    const region = sanitizeText(payload.region || payload.region_code || payload.city || "", 80);
-    const countryRaw = asString(payload.country_code || payload.country).trim().toUpperCase();
-    const countryCode = /^[A-Z]{2}$/.test(countryRaw) ? countryRaw : "";
-    return { region, countryCode };
-  } catch {
-    return { region: "", countryCode: "" };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 function parseJsonObject(text: string): Record<string, unknown> | null {
   const raw = String(text || "").trim();
   if (!raw) return null;
@@ -10660,8 +10609,25 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
 
     const userData = (userSnap.data() || {}) as Record<string, unknown>;
     const prefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
-    const privacyRaw = (userData.notificationPrivacy || {}) as Record<string, unknown>;
-    const coarseLocation = normalizeCoarseLocation(privacyRaw.coarseLocation);
+    const legacyLocationFields = ["timezone", "coarseLocation", "locationConsent", "ipRegionConsent", "ipRegion"];
+    const tokensWithLegacyLocation = tokenSnap.docs.filter((doc) => {
+      const data = (doc.data() || {}) as Record<string, unknown>;
+      return legacyLocationFields.some((field) => Object.prototype.hasOwnProperty.call(data, field));
+    });
+    if (Object.prototype.hasOwnProperty.call(userData, "notificationPrivacy") || tokensWithLegacyLocation.length) {
+      const cleanup = db.batch();
+      if (Object.prototype.hasOwnProperty.call(userData, "notificationPrivacy")) {
+        cleanup.set(userRef, { notificationPrivacy: admin.firestore.FieldValue.delete() }, { merge: true });
+      }
+      tokensWithLegacyLocation.forEach((doc) => {
+        cleanup.set(
+          doc.ref,
+          Object.fromEntries(legacyLocationFields.map((field) => [field, admin.firestore.FieldValue.delete()])),
+          { merge: true }
+        );
+      });
+      await cleanup.commit();
+    }
 
     res.status(200).json({
       notificationPrefs: {
@@ -10674,14 +10640,6 @@ ROUTES.get("/me/notification-settings", async (req, res) => {
         daily: prefs.daily,
         weekly: prefs.weekly,
         inactiveHidden: prefs.inactiveHidden,
-      },
-      notificationPrivacy: {
-        locationConsent: asBoolean(privacyRaw.locationConsent, false),
-        ipRegionConsent: asBoolean(privacyRaw.ipRegionConsent, false),
-        timezone: normalizeTimezone(privacyRaw.timezone),
-        ipRegion: sanitizeText(privacyRaw.ipRegion, 80),
-        coarseLocation,
-        updatedAtMs: getTimestampMs(privacyRaw.updatedAt || Date.now()),
       },
       follows: followsSnap.docs.map((doc) => doc.id),
       watchTickers: watchSnap.docs
@@ -10879,31 +10837,17 @@ ROUTES.post("/notifications/register-token", async (req, res) => {
     }
 
     const tokenRef = db.collection("users").doc(user.uid).collection("fcmTokens").doc(token);
-    const privacyInput = ((req.body || {}) as Record<string, unknown>).notificationPrivacy;
-    const locationConsent = asBoolean((privacyInput as Record<string, unknown>)?.locationConsent, false);
-    const ipRegionConsent = asBoolean((privacyInput as Record<string, unknown>)?.ipRegionConsent, false);
-    const tokenMeta: Record<string, unknown> = {};
-    if (locationConsent) {
-      const timezone = normalizeTimezone((privacyInput as Record<string, unknown>)?.timezone);
-      const coarseLocation = normalizeCoarseLocation((privacyInput as Record<string, unknown>)?.coarseLocation);
-      tokenMeta.timezone = timezone;
-      tokenMeta.coarseLocation = coarseLocation;
-      tokenMeta.locationConsent = true;
-      tokenMeta.ipRegionConsent = ipRegionConsent;
-      let ipRegion = sanitizeText((privacyInput as Record<string, unknown>)?.ipRegion, 80);
-      if (ipRegionConsent && !ipRegion) {
-        const derived = await fetchIpDerivedRegion(requestIpAddress(req));
-        ipRegion = derived.region;
-      }
-      tokenMeta.ipRegion = ipRegion;
-    }
     await tokenRef.set(
       {
         token,
         platform,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         lastSeenAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...tokenMeta,
+        timezone: admin.firestore.FieldValue.delete(),
+        coarseLocation: admin.firestore.FieldValue.delete(),
+        locationConsent: admin.firestore.FieldValue.delete(),
+        ipRegionConsent: admin.firestore.FieldValue.delete(),
+        ipRegion: admin.firestore.FieldValue.delete(),
       },
       { merge: true }
     );
@@ -10962,47 +10906,13 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
     const existingPrefs = normalizeNotificationPrefs({}, (userData.notificationPrefs || {}) as Record<string, unknown>);
     const notificationPrefs = normalizeNotificationPrefs(input, existingPrefs as unknown as Record<string, unknown>);
 
-    const existingPrivacy = (userData.notificationPrivacy || {}) as Record<string, unknown>;
-    const locationConsent =
-      typeof input.locationConsent === "boolean"
-        ? asBoolean(input.locationConsent, false)
-        : asBoolean(existingPrivacy.locationConsent, false);
-    const ipRegionConsent =
-      locationConsent &&
-      (typeof input.ipRegionConsent === "boolean"
-        ? asBoolean(input.ipRegionConsent, false)
-        : asBoolean(existingPrivacy.ipRegionConsent, false));
-    const timezone = locationConsent
-      ? normalizeTimezone(input.timezone || existingPrivacy.timezone || "")
-      : "";
-    const coarseLocation = locationConsent
-      ? normalizeCoarseLocation(input.coarseLocation || existingPrivacy.coarseLocation)
-      : null;
-    let ipRegion = locationConsent && ipRegionConsent ? sanitizeText(input.ipRegion || existingPrivacy.ipRegion, 80) : "";
-    if (locationConsent && ipRegionConsent && !ipRegion) {
-      const derived = await fetchIpDerivedRegion(requestIpAddress(req));
-      ipRegion = derived.region;
-      if (!coarseLocation?.countryCode && derived.countryCode) {
-        if (coarseLocation) coarseLocation.countryCode = derived.countryCode;
-      }
-    }
-    const notificationPrivacy = {
-      locationConsent,
-      ipRegionConsent,
-      timezone,
-      ipRegion,
-      coarseLocation: locationConsent ? coarseLocation : null,
-      ipAddress: locationConsent && ipRegionConsent ? sanitizeText(requestIpAddress(req), 120) : "",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
     await db
       .collection("users")
       .doc(user.uid)
       .set(
         {
           notificationPrefs,
-          notificationPrivacy,
+          notificationPrivacy: admin.firestore.FieldValue.delete(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -11013,14 +10923,6 @@ ROUTES.post("/notifications/preferences", async (req, res) => {
     res.status(200).json({
       ok: true,
       notificationPrefs,
-      notificationPrivacy: {
-        locationConsent,
-        ipRegionConsent,
-        timezone,
-        ipRegion,
-        coarseLocation: locationConsent ? coarseLocation : null,
-        updatedAtMs: Date.now(),
-      },
     });
   } catch (error: any) {
     const code = String(error?.message || "");

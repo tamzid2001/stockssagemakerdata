@@ -1,0 +1,29 @@
+name: Verify GitLab application telemetry
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantura-observability-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Request production API health
+        run: curl --fail --silent --show-error --max-time 30 --output /dev/null https://quantura.studio/api/health
+      - name: Allow collector ingestion
+        run: sleep 10
+      - name: Verify searchable traces, request metrics and request logs
+        env:
+          GITLAB_OBSERVABILITY_API_KEY: ${{ secrets.GITLAB_OBSERVABILITY_API_KEY }}
+        run: python scripts/verify_gitlab_telemetry.py --service quantura-api

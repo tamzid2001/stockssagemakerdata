@@ -3,7 +3,23 @@ import test from "node:test";
 import {
   normalizeOtlpTraceEndpoint,
   resolveGitLabObservabilityStatus,
+  normalizeOtlpEndpoint,
+  safeRequestDimensions,
 } from "./gitlabObservability";
+
+test("all three signals use independent OTLP paths with no credentials", () => {
+  for (const signal of ["traces", "metrics", "logs"] as const) {
+    assert.equal(normalizeOtlpEndpoint("https://user:secret@example.com/v1/traces?key=secret#secret", signal), `https://example.com/v1/${signal}`);
+  }
+});
+
+test("request dimensions contain only approved low-cardinality fields", () => {
+  assert.deepEqual(safeRequestDimensions("GET", "/forecasts/:id", 200), {
+    "http.request.method": "GET", "http.route": "/forecasts/:id", "http.response.status_code": 200,
+  });
+  assert.equal(safeRequestDimensions("secret", undefined, 404)["http.request.method"], "OTHER");
+  assert.equal(safeRequestDimensions("GET", undefined, 404)["http.route"], "unmatched");
+});
 
 test("GitLab observability safely disables when its endpoint is absent", () => {
   const status = resolveGitLabObservabilityStatus({ GITLAB_OBSERVABILITY_ENABLED: "true" });

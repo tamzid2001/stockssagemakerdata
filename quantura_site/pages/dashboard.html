@@ -30,7 +30,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260405b" />
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest?v=20260405b" />
-    <link rel="stylesheet" href="/styles.css?v=20260405a" />
+    <link rel="stylesheet" href="/styles.css?v=20260903b" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
@@ -43,7 +43,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260824a"></script>
+    <script defer src="/app.js?v=20260903b"></script>
     <script defer src="/data-integrations.js?v=20260824a"></script>
     <script defer src="/platform-api.js?v=20260831a"></script>
   
@@ -289,16 +289,20 @@
 
       <section class="section panel hidden" data-panel="notifications" id="notifications">
         <div class="container">
-          <div class="section-title">
-            <div class="eyebrow">Private account activity</div>
-            <h2>Notification center</h2>
-            <p class="small">Review account updates and manage push delivery for this browser. Prediction-boundary email settings remain under Profile.</p>
+          <div class="section-title notification-page-heading">
+            <div class="eyebrow">Alerts &amp; account activity</div>
+            <h2>Notifications</h2>
+            <p>Choose what matters, connect this browser, and review your latest Quantura updates in one place.</p>
           </div>
           <div class="notification-center-grid">
             <section class="results-panel notification-inbox" aria-labelledby="notification-inbox-title">
               <div class="card-head notification-inbox-head">
                 <div>
-                  <h3 id="notification-inbox-title">Inbox</h3>
+                  <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-mail"></i></span>
+                  <div>
+                    <div class="eyebrow">Your feed</div>
+                    <h3 id="notification-inbox-title">Notification inbox</h3>
+                  </div>
                   <span class="pill" id="notifications-unread-count">Unread 0</span>
                 </div>
                 <button class="cta secondary small" id="notifications-mark-all" type="button">Mark all read</button>
@@ -315,27 +319,48 @@
               </div>
             </section>
 
-            <aside class="card notification-delivery-card" aria-labelledby="notification-delivery-title">
-              <div class="eyebrow">Delivery</div>
-              <h3 id="notification-delivery-title">Browser push</h3>
-              <p class="small muted">Enable push on this device to receive supported Quantura account updates. Browser permission and HTTPS are required.</p>
-              <div class="notification-delivery-status">
-                <span class="status-dot" aria-hidden="true"></span>
-                <p class="small" id="notifications-status">Sign in to configure browser push.</p>
-              </div>
-              <span id="notifications-token" class="hidden" aria-hidden="true">No token registered yet.</span>
-              <div class="hero-actions notification-delivery-actions">
-                <button class="cta" id="notifications-enable" type="button">Enable on this device</button>
-                <button class="cta secondary" id="notifications-send-test" type="button">Send test</button>
-                <button class="cta secondary small" id="notifications-refresh" type="button">Reconnect device</button>
-              </div>
-              <div id="notifications-privacy-host"></div>
+            <aside class="notification-settings-stack" aria-label="Notification settings">
+              <section class="card notification-delivery-card" aria-labelledby="notification-delivery-title">
+                <div class="notification-card-heading">
+                  <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-bell-notification"></i></span>
+                  <div>
+                    <div class="eyebrow">This device</div>
+                    <h3 id="notification-delivery-title">Browser notifications</h3>
+                  </div>
+                </div>
+                <p class="small muted">Receive supported Quantura alerts without keeping this page open.</p>
+                <div class="notification-delivery-status" role="status" aria-live="polite">
+                  <span class="status-dot" aria-hidden="true"></span>
+                  <p class="small" id="notifications-status">Sign in to configure browser notifications.</p>
+                </div>
+                <span id="notifications-token" class="hidden" aria-hidden="true">No token registered yet.</span>
+                <div class="notification-delivery-actions">
+                  <button class="cta" id="notifications-enable" type="button"><i class="iconoir-bell" aria-hidden="true"></i><span>Enable notifications</span></button>
+                  <button class="cta secondary" id="notifications-send-test" type="button"><i class="iconoir-send-diagonal" aria-hidden="true"></i><span>Send test</span></button>
+                  <button class="notification-text-action" id="notifications-refresh" type="button"><i class="iconoir-refresh" aria-hidden="true"></i><span>Reconnect this device</span></button>
+                </div>
+              </section>
+
+              <section class="card notification-preferences-card" aria-labelledby="notification-preferences-title">
+                <div class="notification-card-heading">
+                  <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-settings"></i></span>
+                  <div>
+                    <div class="eyebrow">Preferences</div>
+                    <h3 id="notification-preferences-title">What you receive</h3>
+                  </div>
+                </div>
+                <p class="small muted">These choices apply across your signed-in Quantura account.</p>
+                <div id="notifications-preferences-host"></div>
+              </section>
             </aside>
           </div>
 
           <section class="results-panel notification-activity-card" aria-labelledby="notification-activity-title">
             <div class="card-head">
-              <div><h3 id="notification-activity-title">This-device activity</h3><p class="small muted">Recent push registration and foreground delivery events for this browser session.</p></div>
+              <div class="notification-card-heading">
+                <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-activity"></i></span>
+                <div><div class="eyebrow">Diagnostics</div><h3 id="notification-activity-title">This-device activity</h3><p class="small muted">Recent connection and foreground delivery events for this browser session.</p></div>
+              </div>
               <button class="cta secondary small" id="notifications-clear" type="button">Clear activity</button>
             </div>
               <div id="notifications-log" class="notification-log">
