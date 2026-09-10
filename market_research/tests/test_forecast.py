@@ -5,10 +5,29 @@ import numpy as np
 import pytest
 
 from ensemble_forecasting.adapters.chronos import ChronosAdapter
+from ensemble_forecasting.adapters.toto import aligned_toto_context
+from ensemble_forecasting.adapters.base import ModelExecutionError
 from ensemble_forecasting.preprocessing import prepare_series
 from ensemble_forecasting.schemas import ForecastRequest
 from market_research.engine import QUANTILES, Quote, iso, validate_forecast
 from market_research import forecast
+
+
+@pytest.mark.parametrize("count", [32, 40, 50, 500, 512])
+def test_toto_patch_alignment_preserves_observations_and_masks_padding(count):
+    values = np.arange(count, dtype=np.float32)
+    padded, mask = aligned_toto_context(values, 32)
+    assert len(padded) % 32 == 0
+    assert int(mask.sum()) == count and mask[-32:].all()
+    np.testing.assert_array_equal(padded[mask], values)
+    assert not mask[: len(padded) - count].any()
+
+
+@pytest.mark.parametrize("count", [2, 14, 31])
+def test_toto_short_context_never_marks_padding_as_observed(count):
+    with pytest.raises(ModelExecutionError) as error:
+        aligned_toto_context(np.arange(count, dtype=np.float32), 32)
+    assert error.value.code == "MODEL_CONTEXT_TOO_SHORT"
 
 
 def test_equal_weight_ensemble_and_short_history(monkeypatch):
