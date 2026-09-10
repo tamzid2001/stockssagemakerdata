@@ -25,3 +25,7 @@ artifacts/
 .huggingface/
 quantura_site/qa_screens/
 quantura_site/docs/screenshots/
+quantura_site/public/app.min.js
+quantura_site/public/styles.min.css
+/.cs-wizard/
+/quantura_site/.cs-wizard/

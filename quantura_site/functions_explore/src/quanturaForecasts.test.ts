@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   assertStatusTransition,
-  brierScore,
+  logScore,
   buildForecastSearchTokens,
   buildCalibrationRows,
   buildPublishedSnapshot,
@@ -58,11 +58,11 @@ function draft(overrides: Record<string, unknown> = {}) {
   } as never, NOW);
 }
 
-test("probability and Brier score use the 0-1 scale", () => {
+test("binary probability validation and logarithmic loss use the 0-1 scale", () => {
   assert.equal(validateProbability(0.71), 0.71);
   assert.throws(() => validateProbability(71), /between_zero_and_one/);
-  assert.ok(Math.abs(brierScore(0.7, "yes") - 0.09) < 1e-12);
-  assert.ok(Math.abs(brierScore(0.7, "no") - 0.49) < 1e-12);
+  assert.ok(Math.abs(logScore(0.7, "yes") + Math.log(0.7)) < 1e-12);
+  assert.ok(Math.abs(logScore(0.7, "no") + Math.log(0.3)) < 1e-12);
 });
 
 test("draft requires a formal question and objective resolution rule", () => {

@@ -2,6 +2,12 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "maple",
   "name": "Quantura Developer Documentation",
+  "favicon": "/favicon/favicon.svg",
+  "logo": {
+    "light": "/favicon/quantura-logo.svg",
+    "dark": "/favicon/quantura-logo-dark.svg",
+    "href": "https://quantura.studio"
+  },
   "description": "Build with Quantura Forecast (Q Forecast), ensemble quantiles, collaborator-aware workspaces, the Uploaded CSV API, and licensed datasets.",
   "colors": {
     "primary": "#0B1526",

@@ -88,12 +88,15 @@
     container.innerHTML = `<table class="data-table"><thead><tr>${columns.map((column) => `<th scope="col">${html(column.label)}</th>`).join("")}</tr></thead><tbody>${displayed.map((row) => `<tr>${columns.map((column) => `<td>${html(column.render ? column.render(row) : row[column.key])}</td>`).join("")}</tr>`).join("")}</tbody></table>${rows.length > displayed.length ? `<p class="table-note">Showing ${displayed.length.toLocaleString()} of ${rows.length.toLocaleString()} loaded rows. The download contains the full loaded selection.</p>` : ""}`;
   }
   function plot(element, traces, layout = {}) {
-    if (!element || !window.Plotly) return;
-    window.Plotly.react(element, traces, {
-      paper_bgcolor: "transparent", plot_bgcolor: "transparent", font: { color: "#cbd5e1", family: "Inter, sans-serif", size: 12 },
+    if (!element) return;
+    window.QuanturaUI.whenVisible(element, async () => {
+    const Plotly = await window.QuanturaUI.loadPlotly();
+    await Plotly.react(element, traces, {
+      paper_bgcolor: "transparent", plot_bgcolor: "transparent", font: { family: "Inter, sans-serif", size: 12 },
       margin: { l: 56, r: 24, t: 24, b: 48 }, xaxis: { gridcolor: "rgba(148,163,184,.16)", rangeslider: { visible: false } },
       yaxis: { gridcolor: "rgba(148,163,184,.16)" }, hovermode: "x unified", showlegend: false, ...layout,
     }, { responsive: true, displaylogo: false });
+    });
   }
 
   function stockHistoryBody() {

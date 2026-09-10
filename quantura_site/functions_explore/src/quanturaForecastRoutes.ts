@@ -11,7 +11,6 @@ import {
   ForecastApiScope,
   ForecastStatus,
   assertStatusTransition,
-  brierScore,
   buildCalibrationRows,
   buildForecastSearchTokens,
   buildPublishedSnapshot,
@@ -43,7 +42,7 @@ const SLUGS = "quantura_forecast_slugs";
 const AMENDMENTS = "amendments";
 const API_VERSION = "v1";
 const SCHEMA_VERSION = "quantura_forecast_v1";
-const DATASET_SCHEMA_VERSION = "forecast_trajectories_v1";
+const DATASET_SCHEMA_VERSION = "forecast_trajectories_v2";
 const MAX_BULK_RECORDS = 20_000;
 
 type JsonRecord = Record<string, unknown>;
@@ -455,11 +454,13 @@ export async function createDatasetRelease(options: RouteOptions, input: JsonRec
     .get();
   const records: JsonRecord[] = [];
   for (const doc of forecastSnapshot.docs) {
-    records.push(sanitizeDatasetRecord(doc.id, plain(doc.data()), await historyFor(options, doc.id)));
+    const record = sanitizeDatasetRecord(doc.id, plain(doc.data()), await historyFor(options, doc.id));
+    delete record.brier_score; // New v2 releases omit the retired field; prior immutable releases are untouched.
+    records.push(record);
   }
   const generatedAt = new Date().toISOString();
   const jsonl = `${records.map((record) => JSON.stringify(record)).join("\n")}\n`;
-  const csvColumns = ["forecast_id", "created_at", "input_cutoff_at", "category", "question", "possible_future_headline", "probability", "resolution_deadline", "status", "actual_outcome", "resolved_at", "brier_score"];
+  const csvColumns = ["forecast_id", "created_at", "input_cutoff_at", "category", "question", "possible_future_headline", "probability", "resolution_deadline", "status", "actual_outcome", "resolved_at", "log_score"];
   const csv = `${csvColumns.join(",")}\n${records.map((record) => csvColumns.map((column) => escapeCsv(record[column])).join(",")).join("\n")}\n`;
   const jsonlChecksum = crypto.createHash("sha256").update(jsonl).digest("hex");
   const csvChecksum = crypto.createHash("sha256").update(csv).digest("hex");
@@ -540,7 +541,6 @@ export async function runForecastLifecycleJob(options: RouteOptions, jobName: st
     await options.db.collection(AGGREGATES).doc("calibration_public").set({
       rows,
       resolved_count: records.length,
-      average_brier_score: records.length ? records.reduce((sum, item) => sum + Number(item.brier_score || 0), 0) / records.length : null,
       updated_at: now.toISOString(),
     }, { merge: false });
   }
@@ -634,7 +634,18 @@ export function registerQuanturaForecastRoutes(router: Router, options: RouteOpt
 
   router.get("/forecasts/public/calibration", async (_req, res) => {
     const cached = await options.db.collection(AGGREGATES).doc("calibration_public").get();
-    const data = cached.exists ? plain(cached.data()) : { rows: [], resolved_count: 0, average_brier_score: null, updated_at: null };
+    const stored = cached.exists ? plain(cached.data()) : {};
+    // Explicit projection also strips retired fields in pre-deployment caches.
+    const data = {
+      resolved_count: stored.resolved_count ?? 0,
+      updated_at: stored.updated_at ?? null,
+      rows: (Array.isArray(stored.rows) ? stored.rows : []).map((row: JsonRecord) => ({
+        bucket: row.bucket, lower: row.lower, upper: row.upper,
+        forecast_count: row.forecast_count,
+        predicted_average_probability: row.predicted_average_probability,
+        actual_event_frequency: row.actual_event_frequency,
+      })),
+    };
     const pending = await options.db.collection(FORECASTS).where("is_public", "==", true).where("status", "==", "pending").count().get().catch(() => null);
     res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=300");
     res.status(200).json({ data: { ...data, pending_count: pending?.data().count ?? null }, meta: publicMeta(1) });
@@ -709,7 +720,7 @@ export function registerQuanturaForecastRoutes(router: Router, options: RouteOpt
       actual_outcome: value.actual_outcome,
       resolved_at: value.resolved_at,
       scored_probability: value.scored_probability,
-      brier_score: value.brier_score,
+      brier_score: value.scoring_version === "calibration_log_v2" ? null : value.brier_score ?? null, // v1 historical compatibility only
       log_score: value.log_score,
     };
     res.status(200).json({ data, meta: publicMeta(1) });
@@ -749,7 +760,7 @@ export function registerQuanturaForecastRoutes(router: Router, options: RouteOpt
     const average = (field: string) => records.length ? records.reduce((sum, item) => sum + Number(item[field] || 0), 0) / records.length : null;
     const data = {
       resolved_forecasts: records.length,
-      average_brier_score: average("brier_score"),
+      average_brier_score: null, // Deprecated v1 compatibility key; not a current product metric.
       average_log_score: average("log_score"),
       average_forecast_probability: average("scored_probability"),
       calibration: buildCalibrationRows(records),
@@ -991,7 +1002,7 @@ export function registerQuanturaForecastRoutes(router: Router, options: RouteOpt
           resolution_evidence_json: evidence,
           resolved_at: ["yes", "no", "partial"].includes(outcome) ? now : null,
           scored_probability: ["yes", "no"].includes(outcome) ? probability : null,
-          brier_score: outcome === "yes" || outcome === "no" ? brierScore(probability, outcome) : null,
+          scoring_version: "calibration_log_v2",
           log_score: outcome === "yes" || outcome === "no" ? logScore(probability, outcome) : null,
           updated_at: now,
           resolved_by: actor.uid,

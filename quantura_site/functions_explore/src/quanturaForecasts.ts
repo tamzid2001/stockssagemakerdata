@@ -105,7 +105,6 @@ export interface CalibrationRow {
   forecast_count: number;
   predicted_average_probability: number | null;
   actual_event_frequency: number | null;
-  average_brier_score: number | null;
 }
 
 const STATUS_TRANSITIONS: Record<ForecastStatus, ReadonlySet<ForecastStatus>> = {
@@ -287,7 +286,6 @@ export function normalizeForecastDraft(input: ForecastDraftInput, now = new Date
     resolution_notes: "",
     resolved_at: null,
     actual_outcome: null,
-    brier_score: null,
     log_score: null,
     calibration_bucket: calibrationBucket(probability),
     previous_probability: null,
@@ -314,11 +312,6 @@ export function calibrationBucket(probability: number): string {
   const lower = Math.min(90, Math.floor(value * 10) * 10);
   const upper = lower + 10;
   return `${lower}-${upper}`;
-}
-
-export function brierScore(probability: number, outcome: BinaryOutcome): number {
-  const p = validateProbability(probability);
-  return (p - (outcome === "yes" ? 1 : 0)) ** 2;
 }
 
 export function logScore(probability: number, outcome: BinaryOutcome): number {
@@ -471,15 +464,17 @@ export function publicForecastProjection(forecastId: string, value: Record<strin
       notes: value.resolution_notes || null,
       actual_outcome: value.actual_outcome || null,
       resolved_at: value.resolved_at || null,
-      brier_score: value.brier_score ?? null,
       log_score: value.log_score ?? null,
     },
   };
 }
 
 export function enterpriseForecastProjection(forecastId: string, value: Record<string, unknown>): Record<string, unknown> {
+  const projection = publicForecastProjection(forecastId, value);
   return {
-    ...publicForecastProjection(forecastId, value),
+    ...projection,
+    // Read-only v1 compatibility; never published by the website or recalculated.
+    resolution: { ...(projection.resolution as Record<string, unknown>), brier_score: value.scoring_version === "calibration_log_v2" ? null : value.brier_score ?? null },
     schema_version: value.schema_version,
     previous_probability: value.previous_probability,
     current_revision: value.current_revision,
@@ -509,7 +504,6 @@ export function buildCalibrationRows(records: Array<Record<string, unknown>>): C
       .map((item): 0 | 1 | null => (item.status === "resolved_yes" ? 1 : item.status === "resolved_no" ? 0 : null))
       .filter((item): item is 0 | 1 => item !== null);
     const probabilities = rows.map((item) => Number(item.scored_probability ?? item.current_probability)).filter(Number.isFinite);
-    const brier = rows.map((item) => Number(item.brier_score)).filter(Number.isFinite);
     return {
       bucket: `${Math.round(lower * 100)}-${Math.round(upper * 100)}%`,
       lower,
@@ -517,7 +511,6 @@ export function buildCalibrationRows(records: Array<Record<string, unknown>>): C
       forecast_count: rows.length,
       predicted_average_probability: probabilities.length ? probabilities.reduce((a, b) => a + b, 0) / probabilities.length : null,
       actual_event_frequency: outcomes.length ? outcomes.reduce<number>((a, b) => a + b, 0) / outcomes.length : null,
-      average_brier_score: brier.length ? brier.reduce((a, b) => a + b, 0) / brier.length : null,
     };
   });
 }

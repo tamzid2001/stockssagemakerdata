@@ -2378,8 +2378,8 @@
   // React-style hook analogue for this vanilla app: subscribe to Remote Config updates.
   const useRemoteConfig = (listener) => remoteConfigStore.subscribe(listener);
 
-  const QUANTURA_ICON_URL = "/favicon.svg?v=20260903b";
-  const QUANTURA_FAVICON_URL = "/favicon.svg?v=20260903b";
+  const QUANTURA_ICON_URL = "/favicon.svg?v=20260909a";
+  const QUANTURA_FAVICON_URL = "/favicon.svg?v=20260909a";
 
   const hasSessionUser = (user = state.user) => Boolean(user?.uid);
   const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);
@@ -3067,7 +3067,7 @@
       toggle.className = "mobile-nav-toggle";
       toggle.setAttribute("aria-label", "Open navigation menu");
       toggle.setAttribute("aria-expanded", "false");
-      toggle.innerHTML = icon("menu-scale");
+      toggle.innerHTML = `${icon("menu-scale")}<span>Menu</span>`;
     }
     if (logo?.parentNode === nav) {
       nav.insertBefore(toggle, logo);
@@ -3085,7 +3085,7 @@
     const setToggleVisualState = (open) => {
       toggle?.setAttribute("aria-expanded", open ? "true" : "false");
       toggle?.setAttribute("aria-label", open ? "Close navigation menu" : "Open navigation menu");
-      toggle.innerHTML = open ? icon("xmark") : icon("menu-scale");
+      toggle.innerHTML = `${open ? icon("xmark") : icon("menu-scale")}<span>${open ? "Close" : "Menu"}</span>`;
     };
 
     const close = () => {
@@ -5678,6 +5678,7 @@
     const applyTheme = (theme, { persist = true } = {}) => {
       const next = theme === "dark" ? "dark" : "light";
       document.documentElement.dataset.theme = next;
+      document.dispatchEvent(new CustomEvent("quantura:theme-change", { detail: { theme: next } }));
       syncBrandAssets(next);
       if (persist) safeLocalStorageSet(THEME_KEY, next);
 	      const button = document.getElementById("theme-toggle");
@@ -5813,6 +5814,7 @@
   const setCookieConsent = (value) => {
     state.cookieConsent = value;
     safeLocalStorageSet(COOKIE_CONSENT_KEY, value);
+    document.dispatchEvent(new Event("quantura:consent-change"));
     if (value === "accepted") {
       ensureInitialPageView();
       setUserId(state.user?.uid || null);
@@ -7200,10 +7202,10 @@
     ensureProfileFeedbackButtons();
     ensureHeaderNotificationsCta();
     if (ui.headerAuth) {
-      ui.headerAuth.classList.add("icon-only");
+      ui.headerAuth.classList.remove("icon-only");
       ui.headerAuth.innerHTML = accountAuthed
-        ? `${icon("dashboard")}`
-        : `${icon("log-in")}`;
+        ? `${icon("dashboard")}<span>Dashboard</span>`
+        : `${icon("log-in")}<span>Sign in</span>`;
       ui.headerAuth.setAttribute("title", accountAuthed ? "Dashboard" : "Sign in");
       ui.headerAuth.setAttribute("aria-label", accountAuthed ? "Open dashboard" : "Sign in");
       if (ui.headerAuth.tagName.toLowerCase() === "button") {
@@ -9509,14 +9511,12 @@
     if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
-        <a href="/forecasting" data-analytics="nav_terminal">${icon("candlestick-chart")}<span>Terminal</span></a>
+        <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Q Forecast</span></a>
+        <a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>
         <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
-        <a href="/events" data-analytics="nav_events">${icon("calendar")}<span>Events</span></a>
-        <a href="/shop" data-analytics="nav_shop">${icon("shop")}<span>Shop</span></a>
-        <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
-        <a href="/contact" data-analytics="nav_contact">${icon("mail")}<span>Contact Us</span></a>
+        <a href="/developers/api" data-analytics="nav_developers">${icon("code")}<span>API Docs</span></a>
       `;
     });
     navActions.forEach((group) => {
@@ -9750,8 +9750,8 @@
     }
     const authed = hasFullAccount();
     link.href = authed ? "/notifications" : "/account";
-    link.innerHTML = `${icon("bell-notification")}`;
-    link.classList.add("icon-only");
+    link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
+    link.classList.remove("icon-only");
     link.setAttribute("title", "Notifications");
     link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
   };
@@ -14602,7 +14602,10 @@
   };
 
   const renderEnsembleChart = async (job) => {
-    if (!ui.ensembleForecastChart || !window.Plotly) return;
+    if (!ui.ensembleForecastChart) return;
+    if (window.QuanturaUI?.deferChart(ui.ensembleForecastChart, () => renderEnsembleChart(job))) return;
+    const Plotly = await getPlotly();
+    if (!Plotly) return;
     const rows = Array.isArray(job?.predictions) ? job.predictions : [];
     const quantiles = Array.isArray(job?.quantiles) ? job.quantiles.map(Number).sort((a, b) => a - b) : [];
     if (!rows.length || !quantiles.length) return;
@@ -14633,7 +14636,7 @@
       }
     }
     const dark = isDarkMode();
-    await window.Plotly.react(ui.ensembleForecastChart, traces, {
+    await Plotly.react(ui.ensembleForecastChart, traces, {
       font: { family: "Manrope, sans-serif", color: dark ? "rgba(246,244,238,.92)" : "#12182a" },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
       margin: { l: 62, r: 24, t: 26, b: 58 }, height: 420, hovermode: "x unified",
@@ -16587,7 +16590,7 @@
     return dt.toISOString().slice(0, 10);
   };
 
-  const getPlotly = () => (typeof window !== "undefined" ? window.Plotly : null);
+  const getPlotly = async () => window.QuanturaUI ? window.QuanturaUI.loadPlotly() : window.Plotly;
 
   const extractDateKey = (rows) => {
     if (!rows?.length) return null;
@@ -16634,7 +16637,7 @@
       setTerminalStatus("Quantura overlay mode is active on the chart.");
     }
 
-	    const Plotly = getPlotly();
+      const Plotly = await getPlotly();
 	    if (!Plotly) {
 	      ui.tickerChart.textContent = "Chart library not loaded.";
 	      return;
@@ -16805,7 +16808,8 @@
 
   const renderIndicatorChart = async (series) => {
     if (!ui.indicatorChart) return;
-    const Plotly = getPlotly();
+    if (window.QuanturaUI?.deferChart(ui.indicatorChart, () => renderIndicatorChart(series))) return;
+    const Plotly = await getPlotly();
     if (!Plotly) {
       ui.indicatorChart.textContent = "Chart library not loaded.";
       return;
@@ -17822,7 +17826,8 @@
 
   const renderPredictionsChart = async (table, { title = "CSV plot", container = ui.predictionsChart, height = 520 } = {}) => {
     if (!container) return;
-    const Plotly = getPlotly();
+    if (window.QuanturaUI?.deferChart(container, () => renderPredictionsChart(table, { title, container, height }))) return;
+    const Plotly = await getPlotly();
     if (!Plotly) {
       container.textContent = "Chart library not loaded.";
       return;
@@ -19340,10 +19345,13 @@
     const statLabel = String(run?.sports?.stat?.label || "Selected stat").trim();
     const recentHistory = Array.isArray(analysisData?.recentHistory) ? analysisData.recentHistory : [];
     const predictionSeries = Array.isArray(analysisData?.predictionSeries) ? analysisData.predictionSeries : [];
-    if (!window.Plotly || (!recentHistory.length && !predictionSeries.length)) {
+    if (!recentHistory.length && !predictionSeries.length) {
       ui.sportsFoundryChart.innerHTML = `<div class="small muted">Historical and prediction chart will appear here once a forecast is ready.</div>`;
       return;
     }
+    if (window.QuanturaUI?.deferChart(ui.sportsFoundryChart, () => renderSportsFoundryChart(run))) return;
+    const Plotly = await getPlotly();
+    if (!Plotly) return;
     const traces = [];
     if (recentHistory.length) {
       traces.push({
@@ -19427,7 +19435,7 @@
           ]
         : [],
     };
-    await window.Plotly.newPlot(ui.sportsFoundryChart, traces, layout, { responsive: true, displayModeBar: false });
+    await Plotly.newPlot(ui.sportsFoundryChart, traces, layout, { responsive: true, displayModeBar: false });
   };
 
   const renderSportsFoundryRunPreview = (run) => {
@@ -22687,7 +22695,8 @@
     const host = ui.forecastOutput.querySelector("[data-forecast-detail-chart]");
     if (!host) return;
 
-    const Plotly = getPlotly();
+    if (window.QuanturaUI?.deferChart(host, () => renderForecastOutputChart(forecastDoc))) return;
+    const Plotly = await getPlotly();
     if (!Plotly) {
       host.innerHTML = `<div class="small muted">Interactive chart unavailable right now.</div>`;
       return;
@@ -25007,6 +25016,7 @@
       bindMarketingBottomNav();
       bindHomeBottomNav();
       if (isNativeApp()) {
+        window.QuanturaUI?.loadNative().catch(() => {});
         bindNativeTransitionInterstitials();
         registerLegacyNativeAdInjectionHook();
         ensureNativeInlineAdRefreshLoop();
@@ -25020,11 +25030,7 @@
       recordPromoSessionUsage();
       state.promoForecastCount = getStoredNumber(PROMO_FORECAST_COUNT_KEY, 0);
       bindChartControls();
-      queueIdleTask(() => {
-        if (shouldHydrateLiquidGlass()) {
-          loadLiquidGlassRuntime().catch(() => {});
-        }
-      }, { timeout: 1600 });
+      // Solid semantic surfaces need no WebGL/liquid-glass hydration.
   };
 
 		  const init = () => {
@@ -29924,5 +29930,7 @@
   });
   };
 
-  window.addEventListener("load", init);
+  // Navigation/auth must not wait for offsite logos and below-fold images.
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
+  else init();
 })();

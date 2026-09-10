@@ -7,6 +7,13 @@
   const status = document.getElementById("market-search-status");
   const results = document.getElementById("market-search-results");
   if (!form || !queryInput || !sourceInput || !status || !results) return;
+  let timer;
+  let controller;
+  let requestSequence = 0;
+  const cache = new Map();
+  queryInput.setAttribute("aria-controls", "market-search-results");
+  queryInput.setAttribute("aria-describedby", "market-search-status");
+  queryInput.maxLength = 160;
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
@@ -29,7 +36,7 @@
             return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}">
               <div class="market-search-result-main">
                 <div class="market-search-result-symbol">${escapeHtml(row.symbol || row.contract_id || "Market")}</div>
-                <div><strong>${escapeHtml(row.name || row.symbol || "Supported market")}</strong><div class="small muted">${escapeHtml(titleCase(row.asset_class))} · ${escapeHtml(providerLabel(row.source))}${row.exchange ? ` · ${escapeHtml(row.exchange)}` : ""}${row.currency ? ` · ${escapeHtml(row.currency)}` : ""}</div>${row.unit ? `<div class="small muted">Unit: ${escapeHtml(row.unit)}</div>` : ""}</div>
+                <div><strong title="${escapeHtml(row.name || row.symbol || "Supported market")}">${escapeHtml(row.name || row.symbol || "Supported market")}</strong><div class="small muted">${escapeHtml(titleCase(row.asset_class))} · ${escapeHtml(providerLabel(row.source))}${row.exchange ? ` · ${escapeHtml(row.exchange)}` : ""}${row.currency ? ` · ${escapeHtml(row.currency)}` : ""}${row.status ? ` · ${escapeHtml(titleCase(row.status))}` : ""}</div>${row.unit ? `<div class="small muted">${escapeHtml(row.unit)}</div>` : ""}</div>
               </div>
               <div class="hero-actions market-search-result-actions">
                 ${prediction
@@ -45,24 +52,68 @@
     results.innerHTML = sections.length ? sections.join("") : '<div class="empty-state">No supported market matched this search.</div>';
   }
 
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  async function search() {
+    clearTimeout(timer);
+    controller?.abort();
+    const sequence = ++requestSequence;
     const query = String(queryInput.value || "").trim();
-    if (query.length < 2) return;
+    if (query.length < 2) {
+      results.hidden = true;
+      status.textContent = "Enter at least two characters to search markets.";
+      results.removeAttribute("aria-busy");
+      return;
+    }
+    controller = new AbortController();
     status.textContent = "Searching configured providers…";
-    results.hidden = true;
+    results.setAttribute("aria-busy", "true");
     try {
       const params = new URLSearchParams({ q: query, source: String(sourceInput.value || "auto"), limit: "8" });
-      const response = await fetch(`/api/market-search?${params.toString()}`, { headers: { Accept: "application/json" } });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Market search failed.");
+      const key = params.toString();
+      const cached = cache.get(key);
+      let payload = cached && Date.now() - cached.time < 60000 ? cached.payload : null;
+      if (!payload) {
+        const response = await fetch(`/api/market-search?${key}`, { headers: { Accept: "application/json" }, signal: controller.signal });
+        payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error("Market search is temporarily unavailable. Try again.");
+        cache.set(key, { time: Date.now(), payload });
+        if (cache.size > 20) cache.delete(cache.keys().next().value);
+      }
+      if (sequence !== requestSequence) return;
       render(payload.groups || {}, payload.errors || {});
-      status.textContent = `${Number(payload.count || 0).toLocaleString()} supported result${Number(payload.count || 0) === 1 ? "" : "s"}. Availability reflects the configured provider response.`;
+      status.textContent = `${Number(payload.count || 0).toLocaleString()} results · ↓ to explore, Escape to close.`;
     } catch (error) {
+      if (error.name === "AbortError" || sequence !== requestSequence) return;
       results.hidden = false;
       results.innerHTML = '<div class="empty-state">Search is temporarily unavailable. Try a provider-specific workflow.</div>';
       status.textContent = error?.message || "Market search failed.";
+    } finally {
+      if (sequence === requestSequence) results.removeAttribute("aria-busy");
     }
+  }
+
+  form.addEventListener("submit", (event) => { event.preventDefault(); void search(); });
+  queryInput.addEventListener("input", () => {
+    controller?.abort(); ++requestSequence; clearTimeout(timer);
+    timer = setTimeout(search, 300);
+  });
+  sourceInput.addEventListener("change", () => void search());
+  queryInput.addEventListener("keydown", event => {
+    if (event.key === "ArrowDown" && !results.hidden) {
+      const first = results.querySelector("[data-market-action]");
+      if (first) { event.preventDefault(); first.focus(); }
+    }
+    if (event.key === "Escape") { results.hidden = true; controller?.abort(); ++requestSequence; clearTimeout(timer); results.removeAttribute("aria-busy"); }
+  });
+  results.addEventListener("keydown", event => {
+    if (event.key === "Escape") { results.hidden = true; queryInput.focus(); return; }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const buttons = [...results.querySelectorAll("[data-market-action]")];
+    const index = buttons.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    if (event.key === "ArrowUp" && index === 0) { queryInput.focus(); return; }
+    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)));
+    buttons[next]?.focus();
   });
 
   results.addEventListener("click", (event) => {
