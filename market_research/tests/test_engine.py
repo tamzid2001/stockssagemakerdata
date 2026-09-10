@@ -54,8 +54,18 @@ def test_trailing_500_and_no_future():
     )
 
 
-def test_gaps_are_not_invented_minute_observations():
+def test_short_gap_imputation_is_causal_and_never_an_execution_quote():
     quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, 100) if i != 70]
+    window = history_window(quotes, 99 * 60)
+    assert sum(q.observed for q in window) == 98
+    imputed = next(q for q in window if not q.observed)
+    assert imputed.timestamp == 70 * 60 and imputed.ask == quotes[68].ask
+    with pytest.raises(ValueError, match="IMPUTED_EXECUTION"):
+        advance(initial_state(), imputed, curve(), Strategy())
+
+
+def test_long_gaps_restart_context_instead_of_unbounded_carry_forward():
+    quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, 100) if not 60 <= i <= 70]
     with pytest.raises(ValueError, match="insufficient"):
         history_window(quotes, 99 * 60)
 

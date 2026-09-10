@@ -112,7 +112,8 @@ def process_live(
     return {
         "forecast": True,
         "gap_seconds": gap,
-        "history_count": len(window),
+        "history_count": sum(q.observed for q in window),
+        "model_context_steps": len(window),
         "status": "forecast_persisted",
     }
 
@@ -198,7 +199,7 @@ def run(args):
 
     strategy = Strategy()
     configuration = {
-        "version": 1,
+        "version": 2,
         "mode": args.mode,
         "horizon": args.horizon,
         "models": args.models,

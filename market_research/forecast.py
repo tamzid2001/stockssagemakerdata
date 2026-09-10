@@ -21,7 +21,10 @@ def forecast_window(
         or set(models) - set(MODEL_REGISTRY["models"])
     ):
         raise ValueError("unsupported_models")
-    source = [{"timestamp": iso(q.timestamp), "target": q.ask} for q in window]
+    source = [
+        {"timestamp": iso(q.timestamp), "target": q.ask, "observed": q.observed}
+        for q in window
+    ]
     # Epsilon is used only to make log-odds finite at the boundaries.
     logits = [
         {
@@ -97,7 +100,10 @@ def forecast_window(
         ),
         "origin": window[-1].timestamp,
         "history_start": window[0].timestamp,
-        "history_count": len(window),
+        "history_count": sum(q.observed for q in window),
+        "model_context_steps": len(window),
+        "imputed_context_steps": sum(not q.observed for q in window),
+        "imputation": "causal_previous_quote_max_5_minutes_model_input_only",
         "history_requested_minutes": 500,
         "source_hash": digest(source),
         "seed": seed,

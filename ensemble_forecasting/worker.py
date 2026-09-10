@@ -151,6 +151,7 @@ def execute_job(
                 "duration_seconds": time.monotonic() - model_started,
             }
             failures.append(failure)
+            LOGGER.warning("model execution failed: model=%s code=%s retryable=%s", model_id, failure["code"], failure["retryable"])
             model_runs.append({**failure, "status": "failed"})
             if inference_request.failure_policy == "fail":
                 raise ModelExecutionError(model_id, failure["code"], retryable=failure["retryable"]) from exc

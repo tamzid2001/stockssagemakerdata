@@ -21,10 +21,13 @@ versions and actual returned model metadata are preserved privately.
 
 Use up to 500 completed, observed minutes before each origin, including pregame
 and in-game observations. Fewer than 500 are accepted (minimum 40, matching the
-existing engine). Only a contiguous observed suffix is used for a minute-step
-foundation model; missing minutes are not compressed into fake one-minute bars.
-Actual history counts and unavailable origins are reported. Data gaps can reduce
-coverage substantially; 500 requested minutes does not imply 500 actual quotes.
+existing engine). Method v2 puts the input on a minute grid and carries the most
+recent known quote for at most five missing minutes, strictly using past values.
+Longer gaps restart context. Imputed rows are explicitly marked `observed=false`
+and **cannot** trigger signals, fill orders, or determine outcomes. The minimum
+40 counts genuine observations only. Reports separate actual history count,
+model context steps and imputed steps; missing minutes are never compressed into
+fake one-minute observations. The original v1 failed-run record is preserved.
 
 Forecast horizon and rolling refresh cadence are independently selectable runs
 of either 30 or 60 minutes. No final outcome or post-origin price enters inference.

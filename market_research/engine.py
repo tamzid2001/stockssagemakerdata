@@ -15,7 +15,7 @@ import math
 from typing import Callable
 
 QUANTILES = (0.01, *tuple(i / 10 for i in range(1, 10)), 0.99)
-VERSION = "quantura_quote_research_v1"
+VERSION = "quantura_quote_research_v2"
 
 
 def stamp(value: str) -> int:
@@ -44,6 +44,7 @@ class Quote:
     timestamp: int
     ask: float
     bid: float
+    observed: bool = True
 
     def __post_init__(self):
         if (
@@ -149,16 +150,28 @@ def normalize_quotes(rows: list[dict], as_of: int) -> list[Quote]:
 def history_window(
     quotes: list[Quote], origin: int, minutes: int = 500, minimum: int = 40
 ) -> list[Quote]:
-    """A contiguous suffix inside the last 500 minutes; never fill missing data."""
+    """Minute grid of known information with explicitly labeled causal imputation.
+
+    Carry the previous quote for at most five minutes, only in model context.
+    Longer gaps start a new context. Execution never receives these imputed rows.
+    The minimum applies to genuine observations, not the expanded grid.
+    """
     eligible = [q for q in quotes if origin - minutes * 60 < q.timestamp <= origin]
-    if not eligible or eligible[-1].timestamp != origin:
+    if not eligible or origin - eligible[-1].timestamp > 300:
         raise ValueError("missing_origin_quote")
-    start = len(eligible) - 1
-    while start > 0 and eligible[start].timestamp - eligible[start - 1].timestamp == 60:
-        start -= 1
-    window = eligible[start:]
-    if len(window) < minimum:
-        raise ValueError("insufficient_contiguous_minute_history")
+    window = []
+    previous = None
+    actual = {q.timestamp: q for q in eligible}
+    for timestamp in range(eligible[0].timestamp, origin + 1, 60):
+        if timestamp in actual:
+            previous = actual[timestamp]
+            window.append(previous)
+        elif previous and timestamp - previous.timestamp <= 300:
+            window.append(Quote(timestamp, previous.ask, previous.bid, observed=False))
+        else:
+            window = []
+    if sum(q.observed for q in window) < minimum:
+        raise ValueError("insufficient_observed_minute_history")
     return window
 
 
@@ -200,6 +213,8 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
     expire at the issuing forecast's horizon, not reset on each new forecast.
     Different TP-level experiments must never be summed as one portfolio.
     """
+    if not quote.observed:
+        raise ValueError("IMPUTED_EXECUTION_QUOTE")
     if quote.timestamp <= state["last_timestamp"]:
         return []
     events = []
@@ -228,6 +243,7 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
         and current_q
         and previous_q
         and previous
+        and previous.get("observed", True)
         and quote.timestamp - previous["timestamp"] == 60
         and crosses(
             previous["ask"],
