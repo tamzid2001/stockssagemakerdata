@@ -5,6 +5,9 @@ on:
     paths:
       - ".env.example"
       - "forecast_intelligence/**"
+      - "market_research/**"
+      - "ensemble_forecasting/**"
+      - ".github/workflows/polymarket-*.yml"
       - "config/**"
       - "requirements-forecast-intelligence.txt"
       - "requirements-forecast-intelligence-service.txt"
@@ -23,6 +26,9 @@ on:
     paths:
       - ".env.example"
       - "forecast_intelligence/**"
+      - "market_research/**"
+      - "ensemble_forecasting/**"
+      - ".github/workflows/polymarket-*.yml"
       - "config/**"
       - "requirements-forecast-intelligence.txt"
       - "requirements-forecast-intelligence-service.txt"
@@ -62,7 +68,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest exchange-calendars
+          pip install pytest exchange-calendars pyyaml pandas-market-calendars httpx
 
       - name: Install web and backend deps
         run: |
@@ -81,6 +87,7 @@ jobs:
       - name: Run Forecast Intelligence leakage and schema tests
         run: |
           pytest -q forecast_intelligence/tests
+          pytest -q market_research/tests ensemble_forecasting/tests
 
       - name: Build Quantura web bundle
         run: |

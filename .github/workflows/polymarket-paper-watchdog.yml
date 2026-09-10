@@ -1,0 +1,27 @@
+name: Polymarket Paper Worker Recovery Watchdog
+on:
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: polymarket-paper-watchdog
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: vars.POLYMARKET_PAPER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Recover only when no active or queued paper worker exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POLYMARKET_PAPER_ENABLED: ${{ vars.POLYMARKET_PAPER_ENABLED }}
+          PAPER_HORIZON: ${{ vars.POLYMARKET_PAPER_HORIZON || '30' }}
+        run: python -m market_research.handoff

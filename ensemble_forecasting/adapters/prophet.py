@@ -5,7 +5,12 @@ import time
 import numpy as np
 import pandas as pd
 
-from ..schemas import ForecastRequest, ModelForecast, PreparedSeries, canonical_quantile_string
+from ..schemas import (
+    ForecastRequest,
+    ModelForecast,
+    PreparedSeries,
+    canonical_quantile_string,
+)
 from ..validation import coerce_quantile_horizon, monotonic_rearrangement
 from .base import ForecastAdapter, ModelExecutionError, package_versions
 
@@ -13,35 +18,57 @@ from .base import ForecastAdapter, ModelExecutionError, package_versions
 class ProphetAdapter(ForecastAdapter):
     model_id = "prophet"
 
-    def forecast(self, series: PreparedSeries, timestamps: tuple[str, ...], request: ForecastRequest) -> ModelForecast:
+    def forecast(
+        self,
+        series: PreparedSeries,
+        timestamps: tuple[str, ...],
+        request: ForecastRequest,
+    ) -> ModelForecast:
         started = time.monotonic()
         try:
             from prophet import Prophet
         except ImportError as exc:
-            raise ModelExecutionError(self.model_id, "MODEL_DEPENDENCY_MISSING") from exc
-        train_timestamps = pd.to_datetime(list(series.timestamps), utc=True).tz_convert(None)
-        train = pd.DataFrame({"ds": train_timestamps, "y": series.transformed_values.astype(np.float64)})
+            raise ModelExecutionError(
+                self.model_id, "MODEL_DEPENDENCY_MISSING"
+            ) from exc
+        train_timestamps = pd.to_datetime(list(series.timestamps), utc=True).tz_convert(
+            None
+        )
+        train = pd.DataFrame(
+            {"ds": train_timestamps, "y": series.transformed_values.astype(np.float64)}
+        )
+        span_days = (train_timestamps[-1] - train_timestamps[0]).total_seconds() / 86400
         model = Prophet(
             daily_seasonality=False,
-            weekly_seasonality=True,
-            yearly_seasonality=len(train) >= 252,
+            weekly_seasonality=span_days >= 14,
+            yearly_seasonality=span_days >= 365,
             changepoint_prior_scale=0.05,
             seasonality_prior_scale=10.0,
             uncertainty_samples=500,
             mcmc_samples=0,
         )
-        model.add_country_holidays(country_name="US")
-        if len(train) >= 90:
+        if request.calendar in {"NYSE", "XNYS", "NASDAQ", "XNAS"}:
+            model.add_country_holidays(country_name="US")
+        if span_days >= 90:
             model.add_seasonality(name="monthly", period=30.5, fourier_order=5)
         try:
             model.fit(train)
-            future = pd.DataFrame({"ds": pd.to_datetime(list(timestamps), utc=True).tz_convert(None)})
-            samples = np.asarray(model.predictive_samples(future)["yhat"], dtype=np.float64)
+            future = pd.DataFrame(
+                {"ds": pd.to_datetime(list(timestamps), utc=True).tz_convert(None)}
+            )
+            samples = np.asarray(
+                model.predictive_samples(future)["yhat"], dtype=np.float64
+            )
         except Exception as exc:
-            raise ModelExecutionError(self.model_id, "MODEL_INFERENCE_FAILED", retryable=False) from exc
+            raise ModelExecutionError(
+                self.model_id, "MODEL_INFERENCE_FAILED", retryable=False
+            ) from exc
         if samples.ndim != 2:
             raise ModelExecutionError(self.model_id, "INVALID_MODEL_OUTPUT")
-        if samples.shape[0] != request.prediction_length and samples.shape[1] == request.prediction_length:
+        if (
+            samples.shape[0] != request.prediction_length
+            and samples.shape[1] == request.prediction_length
+        ):
             samples = samples.T
         if samples.shape[0] != request.prediction_length:
             raise ModelExecutionError(self.model_id, "INVALID_MODEL_OUTPUT")
@@ -61,7 +88,10 @@ class ProphetAdapter(ForecastAdapter):
             requested_quantiles=request.quantiles,
             available_quantiles=request.quantiles,
             quantile_matrix=matrix,
-            quantile_provenance={canonical_quantile_string(q): "posterior_predictive_sample" for q in request.quantiles},
+            quantile_provenance={
+                canonical_quantile_string(q): "posterior_predictive_sample"
+                for q in request.quantiles
+            },
             device="cpu",
             duration_seconds=time.monotonic() - started,
             package_versions=package_versions(["prophet", "numpy"]),
