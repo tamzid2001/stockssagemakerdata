@@ -9239,27 +9239,12 @@ html .toast[data-variant="warn"] {
   box-shadow: 0 16px 38px rgba(15, 23, 42, 0.07);
 }
 
-.ensemble-forecast-shell > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 20px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.ensemble-forecast-shell > summary::-webkit-details-marker { display: none; }
-.ensemble-forecast-shell > summary::after { content: "+"; font-size: 1.35rem; color: var(--ink-2); }
-.ensemble-forecast-shell[open] > summary::after { content: "−"; }
-.ensemble-forecast-shell > summary strong { display: block; margin-top: 3px; font-size: 1.05rem; }
-
 .ensemble-forecast-body {
-  padding: 0 20px 20px;
-  border-top: 1px solid var(--line);
+  padding: 12px;
 }
 
-.ensemble-forecast-body > p { margin: 16px 0; }
+.ensemble-forecast-body > p { margin: 0 0 12px; }
+.ensemble-forecast-shell [hidden] { display: none !important; }
 
 .ensemble-model-fieldset,
 .ensemble-quantile-fieldset {
@@ -9391,9 +9376,7 @@ html .toast[data-variant="warn"] {
   .forecast-range-grid { grid-template-columns: 1fr; }
   .forecast-statistics-table { min-width: 1040px; }
   .forecast-date-line { display: grid; gap: 5px; }
-  .ensemble-forecast-shell > summary { align-items: flex-start; padding: 16px; }
-  .ensemble-forecast-shell > summary > .small { display: none; }
-  .ensemble-forecast-body { padding: 0 14px 16px; }
+  .ensemble-forecast-body { padding: 12px; }
   .ensemble-model-grid { grid-template-columns: 1fr; }
   .ensemble-result-actions > * { width: 100%; justify-content: center; text-align: center; }
   .ensemble-chart { min-height: 300px; }
