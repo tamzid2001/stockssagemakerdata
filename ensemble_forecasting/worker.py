@@ -70,7 +70,11 @@ def execute_job(
     *,
     progress: Callable[[Mapping[str, Any]], None] | None = None,
     mock: bool = False,
+    minimum_history_rows: int = 40,
 ) -> dict[str, Any]:
+    # Trusted Python caller option, deliberately not a client request field.
+    if type(minimum_history_rows) is not int or not 2 <= minimum_history_rows <= 10_000:
+        raise ValueError("invalid minimum history rows")
     progress = progress or (lambda _payload: None)
     request_payload = dict(job.get("request") or {})
     request_payload["model_checkpoints"] = dict(job.get("model_checkpoints") or {})
@@ -90,6 +94,7 @@ def execute_job(
         frequency=str(source.get("frequency") or request.frequency),
         timezone=str(source.get("timezone") or "UTC"),
         maximum_rows=int(job.get("maximum_history_rows") or 10_000),
+        minimum_rows=minimum_history_rows,
     )
     # `dataset_hash` is the API's immutable snapshot identifier and includes
     # source/provider metadata. `series.dataset_hash` is a second, worker-side
@@ -151,6 +156,7 @@ def execute_job(
                 "duration_seconds": time.monotonic() - model_started,
             }
             failures.append(failure)
+            LOGGER.warning("model execution failed: model=%s code=%s retryable=%s", model_id, failure["code"], failure["retryable"])
             model_runs.append({**failure, "status": "failed"})
             if inference_request.failure_policy == "fail":
                 raise ModelExecutionError(model_id, failure["code"], retryable=failure["retryable"]) from exc

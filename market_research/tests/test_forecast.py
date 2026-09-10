@@ -2,6 +2,7 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 import sys
 import numpy as np
+import pytest
 
 from ensemble_forecasting.adapters.chronos import ChronosAdapter
 from ensemble_forecasting.preprocessing import prepare_series
@@ -13,7 +14,8 @@ from market_research import forecast
 def test_equal_weight_ensemble_and_short_history(monkeypatch):
     seen = {}
 
-    def execute(job):
+    def execute(job, *, minimum_history_rows, progress):
+        assert minimum_history_rows == 2
         seen.update(job)
         request = job["request"]
         assert {m["weight"] for m in request["models"].values()} == {1}
@@ -40,6 +42,27 @@ def test_equal_weight_ensemble_and_short_history(monkeypatch):
     assert output["history_count"] == 50 and len(seen["input"]["rows"]) == 50
     assert output["input_snapshot"][-1]["timestamp"] == iso(3000)
     validate_forecast(output, 3000, 30)
+
+
+def test_two_value_real_worker_path_with_mock_adapters(monkeypatch):
+    from ensemble_forecasting.worker import execute_job
+
+    monkeypatch.setattr(
+        forecast, "execute_job", lambda job, **kw: execute_job(job, mock=True, **kw)
+    )
+    output = forecast.forecast_window(
+        [Quote(60, 0.4, 0.38), Quote(120, 0.42, 0.40)], 30
+    )
+    assert output["history_count"] == 2
+    assert output["imputed_context_steps"] == 0
+    assert any("SHORT_HISTORY" in warning for warning in output["warnings"])
+    validate_forecast(output, 120, 30)
+    job = {
+        "request": output["configuration"],
+        "input": {"rows": output["input_snapshot"]},
+    }
+    with pytest.raises(ValueError, match="40"):
+        execute_job(job, mock=True)
 
 
 def test_chronos_partial_native_range_never_requests_clamped_tails(monkeypatch):

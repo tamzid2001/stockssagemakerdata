@@ -20,11 +20,16 @@ is solely for transform stability. The input, seed, effective weights, package
 versions and actual returned model metadata are preserved privately.
 
 Use up to 500 completed, observed minutes before each origin, including pregame
-and in-game observations. Fewer than 500 are accepted (minimum 40, matching the
-existing engine). Only a contiguous observed suffix is used for a minute-step
-foundation model; missing minutes are not compressed into fake one-minute bars.
-Actual history counts and unavailable origins are reported. Data gaps can reduce
-coverage substantially; 500 requested minutes does not imply 500 actual quotes.
+and in-game observations. Method v3 accepts a minimum of **two genuine consecutive
+minute observations** in research. Missing minutes restart the regular model
+context: no forward filling or time compression. Older data remains in the replay
+archive. Models unable to infer from short history are reported unavailable and
+excluded; two successful models are still required to call the result an ensemble.
+Short-context results carry a warning, not an accuracy claim. Historical origins
+begin after two observations, then advance 30/60 minutes, resuming at a valid
+observed pair after gaps. The public forecast API's existing 40-row default is
+unchanged; the research minimum is a trusted Python caller option, not a client
+override. Original historical run records remain immutable.
 
 Forecast horizon and rolling refresh cadence are independently selectable runs
 of either 30 or 60 minutes. No final outcome or post-origin price enters inference.
@@ -39,7 +44,7 @@ YES bid = 1 − shortPrice; NO bid = 1 − longPrice. Spread is preserved: the t
 asks need not sum to one. Both sides are tracked, not collapsed into complements.
 Requests use genuine one-minute custom ranges, chunked into at most 24 hours and
 cached for 30 seconds. Historical research requests a bounded window around each
-event (maximum 48 hours; unresolved finish metadata falls back to start + 6 hours,
+event (maximum 48 hours; unresolved finish metadata falls back to start + 36 hours,
 which can truncate long games and is not a verified resolution timestamp).
 
 Either P10 crossing direction can trigger a paper limit intent. Entry cannot fill
@@ -68,6 +73,19 @@ selection has survivorship/coverage limitations and is not a profitability guara
   no paper monitor is running/queued and `POLYMARKET_PAPER_ENABLED=true`.
 * `polymarket-historical-backtest.yml`: independent manual mock/real workflow;
   bounded contract and origin budgets, and 345-minute total compute budget.
+* `polymarket-replay-archive.yml`: independent discovery/download-only worker;
+  up to 1000 pages of 100 events, all eligible moneylines within the time budget.
+  No model downloads. Both sides share one stored quote history. Replay chunks
+  are gzip-compressed, checksum-verified, private and immutable. Empty history,
+  download errors, actual observations and incomplete coverage are distinct.
+
+Archive resumption uses the reported `catalog_id` plus `market_offset`, so a
+changing upstream list does not reorder an in-progress download. Once a catalog
+is complete, use its `next_cursor` to discover the next batch. A failed game may
+be retried by resuming at its index; previously archived ranges are reused.
+Backtests automatically reuse matching archived time ranges. Reports distinguish
+download availability from valid forecast origins and actual simulated trades.
+Snapshot revisions preserve earlier bytes rather than overwriting them.
 
 These are logically separate Ubuntu CPU jobs, not dedicated GPU machines. They
 cannot guarantee uninterrupted 24/7 execution: GitHub queue delays, installation,
@@ -96,6 +114,9 @@ Private collections: `market_research_sessions` (contract checkpoints),
 (idempotent outcomes), `market_research_runs` (run reports). Browser Firestore
 access is denied. These internal research records are not a new public API or
 licensed bulk release. Raw provider redistribution remains `review_required`.
+Archive catalogs, manifests, chunks and per-game outcomes live beneath the existing
+private `market_research_sessions/polymarket-replay-archive-v1` document; no new
+client database permission or public download URL is introduced.
 
 No raw datasets, forecasts, trading statistics, secrets, model caches or large
 artifacts are uploaded to GitHub. Public Actions summaries expose only coverage
