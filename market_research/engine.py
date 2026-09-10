@@ -240,7 +240,9 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
     active = []
     for observation in state.setdefault("observations", []):
         reason = (
-            "stop"
+            "horizon"
+            if quote.timestamp > observation["expires_at"]
+            else "stop"
             if quote.bid <= observation["stop"]
             else "target"
             if quote.bid >= observation["target"]
@@ -282,7 +284,9 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
         if position and quote.timestamp > position["entered_at"]:
             # Stop first. A gap is marked at the observed bid, not the stop price.
             reason = (
-                "stop"
+                "horizon"
+                if quote.timestamp > position["expires_at"]
+                else "stop"
                 if quote.bid <= position["stop"]
                 else "target"
                 if quote.bid >= position["target"]

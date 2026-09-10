@@ -166,6 +166,14 @@ def test_horizon_censor_is_not_a_win_or_stop():
     assert result["trigger_outcomes"]["target_before_stop_rate"] is None
 
 
+def test_gap_past_horizon_cannot_be_counted_as_target_hit():
+    state = seed()
+    f = curve(horizon=2)
+    advance(state, Quote(660, 0.17, 0.16), f, Strategy(slippage=0))
+    events = advance(state, Quote(780, 0.95, 0.94), f, Strategy(slippage=0))
+    assert all(e["reason"] == "horizon" for e in events)
+
+
 def test_backtest_forecaster_never_sees_revealed_future():
     quotes = [Quote(i * 60, 0.4 + i * 0.0001, 0.38 + i * 0.0001) for i in range(1, 140)]
     cutoffs = []
