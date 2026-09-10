@@ -291,6 +291,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Private paper-research worker checkpoints and licensed input snapshots.
+    // Access only by the existing server/worker identity, never public clients.
+    match /market_research_sessions/{document=**} { allow read, write: if false; }
+    match /market_research_forecasts/{document=**} { allow read, write: if false; }
+    match /market_research_trades/{document=**} { allow read, write: if false; }
+    match /market_research_runs/{document=**} { allow read, write: if false; }
+
     // Heavy ensemble jobs, immutable inputs, results, presets, cache records,
     // idempotency mappings, and usage counters are only exposed through the
     // authenticated API. Workspace authorization is evaluated on every HTTP

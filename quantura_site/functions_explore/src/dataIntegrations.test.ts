@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AlpacaClient, AlpacaError, barsToCsv, classifyEquitySession } from "./alpacaClient";
-import { buildMlbMinuteRows, discoverMlbMarkets, encodePriceHistoryRequest } from "./polymarketMlb";
+import { buildMlbMinuteRows, discoverMlbMarkets, encodePriceHistoryRequest, fetchPolymarketPricePoints } from "./polymarketMlb";
 import {
   buildPredictionMarketDataset,
   kalshiAuthHeaders,
@@ -22,6 +22,24 @@ function withAlpacaEnvironment(): void {
   process.env.ALPACA_BASE_URL = "https://paper.example.test";
   process.env.ALPACA_DATA_URL = "https://data.example.test";
 }
+
+test("Polymarket official one-minute history splits 24h ranges and preserves spread", async () => {
+  const urls: URL[] = [];
+  const start=Date.parse("2026-09-01T00:00:00Z");
+  const points=await fetchPolymarketPricePoints("sports-fixture",start,start+2*86400000,1,(async input=>{
+    const url=new URL(String(input));urls.push(url);
+    assert.equal(url.pathname,"/v1/price-history");
+    assert.equal(url.searchParams.get("fidelity"),"1");
+    const from=Number(url.searchParams.get("timestamp.startTimestamp"));
+    const end=Number(url.searchParams.get("timestamp.endTimestamp"));
+    assert.equal(end-from,86400);
+    return Response.json({history:[{timestamp:from+10,longPrice:.6,shortPrice:.43},{timestamp:from+10,longPrice:.6,shortPrice:.43}]});
+  }) as typeof fetch);
+  assert.equal(urls.length,2);assert.equal(points.length,2);
+  assert.equal(points[0].longPrice+points[0].shortPrice,1.03);
+  await assert.rejects(()=>fetchPolymarketPricePoints("../private",start,start+1000));
+  await assert.rejects(()=>fetchPolymarketPricePoints("fixture",start,start+1000,5));
+});
 
 test("Alpaca stock history preserves pagination, chronological order, and CSV fields", async () => {
   withAlpacaEnvironment();

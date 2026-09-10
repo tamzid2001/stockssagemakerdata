@@ -58,6 +58,9 @@ export type PredictionMarketContract = {
   liquidity: number | null;
   availableFrom: string | null;
   availableTo: string | null;
+  live?: boolean;
+  marketType?: string;
+  resolutionTime?: string | null;
 };
 
 export type NormalizedPredictionObservation = {
@@ -347,6 +350,9 @@ export function normalizePolymarketEvents(
           eventStart: iso(market.gameStartTime || event.startTime || event.startDate),
           expirationTime: iso(market.endDate || event.endDate),
           status,
+          live: (event.live === true || asRecord(event.eventState)?.live === true) && event.ended !== true && asRecord(event.eventState)?.ended !== true && status === "open",
+          marketType: text(market.sportsMarketTypeV2 || market.sportsMarketType, 100),
+          resolutionTime: iso(event.finishedTimestamp || asRecord(event.eventState)?.finishedTimestamp),
           homeTeam: teams.home,
           awayTeam: teams.away,
           currentPrice: sidePrice,
@@ -706,12 +712,15 @@ async function polymarketHistory(contract: PredictionMarketContract, startMs: nu
     const price = contract.side === "short" ? point.shortPrice : point.longPrice;
     return observation(contract, new Date(point.timestamp * 1000).toISOString(), {
       price,
-      lastTrade: price,
+      ask: price,
+      bid: 1 - (contract.side === "short" ? point.longPrice : point.shortPrice),
+      lastTrade: null,
       raw: {
         provider_timestamp: point.timestamp,
         long_price: point.longPrice,
         short_price: point.shortPrice,
         selected_position: contract.side,
+        price_methodology: "book_derived_display_quote_not_trade",
       },
     });
   });
@@ -1280,6 +1289,31 @@ export const PREDICTION_MARKET_CAPABILITIES = {
 } as const;
 
 export function registerPredictionMarketDataRoutes(router: Router): void {
+  // Bounded metadata discovery shared by research workers; no order capability.
+  router.get("/sports/prediction-markets/research-catalog", async (req, res) => {
+    try {
+      const mode = text(req.query.mode || "live", 20);
+      if (!["live", "historical"].includes(mode)) throw new PredictionMarketDataError("invalid_mode", "Choose live or historical.");
+      const offset = Number(req.query.cursor || 0);
+      if (!Number.isInteger(offset) || offset < 0 || offset > 100000) throw new PredictionMarketDataError("invalid_cursor", "Invalid catalog cursor.");
+      const { payload } = await fetchJson(queryUrl(`${POLYMARKET_GATEWAY}/v1/events`, {
+        limit: 100, offset, closed: mode === "historical", ...(mode === "live" ? { live: true } : {}),
+        orderBy: "id", orderDirection: "desc", categories: "sports",
+      }));
+      const events = asArray(payload.events).map(asRecord).filter((e): e is JsonRecord => !!e);
+      const contracts = events.flatMap(event => {
+        const league = asRecord(asRecord(event.primaryTag)?.league);
+        const category = { id: text(league?.slug || "sports"), label: text(league?.name || "Sports"), sport: text(asRecord(event.eventState)?.type || "Sports"), providerId: "" };
+        return normalizePolymarketEvents({ events: [event] }, category).filter(c =>
+          (c.marketType === "SPORTS_MARKET_TYPE_MONEYLINE" || /(?:^moneyline$|_full_game_(?:moneyline|winner)$)/i.test(c.marketType || "")) &&
+          (mode !== "live" || c.live === true));
+      });
+      res.setHeader("Cache-Control", "public, max-age=30");
+      res.status(200).json({ ok: true, source: "polymarket_us", mode, items: contracts, events_scanned: events.length,
+        next_cursor: events.length === 100 ? String(offset+100) : null, fetched_at: new Date().toISOString(),
+        redistribution_status: "review_required" });
+    } catch (error) { sendPredictionMarketError(res, error); }
+  });
   router.get("/sports/prediction-markets/status", async (req, res) => {
     try {
       const deep = String(req.query.deep || "") === "1";

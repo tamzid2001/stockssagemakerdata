@@ -2,7 +2,6 @@ import { Router } from "express";
 
 const SPORTS_EVENTS_URL = "https://gateway.polymarket.us/v2/leagues/mlb/events";
 const CLOSED_EVENTS_URL = "https://gateway.polymarket.us/v1/events";
-const PRICE_HISTORY_URL = "https://gateway.polymarket.us/gateway.price_history.v1.PriceHistoryService/GetPriceHistory";
 const USER_AGENT = "quantura-polymarket-us-mlb-pregame-history/1.0";
 
 type Side = { itemId: string; team: string; position: "long" | "short" };
@@ -237,6 +236,7 @@ export function buildMlbMinuteRows(points: PolymarketPricePoint[], side: Side, m
   return { rows, observedMinutes: closes.size };
 }
 
+const priceHistoryCache = new Map<string, { expires: number; points: PolymarketPricePoint[] }>();
 export async function fetchPolymarketPricePoints(
   symbol: string,
   startMs: number,
@@ -244,31 +244,41 @@ export async function fetchPolymarketPricePoints(
   fidelityMinutes = 1,
   fetchImpl: typeof fetch = fetch
 ): Promise<PolymarketPricePoint[]> {
-  const request = encodePriceHistoryRequest(symbol, startMs, endMs, fidelityMinutes);
-  let response: Response;
-  try {
-    response = await fetchImpl(PRICE_HISTORY_URL, {
-      method: "POST",
-      headers: { "User-Agent": USER_AGENT, "Content-Type": "application/proto", Accept: "application/proto" },
-      body: new Uint8Array(request),
-      signal: AbortSignal.timeout(30000),
-    });
-  } catch (_error) {
-    throw new PolymarketMlbError("Polymarket US price history could not be reached. Try again.");
+  if (!/^[A-Za-z0-9._:-]{1,220}$/.test(symbol) || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs || endMs-startMs > 90*86400000 || fidelityMinutes !== 1) {
+    throw new PolymarketMlbError("Use a valid market and a bounded range with one-minute fidelity.", 400);
   }
-  if (!response.ok) {
-    throw new PolymarketMlbError(
-      response.status === 429
-        ? "Polymarket US rate-limited this request. Wait briefly and retry."
-        : response.status === 401 || response.status === 403
-        ? "Polymarket US rejected the historical-data request."
-        : "Polymarket US could not load this market's price history.",
-      response.status === 429 ? 429 : response.status === 401 || response.status === 403 ? response.status : 502
-    );
+  const cacheKey = JSON.stringify([symbol, startMs, endMs]);
+  const cached = fetchImpl === fetch ? priceHistoryCache.get(cacheKey) : undefined;
+  if (cached && cached.expires > Date.now()) return cached.points;
+  const points = new Map<number, PolymarketPricePoint>();
+  // Official REST custom ranges are capped at 24h. Never substitute a coarse
+  // INTERVAL_ALL response and call it minute history.
+  for (let start = startMs; start < endMs; start += 86400000) {
+    const end = Math.min(endMs, start+86400000);
+    const url = new URL("https://gateway.polymarket.us/v1/price-history");
+    url.searchParams.set("symbol", symbol);
+    url.searchParams.set("timestamp.startTimestamp", String(Math.floor(start/1000)));
+    url.searchParams.set("timestamp.endTimestamp", String(Math.floor(end/1000)));
+    url.searchParams.set("fidelity", "1");
+    const response = await fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new PolymarketMlbError("Polymarket US historical data is unavailable.", response.status === 429 ? 429 : 502);
+    const payload = await response.json() as { history?: PolymarketPricePoint[] };
+    if (!Array.isArray(payload.history)) throw new PolymarketMlbError("Polymarket US returned invalid history.");
+    for (const raw of payload.history) {
+      const point = { timestamp: Number(raw.timestamp), longPrice: Number(raw.longPrice), shortPrice: Number(raw.shortPrice) };
+      if (!Object.values(point).every(Number.isFinite) || point.timestamp*1000 < startMs || point.timestamp*1000 > endMs || point.longPrice < 0 || point.longPrice > 1 || point.shortPrice < 0 || point.shortPrice > 1) continue;
+      points.set(point.timestamp, point);
+    }
+    if (points.size > 100000) throw new PolymarketMlbError("Too many observations. Request a shorter history.", 413);
   }
-  const points = decodePriceHistoryResponse(Buffer.from(await response.arrayBuffer()));
-  if (!points.length) throw new PolymarketMlbError("No price observations are available for this market.", 404);
-  return points;
+  if (!points.size) throw new PolymarketMlbError("No stored price observations are available for this range.", 404);
+  const result = [...points.values()].sort((a,b)=>a.timestamp-b.timestamp);
+  if (fetchImpl === fetch) {
+    for (const [key, entry] of priceHistoryCache) if (entry.expires <= Date.now()) priceHistoryCache.delete(key);
+    if (priceHistoryCache.size >= 32) priceHistoryCache.delete(priceHistoryCache.keys().next().value!);
+    priceHistoryCache.set(cacheKey, { expires: Date.now()+30000, points: result });
+  }
+  return result;
 }
 
 async function fetchHistory(market: MlbMarket, side: Side): Promise<{ rows: MlbMinuteRow[]; observedMinutes: number; rawPoints: number }> {

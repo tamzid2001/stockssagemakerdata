@@ -1,0 +1,80 @@
+name: Polymarket US Live Ensemble Paper Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      horizon:
+        description: Forecast horizon and refresh cadence (minutes)
+        type: choice
+        options: ['30', '60']
+        default: '30'
+      run_once:
+        description: One bounded validation cycle; no successor
+        type: boolean
+        default: true
+      smoke_mode:
+        description: Mock runs tests only; real uses provider quotes and actual models
+        type: choice
+        options: [mock, real]
+        default: mock
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: polymarket-live-paper
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      POLYMARKET_PAPER_ENABLED: ${{ vars.POLYMARKET_PAPER_ENABLED || 'false' }}
+      PAPER_HORIZON: ${{ inputs.horizon }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Record hard runner deadline
+        run: |
+          echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Mock safety tests (no model downloads)
+        if: inputs.smoke_mode == 'mock'
+        run: |
+          python -m pip install pytest==8.4.2 pyyaml==6.0.3
+          python -m pytest -q market_research/tests/test_engine.py market_research/tests/test_workflows.py
+      - name: Install locked research environment
+        if: inputs.smoke_mode == 'real'
+        run: python -m pip install --no-cache-dir --require-hashes --requirement market_research/requirements.lock
+      - name: Resume private paper simulation
+        id: worker
+        if: inputs.smoke_mode == 'real'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          RUN_ONCE: ${{ inputs.run_once }}
+          TIMESFM_COMMERCIAL_LICENSED: 'false'
+        run: |
+          args=(--mode live --horizon "$PAPER_HORIZON" --duration-minutes 345)
+          if [[ "$RUN_ONCE" == 'true' ]]; then args+=(--once --max-contracts 4); fi
+          python -m market_research.worker "${args[@]}"
+      - name: Checkpoint-confirmed successor handoff
+        if: success() && inputs.smoke_mode == 'real' && !inputs.run_once && steps.worker.outputs.handoff_ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -m market_research.handoff
+      - name: Failure disclosure
+        if: failure()
+        run: echo 'Paper worker failed. No successful forecast coverage or uninterrupted uptime is implied. Check private state and logs before resuming.' >> "$GITHUB_STEP_SUMMARY"
