@@ -68,7 +68,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest exchange-calendars pyyaml pandas-market-calendars httpx
+          pip install pytest exchange-calendars pyyaml pandas-market-calendars httpx firebase-admin
 
       - name: Install web and backend deps
         run: |
@@ -87,7 +87,7 @@ jobs:
       - name: Run Forecast Intelligence leakage and schema tests
         run: |
           pytest -q forecast_intelligence/tests
-          pytest -q market_research/tests ensemble_forecasting/tests
+          python -m pytest -q market_research/tests ensemble_forecasting/tests
 
       - name: Build Quantura web bundle
         run: |
@@ -109,7 +109,7 @@ jobs:
           npx --yes firebase-tools@15.7.0 emulators:exec \
             --only firestore \
             --project quantura-forecast-integration \
-            "node --test functions_explore/dist/quanturaForecastRoutes.integration.test.js"
+            "node --test functions_explore/dist/quanturaForecastRoutes.integration.test.js && cd .. && python -m pytest -q market_research/tests/test_store_integration.py"
 
       - name: Syntax check frontend and SSR entrypoints
         run: |
