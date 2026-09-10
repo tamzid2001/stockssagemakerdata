@@ -15,7 +15,7 @@ import math
 from typing import Callable
 
 QUANTILES = (0.01, *tuple(i / 10 for i in range(1, 10)), 0.99)
-VERSION = "quantura_quote_research_v2"
+VERSION = "quantura_quote_research_v3"
 
 
 def stamp(value: str) -> int:
@@ -148,31 +148,44 @@ def normalize_quotes(rows: list[dict], as_of: int) -> list[Quote]:
 
 
 def history_window(
-    quotes: list[Quote], origin: int, minutes: int = 500, minimum: int = 40
+    quotes: list[Quote], origin: int, minutes: int = 500, minimum: int = 2
 ) -> list[Quote]:
-    """Minute grid of known information with explicitly labeled causal imputation.
+    """Up to 500 genuine minute observations, never compress or fill a gap.
 
-    Carry the previous quote for at most five minutes, only in model context.
-    Longer gaps start a new context. Execution never receives these imputed rows.
-    The minimum applies to genuine observations, not the expanded grid.
+    Foundation models use evenly spaced steps. A missing minute therefore
+    starts a new contiguous context; older observations stay in the archive.
+    Two actual observations are sufficient to attempt research inference.
     """
-    eligible = [q for q in quotes if origin - minutes * 60 < q.timestamp <= origin]
-    if not eligible or origin - eligible[-1].timestamp > 300:
+    eligible = [
+        q
+        for q in quotes
+        if q.observed and origin - minutes * 60 < q.timestamp <= origin
+    ]
+    if not eligible or eligible[-1].timestamp != origin:
         raise ValueError("missing_origin_quote")
-    window = []
-    previous = None
-    actual = {q.timestamp: q for q in eligible}
-    for timestamp in range(eligible[0].timestamp, origin + 1, 60):
-        if timestamp in actual:
-            previous = actual[timestamp]
-            window.append(previous)
-        elif previous and timestamp - previous.timestamp <= 300:
-            window.append(Quote(timestamp, previous.ask, previous.bid, observed=False))
-        else:
-            window = []
-    if sum(q.observed for q in window) < minimum:
+    first = len(eligible) - 1
+    while first > 0 and eligible[first].timestamp - eligible[first - 1].timestamp == 60:
+        first -= 1
+    window = eligible[first:]
+    if len(window) < minimum:
         raise ValueError("insufficient_observed_minute_history")
     return window
+
+
+def rolling_origins(quotes: list[Quote], horizon: int):
+    """Start after two observed minutes; resume after gaps without invented bars."""
+    if horizon not in {30, 60}:
+        raise ValueError("horizon_must_be_30_or_60")
+    due = 0
+    for previous, current in zip(quotes, quotes[1:-1]):
+        if (
+            previous.observed
+            and current.observed
+            and current.timestamp - previous.timestamp == 60
+            and current.timestamp >= due
+        ):
+            yield current.timestamp
+            due = current.timestamp + horizon * 60
 
 
 def validate_forecast(forecast: dict, origin: int, horizon: int) -> None:
@@ -485,15 +498,7 @@ def rolling_backtest(
     trades = []
     forecasts = []
     failures = []
-    for origin in (
-        range(
-            ((quotes[0].timestamp // (horizon * 60)) + 1) * horizon * 60,
-            quotes[-1].timestamp,
-            horizon * 60,
-        )
-        if quotes
-        else []
-    ):
+    for origin in rolling_origins(quotes, horizon):
         if len(forecasts) + len(failures) >= max_origins:
             break
         try:

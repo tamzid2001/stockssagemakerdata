@@ -11,6 +11,7 @@ from market_research.engine import (
     iso,
     normalize_quotes,
     rolling_backtest,
+    rolling_origins,
     summarize,
     validate_forecast,
 )
@@ -38,7 +39,7 @@ def seed():
     return state
 
 
-@pytest.mark.parametrize("count", [40, 50, 120, 499, 500])
+@pytest.mark.parametrize("count", [2, 3, 10, 40, 50, 120, 499, 500])
 def test_shorter_pregame_and_ingame_history_is_accepted(count):
     quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, count + 1)]
     assert len(history_window(quotes, count * 60)) == count
@@ -54,20 +55,27 @@ def test_trailing_500_and_no_future():
     )
 
 
-def test_short_gap_imputation_is_causal_and_never_an_execution_quote():
+def test_missing_minutes_are_skipped_without_filling_or_compressing_time():
     quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, 100) if i != 70]
     window = history_window(quotes, 99 * 60)
-    assert sum(q.observed for q in window) == 98
-    imputed = next(q for q in window if not q.observed)
-    assert imputed.timestamp == 70 * 60 and imputed.ask == quotes[68].ask
+    assert len(window) == 29 and all(q.observed for q in window)
+    assert window[0].timestamp == 71 * 60
     with pytest.raises(ValueError, match="IMPUTED_EXECUTION"):
-        advance(initial_state(), imputed, curve(), Strategy())
+        advance(
+            initial_state(), Quote(660, 0.4, 0.38, observed=False), curve(), Strategy()
+        )
 
 
 def test_long_gaps_restart_context_instead_of_unbounded_carry_forward():
     quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, 100) if not 60 <= i <= 70]
+    assert len(history_window(quotes, 99 * 60)) == 29
+
+
+def test_one_value_rejected_and_two_value_origin_does_not_wait_half_hour():
     with pytest.raises(ValueError, match="insufficient"):
-        history_window(quotes, 99 * 60)
+        history_window([Quote(60, 0.4, 0.38)], 60)
+    quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, 70)]
+    assert list(rolling_origins(quotes, 30)) == [120, 1920, 3720]
 
 
 def test_spread_and_completed_minute_integrity():

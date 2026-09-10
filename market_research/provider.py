@@ -46,9 +46,11 @@ class QuanturaProvider:
                     continue
                 raise RuntimeError("DATA_UNAVAILABLE") from None
 
-    def discover(self, mode, max_pages=20):
+    def discover(self, mode, max_pages=20, start_cursor="0"):
         contracts = {}
-        cursor = "0"
+        cursor = str(start_cursor)
+        if not cursor.isdigit() or not 0 <= int(cursor) <= 100000:
+            raise ValueError("INVALID_DISCOVERY_CURSOR")
         seen = set()
         events = 0
         for _ in range(max_pages):
@@ -67,6 +69,7 @@ class QuanturaProvider:
                 break
             time.sleep(0.1)
         return list(contracts.values()), {
+            "start_cursor": str(start_cursor),
             "events_scanned": events,
             "contracts_discovered": len(contracts),
             "discovery_truncated": cursor is not None,
@@ -104,3 +107,20 @@ class QuanturaProvider:
         }
         self.cache[key] = (time.monotonic(), result["rows"])
         return result["rows"]
+
+
+def historical_range(contract, now):
+    """Pregame plus game replay, bounded to 48h and never beyond collection time."""
+    from .engine import stamp
+
+    event_start = stamp(contract["eventStart"])
+    start = event_start - 501 * 60
+    resolution = contract.get("resolutionTime")
+    end = min(
+        now,
+        stamp(resolution) + 60 if resolution else event_start + 36 * 3600,
+        start + 48 * 3600,
+    )
+    if end <= start:
+        raise ValueError("INVALID_HISTORY_WINDOW")
+    return start, end

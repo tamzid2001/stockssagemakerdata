@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import logging
 import numpy as np
 
 from ensemble_forecasting.worker import execute_job
@@ -21,6 +22,10 @@ def forecast_window(
         or set(models) - set(MODEL_REGISTRY["models"])
     ):
         raise ValueError("unsupported_models")
+    if len(window) < 2 or any(not q.observed for q in window):
+        raise ValueError("TWO_GENUINE_OBSERVATIONS_REQUIRED")
+    if any(b.timestamp - a.timestamp != 60 for a, b in zip(window, window[1:])):
+        raise ValueError("IRREGULAR_MINUTE_CONTEXT")
     source = [
         {"timestamp": iso(q.timestamp), "target": q.ask, "observed": q.observed}
         for q in window
@@ -57,7 +62,15 @@ def forecast_window(
             "request": configuration,
             "input": {"rows": logits, "frequency": "1min"},
             "runtime_mode": "production",
-        }
+        },
+        minimum_history_rows=2,
+        progress=lambda progress: logging.getLogger("quantura.research").warning(
+            "ensemble_progress model=%s completed=%s total=%s observed_rows=%s",
+            progress.get("current_model"),
+            progress.get("completed_models"),
+            progress.get("total_models"),
+            len(window),
+        ),
     )
     if sum(m["status"] == "completed" for m in result["models"]) < 2:
         raise RuntimeError("INSUFFICIENT_ENSEMBLE_MEMBERS")
@@ -103,7 +116,7 @@ def forecast_window(
         "history_count": sum(q.observed for q in window),
         "model_context_steps": len(window),
         "imputed_context_steps": sum(not q.observed for q in window),
-        "imputation": "causal_previous_quote_max_5_minutes_model_input_only",
+        "imputation": "none_contiguous_observations_only",
         "history_requested_minutes": 500,
         "source_hash": digest(source),
         "seed": seed,
@@ -115,7 +128,14 @@ def forecast_window(
         "rows": rows,
         "weights": result["effective_weights_by_quantile"],
         "models": result.get("models"),
-        "warnings": result.get("warnings", []),
+        "warnings": result.get("warnings", [])
+        + (
+            [
+                f"SHORT_HISTORY: only {len(window)} genuine minute observations; forecast reliability is unvalidated."
+            ]
+            if len(window) < 500
+            else []
+        ),
         "failures": result.get("failures", []),
         "duration_seconds": time.monotonic() - started,
     }

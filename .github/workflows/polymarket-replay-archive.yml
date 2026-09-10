@@ -1,0 +1,66 @@
+name: Polymarket US Private Historical Replay Archive
+on:
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: Discovery pages, 100 events each (1–1000)
+        type: number
+        default: 100
+      start_cursor:
+        description: Next discovery cursor from a previous coverage report
+        type: number
+        default: 0
+      catalog_id:
+        description: Stored catalog ID to resume (blank discovers a new catalog)
+        type: string
+        default: ''
+      market_offset:
+        description: Resume game index inside the stored catalog
+        type: number
+        default: 0
+      smoke_mode:
+        description: Safety tests or real private historical downloads (no inference)
+        type: choice
+        options: [mock, real]
+        default: mock
+permissions:
+  contents: read
+concurrency:
+  group: polymarket-replay-archive
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Record deadline
+        run: echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - name: No-model safety tests
+        if: inputs.smoke_mode == 'mock'
+        run: |
+          python -m pip install pytest==8.4.2 pyyaml==6.0.3
+          python -m pytest -q market_research/tests/test_archive.py market_research/tests/test_engine.py market_research/tests/test_workflows.py
+      - name: Install existing private persistence SDK
+        if: inputs.smoke_mode == 'real'
+        run: python -m pip install --no-cache-dir firebase-admin==7.5.0
+      - name: Collect all discoverable games within bounded runtime
+        if: inputs.smoke_mode == 'real'
+        env:
+          MAX_PAGES: ${{ inputs.max_pages }}
+          START_CURSOR: ${{ inputs.start_cursor }}
+          CATALOG_ID: ${{ inputs.catalog_id }}
+          MARKET_OFFSET: ${{ inputs.market_offset }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: python -m market_research.archive --max-pages "$MAX_PAGES" --start-cursor "$START_CURSOR" --catalog-id "$CATALOG_ID" --market-offset "$MARKET_OFFSET"
+      - name: Failure disclosure
+        if: failure()
+        run: echo 'Collection failed; completed immutable chunks and the last private catalog checkpoint remain recoverable. No exchange orders were submitted.' >> "$GITHUB_STEP_SUMMARY"

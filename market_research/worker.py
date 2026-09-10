@@ -16,11 +16,11 @@ from .engine import (
     history_window,
     initial_state,
     normalize_quotes,
-    stamp,
+    rolling_origins,
     summarize,
     validate_forecast,
 )
-from .provider import QuanturaProvider
+from .provider import QuanturaProvider, historical_range
 from .store import Store
 
 
@@ -131,21 +131,19 @@ def process_historical(
     heartbeat,
     deadline,
 ):
-    end = min(
-        now, stamp(contract.get("resolutionTime") or contract["eventStart"]) + 6 * 3600
-    )
-    start = max(end - 48 * 3600, stamp(contract["eventStart"]) - 501 * 60)
-    quotes = normalize_quotes(provider.history(contract, start, end), end)
+    start, end = historical_range(contract, now)
+    raw = store.archived_history(contract, start, end)
+    cache_hit = raw is not None
+    if raw is None:
+        raw = provider.history(contract, start, end)
+        store.archive_history(contract, start, end, raw)
+    quotes = normalize_quotes(raw, end)
     if not quotes:
         raise ValueError("MISSING_HISTORY")
     saved = store.load(contract["contractId"])
     state = saved.get("state") or initial_state()
     successful = failed = 0
-    for origin in range(
-        (quotes[0].timestamp // (horizon * 60) + 1) * horizon * 60,
-        quotes[-1].timestamp,
-        horizon * 60,
-    ):
+    for origin in rolling_origins(quotes, horizon):
         if (
             origin < state["last_timestamp"]
             or successful + failed >= max_origins
@@ -189,6 +187,7 @@ def process_historical(
         "forecasts": successful,
         "failed_origins": failed,
         "observations": len(quotes),
+        "archive_cache_hit": cache_hit,
         "open_positions": sum(bool(l["position"]) for l in state["levels"].values()),
         "unresolved_triggers": len(state.get("observations", [])),
     }
@@ -199,7 +198,7 @@ def run(args):
 
     strategy = Strategy()
     configuration = {
-        "version": 2,
+        "version": 3,
         "mode": args.mode,
         "horizon": args.horizon,
         "models": args.models,
