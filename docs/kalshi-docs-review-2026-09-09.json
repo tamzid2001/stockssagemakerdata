@@ -1,0 +1,1392 @@
+{
+  "reviewed_at": "2026-09-09",
+  "source": "https://docs.kalshi.com/llms.txt",
+  "pages": [
+    {
+      "title": "Introduction",
+      "url": "https://docs.kalshi.com/welcome/index.md",
+      "status": 200,
+      "sha256": "b71958de8f55ed8cd4981fbaf0d4392464bcb89ed310528ccb944fc223ebe9b3"
+    },
+    {
+      "title": "API Environments and Endpoints",
+      "url": "https://docs.kalshi.com/getting_started/api_environments.md",
+      "status": 200,
+      "sha256": "73509a19902422f651f5b2d540d3e033e7c0633c082486cf364d5429bf631e48"
+    },
+    {
+      "title": "Quick Start: Market Data",
+      "url": "https://docs.kalshi.com/getting_started/quick_start_market_data.md",
+      "status": 200,
+      "sha256": "31dec99d496b8343d2fa0613e9f7f1f7a67c4e82b1b55b7a1041e480079ae5f0"
+    },
+    {
+      "title": "Quick Start: Authenticated Requests",
+      "url": "https://docs.kalshi.com/getting_started/quick_start_authenticated_requests.md",
+      "status": 200,
+      "sha256": "cbd37219e5cf2c8cd6c9c76e326561fc0ef70e46e402e840a9d1d3095fccf044"
+    },
+    {
+      "title": "Quick Start: Create your first order",
+      "url": "https://docs.kalshi.com/getting_started/quick_start_create_order.md",
+      "status": 200,
+      "sha256": "297134fb254536a19c4a97b44ee08eed387ceef3ec8c9dcd0fc3b6305eb1fb68"
+    },
+    {
+      "title": "Quick Start: WebSockets",
+      "url": "https://docs.kalshi.com/getting_started/quick_start_websockets.md",
+      "status": 200,
+      "sha256": "ee3dc7fe991f52acc8d8a86c35e1c469b8459722ed2982b4a345140c4fbd522a"
+    },
+    {
+      "title": "Kalshi SDKs",
+      "url": "https://docs.kalshi.com/sdks/overview.md",
+      "status": 200,
+      "sha256": "4ec10c222cb969e8955db8c5159710b08e043d70a08c14af3687c4288645eb62"
+    },
+    {
+      "title": "Making Your First Request",
+      "url": "https://docs.kalshi.com/getting_started/making_your_first_request.md",
+      "status": 200,
+      "sha256": "86433909d4ef8a0e755c3d523e39302c5dc173173d80caf0741f0c7aa95aea90"
+    },
+    {
+      "title": "Test In The Demo Environment",
+      "url": "https://docs.kalshi.com/getting_started/demo_env.md",
+      "status": 200,
+      "sha256": "c156ca0e227b907aa94b88b4a3e382d488142017515b49a12a76395116f4dcfb"
+    },
+    {
+      "title": "API Keys",
+      "url": "https://docs.kalshi.com/getting_started/api_keys.md",
+      "status": 200,
+      "sha256": "96bb49b6c45f946489a0a207cc93e3987e1e6aa5ca2da5111db17982274fc5a4"
+    },
+    {
+      "title": "Rate Limits and Tiers",
+      "url": "https://docs.kalshi.com/getting_started/rate_limits.md",
+      "status": 200,
+      "sha256": "c7fac04330544488f504533d96d7893652679e4898a5fc365f8d644c2401d32d"
+    },
+    {
+      "title": "Understanding Pagination",
+      "url": "https://docs.kalshi.com/getting_started/pagination.md",
+      "status": 200,
+      "sha256": "a98a22ca4166c9dee0870a0aa7254fe908773585fe5f190c6aaea786b8f23c3b"
+    },
+    {
+      "title": "Orderbook Responses",
+      "url": "https://docs.kalshi.com/getting_started/orderbook_responses.md",
+      "status": 200,
+      "sha256": "bb40a4b3df75841b1779058081fdbb1d7b830f8d170195fba4165ecbc606e43b"
+    },
+    {
+      "title": "Order direction (outcome_side and book_side)",
+      "url": "https://docs.kalshi.com/getting_started/order_direction.md",
+      "status": 200,
+      "sha256": "28456f0c8f3b12e2275cab60deead2169e165be92083d9c0de5dd5481232237b"
+    },
+    {
+      "title": "Order Groups",
+      "url": "https://docs.kalshi.com/getting_started/order_groups.md",
+      "status": 200,
+      "sha256": "b864a2c2befdae824a8271c40e2f730ed53f0bb9495fea2a8f06713129263d05"
+    },
+    {
+      "title": "Subaccounts",
+      "url": "https://docs.kalshi.com/getting_started/subaccounts.md",
+      "status": 200,
+      "sha256": "b0bc151bea789530892103c09ec3d061266de84601215692e76e0bcc0a24ae45"
+    },
+    {
+      "title": "Fixed-Point Representation",
+      "url": "https://docs.kalshi.com/getting_started/fixed_point_migration.md",
+      "status": 200,
+      "sha256": "f2669602e88a6a42f92a1608775e90a6881de115d6539686d12b0e8f07d94a76"
+    },
+    {
+      "title": "Fee Rounding",
+      "url": "https://docs.kalshi.com/getting_started/fee_rounding.md",
+      "status": 200,
+      "sha256": "7591cf0fb277eaf8fac8aedaf1645e58b61dacb22b5fed20ba7d8ea9f76ffa22"
+    },
+    {
+      "title": "Historical Data",
+      "url": "https://docs.kalshi.com/getting_started/historical_data.md",
+      "status": 200,
+      "sha256": "5b414e53d560d723455bf0705bac1b8a3ad0c71da63aeb75ea78315f3612701d"
+    },
+    {
+      "title": "Targets & Milestones",
+      "url": "https://docs.kalshi.com/getting_started/targets_and_milestones.md",
+      "status": 200,
+      "sha256": "3ef9d3280fdb57b4b455b4e8e52d97544c1dabdb0e04ed905ac1774562e096d0"
+    },
+    {
+      "title": "Market Lifecycle",
+      "url": "https://docs.kalshi.com/getting_started/market_lifecycle.md",
+      "status": 200,
+      "sha256": "5f3f7c72eda96148fd543e516f506110998bc4a7d58877ec36bcb0454f2d2510"
+    },
+    {
+      "title": "Maintenance and Pauses",
+      "url": "https://docs.kalshi.com/getting_started/maintenance_and_pauses.md",
+      "status": 200,
+      "sha256": "788b5a5e994f4c86b341a995f92d51fe997784ba06772f19c6dfe32e345037bf"
+    },
+    {
+      "title": "Market Settlement",
+      "url": "https://docs.kalshi.com/getting_started/market_settlement.md",
+      "status": 200,
+      "sha256": "c8cdf6d9b09b2e76d9e25218ec2d109149b541360d8c10f2dc8a7fa5f23a54e6"
+    },
+    {
+      "title": "Request for Quote (RFQ)",
+      "url": "https://docs.kalshi.com/getting_started/rfqs.md",
+      "status": 200,
+      "sha256": "8ce5d31ed237b7bf4a0767ed5e83d5889bc72ff82f7e2b9e5c602d34233064dc"
+    },
+    {
+      "title": "Exchange Sharding",
+      "url": "https://docs.kalshi.com/getting_started/exchange_sharding.md",
+      "status": 200,
+      "sha256": "72a268921a1639ac519b3b6566f91759f14474de21d1276bd2c41b1a8ca82fc9"
+    },
+    {
+      "title": "Kalshi Glossary",
+      "url": "https://docs.kalshi.com/getting_started/terms.md",
+      "status": 200,
+      "sha256": "9d8218ea33a800a5cb3a5f1ac0e97e13d9b0866036b4cf6e334ae8291dc41f9b"
+    },
+    {
+      "title": "Get Exchange Status",
+      "url": "https://docs.kalshi.com/api-reference/exchange/get-exchange-status.md",
+      "status": 200,
+      "sha256": "3568b7f0c4053d39690d9b465cd89c8a8a5669de7a3885b70d0098d1474ecd0f"
+    },
+    {
+      "title": "Get Series Fee Changes",
+      "url": "https://docs.kalshi.com/api-reference/exchange/get-series-fee-changes.md",
+      "status": 200,
+      "sha256": "b58cdd327d8743fc75baedf2cfb067e5583ebdc85b21effe7dcd8950fdd97549"
+    },
+    {
+      "title": "Get Exchange Schedule",
+      "url": "https://docs.kalshi.com/api-reference/exchange/get-exchange-schedule.md",
+      "status": 200,
+      "sha256": "bf9e9c727fa09289503efd3b8b5484fcddc44ec52f2b3ff811413f982169929f"
+    },
+    {
+      "title": "Get User Data Timestamp",
+      "url": "https://docs.kalshi.com/api-reference/exchange/get-user-data-timestamp.md",
+      "status": 200,
+      "sha256": "b4f66fe8e136a46842d632208e61b2206916b9de41bd39452d6d5a42692d4d76"
+    },
+    {
+      "title": "Get Market Candlesticks",
+      "url": "https://docs.kalshi.com/api-reference/market/get-market-candlesticks.md",
+      "status": 200,
+      "sha256": "436667538443942550efbfa1e9fe2575d85abf83f6e4f39dff9f3aebbeabc2b7"
+    },
+    {
+      "title": "Get Trades",
+      "url": "https://docs.kalshi.com/api-reference/market/get-trades.md",
+      "status": 200,
+      "sha256": "32cabbccf4cc4cd9410688a6efbab866b3b90f1c26bab375da660d5fb5070288"
+    },
+    {
+      "title": "Get Market Orderbook",
+      "url": "https://docs.kalshi.com/api-reference/market/get-market-orderbook.md",
+      "status": 200,
+      "sha256": "24d0c8b1e8a6d4fafc3c27c94f0d422330e07df5f4d3666865bcb134f98f0791"
+    },
+    {
+      "title": "Get Multiple Market Orderbooks",
+      "url": "https://docs.kalshi.com/api-reference/market/get-multiple-market-orderbooks.md",
+      "status": 200,
+      "sha256": "7267cd06e11e5688a31b512fd1b509ba791cd0969a5ab37678792348a923eef9"
+    },
+    {
+      "title": "Get Series",
+      "url": "https://docs.kalshi.com/api-reference/market/get-series.md",
+      "status": 200,
+      "sha256": "eec9dc99b651ce4689714e0e64f99d3e2ea2fbfc4a18bdf9e6a304db97c48784"
+    },
+    {
+      "title": "Get Series List",
+      "url": "https://docs.kalshi.com/api-reference/market/get-series-list.md",
+      "status": 200,
+      "sha256": "d268db55e36ad23f40b9deabf43aab20b2aa03b1d18bfef5a696a397c9a590f6"
+    },
+    {
+      "title": "Get Markets",
+      "url": "https://docs.kalshi.com/api-reference/market/get-markets.md",
+      "status": 200,
+      "sha256": "31e1bed8226ebc24c956981b16f6dc5c28bd0c9315d14249acbee6b1f404c1da"
+    },
+    {
+      "title": "Get Market",
+      "url": "https://docs.kalshi.com/api-reference/market/get-market.md",
+      "status": 200,
+      "sha256": "b9f826803ffd652405ca1f1068c62e99b7179badd6eb2e4c0c576cdeedf6796d"
+    },
+    {
+      "title": "Batch Get Market Candlesticks",
+      "url": "https://docs.kalshi.com/api-reference/market/batch-get-market-candlesticks.md",
+      "status": 200,
+      "sha256": "714ffc1766779a07968cc97e6e041c85d809513800b446970d19d00a420e7bad"
+    },
+    {
+      "title": "Get Event Candlesticks",
+      "url": "https://docs.kalshi.com/api-reference/events/get-event-candlesticks.md",
+      "status": 200,
+      "sha256": "de76be6e5e8fae9b3a872a31cbca3143bec6f9afd1e3d4ee77b6b72421296d0d"
+    },
+    {
+      "title": "Get Events",
+      "url": "https://docs.kalshi.com/api-reference/events/get-events.md",
+      "status": 200,
+      "sha256": "f4da6c2adb1886eaa2b9c8e7025d88a88c2cd7c66c9d01f4808b439d7437fe8f"
+    },
+    {
+      "title": "Get Multivariate Events",
+      "url": "https://docs.kalshi.com/api-reference/events/get-multivariate-events.md",
+      "status": 200,
+      "sha256": "8956e4cb87e269c1b2cc35165f1939e35e854caceefc2cb520882ef0fa04f1bf"
+    },
+    {
+      "title": "Get Event Fee Changes",
+      "url": "https://docs.kalshi.com/api-reference/events/get-event-fee-changes.md",
+      "status": 200,
+      "sha256": "0e4212060753fbb2b9eede8db514af92993a63663a2e524d5250fc744944c50e"
+    },
+    {
+      "title": "Get Event",
+      "url": "https://docs.kalshi.com/api-reference/events/get-event.md",
+      "status": 200,
+      "sha256": "58d4508d53fd5f3dc9697ed788aff1a8854f8d74e41fbd0050485a870c8c9fda"
+    },
+    {
+      "title": "Get Event Metadata",
+      "url": "https://docs.kalshi.com/api-reference/events/get-event-metadata.md",
+      "status": 200,
+      "sha256": "f904b8b6902fab7119501d72fa4fee7b0a2c4421754c7f931e40b18ceedf5508"
+    },
+    {
+      "title": "Get Event Forecast Percentile History",
+      "url": "https://docs.kalshi.com/api-reference/events/get-event-forecast-percentile-history.md",
+      "status": 200,
+      "sha256": "536f194baccd06c8f67d4889f9113a10e09538a6ae255ef74445cb01e665703c"
+    },
+    {
+      "title": "Get Orders",
+      "url": "https://docs.kalshi.com/api-reference/orders/get-orders.md",
+      "status": 200,
+      "sha256": "6bfea9dcbbc862375dd54ca92100057ecbb34c809d7645474491039dc12f53ab"
+    },
+    {
+      "title": "Get Order",
+      "url": "https://docs.kalshi.com/api-reference/orders/get-order.md",
+      "status": 200,
+      "sha256": "a62942e8b48ad21feed6980ec37dc12204c01af008c7c5618e5b785df20470f8"
+    },
+    {
+      "title": "Get Queue Positions for Orders",
+      "url": "https://docs.kalshi.com/api-reference/orders/get-queue-positions-for-orders.md",
+      "status": 200,
+      "sha256": "f9bbb447024ff4398e7e849b13c817696b1f41988f9f5d6010c46c2f9c53bb56"
+    },
+    {
+      "title": "Get Order Queue Position",
+      "url": "https://docs.kalshi.com/api-reference/orders/get-order-queue-position.md",
+      "status": 200,
+      "sha256": "7a67fdf4b517cc4ebb52940557629235ede278ece11c068b561218e9e45d8592"
+    },
+    {
+      "title": "Create Order (V2)",
+      "url": "https://docs.kalshi.com/api-reference/orders/create-order-v2.md",
+      "status": 200,
+      "sha256": "c3a322a8961723019ca3691e460088c990d6615d1450f3b6d16d5a34fa6bcae2"
+    },
+    {
+      "title": "Cancel All Orders",
+      "url": "https://docs.kalshi.com/api-reference/orders/cancel-all-orders.md",
+      "status": 200,
+      "sha256": "91a7312f803bf20e4e9b9015d01e8a79c113068e150ee7be6d82f1fefcb4a335"
+    },
+    {
+      "title": "Batch Create Orders (V2)",
+      "url": "https://docs.kalshi.com/api-reference/orders/batch-create-orders-v2.md",
+      "status": 200,
+      "sha256": "ae768ab968fc8f8d91a7fc02188ead4dc2fae219a6b45fc8372321be7d32657e"
+    },
+    {
+      "title": "Batch Cancel Orders (V2)",
+      "url": "https://docs.kalshi.com/api-reference/orders/batch-cancel-orders-v2.md",
+      "status": 200,
+      "sha256": "fb1c4cc43b4a44e783c749062afc266f2836e84e6fc34196acd8d2a698550b63"
+    },
+    {
+      "title": "Cancel Order (V2)",
+      "url": "https://docs.kalshi.com/api-reference/orders/cancel-order-v2.md",
+      "status": 200,
+      "sha256": "f98d25bff30f0aafc93dafc2b7f373d21378225955e57755a17cd84950899b55"
+    },
+    {
+      "title": "Amend Order (V2)",
+      "url": "https://docs.kalshi.com/api-reference/orders/amend-order-v2.md",
+      "status": 200,
+      "sha256": "8ab402703b82e4db54d15d628b3d5feccb6a6b62d4e58330ed63ce13481c6cbc"
+    },
+    {
+      "title": "Decrease Order (V2)",
+      "url": "https://docs.kalshi.com/api-reference/orders/decrease-order-v2.md",
+      "status": 200,
+      "sha256": "4a5121d12f762e10bc4d0bfe93a6dbe0e129a8ef13e15a994f71add25e6fceab"
+    },
+    {
+      "title": "Get Order Groups",
+      "url": "https://docs.kalshi.com/api-reference/order-groups/get-order-groups.md",
+      "status": 200,
+      "sha256": "0542d278186a4d493dfb95bbd167f3b7a4b9c58846c3a36877a921a2fefa4973"
+    },
+    {
+      "title": "Create Order Group",
+      "url": "https://docs.kalshi.com/api-reference/order-groups/create-order-group.md",
+      "status": 200,
+      "sha256": "4e652dbc63f1018667f6507b6c4315efb95baa2b155a7dc22e99e72d46a93c18"
+    },
+    {
+      "title": "Get Order Group",
+      "url": "https://docs.kalshi.com/api-reference/order-groups/get-order-group.md",
+      "status": 200,
+      "sha256": "f4ddc0f1b99f92fa4ec59fd31567f90d4583c7eb2f42ead8339566801b733ed6"
+    },
+    {
+      "title": "Delete Order Group",
+      "url": "https://docs.kalshi.com/api-reference/order-groups/delete-order-group.md",
+      "status": 200,
+      "sha256": "e51174db374b1ce58e7d81f8dc4e989951bac0c0cecb9ec64e5a36b08b800a37"
+    },
+    {
+      "title": "Reset Order Group",
+      "url": "https://docs.kalshi.com/api-reference/order-groups/reset-order-group.md",
+      "status": 200,
+      "sha256": "aea629140b08f970543da371e7e30baaf1b1d1aebf9bcc5f4f351022bd52547c"
+    },
+    {
+      "title": "Trigger Order Group",
+      "url": "https://docs.kalshi.com/api-reference/order-groups/trigger-order-group.md",
+      "status": 200,
+      "sha256": "981e0b3d5904950dd69fe1b66a135baa403f4d50fe18ac0a0b6bcaaa4e3eeea0"
+    },
+    {
+      "title": "Update Order Group Limit",
+      "url": "https://docs.kalshi.com/api-reference/order-groups/update-order-group-limit.md",
+      "status": 200,
+      "sha256": "59f1ab3494aa9b17995f774af6540d1d4f0e031ee42fe03fd2d35d41449d2c30"
+    },
+    {
+      "title": "Get Balance",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-balance.md",
+      "status": 200,
+      "sha256": "6e566c1bcaebdeb7d03f2b6535e249728b5a328615d6d8ea0e6dc970fdf8f4a5"
+    },
+    {
+      "title": "Intra Account Transfer",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/intra-account-transfer.md",
+      "status": 200,
+      "sha256": "f413123d4115c509888631bfb0a06bd8641cf2cd3c16aa4b3b92ea7f4d0661d7"
+    },
+    {
+      "title": "Get Intra Account Transfers",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-intra-account-transfers.md",
+      "status": 200,
+      "sha256": "2b24a75a1c5a647a03984e56815aaec6274bd5720e4522aba39cdb7595754dc5"
+    },
+    {
+      "title": "Get Intra Account Transfer",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-intra-account-transfer.md",
+      "status": 200,
+      "sha256": "9a932c45ae2349084096a8a247956d8b3115afc58efc961efb7f6b08f2806a76"
+    },
+    {
+      "title": "Create Subaccount",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/create-subaccount.md",
+      "status": 200,
+      "sha256": "befd53d02b6c9cf5914a5e64cbc5a7d993e56e345ffd7e28ef441de3807262e5"
+    },
+    {
+      "title": "Transfer Between Subaccounts",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/transfer-between-subaccounts.md",
+      "status": 200,
+      "sha256": "ed4b146230f8cbc2898de3440dc1dca4f4ef8a6443683612d297e557507a09a8"
+    },
+    {
+      "title": "Get All Subaccount Balances",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-all-subaccount-balances.md",
+      "status": 200,
+      "sha256": "70add64cdf8118a391619170cf807d262aae7edb33f7308e27fb8eea5a7f33f1"
+    },
+    {
+      "title": "Get Subaccount Transfers",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-subaccount-transfers.md",
+      "status": 200,
+      "sha256": "442382856bf72752c7a9e34ef27d785a1dd9c5d80a7b55e887033334fc0c83d7"
+    },
+    {
+      "title": "Get Subaccount Netting",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-subaccount-netting.md",
+      "status": 200,
+      "sha256": "e749aa391c1143175abea95263a72abb7fb4d6e43b9e39831cfebac67b2ac84d"
+    },
+    {
+      "title": "Update Subaccount Netting",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/update-subaccount-netting.md",
+      "status": 200,
+      "sha256": "0ad9d5b644199ba08584a494806d7fbb5c333232037d0e01851d56a23f4041b4"
+    },
+    {
+      "title": "Get Positions",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-positions.md",
+      "status": 200,
+      "sha256": "46781ed57c66994bd5faab827c7f1640c662f07c2388dfab6fb36a08e786d195"
+    },
+    {
+      "title": "Get Settlements",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-settlements.md",
+      "status": 200,
+      "sha256": "57f87a8ddb19f7d154e8ed7e61c8a01c9538df1ee52430488d2f204fc953c7e4"
+    },
+    {
+      "title": "Get Deposits",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-deposits.md",
+      "status": 200,
+      "sha256": "ea0ab6c047fbab05663c6e42bb0c6c2172cc4143c5dda853f0e1c9cc9a26464d"
+    },
+    {
+      "title": "Get Withdrawals",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-withdrawals.md",
+      "status": 200,
+      "sha256": "32621d2a8bc2aed797f8f4b5f877547464a61d88bf15b48657bdc27e23ca3a1d"
+    },
+    {
+      "title": "Get Total Resting Order Value",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-total-resting-order-value.md",
+      "status": 200,
+      "sha256": "68257488a845b149ee5bb369ef63d1e621ef47d1c2630dbce688ba2b62faddb3"
+    },
+    {
+      "title": "Get Fills",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-fills.md",
+      "status": 200,
+      "sha256": "45c6f64b5875a4de5e041d60424c4f3136abfe536f49baa61b1e9f4762177964"
+    },
+    {
+      "title": "Get Target Balance Allocation",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/get-target-balance-allocation.md",
+      "status": 200,
+      "sha256": "a0282eae94abe479d17d818ed65630ba252f4c942018058f3e6c3ae102e32b95"
+    },
+    {
+      "title": "Set Target Balance Allocation",
+      "url": "https://docs.kalshi.com/api-reference/portfolio/set-target-balance-allocation.md",
+      "status": 200,
+      "sha256": "56db9989c0b3672c81fa44e97b00c082cce62fd3459d1a9233e41b6c491bf95c"
+    },
+    {
+      "title": "Get Communications ID",
+      "url": "https://docs.kalshi.com/api-reference/communications/get-communications-id.md",
+      "status": 200,
+      "sha256": "1fd16ad41124f0daaacaee676e219e94c5352b00e4798eddb8203b34ab9b2b82"
+    },
+    {
+      "title": "Get Block Trade Proposals",
+      "url": "https://docs.kalshi.com/api-reference/communications/get-block-trade-proposals.md",
+      "status": 200,
+      "sha256": "5e86d5ee057279a5a599f47444c2ba168eba1a0c845e611bf9c00806e47ec4de"
+    },
+    {
+      "title": "Propose Block Trade",
+      "url": "https://docs.kalshi.com/api-reference/communications/propose-block-trade.md",
+      "status": 200,
+      "sha256": "4f24090b9922902cc0660a6d1f4ba97d20f65e59d4973a331653245f5042f65f"
+    },
+    {
+      "title": "Accept Block Trade Proposal",
+      "url": "https://docs.kalshi.com/api-reference/communications/accept-block-trade-proposal.md",
+      "status": 200,
+      "sha256": "4151c8389e0c22479acee1c33814a87eb36973561741b87a26f08df91ace0457"
+    },
+    {
+      "title": "Get RFQs",
+      "url": "https://docs.kalshi.com/api-reference/communications/get-rfqs.md",
+      "status": 200,
+      "sha256": "786a41e3a7113efc14aab66e07e5798be05eefcf8e6febc846ca3f17788b38d6"
+    },
+    {
+      "title": "Create RFQ",
+      "url": "https://docs.kalshi.com/api-reference/communications/create-rfq.md",
+      "status": 200,
+      "sha256": "bbc3cb17b58483580dd264366578f9a588a5d07b2e60ef041a5abf8d18c2c281"
+    },
+    {
+      "title": "Get RFQ",
+      "url": "https://docs.kalshi.com/api-reference/communications/get-rfq.md",
+      "status": 200,
+      "sha256": "124fa16c8dfb4367c7af29b0af2ca0e8dbaf39fa44a0337a3ad831cc7efa9c30"
+    },
+    {
+      "title": "Delete RFQ",
+      "url": "https://docs.kalshi.com/api-reference/communications/delete-rfq.md",
+      "status": 200,
+      "sha256": "c0ff36922a52e6c484a3d7950a84653f23327a4bdede5e480d7cae01b320013b"
+    },
+    {
+      "title": "Get RFQ Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/get-rfq-quote.md",
+      "status": 200,
+      "sha256": "fef35dc897237c86f183c790705b30c661fb7f7b4fb61e3075d22ef2cbd32f59"
+    },
+    {
+      "title": "Delete RFQ Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/delete-rfq-quote.md",
+      "status": 200,
+      "sha256": "15ffb9e516995d01001afe2c21d39668ad12a4661b158e417e24bee595ba5472"
+    },
+    {
+      "title": "Accept RFQ Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/accept-rfq-quote.md",
+      "status": 200,
+      "sha256": "fe07b7dd792627bf0e3b41166a7f789a9dac2414a84f7989cb8320294aca5252"
+    },
+    {
+      "title": "Confirm RFQ Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/confirm-rfq-quote.md",
+      "status": 200,
+      "sha256": "6b50b981563249536f7e69ad2e00f55c9ca7227735627b2163630b89dac51db2"
+    },
+    {
+      "title": "Get Quotes",
+      "url": "https://docs.kalshi.com/api-reference/communications/get-quotes.md",
+      "status": 200,
+      "sha256": "533138e3497e6ea282cd58fa1b46c43262f4f76e356f6c0c3ce06c956f63f576"
+    },
+    {
+      "title": "Create Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/create-quote.md",
+      "status": 200,
+      "sha256": "bfd529725c8fcd98e137cc7e827f567e2a50aa30476f0990e877455146b0e722"
+    },
+    {
+      "title": "Get Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/get-quote.md",
+      "status": 200,
+      "sha256": "7f3d4305472d7263230c66fb773947afdb209625ac0d14685f4ec709335887cd"
+    },
+    {
+      "title": "Delete Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/delete-quote.md",
+      "status": 200,
+      "sha256": "4f38f2fbe7458f455d7c56f327f95999d33a83c537693c7e596e22c685ef00a7"
+    },
+    {
+      "title": "Accept Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/accept-quote.md",
+      "status": 200,
+      "sha256": "df31ea169c15e29481824ede5747166dd3aabc172d13cac3a6767d6372f86169"
+    },
+    {
+      "title": "Confirm Quote",
+      "url": "https://docs.kalshi.com/api-reference/communications/confirm-quote.md",
+      "status": 200,
+      "sha256": "c7264770cce68170708e9c5a83b039b79a977f1ebe314eb9e0b43c85c7a6f95f"
+    },
+    {
+      "title": "Get API Keys",
+      "url": "https://docs.kalshi.com/api-reference/api-keys/get-api-keys.md",
+      "status": 200,
+      "sha256": "69e5ddb69f4995f02fd7a6d9afdc3496d589513360421fa016ad8f607b640371"
+    },
+    {
+      "title": "Create API Key",
+      "url": "https://docs.kalshi.com/api-reference/api-keys/create-api-key.md",
+      "status": 200,
+      "sha256": "e48c57396bd7c1d3728bbd2bea39402b54d3c572e8d46aa2d479b9ff70429966"
+    },
+    {
+      "title": "Generate API Key",
+      "url": "https://docs.kalshi.com/api-reference/api-keys/generate-api-key.md",
+      "status": 200,
+      "sha256": "211738dd5966a170fa1c2739ecf7efce23e7d8cc5e4b74de4280a123c7dd4ef5"
+    },
+    {
+      "title": "Delete API Key",
+      "url": "https://docs.kalshi.com/api-reference/api-keys/delete-api-key.md",
+      "status": 200,
+      "sha256": "9d961a8ff4a80672b3165c18144d6f01750ab0050e055b1b7efb75d753bd1253"
+    },
+    {
+      "title": "Get Account API Limits",
+      "url": "https://docs.kalshi.com/api-reference/account/get-account-api-limits.md",
+      "status": 200,
+      "sha256": "f33a90a383d4acdc9b59242d8cc7a012e959dbc2757b6356d55e404129750c9a"
+    },
+    {
+      "title": "Upgrade Account API Usage Level",
+      "url": "https://docs.kalshi.com/api-reference/account/upgrade-account-api-usage-level.md",
+      "status": 200,
+      "sha256": "ccb09884905cfa3a3101338834a541227671b5e6adabde42f96a1b3b7181560d"
+    },
+    {
+      "title": "Get Account API Usage Level Volume Progress",
+      "url": "https://docs.kalshi.com/api-reference/account/get-account-api-usage-level-volume-progress.md",
+      "status": 200,
+      "sha256": "37b97e16f71b6f99b1b8b31a48a61b3598e041dc025cd4fdcaa3353fbbd525db"
+    },
+    {
+      "title": "List Non-Default Endpoint Costs",
+      "url": "https://docs.kalshi.com/api-reference/account/list-non-default-endpoint-costs.md",
+      "status": 200,
+      "sha256": "d8bb41c7ab638cb9667f6481752f5324aa88e632ef1e5de23083d26a8aac4a2d"
+    },
+    {
+      "title": "Get Tags for Series Categories",
+      "url": "https://docs.kalshi.com/api-reference/search/get-tags-for-series-categories.md",
+      "status": 200,
+      "sha256": "4446d20ee677349a38b1be370a7813e3065b4e5b8b482badd07831d56be145ef"
+    },
+    {
+      "title": "Get Filters for Sports",
+      "url": "https://docs.kalshi.com/api-reference/search/get-filters-for-sports.md",
+      "status": 200,
+      "sha256": "11597efa63461419f41810d06f96ccddb095e9d7d6dc54d4d7bacf30384b1c98"
+    },
+    {
+      "title": "Get Live Data",
+      "url": "https://docs.kalshi.com/api-reference/live-data/get-live-data.md",
+      "status": 200,
+      "sha256": "499aad8b59f9d419c49a431a08c6d7d87f9f54c703dad939fd7f04b8127aaeb5"
+    },
+    {
+      "title": "Get Live Data (with type)",
+      "url": "https://docs.kalshi.com/api-reference/live-data/get-live-data-with-type.md",
+      "status": 200,
+      "sha256": "0572a63bd901ad2e84513e82ccb7a3473f4183cb3cb4c61f78f1f6e1ad5ca4e3"
+    },
+    {
+      "title": "Get Multiple Live Data",
+      "url": "https://docs.kalshi.com/api-reference/live-data/get-multiple-live-data.md",
+      "status": 200,
+      "sha256": "427390b898d3754c6c4a3b2266f2b5a5c7647d0d2711ffa50a76323770a3544f"
+    },
+    {
+      "title": "Get Game Stats",
+      "url": "https://docs.kalshi.com/api-reference/live-data/get-game-stats.md",
+      "status": 200,
+      "sha256": "6f2a5f17cd718f7828def651f01c4668ae7182310319fbc38317ffca0c190228"
+    },
+    {
+      "title": "Get Event Live Data",
+      "url": "https://docs.kalshi.com/api-reference/live-data/get-event-live-data.md",
+      "status": 200,
+      "sha256": "8fe0e3699a134c5caab0e56b22ac207a4b8aef6d1530b9746be987ff2b4d17c1"
+    },
+    {
+      "title": "Get Weather Index",
+      "url": "https://docs.kalshi.com/api-reference/live-data/get-weather-index.md",
+      "status": 200,
+      "sha256": "e909b47f6468722751dd4f3bca41eed85cdd573d79229ae5c9831ca6359a0f6f"
+    },
+    {
+      "title": "Get Weather Index Calibrations",
+      "url": "https://docs.kalshi.com/api-reference/live-data/get-weather-index-calibrations.md",
+      "status": 200,
+      "sha256": "cb35dab9ac2c3e75d7cee5e7717acc364882850a19232e5d130385576a810a00"
+    },
+    {
+      "title": "Get Structured Targets",
+      "url": "https://docs.kalshi.com/api-reference/structured-targets/get-structured-targets.md",
+      "status": 200,
+      "sha256": "b716e301ff4b7b0275972b419d2c5e17875162d29a631eacb2d9616021c05716"
+    },
+    {
+      "title": "Get Structured Target",
+      "url": "https://docs.kalshi.com/api-reference/structured-targets/get-structured-target.md",
+      "status": 200,
+      "sha256": "a5f3446293684abe9dc26def162b4b0ae518be462049670801d4540d06516252"
+    },
+    {
+      "title": "Get Milestone",
+      "url": "https://docs.kalshi.com/api-reference/milestone/get-milestone.md",
+      "status": 200,
+      "sha256": "0e044e533461bc6986ec873aafb5dd7208b022dd1d66554c29008b3c8f4d4aca"
+    },
+    {
+      "title": "Get Milestones",
+      "url": "https://docs.kalshi.com/api-reference/milestone/get-milestones.md",
+      "status": 200,
+      "sha256": "0a81e6cb46f08b06ffcaafa26a2e1289ced255d1b3917f452da018d1c24d2e09"
+    },
+    {
+      "title": "Get Multivariate Event Collection",
+      "url": "https://docs.kalshi.com/api-reference/multivariate/get-multivariate-event-collection.md",
+      "status": 200,
+      "sha256": "adb2f13f44b520b8b605589ab914d25a6fc2119ba0d7780d1abd52aab0a80f91"
+    },
+    {
+      "title": "Create Market In Multivariate Event Collection",
+      "url": "https://docs.kalshi.com/api-reference/multivariate/create-market-in-multivariate-event-collection.md",
+      "status": 200,
+      "sha256": "c5bf125665e3fc1aeef33ceadbb845acb56832eca4a1d54048834caf5e9cae26"
+    },
+    {
+      "title": "Get Multivariate Event Collections",
+      "url": "https://docs.kalshi.com/api-reference/multivariate/get-multivariate-event-collections.md",
+      "status": 200,
+      "sha256": "2962501ee176f55545928e6a090b9d46f4d7ff314ce7e4d344b54bea85364fe2"
+    },
+    {
+      "title": "Get Incentives",
+      "url": "https://docs.kalshi.com/api-reference/incentive-programs/get-incentives.md",
+      "status": 200,
+      "sha256": "ea3c9dc0712cd944421b0af1c0f3bf5bfeb4506f69dd5224fe4cf88e35ce828c"
+    },
+    {
+      "title": "Get FCM Orders",
+      "url": "https://docs.kalshi.com/api-reference/fcm/get-fcm-orders.md",
+      "status": 200,
+      "sha256": "038874ef728f7c4ce2a328f4c589ea001701e0627fdd30f1aaf2e45adde2add5"
+    },
+    {
+      "title": "Get FCM Positions",
+      "url": "https://docs.kalshi.com/api-reference/fcm/get-fcm-positions.md",
+      "status": 200,
+      "sha256": "8c6c590308a21f7c3a91bb5dd320129a14eae7e3c726dbecf41ff2ab1c816cab"
+    },
+    {
+      "title": "Get Historical Cutoff Timestamps",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-cutoff-timestamps.md",
+      "status": 200,
+      "sha256": "05eba9f9baa48cc5e0e709d074f3b10a3ceec2c7b7844f3139a83e2648c8ca78"
+    },
+    {
+      "title": "Get Historical Market Candlesticks",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-market-candlesticks.md",
+      "status": 200,
+      "sha256": "c85574d8c8c1363325ed878c48b1f4696fb391d0722294ddbc25a4c883b028d7"
+    },
+    {
+      "title": "Get Historical Fills",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-fills.md",
+      "status": 200,
+      "sha256": "84b3cf2b557d91459d715ccc1bfb6468a22c527df905f0706bc6e60177ae9d03"
+    },
+    {
+      "title": "Get Historical Orders",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-orders.md",
+      "status": 200,
+      "sha256": "da24689bf5aac82da1a0d58a44a523b749e5d71422a9c9a1a6a7fa6983152676"
+    },
+    {
+      "title": "Get Historical Positions",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-positions.md",
+      "status": 200,
+      "sha256": "2d371e997b13b80189e826d85bf9f91002f3cedb404e541d88dd63452eb09707"
+    },
+    {
+      "title": "Get Historical Trades",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-trades.md",
+      "status": 200,
+      "sha256": "1b6e1bb239ed6a8d560e38c15d716880679e1f4a2310d9b5f102805f3202eef8"
+    },
+    {
+      "title": "Get Historical Markets",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-markets.md",
+      "status": 200,
+      "sha256": "52ede1c9b657b321884b6a716149d6b7e9fb66d841ae61550bea2904f4c4e78b"
+    },
+    {
+      "title": "Get Historical Market",
+      "url": "https://docs.kalshi.com/api-reference/historical/get-historical-market.md",
+      "status": 200,
+      "sha256": "b876fc8a99867eeeb2279655d9634ca6d7d49938cb979457552695a413272a71"
+    },
+    {
+      "title": "CF Benchmarks REST Passthrough",
+      "url": "https://docs.kalshi.com/cfbenchmarks/rest-passthrough.md",
+      "status": 200,
+      "sha256": "5ceeecea86d1f0dba5ea23651bc82f4f57c4238c505345e1ca2c5eee6b55efdd"
+    },
+    {
+      "title": "WebSocket API",
+      "url": "https://docs.kalshi.com/websockets.md",
+      "status": 200,
+      "sha256": "d1bfbf45259b7b42d34df4534419ab879c3c2c4b89a3ce3876c8b28c75223cb1"
+    },
+    {
+      "title": "WebSocket Connection",
+      "url": "https://docs.kalshi.com/websockets/websocket-connection.md",
+      "status": 200,
+      "sha256": "4af069208710e2cfebce50720f4a384b14a6ea9ec4e9f17af1967565d6fdc259"
+    },
+    {
+      "title": "Connection Keep-Alive",
+      "url": "https://docs.kalshi.com/websockets/connection-keep-alive.md",
+      "status": 200,
+      "sha256": "8f422884f62f91daed521090de92182d3a167cb5d9e993da6ef32f901c374ff2"
+    },
+    {
+      "title": "Orderbook Updates",
+      "url": "https://docs.kalshi.com/websockets/orderbook-updates.md",
+      "status": 200,
+      "sha256": "14f963ef434c410727e33c959270caa6897a2865752f5a4ea1589dfcf0f07e87"
+    },
+    {
+      "title": "Market Ticker",
+      "url": "https://docs.kalshi.com/websockets/market-ticker.md",
+      "status": 200,
+      "sha256": "2ccd99b959df6a618096a52d72bb8827e9c9dc5d22a2420bfb75ff91d65f4e22"
+    },
+    {
+      "title": "CF Benchmarks Value Feed",
+      "url": "https://docs.kalshi.com/websockets/cfbenchmarks-value.md",
+      "status": 200,
+      "sha256": "1f8a7db38c15b2077850badbb75353bf8a1cec4d05be1bc6aea613cbe92792fa"
+    },
+    {
+      "title": "CF Benchmarks 5Hz Value Feed",
+      "url": "https://docs.kalshi.com/websockets/cfbenchmarks-value-5hz.md",
+      "status": 200,
+      "sha256": "db13ce6a6ecf2daf45a7b321c39381b7118f702ccb26fba24f00d1ff708de982"
+    },
+    {
+      "title": "Pyth Value Feed",
+      "url": "https://docs.kalshi.com/websockets/pyth-value.md",
+      "status": 200,
+      "sha256": "ed726492d718d566a64ba1025c944c56c0998e6b4fe15e1cf83881bd85d84d41"
+    },
+    {
+      "title": "Public Trades",
+      "url": "https://docs.kalshi.com/websockets/public-trades.md",
+      "status": 200,
+      "sha256": "991b3c5539b5dbc674c153578ba21a0cf16399394de2cc8d4e151f2fcbfdb795"
+    },
+    {
+      "title": "User Fills",
+      "url": "https://docs.kalshi.com/websockets/user-fills.md",
+      "status": 200,
+      "sha256": "fe3a858c9f60632b752b16e96fceb45885bc835e634c4efe40eb637309ba95f5"
+    },
+    {
+      "title": "Market Positions",
+      "url": "https://docs.kalshi.com/websockets/market-positions.md",
+      "status": 200,
+      "sha256": "aa2aab0561434e52a75f1684551b878d24000824c59c522f0d3f6f503eb1e6ea"
+    },
+    {
+      "title": "Market & Event Lifecycle",
+      "url": "https://docs.kalshi.com/websockets/market-and-event-lifecycle.md",
+      "status": 200,
+      "sha256": "330d02fd2a3807105e073905028f66a8788f90f611a2c40ce4f5f433e848e3ff"
+    },
+    {
+      "title": "Multivariate Market & Event Lifecycle",
+      "url": "https://docs.kalshi.com/websockets/multivariate-market-and-event-lifecycle.md",
+      "status": 200,
+      "sha256": "7a95576227e49eab4ede5554f234ca2f11838756aafef942c0485a8568154a0a"
+    },
+    {
+      "title": "Communications",
+      "url": "https://docs.kalshi.com/websockets/communications.md",
+      "status": 200,
+      "sha256": "cf5394dbe5308bc1b886ce0b3d18ae5c3b4a0bcdc50a85e8617e1847e46b6e9b"
+    },
+    {
+      "title": "Order Group Updates",
+      "url": "https://docs.kalshi.com/websockets/order-group-updates.md",
+      "status": 200,
+      "sha256": "434392bfcbf4eca8c7c194c5e8f26bc4a165465b561fc7970039afe903e96ac0"
+    },
+    {
+      "title": "User Orders",
+      "url": "https://docs.kalshi.com/websockets/user-orders.md",
+      "status": 200,
+      "sha256": "e3f855c796382b74967c622c59b5dd40cd60afece6120664584c5e907967bb61"
+    },
+    {
+      "title": "Common Components",
+      "url": "https://docs.kalshi.com/fix/common-components.md",
+      "status": 200,
+      "sha256": "c494601863babb2bffd23c930c2f291b2e9a45166688e6b49bf732811030ec82"
+    },
+    {
+      "title": "Connectivity",
+      "url": "https://docs.kalshi.com/fix/connectivity.md",
+      "status": 200,
+      "sha256": "71a35636e2db6b88a01f0641a82271c02926277241543da31ba16d2cd595fee4"
+    },
+    {
+      "title": "Authentication & Sessions",
+      "url": "https://docs.kalshi.com/fix/authentication.md",
+      "status": 200,
+      "sha256": "ede9cd0392fb258c441adcf3373e46bb23d11a9b2f4c444ef3bbdeac9abf7002"
+    },
+    {
+      "title": "Order Entry",
+      "url": "https://docs.kalshi.com/fix/order-entry.md",
+      "status": 200,
+      "sha256": "e402436c075451cf30b635f9f3d1e18e31da2a057f3490a58efa71dd35780817"
+    },
+    {
+      "title": "Order Groups",
+      "url": "https://docs.kalshi.com/fix/order-groups.md",
+      "status": 200,
+      "sha256": "dc85d12b64b045708d85343f5dc7d2a2ef4f2aeea8c8ad940287e86bc0c61a8b"
+    },
+    {
+      "title": "Market Data",
+      "url": "https://docs.kalshi.com/fix/market-data.md",
+      "status": 200,
+      "sha256": "b2c80fe45aefbe63e253fd345bed3e63491649afeb23d49538d322410db725fa"
+    },
+    {
+      "title": "RFQ",
+      "url": "https://docs.kalshi.com/fix/rfq-messages.md",
+      "status": 200,
+      "sha256": "ba81efffa0ee399ec7f3f2cdb0ea4ae664ba0c91f66af0431051ad92ec70354a"
+    },
+    {
+      "title": "Drop Copy Session",
+      "url": "https://docs.kalshi.com/fix/drop-copy.md",
+      "status": 200,
+      "sha256": "93b1cac5fc34ee872b66493952f07bbe85e2bc047bc087aa6e59b0bf712784ad"
+    },
+    {
+      "title": "Listener Sessions",
+      "url": "https://docs.kalshi.com/fix/listener-sessions.md",
+      "status": 200,
+      "sha256": "c897ae3ef0a2ada2b6cfb7cf6238bf1514d1a318c15bea00ced62a329153e00e"
+    },
+    {
+      "title": "Market Settlement",
+      "url": "https://docs.kalshi.com/fix/market-settlement.md",
+      "status": 200,
+      "sha256": "247c58ab1b4ae15e82aa1887d2be4d19ebce7b43ba44a68ccca865fc37dc1d89"
+    },
+    {
+      "title": "Error Handling",
+      "url": "https://docs.kalshi.com/fix/error-handling.md",
+      "status": 200,
+      "sha256": "9223bf136f3f39ccefac41879198a204d7c8f74683b4f732a9fa24208e7c0b53"
+    },
+    {
+      "title": "Subpenny Pricing",
+      "url": "https://docs.kalshi.com/fix/subpenny-pricing.md",
+      "status": 200,
+      "sha256": "f2f7e44e847b47df02da499cef9ece82707b92b0f61bb96894707aaa90cc7a44"
+    },
+    {
+      "title": "Perps API",
+      "url": "https://docs.kalshi.com/margin.md",
+      "status": 200,
+      "sha256": "dae66c93a2920148692fb6ec4360748a31c5f9d41f988046c590ebfca7fac3e6"
+    },
+    {
+      "title": "Price Banding",
+      "url": "https://docs.kalshi.com/margin/price-banding.md",
+      "status": 200,
+      "sha256": "f7783e910e6c155dcdf5b93bafc8f90719424ec1c554ff7beeb697174406beab"
+    },
+    {
+      "title": "Create Margin FCM Subtrader",
+      "url": "https://docs.kalshi.com/margin-rest/fcm/create-margin-fcm-subtrader.md",
+      "status": 200,
+      "sha256": "825a345dcc8549b30fb7833476b6278303a8bab180c5fce1f6156f9eb21127b4"
+    },
+    {
+      "title": "Get FCM Subtrader Risk Controls",
+      "url": "https://docs.kalshi.com/margin-rest/fcm/get-fcm-subtrader-risk-controls.md",
+      "status": 200,
+      "sha256": "3c62b037aa75b24ffdc2e4cf938ad5b1439a408f4be736f2b1a7ff545c069e9a"
+    },
+    {
+      "title": "Update FCM Subtrader Risk Controls",
+      "url": "https://docs.kalshi.com/margin-rest/fcm/update-fcm-subtrader-risk-controls.md",
+      "status": 200,
+      "sha256": "6e9440a7eeabc0c781c4e31364b1fdc4da467b7bda4eadf0b28730c6b042bb31"
+    },
+    {
+      "title": "Delete FCM Subtrader Risk Controls",
+      "url": "https://docs.kalshi.com/margin-rest/fcm/delete-fcm-subtrader-risk-controls.md",
+      "status": 200,
+      "sha256": "41533f6aaec6cb9fa27c35d6afb5b63b1404d45d8c2f0e9aecb54b50c3509202"
+    },
+    {
+      "title": "Get Perps Account API Limits",
+      "url": "https://docs.kalshi.com/margin-rest/account/get-perps-account-api-limits.md",
+      "status": 200,
+      "sha256": "69e63c8c3a1b4d5a3a8698409f2fc6a44aae71dfff32b338e670e37c83f79c54"
+    },
+    {
+      "title": "Get Exchange Status",
+      "url": "https://docs.kalshi.com/margin-rest/exchange/get-exchange-status.md",
+      "status": 200,
+      "sha256": "f18779dce7e8a1256f5497d2297164267332998b5054666502719ee4cb43874c"
+    },
+    {
+      "title": "Get Enabled Status",
+      "url": "https://docs.kalshi.com/margin-rest/exchange/get-enabled-status.md",
+      "status": 200,
+      "sha256": "d59b50fb2a58dc46daa97d971c2d90916957f86985e3bc3838d441df4203e4dd"
+    },
+    {
+      "title": "Get Risk Parameters",
+      "url": "https://docs.kalshi.com/margin-rest/risk/get-risk-parameters.md",
+      "status": 200,
+      "sha256": "2e94ba12df556222c857ec337c318f81ad17676576fea5ed964fe24c9b283395"
+    },
+    {
+      "title": "Get Notional Risk Limit",
+      "url": "https://docs.kalshi.com/margin-rest/risk/get-notional-risk-limit.md",
+      "status": 200,
+      "sha256": "7ba7fef3b49f1fe1ba2e2883ad9fc4ca8fab6697554d91d8784cdca469c58d8b"
+    },
+    {
+      "title": "Get Risk",
+      "url": "https://docs.kalshi.com/margin-rest/risk/get-risk.md",
+      "status": 200,
+      "sha256": "98859398ddcf5d295645f916839b37866c3def49cad6e4ed8751923507f03f40"
+    },
+    {
+      "title": "Get Orders",
+      "url": "https://docs.kalshi.com/margin-rest/orders/get-orders.md",
+      "status": 200,
+      "sha256": "1dc4a8ec6e5e8952101f5add4d401fd7f01ab3127706f3436063c835b49cd045"
+    },
+    {
+      "title": "Create Order",
+      "url": "https://docs.kalshi.com/margin-rest/orders/create-order.md",
+      "status": 200,
+      "sha256": "895a66aecd654c7f1ec033497e9056c0d471f6a16be7b311b842d1b2de88b35c"
+    },
+    {
+      "title": "Cancel All Orders",
+      "url": "https://docs.kalshi.com/margin-rest/orders/cancel-all-orders.md",
+      "status": 200,
+      "sha256": "f3c360ae8eed247b4c47e74cf4c63946a35c3fe34d360b89ef6836478b70daf7"
+    },
+    {
+      "title": "Get Order",
+      "url": "https://docs.kalshi.com/margin-rest/orders/get-order.md",
+      "status": 200,
+      "sha256": "2b51ce8de4757076d49079d9dfa6545a2114bdd143b1a2faed248b6ec342c38a"
+    },
+    {
+      "title": "Cancel Order",
+      "url": "https://docs.kalshi.com/margin-rest/orders/cancel-order.md",
+      "status": 200,
+      "sha256": "01b17dd0949e48d4c7e785b2a1cfda70bb28b7be2617f6cf1b824b2f1d048d9f"
+    },
+    {
+      "title": "Decrease Order",
+      "url": "https://docs.kalshi.com/margin-rest/orders/decrease-order.md",
+      "status": 200,
+      "sha256": "5a0ccc2110bbd5b0a649ac5a59e726de70d13a31849952e079ad6608cde0a50c"
+    },
+    {
+      "title": "Amend Order",
+      "url": "https://docs.kalshi.com/margin-rest/orders/amend-order.md",
+      "status": 200,
+      "sha256": "f8074e68aa80c61645d5c17d7e16c90ef058efb8bb03d699e29c69c9a15a8740"
+    },
+    {
+      "title": "Get Markets",
+      "url": "https://docs.kalshi.com/margin-rest/market/get-markets.md",
+      "status": 200,
+      "sha256": "c5a748bd02a63766e7d770bc7f5fe4fdc76113ba0d348bbde6480bf814cc6e69"
+    },
+    {
+      "title": "Get Market",
+      "url": "https://docs.kalshi.com/margin-rest/market/get-market.md",
+      "status": 200,
+      "sha256": "396bf92ba8ef1fd3a871a99f6bbc234b2f07a0836fa83167d46994d4344c6edd"
+    },
+    {
+      "title": "Get Market Orderbook",
+      "url": "https://docs.kalshi.com/margin-rest/market/get-market-orderbook.md",
+      "status": 200,
+      "sha256": "93647021577e557d36c0fb1c2a05f7e1838bedfb6d7aa677f98eee7f873b3c30"
+    },
+    {
+      "title": "Get Market Candlesticks",
+      "url": "https://docs.kalshi.com/margin-rest/market/get-market-candlesticks.md",
+      "status": 200,
+      "sha256": "f6f8df52ed2f92e93a5351f14ab7ac28b8d17911012f812f3685183deaa9c237"
+    },
+    {
+      "title": "Get Trades",
+      "url": "https://docs.kalshi.com/margin-rest/market/get-trades.md",
+      "status": 200,
+      "sha256": "f57796c67707d36aca973a11e961f7d2d7cb2b48c2794ce1e2287df5f87d2e55"
+    },
+    {
+      "title": "Get Fills",
+      "url": "https://docs.kalshi.com/margin-rest/portfolio/get-fills.md",
+      "status": 200,
+      "sha256": "66c1350d0aa7f8df834ad0a1af359de5827b2a9527abe3902b2572c6af329e97"
+    },
+    {
+      "title": "Get Positions",
+      "url": "https://docs.kalshi.com/margin-rest/portfolio/get-positions.md",
+      "status": 200,
+      "sha256": "23cc99e8077e472127c55a1ca6a7feb5e9eac86109780e219103fa53ef7e939e"
+    },
+    {
+      "title": "Get Balance",
+      "url": "https://docs.kalshi.com/margin-rest/portfolio/get-balance.md",
+      "status": 200,
+      "sha256": "84b4a02252fc75e3e7ce87816e11d45708fcf5c02fc27be2ff8c7d21505f8e10"
+    },
+    {
+      "title": "Intra Account Transfer",
+      "url": "https://docs.kalshi.com/margin-rest/portfolio/intra-account-transfer.md",
+      "status": 200,
+      "sha256": "06daf6b8cd15f4c05e592df90f29fabd2e244d4228aab87d99f9c2b5225b3142"
+    },
+    {
+      "title": "Create Subaccount",
+      "url": "https://docs.kalshi.com/margin-rest/portfolio/create-subaccount.md",
+      "status": 200,
+      "sha256": "e0342ffd3b272016329af6fd90745bd15717d23b169cc815911833fb18357e5f"
+    },
+    {
+      "title": "Transfer Between Subaccounts",
+      "url": "https://docs.kalshi.com/margin-rest/portfolio/transfer-between-subaccounts.md",
+      "status": 200,
+      "sha256": "8e7f5e63232dd715c8ecfe859caddb9825f69af22d0283c38f9a95b06ea4061e"
+    },
+    {
+      "title": "Get Fee Tiers",
+      "url": "https://docs.kalshi.com/margin-rest/fees/get-fee-tiers.md",
+      "status": 200,
+      "sha256": "db35df54d0211e0442382eaead2b642a77a98b1482283a8d1123b83d5b28b828"
+    },
+    {
+      "title": "Get Fee Tier Rates",
+      "url": "https://docs.kalshi.com/margin-rest/fees/get-fee-tier-rates.md",
+      "status": 200,
+      "sha256": "5dbe73973554dec2b2e2a5463e7012c82218b86f3c7732b318c80e1f9e4518d7"
+    },
+    {
+      "title": "Get Funding History",
+      "url": "https://docs.kalshi.com/margin-rest/funding/get-funding-history.md",
+      "status": 200,
+      "sha256": "3863ef62d59120db337c99ba924352f69969a3fe8d3d3827c85667ff1fa887fa"
+    },
+    {
+      "title": "Get Historical Funding Rates",
+      "url": "https://docs.kalshi.com/margin-rest/funding/get-historical-funding-rates.md",
+      "status": 200,
+      "sha256": "51b262e2085077ba552ea9d6daa83337d3c3d2634198802b0f99aaee09a5209a"
+    },
+    {
+      "title": "Get Funding Rate Estimate",
+      "url": "https://docs.kalshi.com/margin-rest/funding/get-funding-rate-estimate.md",
+      "status": 200,
+      "sha256": "513924447a1ee93dfada772982280ea9aad44a78e2f530f3f2f659a4e6560522"
+    },
+    {
+      "title": "Get Order Groups",
+      "url": "https://docs.kalshi.com/margin-rest/order-groups/get-order-groups.md",
+      "status": 200,
+      "sha256": "9bb9491aa6179b659d59e08c24a43d1cd3c221edfea337c9d94f4932f4c060ae"
+    },
+    {
+      "title": "Create Order Group",
+      "url": "https://docs.kalshi.com/margin-rest/order-groups/create-order-group.md",
+      "status": 200,
+      "sha256": "5d190b80e50b3d5cbbd2d5ca2a2dbc4e008513e7bf32202ec8e70eadd08c9ef9"
+    },
+    {
+      "title": "Get Order Group",
+      "url": "https://docs.kalshi.com/margin-rest/order-groups/get-order-group.md",
+      "status": 200,
+      "sha256": "d5ce0377efad7a7d22dad88a724fa3b20c4b4e3f3f7ca56ec782993991b7f3e2"
+    },
+    {
+      "title": "Delete Order Group",
+      "url": "https://docs.kalshi.com/margin-rest/order-groups/delete-order-group.md",
+      "status": 200,
+      "sha256": "21b13877041fc3a056c2b8a68bba7d2f68a86222f66b0daab057f74dd0508ee2"
+    },
+    {
+      "title": "Reset Order Group",
+      "url": "https://docs.kalshi.com/margin-rest/order-groups/reset-order-group.md",
+      "status": 200,
+      "sha256": "f325024123ddfbc8ab521792e5438b2663ffce25086767ea887054fe669852c1"
+    },
+    {
+      "title": "Trigger Order Group",
+      "url": "https://docs.kalshi.com/margin-rest/order-groups/trigger-order-group.md",
+      "status": 200,
+      "sha256": "198bacde229d93b1d06a50bead706444342f3a839489201482dcba4b52bbefb7"
+    },
+    {
+      "title": "Update Order Group Limit",
+      "url": "https://docs.kalshi.com/margin-rest/order-groups/update-order-group-limit.md",
+      "status": 200,
+      "sha256": "6ad7316f1fc05622ca08909befbeebb42a8475b0b98c2128f0cdd3c2df53ff66"
+    },
+    {
+      "title": "Get Isolated Exit Triggers",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/get-isolated-exit-triggers.md",
+      "status": 200,
+      "sha256": "c52c9622551d1ca89c72bc53114fcc078b5f1da7558b01e13e535fa644c094f2"
+    },
+    {
+      "title": "Set Isolated Exit Trigger",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/set-isolated-exit-trigger.md",
+      "status": 200,
+      "sha256": "b8dd0a94701b106c6da932ae8e4f2eb158d0dd6e74c3eee03996de98866db6d0"
+    },
+    {
+      "title": "Cancel Isolated Exit Trigger",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/cancel-isolated-exit-trigger.md",
+      "status": 200,
+      "sha256": "eed691a50de8a125fc7a27886dd8f90691d0cc34a4890e59d4ecf3ce1f0049f8"
+    },
+    {
+      "title": "Get Cross Exit Triggers",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/get-cross-exit-triggers.md",
+      "status": 200,
+      "sha256": "7f5677398757e39767dfb26be3eea1c3995328ff6dd54c755e635e3f678aef79"
+    },
+    {
+      "title": "Set Cross Exit Trigger",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/set-cross-exit-trigger.md",
+      "status": 200,
+      "sha256": "9cd751284bb18813c04d08cccf7cfadc81a4f1d1afca75c1f5e99e7176c0f3b9"
+    },
+    {
+      "title": "Cancel Cross Exit Triggers",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/cancel-cross-exit-triggers.md",
+      "status": 200,
+      "sha256": "1328cedecfe4bf7d1f85efe4a640239624c671fbdf7f1c4f6c687b8dffa1c3c9"
+    },
+    {
+      "title": "Update Cross Exit Trigger",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/update-cross-exit-trigger.md",
+      "status": 200,
+      "sha256": "80c02231cff2ebf755ef70cd1761a67ce83e74941f6a42390f87325e63aa98e4"
+    },
+    {
+      "title": "Cancel Cross Exit Trigger by ID",
+      "url": "https://docs.kalshi.com/margin-rest/exit-triggers/cancel-cross-exit-trigger-by-id.md",
+      "status": 200,
+      "sha256": "a0121dd43ef25620b7bc017b36d351b0f17e402d41e45fd60a9cecd62f9e77b6"
+    },
+    {
+      "title": "WebSocket Connection",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/websocket-connection.md",
+      "status": 200,
+      "sha256": "97d378d33f0a69e24cebb3a335fc82c15658d0d6da6399b51ef8a76e0d21ce4a"
+    },
+    {
+      "title": "Connection Keep-Alive",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/connection-keep-alive.md",
+      "status": 200,
+      "sha256": "759e9f79f67bb1a974e01ba3fc389a337f4fc1a3346287398c68e0144facda3d"
+    },
+    {
+      "title": "Orderbook Updates",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/orderbook-updates.md",
+      "status": 200,
+      "sha256": "4ba03ad0ce12695fd50cf01290f56abb981419b1742f297b95cbabcbc14a8954"
+    },
+    {
+      "title": "Market Ticker",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/market-ticker.md",
+      "status": 200,
+      "sha256": "f9329f3354949fef1bb858b04b9080468a27d17627cc404268e7e2a5655942df"
+    },
+    {
+      "title": "Public Trades",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/public-trades.md",
+      "status": 200,
+      "sha256": "f3d11419a8fee0be5b33edb75d7aa4b2066822e03f8f4ec2d42249adaccc75c0"
+    },
+    {
+      "title": "User Fills",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/user-fills.md",
+      "status": 200,
+      "sha256": "021657cd9db463ba0f9038ee689b882e1254b8cba838859d17150b20d5afe517"
+    },
+    {
+      "title": "User Orders",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/user-orders.md",
+      "status": 200,
+      "sha256": "1d62331cc447b8c38b5edc74d93cfa8784047271ad9c14d53de59129cfed83fc"
+    },
+    {
+      "title": "Order Group Updates",
+      "url": "https://docs.kalshi.com/margin-ws/websockets/order-group-updates.md",
+      "status": 200,
+      "sha256": "b89ddbcf739891056173bf987e2f500c9e1ddc31fd176cd399d269d55acf7775"
+    },
+    {
+      "title": "Connectivity",
+      "url": "https://docs.kalshi.com/fix-margin/connectivity.md",
+      "status": 200,
+      "sha256": "a4b10ebe3ba4cf190133b5726971695590867410b779db01330768dbde9c308f"
+    },
+    {
+      "title": "Authentication & Sessions",
+      "url": "https://docs.kalshi.com/fix-margin/authentication.md",
+      "status": 200,
+      "sha256": "1498fd4a60101059070e4f0e7e5fb7719272beec93e9e6e38f0342d5556151d7"
+    },
+    {
+      "title": "Order Entry",
+      "url": "https://docs.kalshi.com/fix-margin/order-entry.md",
+      "status": 200,
+      "sha256": "ff07c2ea517c51cbb04bdfdba31325a578f4c743ff20ad3b8db6f1f83b2034d5"
+    },
+    {
+      "title": "Order Groups",
+      "url": "https://docs.kalshi.com/fix-margin/order-groups.md",
+      "status": 200,
+      "sha256": "ef1cc41e72db257dec24e3543cff63b4660099cb074f80c22794353dbd61d9dc"
+    },
+    {
+      "title": "Market Data",
+      "url": "https://docs.kalshi.com/fix-margin/market-data.md",
+      "status": 200,
+      "sha256": "674e1e6f07bf7ed33776441bb6514ea5391473c6e09b7f58924c7c9ab1003cb9"
+    },
+    {
+      "title": "Drop Copy Session",
+      "url": "https://docs.kalshi.com/fix-margin/drop-copy.md",
+      "status": 200,
+      "sha256": "44424d61a634f15399465fa6eac385b436c41621ff21a72637899d3689714f2a"
+    },
+    {
+      "title": "Listener Sessions",
+      "url": "https://docs.kalshi.com/fix-margin/listener-sessions.md",
+      "status": 200,
+      "sha256": "157e899d62eb91bbe7eb180acf7efadba248d5c5e3302d784fa39c108f76c3a0"
+    },
+    {
+      "title": "Error Handling",
+      "url": "https://docs.kalshi.com/fix-margin/error-handling.md",
+      "status": 200,
+      "sha256": "513087e4da69ce8c171482a4771d7c132485a1fbb856edd8564c77fbc94760ec"
+    },
+    {
+      "title": "API Changelog",
+      "url": "https://docs.kalshi.com/changelog/index.md",
+      "status": 200,
+      "sha256": "00c1ace58fc411b56d852681673720686896ba5fcfa3dcbc7e0e74eeebf9954a"
+    }
+  ]
+}

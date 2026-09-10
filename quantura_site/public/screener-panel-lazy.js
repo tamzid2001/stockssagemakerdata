@@ -15,7 +15,7 @@
     if (!loaderPromise) {
       loaderPromise = new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/screener-workspace-loader.js?v=20260831a";
+        script.src = "/screener-workspace-loader.js?v=20260908a";
         script.async = true;
         script.dataset.quanturaScreenerLoader = "true";
         script.addEventListener("load", resolve, { once: true });

@@ -2,10 +2,13 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { imageUrl, photoFigure, escapeHtml } from "./blog-photo.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
+const editorial = JSON.parse(await fs.readFile(path.join(root, "brand/blog-photos.json"), "utf8"));
+const editorialPhoto = (slug) => editorial.photos[editorial.posts[slug]];
 const pagesDir = path.join(root, "pages", "blog");
 const pagesPostsDir = path.join(pagesDir, "posts");
 const pagesTopicsDir = path.join(pagesDir, "topics");
@@ -14,7 +17,7 @@ const publicPostsDir = path.join(publicBlogDir, "posts");
 const publicTopicsDir = path.join(publicBlogDir, "topics");
 
 const SITE_URL = "https://quantura.studio";
-const ASSET_VERSION = "20260405a";
+const ASSET_VERSION = "20260909a";
 
 const TOPICS = [
   { slug: "macro-signals", label: "Macro Signals", description: "Regime-aware macro signals and scenario framing for institutional workflows." },
@@ -313,7 +316,7 @@ function buildChecklist(items) {
   return `<ul>\n${items.map((item) => `  <li>${item}</li>`).join("\n")}\n</ul>`;
 }
 
-function buildBody({ title, topic, tags, dateIso, weekIndex }) {
+function buildBody({ title, topic, tags, dateIso, weekIndex, slug }) {
   const spec = CATEGORY_SPECS[topic];
   const topicMeta = TOPIC_BY_SLUG.get(topic);
   const fillerA = FILLER_PARAGRAPHS[weekIndex % FILLER_PARAGRAPHS.length];
@@ -371,10 +374,7 @@ function buildBody({ title, topic, tags, dateIso, weekIndex }) {
   const tagsLine = tags.map((tag) => `#${tag}`).join(" ");
 
   return `
-    <figure style="margin: 0 0 18px;">
-      <img src="/assets/hero-illustration.svg" alt="Quantura research workflow visual" style="width:100%;border-radius:16px;display:block;" />
-      <figcaption class="small muted" style="margin-top:8px;">Quantura institutional workflow brief · ${topicMeta?.label || topic}</figcaption>
-    </figure>
+    ${editorialPhoto(slug) ? photoFigure(editorialPhoto(slug)) : ""}
     <p>
       ${title} is written for operators who need a repeatable bridge between signal intake and action execution.
       The core objective is to reduce latency without reducing rigor. ${fillerA}
@@ -461,6 +461,7 @@ function buildBody({ title, topic, tags, dateIso, weekIndex }) {
 function blogPostHtml(meta) {
   const { title, dateIso, excerpt, slug, tags, topic } = meta;
   const canonical = `${SITE_URL}/blog/posts/${slug}`;
+  const socialImage = editorialPhoto(slug) ? imageUrl(editorialPhoto(slug)) : `${SITE_URL}/assets/quantura-social.png`;
   const dateObj = new Date(`${dateIso}T00:00:00.000Z`);
   const topicMeta = TOPIC_BY_SLUG.get(topic);
   const body = buildBody(meta);
@@ -479,13 +480,13 @@ function blogPostHtml(meta) {
     <meta property="og:description" content="${excerpt}" />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="${canonical}" />
-    <meta property="og:image" content="/assets/hero-illustration.svg" />
+    <meta property="og:image" content="${escapeHtml(socialImage)}" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${title} | Quantura Blog" />
     <meta name="twitter:description" content="${excerpt}" />
-    <meta name="twitter:image" content="/assets/hero-illustration.svg" />
+    <meta name="twitter:image" content="${escapeHtml(socialImage)}" />
     <meta name="twitter:url" content="${canonical}" />
     <meta property="article:published_time" content="${dateIso}" />
     <meta property="article:section" content="${topicMeta?.label || "Research"}" />
@@ -511,7 +512,8 @@ function blogPostHtml(meta) {
           "@type": "Organization",
           "name": "Quantura"
         },
-        "mainEntityOfPage": "${canonical}"
+        "mainEntityOfPage": "${canonical}",
+        "image": ${JSON.stringify(socialImage)}
       }
     </script>
     <script defer src="/app.js?v=${ASSET_VERSION}"></script>
@@ -804,7 +806,7 @@ async function main() {
       topic,
       tags,
       excerpt,
-      heroImage: "/assets/hero-illustration.svg",
+      heroImage: editorialPhoto(slug) ? imageUrl(editorialPhoto(slug)) : "/assets/quantura-social.png",
       canonical: `${SITE_URL}/blog/posts/${slug}`,
       description: excerpt,
     });

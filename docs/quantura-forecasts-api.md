@@ -84,7 +84,7 @@ Returns forecasts for an exact normalized entity ID/name.
 
 ### `GET /calibration` and `GET /performance`
 
-Require `forecasts:resolved`. Filters may include category, model and date range. Calibration rows include probability bucket, average prediction, actual frequency, sample count and Brier score.
+Require `forecasts:resolved`. Filters may include category, model and date range. Calibration rows include probability bucket, average prediction, actual frequency, sample count.
 
 ### `GET /categories` and `GET /forecast-feed`
 

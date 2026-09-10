@@ -73,6 +73,11 @@ jobs:
         run: |
           pytest -q quantura_site/tests
 
+      - name: Validate shared presentation and support UI
+        run: |
+          npm run lint --prefix quantura_site
+          npm run test:ui --prefix quantura_site
+
       - name: Run Forecast Intelligence leakage and schema tests
         run: |
           pytest -q forecast_intelligence/tests

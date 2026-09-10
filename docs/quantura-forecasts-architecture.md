@@ -57,8 +57,6 @@ Resolvers are registered by category. A resolver returns `yes`, `no`, `partial`,
 
 Binary scores use:
 
-`Brier = (p - outcome)^2`
-
 `Log score = -(outcome * ln(p) + (1 - outcome) * ln(1 - p))`
 
 using the final probability revision created before resolution. Partial/void/disputed records do not receive a binary score.

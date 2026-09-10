@@ -35,9 +35,7 @@ Resolution uses category-specific deterministic adapters backed by authoritative
 
 Binary forecasts are scored using the last published probability available before resolution.
 
-`Brier score = (probability - outcome)^2`
-
-where outcome is `1` for yes and `0` for no. Lower Brier scores are better. Quantura also stores logarithmic score and aggregates calibration buckets comparing average predicted probability with actual event frequency. Partial, void and disputed outcomes are not assigned a binary Brier score.
+Calibration buckets compare the average predicted probability with the actual event frequency and sample count. Quantura also stores logarithmic loss for resolved binary outcomes. Partial, void and disputed outcomes are not assigned binary scores. Price-error metrics such as MAE or RMSE apply to numerical time-series forecasts, not these yes/no propositions.
 
 ## Temporal integrity
 

@@ -12,24 +12,26 @@
         <meta property="og:description" content="Search markets, prepare data, generate calibrated forecasts, screen opportunities, and deliver research through one coherent platform." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/" />
-        <meta property="og:image" content="/assets/quantura-logo.svg" />
+        <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Quantura | Quantitative Forecasts, Data APIs &amp; Research" />
     <meta name="twitter:description" content="Cross-asset forecasts, prediction-market datasets, screeners, backtests, APIs, and collaborative research." />
-    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/" />
     <meta name="author" content="Quantura" />
     <meta name="theme-color" content="#0B1526" />
     <link rel="alternate" hreflang="en-US" href="https://quantura.studio/" />
     <link rel="alternate" hreflang="x-default" href="https://quantura.studio/" />
-<link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260405b" sizes="96x96" />
-<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260405b" />
-<link rel="shortcut icon" href="/favicon.ico?v=20260405b" />
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260405b" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260909a" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260909a" />
+<link rel="shortcut icon" href="/favicon.ico?v=20260909a" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
 <meta name="apple-mobile-web-app-title" content="Quantura" />
-<link rel="manifest" href="/site.webmanifest?v=20260405b" />
+<link rel="manifest" href="/site.webmanifest?v=20260909a" />
+    <script src="/theme-init.js?v=20260908a"></script>
+    <script defer src="/ui-runtime.js?v=20260908a"></script>
     <link rel="stylesheet" href="/styles.css?v=20260405a" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
@@ -42,8 +44,7 @@
 	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
 	    <script defer src="/app.js?v=20260405a"></script>
-    <script defer src="/forecasts.js?v=20260830a"></script>
-    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
+    <script defer src="/forecasts.js?v=20260908a"></script>
     <script defer src="/marketing-carousel.js"></script>
 
     <script type="application/ld+json">
@@ -80,7 +81,7 @@
           },
           {
             "@type": "Question",
-            "name": "What is the difference between Starter and paid plans?",
+            "name": "What is the difference between Free and paid plans?",
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "Free access covers core research workflows. Paid plans add higher analysis limits, advanced exports, collaboration seats, and additional forecasting capabilities described on the Pricing page."
@@ -156,54 +157,53 @@
     </header>
 
     <main>
-	      <section class="hero">
+	      <section class="hero home-intelligence-hero" aria-labelledby="home-intelligence-title">
 	        <div class="container hero-grid">
-	          <div class="fade-in">
-	            <span class="badge">Quantitative forecast intelligence</span>
-	            <h1>Search markets. Forecast distributions. Ship defensible research.</h1>
+	          <div class="hero-copy">
+	            <span class="eyebrow">Markets. Forecasts. Opportunities.</span>
+	            <h1 id="home-intelligence-title">See the market.<br /><span>Understand what’s next.</span></h1>
 	            <p>
-	              Quantura connects cross-asset market data, canonical forecast quantiles, screeners, prediction-market datasets,
-	              backtests, APIs, and collaborator-aware workspaces in one research surface.
+	              Probabilistic forecasts, cross-asset research, and connected data.
+                  Explore the range of possibilities—not just a single price target.
 	            </p>
 	            <div class="hero-actions">
-	              <a class="cta" href="/pricing" data-analytics="hero_cta_primary"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
-	              <a class="cta secondary" href="/forecasting" data-analytics="hero_cta_secondary"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Workspace forecasting</span></a>
+	              <a class="cta" href="/forecasting" data-analytics="hero_cta_primary"><span>Start researching</span><i class="iconoir-arrow-right" aria-hidden="true"></i></a>
+	              <a class="cta secondary" href="/pricing" data-analytics="hero_cta_secondary"><span>Explore plans</span></a>
 	            </div>
-	            <div class="small" style="margin-top: 20px;">
-	              Search → Data → Forecast → Quantiles → Screener → Analysis → API → Dataset.
-	            </div>
+                <ul class="hero-proof" aria-label="Research capabilities">
+                  <li><strong>Quantiles</strong><span>Make uncertainty visible</span></li>
+                  <li><strong>Connected data</strong><span>Sources with provenance</span></li>
+                  <li><strong>Workspace API</strong><span>Research you can reuse</span></li>
+                </ul>
 	          </div>
-          <div class="hero-card fade-in delay-1">
-            <h3>Weekly market visual briefing</h3>
-            <p class="small" style="margin-bottom: 12px;">One live finance image updates from Unsplash to keep the landing narrative current.</p>
-            <div
-              class="unsplash-grid"
-              id="unsplash-grid"
-              data-unsplash-query="institutional trading desk, stock market chart, macro investing"
-              data-unsplash-count="1"
-            >
-              <figure class="unsplash-card hero-moodboard" data-unsplash-slot="0">
-                <img
-                  data-unsplash-img
-                  src="https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80"
-                  alt="Finance workspace with market charts"
-                  loading="lazy"
-                />
-                <figcaption>
-                  <a
-                    data-unsplash-credit
-                    href="https://unsplash.com/@adeolueletu"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Photo by Adeolu Eletu on Unsplash
-                  </a>
-                </figcaption>
+              <figure class="hero-product-visual">
+                <a href="/forecasting" aria-label="Explore Quantura Forecast">
+                  <img src="/assets/quantura-product-concept.webp?v=20260909a" srcset="/assets/quantura-product-concept-640.webp?v=20260909a 640w, /assets/quantura-product-concept.webp?v=20260909a 1200w" sizes="(max-width: 760px) calc(100vw - 32px), 52vw" width="1200" height="675" alt="Quantura brand illustration: a probabilistic research interface on a laptop. Example values, not live forecasts." fetchpriority="high" decoding="async" />
+                </a>
+                <figcaption>Product concept illustration · example values, not live market data.</figcaption>
               </figure>
-            </div>
-          </div>
         </div>
 		      </section>
+
+      <section class="home-workflow-strip" aria-label="Explore Quantura">
+        <div class="container">
+          <a href="/forecasting"><i class="iconoir-stats-up-square" aria-hidden="true"></i><span>Q Forecast</span></a>
+          <a href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a href="/historical-data"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
+          <a href="/sports-forecasting"><i class="iconoir-trophy" aria-hidden="true"></i><span>Prediction markets</span></a>
+          <a href="/developers/api"><i class="iconoir-code" aria-hidden="true"></i><span>Developer API</span></a>
+        </div>
+      </section>
+
+      <section class="section home-global-section" aria-labelledby="home-global-title">
+        <div class="container">
+          <div class="home-global-banner">
+            <h2 id="home-global-title">From connected data<br />to considered decisions.</h2>
+            <p>Explore markets, preserve your research, and deliver it through one workspace-aware API.</p>
+            <a class="cta" href="/developers/api">Explore the API <i class="iconoir-arrow-right" aria-hidden="true"></i></a>
+          </div>
+        </div>
+      </section>
 
       <section class="section forecast-home-preview-section" aria-labelledby="home-forecast-title">
         <div class="container">
@@ -371,12 +371,12 @@
           <div class="card media-card">
             <video
               class="hero-video"
-              src="/assets/hero-market.mp4"
+              data-lazy-video="/assets/hero-market.mp4"
               muted
-              autoplay
               loop
               playsinline
-              preload="metadata"
+              preload="none"
+              controls
             ></video>
           </div>
         </div>
@@ -726,17 +726,6 @@
         </div>
       </section>
     </main>
-
-    <nav class="home-bottom-nav liquid-glass" aria-label="Home quick navigation">
-      <a href="/forecasting" class="home-bottom-nav-link">
-        <i class="iconoir-candlestick-chart" aria-hidden="true"></i>
-        <span>Terminal</span>
-      </a>
-      <a href="/dashboard" class="home-bottom-nav-link">
-        <i class="iconoir-dashboard-dots" aria-hidden="true"></i>
-        <span>Dashboard</span>
-      </a>
-    </nav>
 
     <footer class="footer">
       <div class="container footer-grid">

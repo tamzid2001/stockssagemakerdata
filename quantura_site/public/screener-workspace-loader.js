@@ -6,7 +6,7 @@
     if (document.querySelector('link[data-quantura-screener-workspace]')) return;
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/screener.css?v=20260831a";
+    link.href = "/screener.css?v=20260908a";
     link.dataset.quanturaScreenerWorkspace = "true";
     document.head.appendChild(link);
   }
@@ -15,7 +15,7 @@
     if (document.querySelector('script[data-quantura-screener-workspace]')) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "/screener.js?v=20260831a";
+      script.src = "/screener.js?v=20260908a";
       script.async = true;
       script.dataset.quanturaScreenerWorkspace = "true";
       script.addEventListener("load", resolve, { once: true });

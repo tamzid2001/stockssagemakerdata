@@ -11,20 +11,22 @@
     <meta property="og:description" content="Prospective, timestamped event forecasts scored after resolution." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura.studio/forecasts" />
-    <meta property="og:image" content="https://quantura.studio/assets/quantura-logo.svg" />
+    <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta property="og:site_name" content="Quantura" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Quantura Forecasts" />
     <meta name="twitter:description" content="Timestamped predictions for unresolved real-world events, with resolution rules and calibration." />
     <meta name="theme-color" content="#0B1526" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260405b" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260909a" />
+    <script src="/theme-init.js?v=20260908a"></script>
+    <script defer src="/ui-runtime.js?v=20260908a"></script>
     <link rel="stylesheet" href="/styles.css?v=20260830f" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260830f"></script>
-    <script defer src="/forecasts.js?v=20260830a"></script>
+    <script defer src="/forecasts.js?v=20260908a"></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -139,14 +141,14 @@
             <div>
               <div class="eyebrow">Public prediction record</div>
               <h2 id="calibration-title">Calibration and resolution</h2>
-              <p class="small">Brier scores evaluate probability quality after binary outcomes resolve. A lower average Brier score is better; bucket comparisons show whether stated probabilities match observed frequencies.</p>
+              <p class="small">Compare forecast probabilities with observed event frequencies after resolution. Read each calibration bucket alongside its sample count; small samples are uncertain.</p>
             </div>
           </div>
           <div id="forecast-performance-summary" class="forecast-metric-grid" aria-live="polite"></div>
           <div class="table-wrap forecast-calibration-table-wrap">
             <table class="data-table" id="forecast-calibration-table">
-              <thead><tr><th>Probability bucket</th><th>Forecasts</th><th>Predicted average</th><th>Actual frequency</th><th>Average Brier</th></tr></thead>
-              <tbody><tr><td colspan="5">Calibration data will appear after forecasts resolve.</td></tr></tbody>
+              <thead><tr><th>Probability bucket</th><th>Forecasts</th><th>Predicted average</th><th>Actual frequency</th></tr></thead>
+              <tbody><tr><td colspan="4">Calibration data will appear after forecasts resolve.</td></tr></tbody>
             </table>
           </div>
         </div>

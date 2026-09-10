@@ -1,5 +1,6 @@
 import { constants, createPrivateKey, sign } from "node:crypto";
 import { Router } from "express";
+import { KALSHI_API_BASE, kalshiPrice, kalshiMilestoneStart } from "./kalshiProtocol";
 import {
   PolymarketMlbError,
   fetchPolymarketPricePoints,
@@ -8,7 +9,7 @@ import {
 
 const POLYMARKET_GATEWAY = "https://gateway.polymarket.us";
 const POLYMARKET_API = "https://api.polymarket.us";
-const KALSHI_API = "https://external-api.kalshi.com/trade-api/v2";
+const KALSHI_API = KALSHI_API_BASE;
 const USER_AGENT = "quantura-prediction-market-data/1.0";
 const MAX_SELECTED_CONTRACTS = 25;
 const MAX_OUTPUT_ROWS = 100_000;
@@ -450,10 +451,10 @@ async function kalshiSeriesIndex(): Promise<KalshiSeriesIndex> {
   return remember(key, { categories, tagsBySeries, seriesByTag });
 }
 
-function kalshiStatus(raw: unknown): PredictionMarketContract["status"] {
+export function kalshiStatus(raw: unknown): PredictionMarketContract["status"] {
   const status = text(raw, 80).toLowerCase();
-  if (["settled", "finalized", "determined"].some((value) => status.includes(value))) return "settled";
-  if (["closed", "inactive"].some((value) => status.includes(value))) return "closed";
+  if (["settled", "finalized"].includes(status)) return "settled";
+  if (["closed", "inactive", "determined", "disputed", "amended"].includes(status)) return "closed";
   if (["unopened", "initialized", "upcoming"].some((value) => status.includes(value))) return "upcoming";
   return "open";
 }
@@ -467,14 +468,14 @@ export function normalizeKalshiEvent(eventPayload: JsonRecord, sport: string): P
   const rows: PredictionMarketContract[] = [];
   markets.map(asRecord).filter(Boolean).forEach((market) => {
     const ticker = text(market?.ticker, 180).toUpperCase();
-    if (!ticker || !eventId) return;
-    const yesPrice = normalizeProbability(market?.last_price_dollars ?? market?.last_price);
-    const yesBid = normalizeProbability(market?.yes_bid_dollars ?? market?.yes_bid);
-    const yesAsk = normalizeProbability(market?.yes_ask_dollars ?? market?.yes_ask);
+    if (!ticker || !eventId || (market?.market_type && market.market_type !== "binary")) return;
+    const yesPrice = kalshiPrice(market, "last_price");
+    const yesBid = kalshiPrice(market, "yes_bid");
+    const yesAsk = kalshiPrice(market, "yes_ask");
     const yesOutcome = text(market?.yes_sub_title || "Yes", 180);
     const suppliedNoOutcome = text(market?.no_sub_title || "No", 180);
     const noOutcome = suppliedNoOutcome.toLowerCase() === yesOutcome.toLowerCase() ? "No" : suppliedNoOutcome;
-    const eventStart = iso(market?.occurrence_datetime || market?.expected_expiration_time || market?.close_time);
+    const eventStart = kalshiMilestoneStart(eventId, eventPayload.milestones || event.milestones);
     const base = {
       source: "kalshi" as const,
       sport,
@@ -485,13 +486,14 @@ export function normalizeKalshiEvent(eventPayload: JsonRecord, sport: string): P
       eventTitle,
       marketTitle: text(market?.title || market?.subtitle || eventTitle, 320),
       eventStart,
-      expirationTime: iso(market?.expiration_time || market?.latest_expiration_time || market?.close_time),
+      expirationTime: iso(market?.latest_expiration_time || market?.expiration_time || market?.close_time),
       status: kalshiStatus(market?.status),
       homeTeam: null,
       awayTeam: null,
       volume: finite(market?.volume_fp ?? market?.volume),
       openInterest: finite(market?.open_interest_fp ?? market?.open_interest),
-      liquidity: finite(market?.liquidity_dollars ?? market?.liquidity),
+      // Kalshi documents liquidity_dollars as deprecated and always zero.
+      liquidity: null,
       availableFrom: iso(market?.open_time || market?.created_time),
       availableTo: iso(market?.expiration_time || market?.close_time),
     };
@@ -526,17 +528,47 @@ function kalshiSeriesPriority(ticker: string, search: string): number {
   return 3;
 }
 
-async function kalshiSeriesEvents(seriesTicker: string, apiStatus: string): Promise<JsonRecord[]> {
+export async function kalshiSeriesEvents(seriesTicker: string, apiStatus: string): Promise<{ events: JsonRecord[]; limited: boolean }> {
   const cacheKey = `kalshi:events:${seriesTicker}:${apiStatus}`;
-  const existing = cached<JsonRecord[]>(cacheKey);
+  const existing = cached<{ events: JsonRecord[]; limited: boolean }>(cacheKey);
   if (existing) return existing;
-  const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/events`, {
-    series_ticker: seriesTicker,
-    status: apiStatus,
-    limit: 200,
-    with_nested_markets: true,
-  }));
-  return remember(cacheKey, asArray(payload.events).map(asRecord).filter((event): event is JsonRecord => Boolean(event)), 5 * 60 * 1000);
+  const events: JsonRecord[] = [];
+  const seen = new Set<string>();
+  let cursor = "";
+  for (let page = 0; page < 5; page++) {
+    const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/events`, {
+      series_ticker: seriesTicker, status: apiStatus, limit: 200,
+      with_nested_markets: true, with_milestones: true, cursor,
+    }));
+    events.push(...asArray(payload.events).map(asRecord).filter((event): event is JsonRecord => Boolean(event))
+      .map(event => ({ ...event, milestones: asArray(payload.milestones) })));
+    cursor = text(payload.cursor, 2000);
+    if (!cursor) break;
+    if (seen.has(cursor)) throw new PredictionMarketDataError("provider_pagination_failed", "Kalshi returned a repeated page cursor. Retry later.", 502);
+    seen.add(cursor);
+  }
+  // Nested events deliberately omit archived markets. Fetch that tier separately
+  // for settled/all discovery and join by immutable event ID.
+  let archiveLimited = false;
+  if (!apiStatus || apiStatus === "settled") {
+    let archiveCursor = "";
+    const archiveSeen = new Set<string>();
+    const eventMap = new Map(events.map(event => [text(event.event_ticker, 180), event]));
+    for (let page = 0; page < 3; page++) {
+      const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/historical/markets`, { series_ticker: seriesTicker, limit: 1000, cursor: archiveCursor }));
+      for (const market of asArray(payload.markets).map(asRecord).filter((item): item is JsonRecord => Boolean(item))) {
+        const event = eventMap.get(text(market.event_ticker, 180));
+        if (event) event.markets = [...asArray(event.markets), market];
+        else archiveLimited = true;
+      }
+      archiveCursor = text(payload.cursor, 2000);
+      if (!archiveCursor) break;
+      if (archiveSeen.has(archiveCursor)) throw new PredictionMarketDataError("provider_pagination_failed", "Kalshi returned a repeated archive cursor.", 502);
+      archiveSeen.add(archiveCursor);
+    }
+    archiveLimited ||= Boolean(archiveCursor);
+  }
+  return remember(cacheKey, { events, limited: Boolean(cursor) || archiveLimited }, 5 * 60 * 1000);
 }
 
 async function kalshiContracts(input: {
@@ -557,14 +589,15 @@ async function kalshiContracts(input: {
   const matchingSeries = allMatchingSeries
     .sort((left, right) => kalshiSeriesPriority(left, search) - kalshiSeriesPriority(right, search) || left.localeCompare(right))
     .slice(0, seriesLimit);
-  const apiStatuses = input.status === "any" ? ["open", "settled"] : ["upcoming", "open"].includes(input.status) ? ["open"] : [input.status];
+  const apiStatuses = input.status === "any" ? [""] : input.status === "upcoming" ? ["unopened", "open"] : [input.status];
   const candidates: JsonRecord[] = [];
   let providerFailures = 0;
+  let paginationLimited = false;
   for (let offset = 0; offset < matchingSeries.length; offset += 6) {
     const batch = matchingSeries.slice(offset, offset + 6);
     const settled = await Promise.allSettled(batch.flatMap((seriesTicker) => apiStatuses.map((apiStatus) => kalshiSeriesEvents(seriesTicker, apiStatus))));
     settled.forEach((result) => {
-      if (result.status === "fulfilled") candidates.push(...result.value);
+      if (result.status === "fulfilled") { candidates.push(...result.value.events); paginationLimited ||= result.value.limited; }
       else providerFailures += 1;
     });
   }
@@ -593,7 +626,7 @@ async function kalshiContracts(input: {
     items: unique.slice(pageOffset, pageOffset + input.pageSize),
     total: unique.length,
     scanned: candidates.length,
-    scanLimited: allMatchingSeries.length > matchingSeries.length || providerFailures > 0,
+    scanLimited: allMatchingSeries.length > matchingSeries.length || providerFailures > 0 || paginationLimited,
     seriesScanned: matchingSeries.length,
     seriesAvailable: allMatchingSeries.length,
     providerFailures,
@@ -691,9 +724,9 @@ function kalshiCandleRows(contract: PredictionMarketContract, rawCandles: unknow
     const priceRecord = asRecord(candle?.price) || {};
     const bidRecord = asRecord(candle?.yes_bid) || {};
     const askRecord = asRecord(candle?.yes_ask) || {};
-    const yesPrice = normalizeProbability(priceRecord.close_dollars ?? priceRecord.close);
-    const yesBid = normalizeProbability(bidRecord.close_dollars ?? bidRecord.close);
-    const yesAsk = normalizeProbability(askRecord.close_dollars ?? askRecord.close);
+    const yesPrice = kalshiPrice(priceRecord, "close");
+    const yesBid = kalshiPrice(bidRecord, "close");
+    const yesAsk = kalshiPrice(askRecord, "close");
     const isNo = contract.side === "no";
     return [observation(contract, new Date(endSeconds * 1000).toISOString(), {
       price: isNo ? complement(yesPrice) : yesPrice,
@@ -704,9 +737,9 @@ function kalshiCandleRows(contract: PredictionMarketContract, rawCandles: unknow
       openInterest: finite(candle?.open_interest_fp ?? candle?.open_interest),
       raw: {
         end_period_ts: endSeconds,
-        yes_price_open: normalizeProbability(priceRecord.open_dollars ?? priceRecord.open),
-        yes_price_high: normalizeProbability(priceRecord.high_dollars ?? priceRecord.high),
-        yes_price_low: normalizeProbability(priceRecord.low_dollars ?? priceRecord.low),
+        yes_price_open: kalshiPrice(priceRecord, "open"),
+        yes_price_high: kalshiPrice(priceRecord, "high"),
+        yes_price_low: kalshiPrice(priceRecord, "low"),
         yes_price_close: yesPrice,
         yes_bid_close: yesBid,
         yes_ask_close: yesAsk,
@@ -762,7 +795,7 @@ async function pagedKalshiTrades(endpoint: string, contract: PredictionMarketCon
     if (response.status !== 200) break;
     asArray(response.payload.trades).map(asRecord).filter(Boolean).forEach((trade) => {
       const timestamp = iso(trade?.created_time || trade?.created_ts);
-      const yesPrice = normalizeProbability(trade?.yes_price_dollars ?? trade?.yes_price);
+      const yesPrice = kalshiPrice(trade, "yes_price");
       if (!timestamp || yesPrice === null) return;
       const selectedPrice = contract.side === "no" ? complement(yesPrice) : yesPrice;
       rows.push(observation(contract, timestamp, {
@@ -773,23 +806,30 @@ async function pagedKalshiTrades(endpoint: string, contract: PredictionMarketCon
           trade_id: text(trade?.trade_id, 180),
           created_time: timestamp,
           yes_price: yesPrice,
-          no_price: normalizeProbability(trade?.no_price_dollars ?? trade?.no_price),
+          no_price: kalshiPrice(trade, "no_price"),
           count: finite(trade?.count_fp ?? trade?.count),
-          taker_side: text(trade?.taker_side || trade?.taker_outcome_side, 30),
+          taker_side: text(trade?.taker_outcome_side || trade?.taker_side, 30),
+          taker_outcome_side: text(trade?.taker_outcome_side || trade?.taker_side, 30),
+          taker_book_side: text(trade?.taker_book_side, 30) || null,
           is_block_trade: trade?.is_block_trade === true,
         },
       }));
     });
     cursor = text(response.payload.cursor, 600);
     if (!cursor) break;
+    if (page === 19 || rows.length >= MAX_OUTPUT_ROWS) throw new PredictionMarketDataError("history_limit_exceeded", "Kalshi trade history exceeds the synchronous limit. Narrow the time range.", 413);
   }
   return rows;
 }
 
 async function kalshiTrades(contract: PredictionMarketContract, startMs: number, endMs: number): Promise<NormalizedPredictionObservation[]> {
+  const key = "kalshi:historical-cutoff";
+  const cutoff = cached<JsonRecord>(key) || remember(key, (await fetchJson(`${KALSHI_API}/historical/cutoff`)).payload, 5 * 60 * 1000);
+  const split = Date.parse(text(cutoff.trades_created_ts, 100));
+  if (!Number.isFinite(split)) throw new PredictionMarketDataError("invalid_history_cutoff", "Kalshi's historical boundary is unavailable. Retry later.", 502);
   const [live, historical] = await Promise.all([
-    pagedKalshiTrades("/markets/trades", contract, startMs, endMs),
-    pagedKalshiTrades("/historical/trades", contract, startMs, endMs),
+    endMs >= split ? pagedKalshiTrades("/markets/trades", contract, Math.max(startMs, split), endMs) : [],
+    startMs < split ? pagedKalshiTrades("/historical/trades", contract, startMs, Math.min(endMs, split)) : [],
   ]);
   return [...live, ...historical];
 }
@@ -1057,7 +1097,9 @@ async function prepareDataset(body: JsonRecord): Promise<PredictionMarketDataset
   if (contracts.length > MAX_SELECTED_CONTRACTS) throw new PredictionMarketDataError("too_many_contracts", `Select no more than ${MAX_SELECTED_CONTRACTS} contracts per export.`, 413);
   const { startMs, endMs } = timeRange(body);
   const allRows: NormalizedPredictionObservation[] = [];
-  for (const contract of contracts) {
+  for (const suppliedContract of contracts) {
+    const contract = source === "kalshi" ? await resolveKalshiContract(suppliedContract) : suppliedContract;
+    if (pregameOnly && !contract.eventStart) throw new PredictionMarketDataError("event_start_unavailable", "Pregame history requires a provider-confirmed event start. Choose full history for this contract.", 422);
     const contractEnd = pregameOnly && contract.eventStart ? Math.min(endMs, Date.parse(contract.eventStart)) : endMs;
     if (contractEnd <= startMs) continue;
     const rows = source === "polymarket_us"
@@ -1078,6 +1120,28 @@ async function prepareDataset(body: JsonRecord): Promise<PredictionMarketDataset
     pregameOnly,
     features: asArray(body.features).map((item) => text(item, 60)),
   });
+}
+
+export async function resolveKalshiContract(selected: PredictionMarketContract): Promise<PredictionMarketContract> {
+  if (!["yes", "no"].includes(selected.side)) throw new PredictionMarketDataError("invalid_contract", "Select a Kalshi YES or NO contract.", 422);
+  const ticker = cleanIdentifier(selected.providerSymbol, 180).toUpperCase();
+  const key = `kalshi:verified-contract:${ticker}:${selected.side}`;
+  const existing = cached<PredictionMarketContract>(key);
+  if (existing) return existing;
+  let response = await fetchJson(`${KALSHI_API}/markets/${encodeURIComponent(ticker)}`, {}, [404]);
+  if (response.status === 404) response = await fetchJson(`${KALSHI_API}/historical/markets/${encodeURIComponent(ticker)}`);
+  const market = asRecord(response.payload.market);
+  const eventId = text(market?.event_ticker, 180);
+  if (!market || !eventId) throw new PredictionMarketDataError("invalid_contract", "Kalshi did not return a valid market.", 422);
+  const [event, milestone] = await Promise.all([
+    fetchJson(`${KALSHI_API}/events/${encodeURIComponent(eventId)}`),
+    fetchJson(queryUrl(`${KALSHI_API}/milestones`, { related_event_ticker: eventId, limit: 500 })),
+  ]);
+  const sport = text(asRecord(event.payload.event)?.category, 100);
+  const verified = normalizeKalshiEvent({ ...event.payload, markets: [market], milestones: milestone.payload.cursor ? [] : milestone.payload.milestones }, sport)
+    .find(contract => contract.side === selected.side);
+  if (!verified) throw new PredictionMarketDataError("unsupported_market", "This export supports binary Kalshi contracts only.", 422);
+  return remember(key, verified, 60_000);
 }
 
 function polymarketAuthHeaders(method: string, path: string): Record<string, string> | null {

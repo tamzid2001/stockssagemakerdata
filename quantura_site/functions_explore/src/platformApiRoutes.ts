@@ -93,7 +93,7 @@ async function enforceRateLimit(options: Options, principal: ApiPrincipal): Prom
   });
 }
 
-function wrap(options: Options, handler: Handler): (req: Request, res: Response) => Promise<void> {
+export function withPlatformAccess(options: Options, handler: Handler): (req: Request, res: Response) => Promise<void> {
   return async (req, res) => {
     const requestId = crypto.randomUUID();
     const started = Date.now();
@@ -112,6 +112,8 @@ function wrap(options: Options, handler: Handler): (req: Request, res: Response)
     }
   };
 }
+
+const wrap = withPlatformAccess;
 
 function cursorEncode(value: string): string { return Buffer.from(value, "utf8").toString("base64url"); }
 function cursorDecode(value: unknown): string {

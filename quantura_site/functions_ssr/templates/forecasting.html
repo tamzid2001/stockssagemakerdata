@@ -12,27 +12,28 @@
         <meta property="og:description" content="Probabilistic ensemble forecasting, cross-asset market data, and demand intelligence for serious investors." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/forecasting" />
-        <meta property="og:image" content="/assets/quantura-logo.svg" />
+        <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Quantura Forecasting Studio" />
     <meta name="twitter:description" content="Probabilistic ensemble forecasting, cross-asset market data, and demand intelligence for serious investors." />
-    <meta name="twitter:image" content="/assets/quantura-logo.svg" />
+    <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/forecasting" />
     <meta name="author" content="Quantura" />
     <meta name="theme-color" content="#0B1526" />
     <link rel="alternate" hreflang="en-US" href="https://quantura.studio/forecasting" />
     <link rel="alternate" hreflang="x-default" href="https://quantura.studio/forecasting" />
-    <link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260405b" sizes="96x96" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260405b" />
-    <link rel="shortcut icon" href="/favicon.ico?v=20260405b" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260405b" />
+    <link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260909a" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260909a" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260909a" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
     <meta name="apple-mobile-web-app-title" content="Quantura" />
-    <link rel="manifest" href="/site.webmanifest?v=20260405b" />
+    <link rel="manifest" href="/site.webmanifest?v=20260909a" />
+    <script src="/theme-init.js?v=20260908a"></script>
+    <script defer src="/ui-runtime.js?v=20260908a"></script>
     <link rel="stylesheet" href="/styles.css?v=20260817c" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
-    <script defer src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
@@ -43,10 +44,9 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260824a"></script>
-    <script defer src="/data-integrations.js?v=20260831a"></script>
-    <script defer src="/market-search.js?v=20260831a"></script>
+    <script defer src="/data-integrations.js?v=20260908a"></script>
+    <script defer src="/market-search.js?v=20260908a"></script>
     <script defer src="/screener-panel-lazy.js?v=20260831a"></script>
-    <script defer src="/assets/rnweb/quantura-rnw.js"></script>
   
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -123,15 +123,15 @@
 	            <div class="container">
 	              <section class="market-search-workspace" aria-labelledby="market-search-title">
                     <div class="market-search-heading">
-                      <div><div class="eyebrow">Universal discovery</div><h2 id="market-search-title">Search Markets / Data</h2><p class="small muted">Find supported exchange-traded instruments and live prediction-market contracts without memorizing provider syntax.</p></div>
+                      <h2 id="market-search-title">Search markets</h2>
                     </div>
                     <form id="market-search-form" class="market-search-form">
                       <div class="field"><label class="label" for="market-search-query">Search asset or market</label><input id="market-search-query" type="search" minlength="2" placeholder="Company, symbol, FX pair, commodity, rate, team, or event" required /></div>
                       <div class="field"><label class="label" for="market-search-source">Source</label><select id="market-search-source"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="polymarket_us">Polymarket US</option><option value="kalshi">Kalshi</option></select></div>
                       <button class="cta" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Search</span></button>
                     </form>
-                    <p id="market-search-status" class="small muted" role="status" aria-live="polite">Search results report their provider, asset class, units, and available workflow.</p>
-                    <div id="market-search-results" class="market-search-results" hidden></div>
+                    <p id="market-search-status" class="small muted" role="status" aria-live="polite">Stocks, FX, futures, rates, and prediction markets. Type to search.</p>
+                    <div id="market-search-results" class="market-search-results" role="region" aria-label="Market search results" hidden></div>
                   </section>
 		              <div class="studio-layout is-main-hidden" data-panels data-panel-router="terminal">
 	                <div class="studio-panel">

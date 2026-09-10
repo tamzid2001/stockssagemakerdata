@@ -12,6 +12,7 @@ import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
 import { registerPlatformApiRoutes } from "./platformApiRoutes";
+import { registerSupportChatRoutes, SUPPORT_MODEL, SUPPORT_OUTPUT_SCHEMA } from "./supportChat";
 import { authenticatePlatformRequest, requireWorkspacePermission, resolveWorkspaceAccess } from "./apiAccess";
 import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
 import { isAllowedUserCsvImportStoragePath } from "./uploadedCsv";
@@ -673,6 +674,14 @@ registerPlatformApiRoutes(ROUTES, {
   db,
   auth,
   publicOrigin: PUBLIC_ORIGIN,
+});
+registerSupportChatRoutes(ROUTES, {
+  db, auth, publicOrigin: PUBLIC_ORIGIN,
+  complete: async (messages) => (await invokeOpenAiLlm({
+    model: SUPPORT_MODEL, messages, temperature: 0, maxTokens: 1600,
+    allowWebSearch: false, stream: false, background: false,
+    jsonSchema: SUPPORT_OUTPUT_SCHEMA, store: false, workflow: "support_chat",
+  })).text,
 });
 
 // Retired public-social and currency endpoints. Keep an explicit response for
@@ -6236,7 +6245,7 @@ function isOpenAiReasoningModel(model: string): boolean {
 function getOpenAiReasoningEffort(model: string, allowWebSearch = false): "minimal" | "low" {
   if (allowWebSearch) return "low";
   const normalized = sanitizeText(model, 120).toLowerCase();
-  if (normalized === "gpt-5" || normalized.startsWith("gpt-5.4")) return "low";
+  if (normalized === "gpt-5" || normalized.startsWith("gpt-5.4") || normalized.startsWith("gpt-5.6")) return "low";
   return "minimal";
 }
 
@@ -6256,6 +6265,8 @@ async function invokeOpenAiLlm(payload: {
   background: boolean;
   tools?: unknown[];
   jsonSchema?: unknown;
+  store?: boolean;
+  workflow?: string;
 }): Promise<{ text: string; usage: Record<string, unknown>; citations: Array<Record<string, unknown>>; responseId: string; status: string }> {
   const openAiApiKey = await getOpenAiApiKey();
   if (!openAiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
@@ -6322,11 +6333,12 @@ async function invokeOpenAiLlm(payload: {
         max_output_tokens: maxOutputTokens,
         stream: Boolean(payload.stream),
         background: Boolean(payload.background),
+        ...(payload.store === undefined ? {} : { store: payload.store }),
         reasoning,
         tools,
         text: textFormat,
         metadata: {
-          quantura_workflow: "model_council",
+          quantura_workflow: payload.workflow || "model_council",
           quantura_prompt_caching: "enabled",
         },
       }),

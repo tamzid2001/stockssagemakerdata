@@ -1195,7 +1195,7 @@ Added calibration aggregation to measure whether predicted probabilities align w
 
 Potential metrics include:
 
-* Brier score
+* Probability calibration
 * log score
 * empirical calibration
 

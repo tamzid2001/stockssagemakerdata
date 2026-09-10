@@ -249,6 +249,7 @@ test("Polymarket US discovery produces selectable provider-neutral contracts", (
 test("Kalshi discovery creates YES and NO contracts with correctly complemented quotes", () => {
   const contracts = normalizeKalshiEvent({
     event: { event_ticker: "KXMLB-26AUG20", title: "New York at Boston", series_ticker: "KXMLBGAME" },
+    milestones: [{ related_event_tickers: ["KXMLB-26AUG20"], start_date: "2026-08-20T23:00:00Z" }],
     markets: [{ ticker: "KXMLB-26AUG20-NY", title: "New York wins", status: "active", occurrence_datetime: "2026-08-20T23:00:00Z", last_price: 61, yes_bid: 60, yes_ask: 62, volume_fp: "120", open_interest_fp: "75" }],
   }, "Baseball");
   assert.equal(contracts.length, 2);
