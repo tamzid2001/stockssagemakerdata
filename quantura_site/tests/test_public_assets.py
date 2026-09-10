@@ -283,7 +283,7 @@ def test_five_model_ensemble_is_integrated_into_existing_forecast_workspace():
     backend = (ROOT / "functions_explore" / "src" / "ensembleForecastRoutes.ts").read_text()
     workflow = (ROOT.parent / ".github" / "workflows" / "ensemble-forecast.yml").read_text()
     docs = (PAGES / "developers-api.html").read_text()
-    assert forecasting.count('id="forecast-form"') == 1
+    assert forecasting.count('id="ensemble-forecast-form"') == 1
     for marker in [
         'id="ensemble-forecast-form"',
         'id="ensemble-model-list"',
@@ -295,7 +295,10 @@ def test_five_model_ensemble_is_integrated_into_existing_forecast_workspace():
         assert marker in forecasting
     for model in ["Prophet", "Toto 2.0", "Granite", "Chronos-2", "TimesFM 3.0"]:
         assert model in forecasting
-    assert 'addEventListener("toggle"' in client
+    assert "refreshPrimaryForecast" in client
+    assert '<section class="ensemble-forecast-shell' in forecasting
+    assert 'id="forecast-form"' not in forecasting
+    assert '>Run forecast</span>' in forecasting
     assert 'apiRequestJson("/api/v1/ensemble-forecasts"' in client
     assert "pollEnsembleForecast" in client
     assert "Component prediction arrays remain private" in client
@@ -332,7 +335,7 @@ def test_cross_asset_search_and_optional_search_grounded_analysis_are_explicit()
     analysis_client = (PUBLIC / "app.js").read_text()
     backend = (ROOT / "functions_explore" / "src" / "marketSearch.ts").read_text()
     prompt = (ROOT / "functions_explore" / "src" / "forecastAnalysis.ts").read_text()
-    for marker in ['id="market-search-query"', 'id="market-search-source"', 'id="market-search-results"', 'id="forecast-source"']:
+    for marker in ['id="market-search-query"', 'id="market-search-source"', 'id="market-search-results"', 'id="ensemble-provider"']:
         assert marker in forecasting
     for source in ["alpaca", "yahoo", "polymarket_us", "kalshi"]:
         assert source in backend

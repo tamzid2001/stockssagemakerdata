@@ -837,7 +837,7 @@
       sidebar_learn_more: "Forecast guide",
       sidebar_screener: "Screener",
       panel_forecast_title: "Quantura Forecast",
-      panel_forecast_subtitle: "Generate the full forecast distribution, inspect technical confirmation, compare signed scenarios, and request balanced AI interpretation only when you choose.",
+      panel_forecast_subtitle: "Multi-model probabilistic forecasting. Configure once, run asynchronously, and download your final ensemble.",
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.",
       panel_ticker_query_title: "Forecast Review",
@@ -10906,6 +10906,7 @@
   const TICKER_SYNC_INPUT_IDS = Object.freeze([
     "terminal-ticker",
     "forecast-ticker",
+    "ensemble-ticker",
     "technicals-ticker",
     "download-ticker",
     "news-ticker",
@@ -14411,6 +14412,7 @@
     forecastId: "",
     pollTimer: 0,
     capabilitiesLoaded: false,
+    accessKey: "",
   };
 
   const ensembleQuantileKey = (value) => Number(Number(value).toPrecision(12)).toString();
@@ -14717,14 +14719,32 @@
   };
 
   const loadEnsembleCapabilities = async () => {
-    if (ensembleUiState.capabilitiesLoaded) return;
-    setEnsembleStatus("Loading model availability for your plan…");
     const workspace = state.activeWorkspaceId || state.user?.uid || "";
+    const accessKey = `${state.user?.uid || ""}:${workspace}`;
+    if (ensembleUiState.capabilitiesLoaded && ensembleUiState.accessKey === accessKey) return;
+    setEnsembleStatus("Loading model availability for your plan…");
     const response = await apiRequestJson(`/api/v1/ensemble-forecasts/models?workspace_id=${encodeURIComponent(workspace)}`);
+    if (accessKey !== `${state.user?.uid || ""}:${state.activeWorkspaceId || state.user?.uid || ""}`) throw new Error("Workspace changed. Please retry in your current workspace.");
+    ensembleUiState.accessKey = accessKey;
     ensembleUiState.capabilities = response.data || {};
     ensembleUiState.capabilitiesLoaded = true;
     renderEnsembleModelCapabilities(ensembleUiState.capabilities);
     setEnsembleStatus("Model availability loaded. Configure the ensemble and submit a durable job.");
+  };
+
+  const refreshPrimaryForecast = async () => {
+    if (!ui.ensembleForecastSettings || ui.ensembleForecastSettings.closest('[data-panel]')?.classList.contains("hidden")) return;
+    if (!hasFullAccount()) {
+      if (ui.ensembleModelList) ui.ensembleModelList.innerHTML = '<p class="small muted"><a href="/account">Sign in</a> to configure your available models.</p>';
+      setEnsembleStatus("Sign in to run Quantura Forecast. No compute runs until you submit.");
+      return;
+    }
+    try {
+      await Promise.all([loadEnsembleCapabilities(), loadEnsemblePresets()]);
+      if (ui.ensembleTicker && !ui.ensembleTicker.value) ui.ensembleTicker.value = normalizeTicker(state.tickerContext.ticker || getQueryParam("ticker") || "");
+    } catch (error) {
+      setEnsembleStatus(error.message || "Unable to load forecast capabilities. Submit to retry.", "error");
+    }
   };
 
   const loadEnsemblePresets = async () => {
@@ -14783,16 +14803,7 @@
     ui.ensembleForecastSettings.dataset.bound = "1";
     syncEnsembleSourceFields();
     ui.ensembleSourceType?.addEventListener("change", syncEnsembleSourceFields);
-    ui.ensembleForecastSettings.addEventListener("toggle", async () => {
-      if (!ui.ensembleForecastSettings.open) return;
-      try {
-        await ensureSessionUser({ reason: "ensemble_capabilities_requires_session", message: "Sign in to configure the ensemble." });
-        await Promise.all([loadEnsembleCapabilities(), loadEnsemblePresets().catch(() => undefined)]);
-        if (ui.ensembleTicker && !ui.ensembleTicker.value) ui.ensembleTicker.value = normalizeTicker(ui.forecastTicker?.value || state.tickerContext.ticker || "");
-      } catch (error) {
-        setEnsembleStatus(error.message || "Unable to load ensemble capabilities.", "error");
-      }
-    });
+    refreshPrimaryForecast();
     ui.ensembleModelList?.addEventListener("input", updateEnsembleWeightsAndSupport);
     ui.ensembleForecastForm?.addEventListener("input", (event) => {
       if (event.target.matches('input[name="ensemble_quantile"], #ensemble-custom-quantiles')) updateEnsembleWeightsAndSupport();
@@ -14881,7 +14892,6 @@
     });
     const forecastId = String(getQueryParam("ensembleForecastId") || "").trim();
     if (forecastId) {
-      ui.ensembleForecastSettings.open = true;
       ensembleUiState.forecastId = forecastId;
       window.setTimeout(() => pollEnsembleForecast(forecastId).catch(() => undefined), 400);
     }
@@ -23331,6 +23341,8 @@
 
   const renderForecastDetails = (forecastDoc) => {
     if (!ui.forecastOutput || !forecastDoc) return;
+    const legacyDetail = document.getElementById("legacy-forecast-detail");
+    if (legacyDetail) legacyDetail.hidden = false;
     const rows = normalizeForecastSeriesRows(forecastDoc.forecastRows || forecastDoc.forecastPreview || []);
     const availableQuantKeys = extractQuantileKeys(rows);
     const quantKeys = META_PROPHET_QUANTILE_LEVELS
@@ -25078,6 +25090,7 @@
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
         if (!next) return;
+        if (next === "forecast") refreshPrimaryForecast();
         const showTickerChart = next === "ticker";
         const showStudioMain = showTickerChart;
         const hideStudioPanel = showTickerChart;
@@ -25354,10 +25367,10 @@
 		      logEvent("ticker_selected", { ticker, page_path: window.location.pathname });
 
 			      // Forecast is now the canonical terminal destination for ticker-driven actions.
-			      if (ui.forecastForm && ui.forecastTicker && typeof window.__quanturaSetPanel === "function") {
+			      if (ui.ensembleForecastForm && ui.ensembleTicker && typeof window.__quanturaSetPanel === "function") {
               window.__quanturaSetPanel("forecast");
-			        ui.forecastTicker.value = ticker;
-              ui.forecastTicker.focus?.();
+			        ui.ensembleTicker.value = ticker;
+              ui.ensembleTicker.focus?.();
 			      } else {
 			        window.location.href = buildForecastPanelUrl(ticker);
 		      }
@@ -25373,10 +25386,10 @@
             destination: "forecast",
           });
 
-          if (ui.forecastForm && ui.forecastTicker && typeof window.__quanturaSetPanel === "function") {
+          if (ui.ensembleForecastForm && ui.ensembleTicker && typeof window.__quanturaSetPanel === "function") {
             window.__quanturaSetPanel("forecast");
-            ui.forecastTicker.value = ticker;
-            ui.forecastTicker.focus?.();
+            ui.ensembleTicker.value = ticker;
+            ui.ensembleTicker.focus?.();
           } else {
             window.location.href = buildForecastPanelUrl(ticker);
           }
@@ -26538,6 +26551,9 @@
 	        return;
 	      }
 		      setActiveWorkspaceId(next);
+          stopEnsemblePolling();
+          if (ui.ensembleForecastResults) ui.ensembleForecastResults.hidden = true;
+          refreshPrimaryForecast();
 		      logEvent("workspace_switched", { workspace_id: next });
 		      renderWorkspaceSummary();
 		      startUserForecasts(db, next);
@@ -29814,6 +29830,7 @@
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
 		      setActiveWorkspaceId(activeWorkspaceId);
 		      renderWorkspaceSelect(user);
+          refreshPrimaryForecast();
 		      startUserForecasts(db, activeWorkspaceId);
           startScreenerRuns(db, activeWorkspaceId);
           await fetchMyRequestsList({ force: true }).catch(() => []);

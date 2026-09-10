@@ -117,3 +117,51 @@ test('market selector does not render late responses over a newer query', async 
   pending[0]({ok:true,json:async()=>({count:999,groups:{}})});await tick();
   assert.match(w.document.getElementById('market-search-status').textContent,/^0 results/);d.window.close();
 });
+
+test('Quantura Forecast is the expanded primary form with exactly one submission action', () => {
+  const d=dom(page('forecasting.html')); const document=d.window.document;
+  const panel=document.querySelector('[data-panel="forecast"]');
+  assert.equal(panel.querySelector('h2').textContent,'Quantura Forecast');
+  assert.equal(panel.querySelector('#ensemble-forecast-settings').tagName,'SECTION');
+  assert.equal(panel.querySelectorAll('button[type="submit"]').length,1);
+  assert.equal(panel.querySelector('button[type="submit"]').textContent.trim(),'Run forecast');
+  assert.equal(panel.querySelector('#forecast-form'),null);
+  assert.equal(panel.querySelector('#legacy-forecast-detail').hidden,true);
+  assert.doesNotMatch(panel.textContent,/Advanced asynchronous forecast|Five-model probabilistic ensemble|Open this section/);
+  assert.match(source('app.js'),/if \(next === "forecast"\) refreshPrimaryForecast\(\)/);
+  assert.match(source('app.js'),/ensembleUiState.accessKey === accessKey/);
+  d.window.close();
+});
+
+test('market selection configures the primary ensemble, including dataset-to-ticker switching', async () => {
+  const d=dom(page('forecasting.html')); const w=d.window; const document=w.document;
+  w.HTMLElement.prototype.scrollIntoView=()=>{};
+  let panel=''; w.__quanturaSetPanel=value=>{panel=value;};
+  w.fetch=async()=>({ok:true,json:async()=>({count:1,groups:{yahoo:[{symbol:'TEST',name:'Test equity',asset_class:'equity',source:'yahoo',forecast_available:true}]}})});
+  document.getElementById('ensemble-source-type').value='workspace_dataset';
+  let changes=0;document.getElementById('ensemble-source-type').addEventListener('change',()=>changes++);
+  w.eval(source('market-search.js'));
+  document.getElementById('market-search-query').value='TEST';
+  document.getElementById('market-search-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();
+  document.querySelector('[data-market-action="forecast"]').click();
+  assert.equal(document.getElementById('ensemble-ticker').value,'TEST');
+  assert.equal(document.getElementById('ensemble-provider').value,'yahoo');
+  assert.equal(document.getElementById('ensemble-source-type').value,'ticker');
+  assert.equal(changes,1);assert.equal(panel,'forecast');d.window.close();
+});
+
+test('primary forecast loads capabilities on authenticated activation without automatically running compute', async () => {
+  const d=dom(page('forecasting.html')); const w=d.window;const document=w.document;
+  const client=source('app.js');
+  const implementation=client.slice(client.indexOf('  const refreshPrimaryForecast ='),client.indexOf('  const loadEnsemblePresets ='));
+  let signedIn=false,capabilities=0,presets=0;
+  w.hasFullAccount=()=>signedIn;w.state={tickerContext:{ticker:'TEST'}};
+  w.ui={ensembleForecastSettings:document.getElementById('ensemble-forecast-settings'),ensembleModelList:document.getElementById('ensemble-model-list'),ensembleTicker:document.getElementById('ensemble-ticker')};
+  w.setEnsembleStatus=()=>{};w.normalizeTicker=s=>s;w.getQueryParam=()=>'';
+  w.loadEnsembleCapabilities=async()=>{capabilities++;};w.loadEnsemblePresets=async()=>{presets++;};
+  w.eval(implementation+'\nwindow.refreshTestForecast=refreshPrimaryForecast;');
+  await w.refreshTestForecast();assert.equal(capabilities,0);assert.match(w.ui.ensembleModelList.textContent,/Sign in/);
+  signedIn=true;await w.refreshTestForecast();assert.equal(capabilities,1);assert.equal(presets,1);assert.equal(w.ui.ensembleTicker.value,'TEST');
+  document.querySelector('[data-panel="forecast"]').classList.add('hidden');await w.refreshTestForecast();assert.equal(capabilities,1);
+  assert.doesNotMatch(implementation,/method: "POST"|pollEnsembleForecast/);d.window.close();
+});

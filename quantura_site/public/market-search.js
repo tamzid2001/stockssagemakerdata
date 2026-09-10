@@ -123,14 +123,16 @@
     const symbol = String(button.dataset.symbol || "").trim();
     const source = String(button.dataset.source || "auto").trim();
     if (action === "forecast") {
-      const ticker = document.getElementById("forecast-ticker");
-      const forecastSource = document.getElementById("forecast-source");
+      const ticker = document.getElementById("ensemble-ticker") || document.getElementById("forecast-ticker");
+      const forecastSource = document.getElementById("ensemble-provider") || document.getElementById("forecast-source");
       const assetClass = document.getElementById("forecast-asset-class");
       if (ticker) ticker.value = symbol;
       if (forecastSource) forecastSource.value = source === "alpaca" ? "alpaca" : "yahoo";
       if (assetClass) assetClass.value = button.dataset.assetClass || "equity";
+      const sourceType = document.getElementById("ensemble-source-type");
+      if (sourceType) { sourceType.value = "ticker"; sourceType.dispatchEvent(new Event("change", { bubbles: true })); }
       setPanel("forecast");
-      document.getElementById("forecast-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      (document.getElementById("ensemble-forecast-form") || document.getElementById("forecast-form"))?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     if (action === "history") {

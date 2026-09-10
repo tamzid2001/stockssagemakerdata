@@ -139,48 +139,11 @@
 	                    <div class="panel-header">
 	                      <div class="eyebrow">Unified quantitative workspace</div>
 	                      <h2>Quantura Forecast</h2>
-	                      <p class="small">Generate a multi-model forecast distribution, compare mathematically signed scenarios, and request balanced AI interpretation only when you choose.</p>
+	                      <p class="small">Multi-model probabilistic forecasting. Configure once, run asynchronously, and download your final ensemble.</p>
 	                    </div>
-	                    <form id="forecast-form" class="card">
-	                      <div class="form-grid">
-                        <div class="field">
-                          <label class="label" for="forecast-ticker">Ticker</label>
-                          <input id="forecast-ticker" name="ticker" placeholder="AAPL" required />
-                        </div>
-	                        <div class="field">
-	                          <label class="label" for="forecast-source">Source</label>
-	                          <select id="forecast-source" name="source" data-toggle-select><option value="auto" selected>Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
-                            <input id="forecast-asset-class" name="assetClass" type="hidden" value="equity" />
-	                        </div>
-	                        <div class="field">
-	                          <label class="label" for="forecast-horizon">Forecast length</label>
-	                          <input id="forecast-horizon" name="horizon" type="number" min="5" max="365" value="90" />
-	                          <div class="small muted">Daily = trading days. Hourly = hours.</div>
-	                        </div>
-                        <div class="field">
-                          <label class="label" for="forecast-interval">Timeframe</label>
-                          <select id="forecast-interval" name="interval" data-toggle-select>
-                            <option value="1d">Daily</option>
-                            <option value="1h">Hourly</option>
-                          </select>
-                        </div>
-	                      </div>
-	                      <div class="field">
-	                        <label class="label">Forecast bands</label>
-	                        <div class="small muted">
-                            Quantura Horizon uses canonical distribution quantiles: <strong>P1</strong>, <strong>P25</strong>, <strong>P50</strong>,
-                            <strong>P75</strong>, and <strong>P99</strong>.
-                          </div>
-	                      </div>
-	                      <button class="cta" type="submit" data-analytics="forecast_submit"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Generate forecast</span></button>
-	                    </form>
-                    <details class="ensemble-forecast-shell forecast-workspace-section" id="ensemble-forecast-settings">
-                      <summary>
-                        <span><span class="eyebrow">Advanced asynchronous forecast</span><strong>Five-model probabilistic ensemble</strong></span>
-                        <span class="small muted">Prophet · Toto 2.0 · Granite · Chronos-2 · TimesFM 3.0</span>
-                      </summary>
+                    <section class="ensemble-forecast-shell forecast-workspace-section" id="ensemble-forecast-settings" aria-label="Quantura Forecast configuration">
                       <div class="ensemble-forecast-body">
-                        <p class="small muted">Choose the models, weights, quantiles, and horizon. Quantura runs eligible models sequentially in a durable worker and returns only the final weighted ensemble.</p>
+                        <p class="small muted">Choose your models, weights, quantiles, and horizon. Availability follows your workspace access and model licensing.</p>
                         <form id="ensemble-forecast-form">
                           <div class="form-grid">
                             <div class="field">
@@ -221,7 +184,8 @@
                           </div>
 
                           <fieldset class="field ensemble-model-fieldset">
-                            <legend class="label">Ensemble models</legend>
+                            <legend class="label">Models</legend>
+                            <p class="small muted">Prophet · Toto 2.0 · Granite · Chronos-2 · TimesFM 3.0 — availability is checked for your workspace.</p>
                             <div id="ensemble-model-list" class="ensemble-model-grid" aria-live="polite">
                               <div class="small muted">Loading model capabilities…</div>
                             </div>
@@ -264,9 +228,9 @@
                             <button id="ensemble-save-preset" class="task-chip" type="button">Save preset</button>
                           </div>
 
-                          <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run ensemble forecast</span></button>
+                          <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
                         </form>
-                        <div id="ensemble-forecast-status" class="ensemble-job-status small muted" role="status" aria-live="polite">Open this section to configure an asynchronous ensemble forecast.</div>
+                        <div id="ensemble-forecast-status" class="ensemble-job-status small muted" role="status" aria-live="polite">Sign in to load your available forecasting models.</div>
                         <section id="ensemble-forecast-results" class="ensemble-results" aria-labelledby="ensemble-results-title" hidden>
                           <div class="forecast-section-heading"><div><div class="eyebrow">Final ensemble</div><h3 id="ensemble-results-title">Probabilistic forecast</h3></div><span id="ensemble-result-state" class="status-pill">Queued</span></div>
                           <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
@@ -276,14 +240,15 @@
                             <a id="ensemble-download-csv" class="cta secondary small" href="#">Download CSV</a>
                             <a id="ensemble-download-json" class="cta secondary small" href="#">Download JSON</a>
                             <button id="ensemble-copy-config" class="task-chip" type="button">Copy API request</button>
-                            <button id="ensemble-run-again" class="task-chip" type="button">Run again</button>
+                            <button id="ensemble-run-again" class="task-chip" type="button">Reproduce saved configuration</button>
                           </div>
                         </section>
                       </div>
-                    </details>
+                    </section>
+                    <section id="legacy-forecast-detail" hidden aria-label="Previously saved forecast">
                     <div class="results-panel">
                       <h3>Forecast workspace</h3>
-                      <div id="forecast-output" class="panel-output small">Run Q Forecast to load the market snapshot, ensemble quantiles, scenario math, and uncertainty analysis.</div>
+                      <div id="forecast-output" class="panel-output small"></div>
                     </div>
                     <div id="forecast-scenario-host" class="forecast-workspace-section">
                       <section class="results-panel">
@@ -299,6 +264,7 @@
                         <p class="small muted">Generate a forecast first. AI analysis never runs automatically.</p>
                       </section>
                     </div>
+                    </section>
                     <div class="card" data-my-requests-panel data-default-type="forecast">
                       <div class="card-head">
                         <h3>My Requests</h3>
