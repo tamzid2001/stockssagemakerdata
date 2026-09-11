@@ -11,6 +11,10 @@ Each selected model receives raw weight 1. For each requested quantile, successf
 capable models receive equal normalized weights. At least two models must succeed;
 a lone Prophet result is not reported as an ensemble. Model failures are recorded.
 TimesFM is not selected by these workflows: commercial licensing remains required.
+Toto's pinned implementation requires a full 32-observation patch. With 32 or
+more observations, leading alignment slots are masked as unknown, never prices;
+with fewer, Toto is unavailable with `MODEL_CONTEXT_TOO_SHORT`. This does not
+raise the overall two-observation research minimum for other capable models.
 
 Quantiles: P1, P10, P20, P30, P40, P50, P60, P70, P80, P90, P99. Toto contributes
 only P10–P90; Chronos contributes only inside its loaded checkpoint's genuine

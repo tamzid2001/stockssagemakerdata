@@ -12,6 +12,21 @@ from .base import ForecastAdapter, ModelExecutionError, cleanup_memory, device_n
 NATIVE_LEVELS = tuple(round(value / 10, 1) for value in range(1, 10))
 
 
+def aligned_toto_context(values: np.ndarray, patch_size: int) -> tuple[np.ndarray, np.ndarray]:
+    """Left-pad unobserved slots, preserving the final entirely observed patch.
+
+    toto-2 2.0.0 reshapes context into full patches and forces its final patch
+    mask to true. It therefore cannot safely represent fewer than one genuine
+    patch. Padding must never be mislabeled as historical market observations.
+    """
+    if patch_size < 1 or len(values) < patch_size:
+        raise ModelExecutionError("toto", "MODEL_CONTEXT_TOO_SHORT", retryable=False)
+    padding = (-len(values)) % patch_size
+    target = np.pad(np.asarray(values, dtype=np.float32), (padding, 0), constant_values=0)
+    mask = np.arange(len(target)) >= padding
+    return target, mask
+
+
 class TotoAdapter(ForecastAdapter):
     model_id = "toto"
 
@@ -33,8 +48,10 @@ class TotoAdapter(ForecastAdapter):
                 int(MODEL_REGISTRY["models"]["toto"]["maxContextLength"]),
                 len(series.transformed_values),
             )
-            target = torch.tensor(series.transformed_values[-context_length:], dtype=torch.float32, device=device).view(1, 1, -1)
-            mask = torch.ones_like(target, dtype=torch.bool)
+            values, observed_mask = aligned_toto_context(
+                series.transformed_values[-context_length:], int(model.config.patch_size))
+            target = torch.tensor(values, dtype=torch.float32, device=device).view(1, 1, -1)
+            mask = torch.tensor(observed_mask, dtype=torch.bool, device=device).view(1, 1, -1)
             series_ids = torch.zeros((1, 1), dtype=torch.long, device=device)
             with torch.inference_mode():
                 output = model.forecast(
@@ -65,6 +82,8 @@ class TotoAdapter(ForecastAdapter):
                 device=device,
                 duration_seconds=time.monotonic() - started,
                 package_versions=package_versions(["toto-2", "torch"]),
+                warnings=([f"Toto patch alignment: {len(values) - context_length} leading positions masked as unobserved; {context_length} genuine observations."]
+                          if len(values) != context_length else []),
             )
             result.validate()
             return result
