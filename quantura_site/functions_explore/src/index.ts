@@ -665,6 +665,7 @@ registerQuanturaForecastRoutes(ROUTES, {
 registerEnsembleForecastRoutes(ROUTES, {
   db,
   auth,
+  adminEmails: [ADMIN_EMAIL.toLowerCase()],
   publicOrigin: PUBLIC_ORIGIN,
 });
 // Register concrete dataset routes before the generic catalog

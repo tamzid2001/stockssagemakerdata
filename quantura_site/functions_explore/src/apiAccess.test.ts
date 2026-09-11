@@ -136,3 +136,58 @@ test("revoked and expired keys immediately fail authentication", async () => {
     else process.env.QUANTURA_API_KEY_PEPPER = priorPepper;
   }
 });
+
+test("configured platform admin is verified dynamically, retains billing plan, and cannot bypass workspace boundaries", async () => {
+  const records = new Map<string, RecordValue>([
+    ["users/admin-user", { plan: "free" }],
+    ["users/other", { plan: "quant" }],
+    ["users/other/collaborators/admin-user", { role: "viewer" }],
+  ]);
+  const db = new FakeDb(records) as any;
+  let identity = { uid: "admin-user", email: "admin@example.test", emailVerified: true, disabled: false };
+  const auth = { verifyIdToken: async () => ({ uid: "admin-user", admin: true }), getUser: async () => identity } as any;
+  const options = { db, auth, adminEmails: ["admin@example.test"] };
+  const req = { headers: { authorization: "Bearer session-fixture" } } as any;
+  const token = await authenticatePlatformRequest(req, options);
+  assert.equal(token.platformAdmin, true);
+  assert.equal(token.plan, "free", "actual subscription must not be rewritten");
+  assert.equal((await resolveWorkspaceAccess(db, token, token.userId)).plan, "research");
+  const shared = await resolveWorkspaceAccess(db, token, "other");
+  assert.equal(shared.role, "viewer");
+  assert.throws(() => authorizeWorkspaceAction(token, shared, "forecasts:write", "write"), /workspace_read_only/);
+  records.delete("users/other/collaborators/admin-user");
+  await assert.rejects(resolveWorkspaceAccess(db, token, "other"), /workspace_forbidden/);
+  for (const fields of [{ emailVerified: false }, { disabled: true }, { email: "other@example.test" }]) {
+    identity = { uid: "admin-user", email: "admin@example.test", emailVerified: true, disabled: false, ...fields };
+    assert.equal((await authenticatePlatformRequest(req, options)).platformAdmin, false);
+  }
+  records.set("users/admin-user", { plan: "free", admin: true, email: "admin@example.test" });
+  assert.equal((await authenticatePlatformRequest(req, options)).platformAdmin, false, "editable profile and token claims do not grant admin");
+  assert.equal((await authenticatePlatformRequest(req, { db, auth })).platformAdmin, false, "route must explicitly opt into the server admin allowlist");
+});
+
+test("admin API key checks current identity without encoding admin privileges into the key", async () => {
+  const oldPepper = process.env.QUANTURA_API_KEY_PEPPER;
+  process.env.QUANTURA_API_KEY_PEPPER = "admin-test-only-pepper-with-thirty-two-characters";
+  try {
+    const key = generatePlatformApiKey().rawKey;
+    const records = new Map<string, RecordValue>([
+      ["users/admin-user", { plan: "free" }],
+      [`quantura_api_keys/${hashPlatformApiKey(key)}`, { user_id: "admin-user", name: "CI", scopes: ["forecasts:read"] }],
+    ]);
+    let verified = true;
+    const auth = { getUser: async () => ({ uid: "admin-user", email: "admin@example.test", emailVerified: verified, disabled: false }) } as any;
+    const options = { db: new FakeDb(records) as any, auth, adminEmails: ["admin@example.test"] };
+    const req = { headers: { authorization: `Bearer ${key}` } } as any;
+    const token = await authenticatePlatformRequest(req, options);
+    assert.equal(token.platformAdmin, true);
+    assert.deepEqual(token.tokenScopes, ["forecasts:read"]);
+    const own = await resolveWorkspaceAccess(options.db, token, token.userId);
+    assert.throws(() => authorizeWorkspaceAction(token, own, "forecasts:write", "write"), /insufficient_scope/);
+    verified = false;
+    assert.equal((await authenticatePlatformRequest(req, options)).platformAdmin, false);
+  } finally {
+    if (oldPepper === undefined) delete process.env.QUANTURA_API_KEY_PEPPER;
+    else process.env.QUANTURA_API_KEY_PEPPER = oldPepper;
+  }
+});

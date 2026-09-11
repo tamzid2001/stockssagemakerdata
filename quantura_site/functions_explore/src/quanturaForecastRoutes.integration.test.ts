@@ -21,22 +21,29 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
   process.env.QUANTURA_API_KEY_PEPPER = "integration-only-pepper-with-at-least-32-characters";
   process.env.QUANTURA_ENSEMBLE_WORKER_MODE = "manual";
   process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM = "true";
+  process.env.TIMESFM_HF_ACCESS_APPROVED = "true";
+  process.env.TIMESFM_COMMERCIAL_LICENSED = "true";
   const workerToken = "integration-only-worker-token-with-32-characters";
   process.env.QUANTURA_ENSEMBLE_WORKER_TOKEN = workerToken;
   const keys = [generatePlatformApiKey().rawKey, generatePlatformApiKey().rawKey];
   for (const [i, user] of [owner, viewer].entries()) {
-    await db.collection("users").doc(user).set({ plan: "quant" });
+    await db.collection("users").doc(user).set({ plan: i === 0 ? "free" : "quant" });
     await db.collection("quantura_api_keys").doc(hashPlatformApiKey(keys[i])).set({ user_id: user, name: "Integration only", scopes: ["forecasts:read", "forecasts:write"] });
   }
   await db.collection("workspaces").doc(workspace).set({ owner_user_id: owner, name: "Integration only" });
   const member = db.collection("workspace_memberships").doc(workspaceMembershipId(workspace, viewer));
   await member.set({ role: "viewer", status: "active" });
   const app = express(); app.use(express.json());
-  const router = express.Router(); registerEnsembleForecastRoutes(router, { db, auth: firebaseApp.auth(), publicOrigin: "http://localhost" }); app.use("/api", router);
+  const identity = { verifyIdToken: async () => { throw new Error("invalid_test_token"); }, getUser: async (uid: string) => ({ uid, email: uid === owner ? "administrator@example.test" : "viewer@example.test", emailVerified: true, disabled: false }) } as any;
+  const router = express.Router(); registerEnsembleForecastRoutes(router, { db, auth: identity, adminEmails: ["administrator@example.test"], publicOrigin: "http://localhost" }); app.use("/api", router);
   const server = await new Promise<Server>(resolve => { const listening = app.listen(0, "127.0.0.1", () => resolve(listening)); });
   const address = server.address() as { port: number };
   const call = (path: string, token = keys[0], body?: unknown) => fetch(`http://127.0.0.1:${address.port}/api${path}`, { method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   try {
+    const capabilities = await call(`/v1/forecast/models?workspace_id=${workspace}`);
+    assert.equal(capabilities.status, 200);
+    assert.equal((await capabilities.json()).data.models.filter((model: any) => model.available).length, 5);
+    assert.equal((await db.collection("users").doc(owner).get()).data()?.plan, "free", "admin access does not mutate billing");
     const request = { workspace_id: workspace, source: { type: "series", frequency: "1min", rows: Array.from({ length: 40 }, (_, i) => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), target: .4 })) }, prediction_length: 2, horizon_mode: "frequency_periods", quantiles: [.1, .5, .9], models: { prophet: { enabled: true, weight: 1 } } };
     assert.equal((await call("/v1/ensemble-forecasts", keys[1], request)).status, 403);
     assert.equal((await call("/v1/ensemble-forecasts", "invalid", request)).status, 401);
@@ -67,7 +74,7 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     assert.equal((await call(`/v1/ensemble-forecasts/${id}`, keys[0])).status, 200);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
-    for (const name of ["QUANTURA_API_KEY_PEPPER", "QUANTURA_ENSEMBLE_WORKER_MODE", "QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM", "QUANTURA_ENSEMBLE_WORKER_TOKEN"]) { if (oldEnv[name] === undefined) delete process.env[name]; else process.env[name] = oldEnv[name]; }
+    for (const name of ["QUANTURA_API_KEY_PEPPER", "QUANTURA_ENSEMBLE_WORKER_MODE", "QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM", "QUANTURA_ENSEMBLE_WORKER_TOKEN", "TIMESFM_HF_ACCESS_APPROVED", "TIMESFM_COMMERCIAL_LICENSED"]) { if (oldEnv[name] === undefined) delete process.env[name]; else process.env[name] = oldEnv[name]; }
     await firebaseApp.delete();
   }
 });

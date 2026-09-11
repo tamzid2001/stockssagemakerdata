@@ -53,6 +53,7 @@ export type ApiPrincipal = {
   tokenScopes: PlatformApiScope[];
   plan: PlanKey;
   authMethod: "api_key" | "firebase_session";
+  platformAdmin?: boolean;
 };
 
 export type WorkspaceAccess = {
@@ -182,7 +183,7 @@ async function userPlan(db: FirebaseFirestore.Firestore, userId: string): Promis
 
 export async function authenticatePlatformRequest(
   req: Request,
-  options: { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth }
+  options: { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; adminEmails?: readonly string[] }
 ): Promise<ApiPrincipal> {
   const bearer = extractBearer(req);
   if (!bearer) throw new Error("api_key_missing");
@@ -197,6 +198,7 @@ export async function authenticatePlatformRequest(
       tokenScopes: [...PLATFORM_API_SCOPES],
       plan: await userPlan(options.db, decoded.uid),
       authMethod: "firebase_session",
+      platformAdmin: await verifiedPlatformAdmin(options.auth, decoded.uid, options.adminEmails),
     };
   }
 
@@ -217,7 +219,17 @@ export async function authenticatePlatformRequest(
     tokenScopes: scopes,
     plan: await userPlan(options.db, userId),
     authMethod: "api_key",
+    platformAdmin: await verifiedPlatformAdmin(options.auth, userId, options.adminEmails),
   };
+}
+
+async function verifiedPlatformAdmin(auth: admin.auth.Auth, userId: string, allowed: readonly string[] = []): Promise<boolean> {
+  if (!allowed.length) return false;
+  // Authoritative Firebase identity, not editable profile fields, API-key claims,
+  // or stale JWT role claims. This role never bypasses workspace membership.
+  const user = await auth.getUser(userId).catch(() => null);
+  return Boolean(user?.uid === userId && !user.disabled && user.emailVerified
+    && allowed.some(email => email.toLowerCase() === user.email?.toLowerCase()));
 }
 
 export function requireScope(principal: ApiPrincipal, scope: PlatformApiScope): void {
@@ -236,11 +248,15 @@ export async function resolveWorkspaceAccess(
   const ownerUserId = clean(workspace.owner_user_id, 220);
   if (workspaceSnapshot.exists && workspace.archived_at) throw new Error("workspace_archived");
   if ((workspaceSnapshot.exists && ownerUserId === principal.userId) || (!workspaceSnapshot.exists && workspaceId === principal.userId)) {
+    // Server-configured platform admins may exercise configured model features
+    // in their own workspaces under bounded Research quotas, without changing
+    // their actual subscription or granting access to other owners' resources.
+    const effectivePlan = principal.platformAdmin ? "research" : principal.plan;
     return {
       workspaceId,
       role: "owner",
-      plan: principal.plan,
-      capabilities: PLAN_ENTITLEMENTS[principal.plan].features,
+      plan: effectivePlan,
+      capabilities: PLAN_ENTITLEMENTS[effectivePlan].features,
       permissions: [...WORKSPACE_PERMISSIONS],
       resourceScope: defaultResourceScope(),
       ownerUserId: principal.userId,
