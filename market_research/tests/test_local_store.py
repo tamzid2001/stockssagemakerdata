@@ -81,3 +81,6 @@ def test_missing_key_fails_before_creating_artifact(tmp_path, monkeypatch):
     monkeypatch.delenv("QUANTURA_RESEARCH_ARTIFACT_KEY", raising=False)
     with pytest.raises(ValueError, match="KEY_REQUIRED"):
         key_bytes()
+    monkeypatch.setenv("QUANTURA_RESEARCH_ARTIFACT_KEY", "a" * 32 + " " * 32)
+    with pytest.raises(ValueError, match="KEY_INVALID"):
+        key_bytes()

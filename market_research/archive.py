@@ -172,7 +172,7 @@ def collect_batches(args, store, provider, heartbeat):
     last = None
     while totals["pages"] < args.max_pages:
         remaining = args.duration_minutes * 60 - (time.monotonic() - started)
-        if remaining < 180:
+        if remaining < 120:
             break
         batch.duration_minutes = remaining / 60
         last = collect(batch, store, provider, heartbeat)

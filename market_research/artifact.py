@@ -21,7 +21,10 @@ def key_bytes():
     if len(raw) != 64:
         raise ValueError("ARTIFACT_ENCRYPTION_KEY_REQUIRED")
     try:
-        return bytes.fromhex(raw)
+        decoded = bytes.fromhex(raw)
+        if len(decoded) != 32:
+            raise ValueError("invalid length")
+        return decoded
     except ValueError:
         raise ValueError("ARTIFACT_ENCRYPTION_KEY_INVALID") from None
 
