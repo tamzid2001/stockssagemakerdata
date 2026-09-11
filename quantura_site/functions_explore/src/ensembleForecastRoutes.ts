@@ -16,7 +16,7 @@ import { PredictionMarketDataError, predictionForecastHistory } from "./predicti
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 
 type JsonRecord = Record<string, unknown>;
-type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string };
+type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string; adminEmails?: readonly string[] };
 type ModelId = "prophet" | "toto" | "granite" | "chronos" | "timesfm";
 type Handler = (req: Request, res: Response, principal: ApiPrincipal, requestId: string) => Promise<void>;
 
