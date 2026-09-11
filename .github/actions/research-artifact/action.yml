@@ -1,0 +1,35 @@
+name: Encrypted research artifact
+description: Compress and encrypt only research outputs; never upload credentials or model caches.
+inputs:
+  encryption_key:
+    description: AES-256 key from the repository secret
+    required: true
+  name:
+    description: Unique artifact name
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Encrypt checkpoint and results
+      shell: bash
+      env:
+        QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ inputs.encryption_key }}
+      run: |
+        python -m pip install --no-cache-dir cryptography==50.0.1
+        python -m market_research.artifact package --source "$QUANTURA_RESEARCH_DIR" --output "$RUNNER_TEMP/research.qra.enc"
+    - uses: actions/upload-artifact@v7
+      id: upload
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ runner.temp }}/research.qra.enc
+        retention-days: 3
+        compression-level: 0
+        if-no-files-found: error
+        overwrite: false
+    - name: Link encrypted archive
+      shell: bash
+      env:
+        ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+      run: |
+        echo "Encrypted ZIP: $ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+        echo 'Retention: 3 days. Download before expiry. Maximum encrypted payload: 25 MiB. No historical Firestore writes.' >> "$GITHUB_STEP_SUMMARY"

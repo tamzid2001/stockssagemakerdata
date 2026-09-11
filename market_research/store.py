@@ -10,6 +10,7 @@ import json
 import os
 import time
 import gzip
+import threading
 from .engine import digest
 
 
@@ -43,7 +44,27 @@ class Store:
         self.session = session
         self.holder = holder
         self.fence = None
+        self.transaction_lock = threading.RLock()
         self.ref = self.db.collection("market_research_sessions").document(session)
+
+    def transact(self, operation):
+        """Retry read-phase aborts too; serialize this worker's heartbeat/writes.
+
+        Firestore's decorator retries commit aborts, but a read may abort before
+        commit. Every retry creates a fresh transaction and rechecks the fence.
+        """
+        from google.api_core.exceptions import Aborted
+
+        if not hasattr(self, "transaction_lock"):
+            self.transaction_lock = threading.RLock()
+        with self.transaction_lock:
+            for attempt in range(6):
+                try:
+                    return operation(self.db.transaction())
+                except Aborted:
+                    if attempt == 5:
+                        raise RuntimeError("PERSISTENCE_CONTENTION") from None
+                    time.sleep(0.2 * 2**attempt)
 
     def claim(self, configuration=None):
         @self.fs.transactional
@@ -70,7 +91,7 @@ class Store:
             )
             return lease["fence"]
 
-        self.fence = update(self.db.transaction())
+        self.fence = self.transact(update)
 
     def check(self, tx):
         current = (self.ref.get(transaction=tx).to_dict() or {}).get("lease", {})
@@ -98,7 +119,7 @@ class Store:
                 merge=True,
             )
 
-        update(self.db.transaction())
+        self.transact(update)
 
     def release(self):
         @self.fs.transactional
@@ -113,7 +134,7 @@ class Store:
                 merge=True,
             )
 
-        update(self.db.transaction())
+        self.transact(update)
 
     def load(self, contract_id: str):
         return (
@@ -187,7 +208,7 @@ class Store:
                     {"session": self.session, **trade},
                 )
 
-        update(self.db.transaction())
+        self.transact(update)
 
     def report(self, run_id: str, report: dict):
         ref = self.db.collection("market_research_runs").document(digest(run_id))
@@ -205,7 +226,9 @@ class Store:
     def archive_ref(self):
         # Already covered by recursive deny-all client rules. Not public data licensing.
         return self.db.collection("market_research_sessions").document(
-            "polymarket-replay-archive-v1"
+            "kalshi-replay-archive-v1"
+            if self.session.startswith("kalshi-")
+            else "polymarket-replay-archive-v1"
         )
 
     def _create_once(self, ref, payload):
@@ -216,7 +239,7 @@ class Store:
             if not existing.exists:
                 tx.create(ref, payload)
 
-        update(self.db.transaction())
+        self.transact(update)
 
     def save_catalog(self, contracts, coverage, as_of):
         identifier = digest(
@@ -279,7 +302,7 @@ class Store:
             )
         metadata = {
             "snapshot_id": identifier,
-            "provider": "polymarket_us",
+            "provider": contract.get("source", "polymarket_us"),
             "start": start,
             "end": end,
             "checksum": checksum,
@@ -300,7 +323,7 @@ class Store:
                 {"snapshot_id": identifier},
             )
 
-        publish(self.db.transaction())
+        self.transact(publish)
         return {"snapshot_id": identifier, "row_count": len(rows), "checksum": checksum}
 
     def archived_history(self, contract, start, end):
@@ -331,6 +354,7 @@ class Store:
             "index": index,
             "contract": contract,
             "result": result,
+            "report": report,
         }
         self._create_once(
             self.archive_ref.collection("attempts").document(digest(entry)), entry
@@ -341,4 +365,4 @@ class Store:
             self.check(tx)
             tx.set(self.archive_ref.collection("progress").document(catalog_id), report)
 
-        update(self.db.transaction())
+        self.transact(update)

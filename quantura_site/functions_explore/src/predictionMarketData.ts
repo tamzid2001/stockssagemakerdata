@@ -1,6 +1,6 @@
 import { constants, createPrivateKey, sign } from "node:crypto";
 import { Router } from "express";
-import { KALSHI_API_BASE, kalshiPrice, kalshiMilestoneStart } from "./kalshiProtocol";
+import { KALSHI_API_BASE, kalshiPrice, kalshiCandlePrice, kalshiMilestoneStart } from "./kalshiProtocol";
 import {
   PolymarketMlbError,
   fetchPolymarketPricePoints,
@@ -61,6 +61,9 @@ export type PredictionMarketContract = {
   live?: boolean;
   marketType?: string;
   resolutionTime?: string | null;
+  resolutionResult?: string | null;
+  settlementValue?: number | null;
+  sourceTier?: "live" | "historical";
 };
 
 export type NormalizedPredictionObservation = {
@@ -502,6 +505,9 @@ export function normalizeKalshiEvent(eventPayload: JsonRecord, sport: string): P
       liquidity: null,
       availableFrom: iso(market?.open_time || market?.created_time),
       availableTo: iso(market?.expiration_time || market?.close_time),
+      resolutionTime: iso(market?.settlement_ts),
+      resolutionResult: ["yes", "no", "scalar", "void"].includes(text(market?.result)) ? text(market?.result) : null,
+      settlementValue: kalshiPrice(market, "settlement_value"),
     };
     rows.push({
       ...base,
@@ -726,16 +732,16 @@ async function polymarketHistory(contract: PredictionMarketContract, startMs: nu
   });
 }
 
-function kalshiCandleRows(contract: PredictionMarketContract, rawCandles: unknown): NormalizedPredictionObservation[] {
+export function kalshiCandleRows(contract: PredictionMarketContract, rawCandles: unknown, sourceTier: "live" | "historical" = "live"): NormalizedPredictionObservation[] {
   return asArray(rawCandles).map(asRecord).filter(Boolean).flatMap((candle) => {
     const endSeconds = finite(candle?.end_period_ts);
     if (endSeconds === null) return [];
     const priceRecord = asRecord(candle?.price) || {};
     const bidRecord = asRecord(candle?.yes_bid) || {};
     const askRecord = asRecord(candle?.yes_ask) || {};
-    const yesPrice = kalshiPrice(priceRecord, "close");
-    const yesBid = kalshiPrice(bidRecord, "close");
-    const yesAsk = kalshiPrice(askRecord, "close");
+    const yesPrice = kalshiCandlePrice(priceRecord, "close");
+    const yesBid = kalshiCandlePrice(bidRecord, "close");
+    const yesAsk = kalshiCandlePrice(askRecord, "close");
     const isNo = contract.side === "no";
     return [observation(contract, new Date(endSeconds * 1000).toISOString(), {
       price: isNo ? complement(yesPrice) : yesPrice,
@@ -746,11 +752,21 @@ function kalshiCandleRows(contract: PredictionMarketContract, rawCandles: unknow
       openInterest: finite(candle?.open_interest_fp ?? candle?.open_interest),
       raw: {
         end_period_ts: endSeconds,
-        yes_price_open: kalshiPrice(priceRecord, "open"),
-        yes_price_high: kalshiPrice(priceRecord, "high"),
-        yes_price_low: kalshiPrice(priceRecord, "low"),
+        source_tier: sourceTier,
+        price_methodology: "exchange_candle_not_tick_execution",
+        yes_price_open: kalshiCandlePrice(priceRecord, "open"),
+        yes_price_high: kalshiCandlePrice(priceRecord, "high"),
+        yes_price_low: kalshiCandlePrice(priceRecord, "low"),
         yes_price_close: yesPrice,
+        yes_price_mean: kalshiCandlePrice(priceRecord, "mean"),
+        yes_price_previous: kalshiCandlePrice(priceRecord, "previous"),
+        yes_bid_open: kalshiCandlePrice(bidRecord, "open"),
+        yes_bid_high: kalshiCandlePrice(bidRecord, "high"),
+        yes_bid_low: kalshiCandlePrice(bidRecord, "low"),
         yes_bid_close: yesBid,
+        yes_ask_open: kalshiCandlePrice(askRecord, "open"),
+        yes_ask_high: kalshiCandlePrice(askRecord, "high"),
+        yes_ask_low: kalshiCandlePrice(askRecord, "low"),
         yes_ask_close: yesAsk,
         volume: finite(candle?.volume_fp ?? candle?.volume),
         open_interest: finite(candle?.open_interest_fp ?? candle?.open_interest),
@@ -784,7 +800,7 @@ async function kalshiCandles(contract: PredictionMarketContract, startMs: number
       end_ts: chunkEnd,
       period_interval: period,
     }), {}, [400, 404, 422]);
-    rows.push(...kalshiCandleRows(contract, historical.payload.candlesticks));
+    rows.push(...kalshiCandleRows(contract, historical.payload.candlesticks, "historical"));
   }
   return rows;
 }
@@ -1288,10 +1304,63 @@ export const PREDICTION_MARKET_CAPABILITIES = {
   },
 } as const;
 
+/** One resumable event page, not the deliberately bounded UI search universe.
+ * Old events remain in /events; their markets must be joined from /historical.
+ * Outcome annotations stay in metadata, never in the historical model target.
+ */
+export async function kalshiResearchCatalog(seriesTicker = "", cursor = "") {
+  if (cursor.length > 2048 || /[\x00-\x1f]/.test(cursor)) throw new PredictionMarketDataError("invalid_cursor", "Invalid catalog cursor.");
+  let seriesPayload = cached<JsonRecord>("kalshi:research-series");
+  if (!seriesPayload) {
+    seriesPayload = (await fetchJson(queryUrl(`${KALSHI_API}/series`, { category: "Sports" }))).payload;
+    remember("kalshi:research-series", seriesPayload, 5 * 60_000);
+  }
+  const series = asArray(seriesPayload.series).map(asRecord).filter((s): s is JsonRecord => !!s && text(s.category).toLowerCase() === "sports");
+  const summaries = series.map(s => ({ ticker: text(s.ticker, 120), title: text(s.title, 300),
+    tags: asArray(s.tags).map(t => text(t, 80)),
+    // Conservative automatic game-series classification; props/championships
+    // remain discoverable in the series inventory but aren't called moneylines.
+    game_candidate: /(?:GAME|MATCH|MONEYLINE)$/.test(text(s.ticker)) && !/(SPREAD|TOTAL|HALF|QUARTER|PERIOD|F5|F3|RFI|BTTS)/.test(text(s.ticker)),
+  })).sort((a, b) => a.ticker.localeCompare(b.ticker));
+  if (!seriesTicker) return { ok: true, source: "kalshi", series: summaries, items: [], events_scanned: 0, next_cursor: null };
+  if (!/^[A-Z0-9._-]{1,120}$/.test(seriesTicker) || !summaries.some(s => s.ticker === seriesTicker)) {
+    throw new PredictionMarketDataError("invalid_series", "Choose an existing Kalshi Sports series.");
+  }
+  const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/events`, { series_ticker: seriesTicker, status: "settled", limit: 1,
+    with_nested_markets: true, with_milestones: true, cursor }));
+  const events = asArray(payload.events).map(asRecord).filter((e): e is JsonRecord => !!e);
+  const items: PredictionMarketContract[] = [];
+  for (const event of events) {
+    const eventTicker = text(event.event_ticker, 180);
+    if (text(event.series_ticker) !== seriesTicker || !/^[A-Z0-9._-]{1,180}$/.test(eventTicker)) continue;
+    const markets = new Map<string, JsonRecord>();
+    asArray(event.markets).map(asRecord).filter((m): m is JsonRecord => !!m).forEach(m => markets.set(text(m.ticker), { ...m, source_tier: "live" }));
+    const archived = await fetchJson(queryUrl(`${KALSHI_API}/historical/markets`, { event_ticker: eventTicker, limit: 1000 }));
+    // A game normally has two or three outcome markets. Never silently truncate
+    // an anomalous huge event or present it as complete game coverage.
+    if (text(archived.payload.cursor)) throw new PredictionMarketDataError("event_market_limit", "This event exceeds the bounded game catalog. Continue with an explicit bulk dataset job.", 422);
+    asArray(archived.payload.markets).map(asRecord).filter((m): m is JsonRecord => !!m && text(m.event_ticker) === eventTicker)
+      .forEach(m => markets.set(text(m.ticker), { ...m, source_tier: "historical" }));
+    const eventMarkets = [...markets.values()];
+    const contracts = normalizeKalshiEvent({ event, markets: eventMarkets, milestones: payload.milestones }, "Sports");
+    items.push(...contracts.map(c => ({ ...c, sourceTier: markets.get(c.marketId)?.source_tier === "historical" ? "historical" as const : "live" as const })));
+  }
+  const next = text(payload.cursor, 2048) || null;
+  if (next && next === cursor) throw new PredictionMarketDataError("repeated_cursor", "Kalshi repeated a catalog cursor.", 502);
+  return { ok: true, source: "kalshi", items, events_scanned: events.length, next_cursor: next,
+    fetched_at: new Date().toISOString(), redistribution_status: "review_required" };
+}
+
 export function registerPredictionMarketDataRoutes(router: Router): void {
   // Bounded metadata discovery shared by research workers; no order capability.
   router.get("/sports/prediction-markets/research-catalog", async (req, res) => {
     try {
+      if (req.query.source === "kalshi") {
+        res.setHeader("Cache-Control", "public, max-age=30");
+        res.status(200).json(await kalshiResearchCatalog(String(req.query.series_ticker || ""), String(req.query.cursor || "")));
+        return;
+      }
+      if (req.query.source && req.query.source !== "polymarket_us") throw new PredictionMarketDataError("invalid_source", "Choose Polymarket US or Kalshi.");
       const mode = text(req.query.mode || "live", 20);
       if (!["live", "historical"].includes(mode)) throw new PredictionMarketDataError("invalid_mode", "Choose live or historical.");
       const offset = Number(req.query.cursor || 0);

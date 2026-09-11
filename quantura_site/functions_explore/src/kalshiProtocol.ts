@@ -12,6 +12,18 @@ export function kalshiPrice(record: Record<string, unknown> | null | undefined, 
   return Number.isFinite(price) && price >= 0 && price <= 1 ? Number(price.toFixed(6)) : null;
 }
 
+/** Candle v3 decimal strings are dollars; legacy integer fields are cents.
+ * Unlike market quote fields, current candles need not use a _dollars suffix.
+ * Never infer units from the numeric magnitude.
+ */
+export function kalshiCandlePrice(record: Record<string, unknown> | null | undefined, field: string): number | null {
+  const raw = record?.[field];
+  if (record && record[`${field}_dollars`] == null && typeof raw === "string" && /^\d+\.\d+$/.test(raw)) {
+    return kalshiPrice({ [`${field}_dollars`]: raw }, field);
+  }
+  return kalshiPrice(record, field);
+}
+
 export function kalshiMilestoneStart(eventTicker: string, milestones: unknown): string | null {
   if (!Array.isArray(milestones)) return null;
   const times = milestones.filter(m => m && [ ...(Array.isArray(m.primary_event_tickers) ? m.primary_event_tickers : []), ...(Array.isArray(m.related_event_tickers) ? m.related_event_tickers : []) ].includes(eventTicker))

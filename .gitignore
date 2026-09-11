@@ -29,3 +29,6 @@ quantura_site/public/app.min.js
 quantura_site/public/styles.min.css
 /.cs-wizard/
 /quantura_site/.cs-wizard/
+# Runner-local historical research and encrypted exports are never source code.
+.research-output/
+*.qra.enc

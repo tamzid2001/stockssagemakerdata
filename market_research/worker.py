@@ -22,6 +22,7 @@ from .engine import (
 )
 from .provider import QuanturaProvider, historical_range
 from .store import Store
+from .local_store import LocalStore
 
 
 class Heartbeat:
@@ -144,6 +145,8 @@ def process_historical(
     state = saved.get("state") or initial_state()
     successful = failed = 0
     for origin in rolling_origins(quotes, horizon):
+        if getattr(store, "at_capacity", False):
+            break
         if (
             origin < state["last_timestamp"]
             or successful + failed >= max_origins
@@ -214,7 +217,9 @@ def run(args):
         if args.mode == "live"
         else "polymarket-history-" + run_id
     )
-    store = Store(session, run_id)
+    store = (
+        Store(session, run_id) if args.mode == "live" else LocalStore(session, run_id)
+    )
     store.claim(configuration)
     heartbeat = Heartbeat(store)
     heartbeat.thread.start()
@@ -233,9 +238,16 @@ def run(args):
     # Leave time for checkpoint + dispatch before GitHub's six-hour hard limit.
     job_started = float(os.environ.get("QUANTURA_JOB_STARTED_AT", time.time()))
     deadline = min(deadline, started + max(0, job_started + 358 * 60 - time.time()))
-    forecaster = lambda window, horizon: forecast_window(
-        window, horizon, tuple(args.models)
-    )
+    participation = {model: {"completed": 0, "failed": 0} for model in args.models}
+
+    def forecaster(window, horizon):
+        forecast = forecast_window(window, horizon, tuple(args.models))
+        for model in forecast.get("models", []):
+            participation[model["id"]][
+                "completed" if model["status"] == "completed" else "failed"
+            ] += 1
+        return forecast
+
     try:
         while time.monotonic() < deadline:
             heartbeat.check()
@@ -262,7 +274,10 @@ def run(args):
             )
             for contract in selected:
                 heartbeat.check()
-                if time.monotonic() >= deadline - 120:
+                if time.monotonic() >= deadline - 120 or getattr(
+                    store, "at_capacity", False
+                ):
+                    coverage["stopped_at_storage_or_runtime_limit"] = True
                     break
                 try:
                     if args.mode == "live":
@@ -338,6 +353,9 @@ def run(args):
         )
         report = {
             "configuration": configuration,
+            "model_participation_in_returned_ensembles": participation,
+            "registered_model_count": 5,
+            "requested_model_count": len(args.models),
             "commit": code_sha,
             "coverage": coverage,
             "cycles": cycles[-1000:],
@@ -368,7 +386,7 @@ def run(args):
                     "event": "research_completed",
                     "paper_only": True,
                     "run_id": run_id,
-                    "storage": "private_firestore",
+                    "storage": getattr(store, "storage_name", "private_firestore"),
                     "coverage": coverage,
                     "trade_events": len(events),
                 }
@@ -379,7 +397,8 @@ def run(args):
                 handle.write(
                     f"## Polymarket US {args.mode} paper research\n\nCommit: `{code_sha}`\n\n"
                     f"Selected contracts: {coverage['selected_contracts']}; successful: {coverage['successful']}; unavailable: {coverage['failed']}.\n\n"
-                    "Detailed forecasts, trades, statistics and checkpoints are in private Firestore. No exchange orders were submitted.\n"
+                    f"Registered models: 5. Requested for this run: {', '.join(args.models)}. Actual participation counts: `{json.dumps(participation)}`. TimesFM is not included unless explicitly selected and commercially licensed.\n\n"
+                    f"Detailed results storage: {getattr(store, 'storage_name', 'private_firestore')}. No exchange orders were submitted.\n"
                 )
     finally:
         heartbeat.close()
