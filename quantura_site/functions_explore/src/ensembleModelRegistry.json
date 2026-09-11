@@ -16,6 +16,7 @@
     "toto": {
       "name": "Toto 2.0",
       "checkpoint": "Datadog/Toto-2.0-4m",
+      "minimumObservedContext": 32,
       "defaultWeight": 0.2,
       "quantileSupport": {
         "type": "bounded_native",

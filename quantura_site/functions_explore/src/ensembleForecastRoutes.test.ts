@@ -8,6 +8,7 @@ import {
   timesFmState,
   validateWorkerResult,
   apiError,
+  validateModelHistory,
 } from "./ensembleForecastRoutes";
 import { AlpacaError } from "./alpacaClient";
 import { parseMarketLink } from "./marketLink";
@@ -65,6 +66,24 @@ test("event URL resolution preserves team sides and selects moneylines over unre
 const balancedModels = Object.fromEntries(
   ["prophet", "toto", "granite", "chronos", "timesfm"].map((id) => [id, { enabled: true, weight: 0.2 }])
 );
+
+test("short observed histories fail before dispatch unless the user permits a viable reduced ensemble", () => {
+  const models = { prophet: { enabled: true, weight: 1 }, toto: { enabled: true, weight: 1 } };
+  const strict = normalizeEnsembleConfiguration({ models }, "quant");
+  assert.throws(() => validateModelHistory(strict, 2), (error: unknown) => {
+    const response = apiError(error);
+    return response.status === 422 && response.code === "MODEL_CONTEXT_TOO_SHORT" && response.message.includes("32 observed values");
+  });
+  assert.doesNotThrow(() => validateModelHistory(strict, 32));
+  const flexible = normalizeEnsembleConfiguration({ models, failure_policy: "renormalize" }, "quant");
+  assert.doesNotThrow(() => validateModelHistory(flexible, 2));
+  assert.equal(flexible.models.toto.enabled, true, "preflight must not silently rewrite the requested models");
+  const onlyToto = normalizeEnsembleConfiguration({ models: { prophet: { enabled: false }, toto: { enabled: true, weight: 1 } }, quantiles: [.1, .5, .9], failure_policy: "renormalize" }, "quant");
+  assert.throws(() => validateModelHistory(onlyToto, 2), /No enabled positive-weight model/);
+  const zeroToto = normalizeEnsembleConfiguration({ models: { ...models, toto: { enabled: true, weight: 0 } } }, "quant");
+  assert.doesNotThrow(() => validateModelHistory(zeroToto, 2));
+  assert.equal((publicModelCapabilities("quant").models as any[]).find(m => m.id === "toto").minimum_observed_context, 32);
+});
 
 test("custom quantiles are sorted and deduplicated without rounding collisions", () => {
   assert.deepEqual(normalizeRequestedQuantiles([0.75, 0.123456, 0.1, 0.123456, 0.5]), [0.1, 0.123456, 0.5, 0.75]);
