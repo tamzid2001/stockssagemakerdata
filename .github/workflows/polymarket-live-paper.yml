@@ -65,7 +65,8 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
           RUN_ONCE: ${{ inputs.run_once }}
-          TIMESFM_COMMERCIAL_LICENSED: 'false'
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: |
           args=(--mode live --horizon "$PAPER_HORIZON" --duration-minutes 345)
           if [[ "$RUN_ONCE" == 'true' ]]; then args+=(--once --max-contracts 4); fi

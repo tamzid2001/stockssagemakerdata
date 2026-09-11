@@ -2,6 +2,7 @@ import pytest
 
 from market_research.engine import (
     QUANTILES,
+    EXIT_LEVELS,
     Quote,
     Strategy,
     advance,
@@ -145,7 +146,7 @@ def test_loss_multiplier_caps_and_stop_uses_observed_bid():
     advance(state, Quote(720, 0.16, 0.15), f, s)
     events = advance(state, Quote(780, 0.09, 0.08), f, s)
     trades = [t for t in events if t["kind"] == "trade"]
-    assert len(trades) == 8 and all(
+    assert len(trades) == len(EXIT_LEVELS) == 9 and all(
         t["exit"] == 0.08 and t["size"] == 2 for t in trades
     )
     assert all(l["size"] == 4 for l in state["levels"].values())
@@ -160,6 +161,24 @@ def test_publication_delay_prevents_retrospective_live_signals():
     assert not state["observations"] and all(
         not l["pending"] for l in state["levels"].values()
     )
+
+
+@pytest.mark.parametrize("direction,previous,signal", [("cross_below", .3, .17), ("cross_above", .16, .19)])
+def test_p99_and_crossing_direction_are_preserved_through_fills_and_scoring(direction, previous, signal):
+    state = seed()
+    state["previous"]["ask"] = previous
+    f = curve()
+    s = Strategy(slippage=0, fee_per_contract=0)
+    advance(state, Quote(660, signal, signal-.01), f, s)
+    assert state["levels"]["0.99"]["pending"]["trigger_direction"] == direction
+    advance(state, Quote(720, .16, .15), f, s)
+    events = advance(state, Quote(780, .95, .94), f, s)
+    level = summarize(events)["levels"]["0.99"]
+    assert level["trades"] == 1 and level["target_hits"] == 1
+    split = level["entry_direction"][direction]
+    assert split["trades"] == 1 and split["win_rate"] == 1
+    assert split["target_before_stop_rate"] == 1
+    assert level["entry_direction"]["unrecorded"]["trades"] == 0
 
 
 def test_trigger_outcomes_do_not_claim_unfilled_orders_traded():

@@ -15,7 +15,8 @@ import math
 from typing import Callable
 
 QUANTILES = (0.01, *tuple(i / 10 for i in range(1, 10)), 0.99)
-VERSION = "quantura_quote_research_v3"
+VERSION = "quantura_quote_research_v4"
+EXIT_LEVELS = (*tuple(str(i / 10) for i in range(2, 10)), "0.99")
 
 
 def stamp(value: str) -> int:
@@ -204,14 +205,14 @@ def validate_forecast(forecast: dict, origin: int, horizon: int) -> None:
 def initial_state() -> dict:
     return {
         "levels": {
-            str(i / 10): {
+            level: {
                 "size": 1.0,
                 "recovery": 0.0,
                 "position": None,
                 "pending": None,
                 "count": 0,
             }
-            for i in range(2, 10)
+            for level in EXIT_LEVELS
         },
         "last_timestamp": 0,
         "previous": None,
@@ -220,7 +221,7 @@ def initial_state() -> dict:
 
 
 def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list[dict]:
-    """Idempotent one-minute state transition; eight independent TP experiments.
+    """Idempotent one-minute state transition; nine independent TP experiments.
 
     Thresholds are frozen at signal time. Positions and pending limit orders
     expire at the issuing forecast's horizon, not reset on each new forecast.
@@ -266,6 +267,11 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
             config.entry,
         )
     )
+    trigger_direction = (
+        "cross_above" if trigger and previous["ask"] < previous_q["0.1"] and quote.ask >= current_q["0.1"]
+        else "cross_below" if trigger and previous["ask"] > previous_q["0.1"] and quote.ask <= current_q["0.1"]
+        else config.entry
+    )
     active = []
     for observation in state.setdefault("observations", []):
         reason = (
@@ -299,6 +305,7 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
                     {
                         "level": level,
                         "signal_at": quote.timestamp,
+                        "trigger_direction": trigger_direction,
                         "stop": current_q["0.01"],
                         "target": current_q[level],
                         "forecast_id": forecast["forecast_id"],
@@ -396,6 +403,7 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
                 continue
             lane["pending"] = {
                 "signal_at": quote.timestamp,
+                "trigger_direction": trigger_direction,
                 "limit": limit,
                 "stop": stop,
                 "target": target,
@@ -408,10 +416,30 @@ def advance(state: dict, quote: Quote, forecast: dict, config: Strategy) -> list
     return events
 
 
+def direction_statistics(rows: list[dict], observations: list[dict]) -> dict:
+    output = {}
+    for direction in ("cross_above", "cross_below", "at_or_above", "at_or_below", "touch", "unrecorded"):
+        group = [t for t in rows if t.get("trigger_direction", "unrecorded") == direction]
+        triggers = [t for t in observations if t.get("trigger_direction", "unrecorded") == direction]
+        targets = sum(t["reason"] == "target" for t in triggers)
+        stops = sum(t["reason"] == "stop" for t in triggers)
+        wins = sum(t["net_pnl"] > 0 for t in group)
+        output[direction] = {
+            "trades": len(group), "wins": wins,
+            "win_rate": wins / len(group) if group else None,
+            "net_pnl": sum(t["net_pnl"] for t in group),
+            "target_hits": sum(t["reason"] == "target" for t in group),
+            "stops": sum(t["reason"] == "stop" for t in group),
+            "trigger_targets": targets, "trigger_stops": stops,
+            "trigger_censored": len(triggers) - targets - stops,
+            "target_before_stop_rate": targets / (targets + stops) if targets + stops else None,
+        }
+    return output
+
+
 def summarize(trades: list[dict]) -> dict:
     result = {}
-    for i in range(2, 10):
-        level = str(i / 10)
+    for level in EXIT_LEVELS:
         rows = [
             t
             for t in trades
@@ -476,6 +504,7 @@ def summarize(trades: list[dict]) -> dict:
                 else None,
             },
             "multiplier_increases": sum(t["multiplier_increased"] for t in rows),
+            "entry_direction": direction_statistics(rows, observations),
         }
     return {
         "paper_only": True,

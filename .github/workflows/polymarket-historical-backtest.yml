@@ -68,7 +68,8 @@ jobs:
           MAX_ORIGINS: ${{ inputs.max_origins }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
-          TIMESFM_COMMERCIAL_LICENSED: 'false'
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: python -m market_research.worker --mode historical --horizon "$PAPER_HORIZON" --max-contracts "$MAX_CONTRACTS" --max-origins "$MAX_ORIGINS" --duration-minutes 345
       - name: Preserve compressed encrypted results, including partial failures
         if: always() && inputs.smoke_mode == 'real'

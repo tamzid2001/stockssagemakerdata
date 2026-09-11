@@ -1,5 +1,5 @@
 import type { Router } from "express";
-import { searchPredictionMarkets, type PredictionMarketSource } from "./predictionMarketData";
+import { searchPredictionMarkets, discoverForecastMarkets, resolveMarketLink, gameTiming, PredictionMarketDataError, type PredictionMarketSource } from "./predictionMarketData";
 import { AlpacaClient } from "./alpacaClient";
 
 type JsonRecord = Record<string, unknown>;
@@ -109,12 +109,12 @@ async function searchAlpaca(query: string): Promise<JsonRecord[]> {
   }];
 }
 
-function predictionResult(source: PredictionMarketSource, contract: any): JsonRecord {
+export function predictionResult(source: PredictionMarketSource, contract: any): JsonRecord {
   return {
     resource_type: "prediction_market_contract",
     resource_id: `${source}:${contract.contractId}`,
     symbol: contract.providerSymbol,
-    name: contract.marketTitle || contract.eventTitle,
+    name: `${contract.outcome} · ${contract.marketTitle || contract.eventTitle}`,
     asset_class: "prediction_market",
     source,
     exchange: source === "kalshi" ? "Kalshi" : "Polymarket US",
@@ -129,10 +129,26 @@ function predictionResult(source: PredictionMarketSource, contract: any): JsonRe
     league: contract.league,
     event_start: contract.eventStart,
     status: contract.status,
+    timing: gameTiming(contract),
+    outcome: contract.outcome,
+    side: contract.side,
+    current_price: contract.currentPrice,
+    contract,
   };
 }
 
 export function registerMarketSearchRoutes(router: Router): void {
+  router.get("/market-search/resolve", async (req, res) => {
+    try {
+      const rows = await resolveMarketLink(req.query.url);
+      const source = rows[0].source;
+      res.setHeader("Cache-Control", "public, max-age=15");
+      res.json({ ok: true, count: rows.length, groups: { [source]: rows.map(c => predictionResult(source, c)) }, errors: {}, coverage: "Provider-verified contracts for this link. Choose the intended team or side." });
+    } catch (error) {
+      const safe = error instanceof PredictionMarketDataError ? error : new PredictionMarketDataError("market_link_unavailable", "Unable to resolve this link. Check the URL or retry the provider.", 502);
+      res.status(safe.status).json({ ok: false, error: safe.code, message: safe.message });
+    }
+  });
   router.get("/market-search/capabilities", (_req, res) => {
     res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=900");
     res.status(200).json({ ok: true, providers: PROVIDER_CAPABILITIES });
@@ -141,29 +157,33 @@ export function registerMarketSearchRoutes(router: Router): void {
   router.get("/market-search", async (req, res) => {
     const query = text(req.query.q, 100);
     const requested = text(req.query.source || "auto", 40).toLowerCase();
+    const mode = text(req.query.mode || "open", 20);
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
-    if (query.length < 2) {
+    if (!["auto", "yahoo", "alpaca", "polymarket_us", "kalshi"].includes(requested) || !["open", "live", "any"].includes(mode)) {
+      res.status(422).json({ ok: false, error: "search_filter_invalid", message: "Choose a supported source and market status." }); return;
+    }
+    if (query.length < 2 && mode !== "live") {
       res.status(400).json({ ok: false, error: "search_query_too_short", message: "Enter at least two characters." });
       return;
     }
     const groups: Record<string, JsonRecord[]> = {};
     const errors: Record<string, string> = {};
     const tasks: Array<Promise<void>> = [];
-    if (["auto", "yahoo"].includes(requested)) {
+    if (mode !== "live" && ["auto", "yahoo"].includes(requested)) {
       tasks.push(searchYahoo(query, limit).then((rows) => { groups.yahoo = rows; }).catch(() => { errors.yahoo = "temporarily_unavailable"; }));
     }
-    if (["auto", "alpaca"].includes(requested)) {
+    if (mode !== "live" && ["auto", "alpaca"].includes(requested)) {
       tasks.push(searchAlpaca(query).then((rows) => { groups.alpaca = rows; }).catch(() => { errors.alpaca = "unavailable_or_not_found"; }));
     }
     for (const source of ["polymarket_us", "kalshi"] as PredictionMarketSource[]) {
       if (requested !== "auto" && requested !== source) continue;
-      tasks.push(searchPredictionMarkets(source, query, limit)
-        .then((rows) => { groups[source] = rows.map((row) => predictionResult(source, row)); })
+      tasks.push((mode === "any" ? searchPredictionMarkets(source, query, limit) : discoverForecastMarkets(source, query, mode as "live" | "open"))
+        .then((rows) => { groups[source] = rows.filter(row => !query || [row.eventTitle, row.marketTitle, row.outcome, row.providerSymbol, row.league].join(" ").toLowerCase().includes(query.toLowerCase())).slice(0, limit).map((row) => predictionResult(source, row)); })
         .catch(() => { errors[source] = "temporarily_unavailable"; }));
     }
     await Promise.all(tasks);
     const results = Object.values(groups).flat();
     res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
-    res.status(200).json({ ok: true, query, count: results.length, groups, errors, capabilities: PROVIDER_CAPABILITIES });
+    res.status(200).json({ ok: true, query, count: results.length, groups, errors, capabilities: PROVIDER_CAPABILITIES, coverage: "Bounded provider discovery, not exhaustive coverage. Paste an event link for exact lookup. Kalshi in-progress is inferred from official start time and open status, not a live score feed." });
   });
 }

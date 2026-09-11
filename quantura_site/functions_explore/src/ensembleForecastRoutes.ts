@@ -11,6 +11,8 @@ import {
 } from "./apiAccess";
 import modelRegistry from "./ensembleModelRegistry.json";
 import { fetchStockHistoryData } from "./marketDataRoutes";
+import { AlpacaError } from "./alpacaClient";
+import { PredictionMarketDataError, predictionForecastHistory } from "./predictionMarketData";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 
 type JsonRecord = Record<string, unknown>;
@@ -32,7 +34,7 @@ const WORKER_SCHEMA_VERSION = "ensemble_forecast_job_v1";
 
 function text(value: unknown, max = 500): string { return String(value ?? "").trim().slice(0, max); }
 function plain(value: unknown): JsonRecord { return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}; }
-function finite(value: unknown): number | null { const result = Number(value); return Number.isFinite(result) ? result : null; }
+function finite(value: unknown): number | null { if (value === null || value === undefined || value === "" || typeof value === "boolean") return null; const result = Number(value); return Number.isFinite(result) ? result : null; }
 function boolean(value: unknown, fallback = false): boolean {
   if (typeof value === "boolean") return value;
   if (typeof value === "string" && /^(true|false)$/i.test(value.trim())) return value.trim().toLowerCase() === "true";
@@ -57,7 +59,8 @@ function runtimeMode(): "production" | "development" | "test" {
 }
 function envTrue(name: string): boolean { return /^(1|true|yes|on)$/i.test(text(process.env[name], 20)); }
 
-function apiError(error: unknown): { status: number; code: string; message: string } {
+export function apiError(error: unknown): { status: number; code: string; message: string } {
+  if (error instanceof AlpacaError || error instanceof PredictionMarketDataError) return { status: error.status, code: error.code.toUpperCase(), message: error.message };
   const raw = text((error as any)?.message || error, 300).toLowerCase();
   const code = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "INVALID_REQUEST";
   if (/api_key_(missing|invalid|revoked|expired)|worker_token_invalid/.test(raw)) return { status: 401, code, message: "Authentication failed." };
@@ -74,6 +77,8 @@ function apiError(error: unknown): { status: number; code: string; message: stri
 
 function sendError(res: Response, error: unknown, requestId: string): void {
   const normalized = apiError(error);
+  res.setHeader("X-Request-ID", requestId);
+  console.warn(JSON.stringify({ event: "ensemble_request_failed", request_id: requestId, code: /^[A-Z_0-9.]{1,100}$/.test(normalized.code) ? normalized.code : "REQUEST_FAILED", status: normalized.status }));
   res.status(normalized.status).json({ error: { code: normalized.code, message: normalized.message, request_id: requestId } });
 }
 
@@ -184,7 +189,7 @@ type NormalizedConfiguration = {
   prediction_length: number;
   horizon_mode: "trading_sessions" | "calendar_days" | "frequency_periods";
   quantiles: number[];
-  transform: "auto" | "log" | "none";
+  transform: "auto" | "log" | "none" | "logit";
   context_length: number | null;
   failure_policy: "fail" | "renormalize";
   frequency: string;
@@ -202,7 +207,7 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
   const horizonModeRaw = text(body.horizon_mode || "trading_sessions", 40);
   if (!new Set(["trading_sessions", "calendar_days", "frequency_periods"]).has(horizonModeRaw)) throw new Error("horizon_mode_unsupported");
   const transformRaw = text(body.transform || "auto", 20);
-  if (!new Set(["auto", "log", "none"]).has(transformRaw)) throw new Error("transform_unsupported");
+  if (!new Set(["auto", "log", "none", "logit"]).has(transformRaw)) throw new Error("transform_unsupported");
   const failureRaw = text(body.model_failure_policy || body.failure_policy || "fail", 20);
   if (!new Set(["fail", "renormalize"]).has(failureRaw)) throw new Error("failure_policy_unsupported");
   const contextRaw = body.context_length;
@@ -251,7 +256,7 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
   };
 }
 
-function normalizeSeriesRows(rows: unknown, timestampColumn: string, targetColumn: string): Array<{ timestamp: string; target: number }> {
+function normalizeSeriesRows(rows: unknown, timestampColumn: string, targetColumn: string, minimumRows = 40): Array<{ timestamp: string; target: number }> {
   if (!Array.isArray(rows)) throw new Error("source_series_rows_required");
   if (rows.length > MAX_HISTORY_ROWS) throw new Error("history_row_limit_exceeded");
   const byTimestamp = new Map<string, number>();
@@ -262,7 +267,7 @@ function normalizeSeriesRows(rows: unknown, timestampColumn: string, targetColum
     if (timestamp && target !== null) byTimestamp.set(timestamp, target);
   });
   const output = [...byTimestamp.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([timestamp, target]) => ({ timestamp, target }));
-  if (output.length < 40) throw new Error("history_minimum_rows_required");
+  if (output.length < minimumRows) throw new Error("history_minimum_rows_required");
   return output;
 }
 
@@ -346,6 +351,13 @@ async function materializeSource(
 ): Promise<{ rows: Array<{ timestamp: string; target: number }>; source: JsonRecord; frequency: string; timezone: string }> {
   const source = plain(sourceValue);
   const type = text(source.type || "ticker", 40);
+  if (type === "prediction_market") {
+    assertOnlyKeys(source, ["type", "provider", "symbol", "contract_id", "frequency"], "source");
+    const provider = text(source.provider);
+    if (provider !== "polymarket_us" && provider !== "kalshi") throw new Error("source_provider_unsupported");
+    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20));
+    return { rows: history.rows, source: { type, provider, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
+  }
   if (type === "ticker") {
     assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "limit"], "source");
     const symbol = text(source.symbol, 30).toUpperCase();
@@ -353,17 +365,17 @@ async function materializeSource(
     const history = await fetchStockHistoryData({
       source: source.provider || source.source || "auto",
       symbol,
-      start: source.start || "2000-01-01",
+      start: source.start || undefined,
       end: source.end || new Date().toISOString(),
       timeframe: source.frequency || "1Day",
       adjustment: source.adjustment || "raw",
       session: source.session || "regular",
-      limit: Math.min(Math.max(Math.floor(Number(source.limit) || 5000), 40), MAX_HISTORY_ROWS),
+      limit: Math.min(Math.max(Math.floor(Number(source.limit) || 500), 40), MAX_HISTORY_ROWS),
     });
     return {
       rows: normalizeSeriesRows(history.rows, "timestamp", text(source.field || "close", 50) || "close"),
       source: { type: "ticker", symbol, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, start: source.start || null, end: source.end || null },
-      frequency: text(source.frequency || history.timeframe || "1D", 30),
+      frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
       timezone: "UTC",
     };
   }
@@ -403,10 +415,10 @@ async function persistInputChunks(ref: FirebaseFirestore.DocumentReference, rows
   }
 }
 
-async function loadInputRows(ref: FirebaseFirestore.DocumentReference): Promise<Array<{ timestamp: string; target: number }>> {
+async function loadInputRows(ref: FirebaseFirestore.DocumentReference, minimumRows = 40): Promise<Array<{ timestamp: string; target: number }>> {
   const snapshots = await ref.collection(INPUT_CHUNKS).orderBy("__name__").limit(100).get();
   const rows = snapshots.docs.flatMap((doc) => Array.isArray(doc.data().rows) ? doc.data().rows : []);
-  return normalizeSeriesRows(rows, "timestamp", "target");
+  return normalizeSeriesRows(rows, "timestamp", "target", minimumRows);
 }
 
 async function enforceComputeQuota(options: Options, plan: PlanKey, workspaceId: string): Promise<void> {
@@ -520,6 +532,7 @@ export function validateWorkerResult(body: JsonRecord, job: JsonRecord): { quant
       const value = finite(values[canonicalQuantile(quantile)]);
       if (value === null || value < previous) throw new Error("forecast_result_ordering_invalid");
       if (text(body.transform, 20) === "log" && value <= 0) throw new Error("forecast_result_transform_invalid");
+      if (plain(job.source).type === "prediction_market" && (value < 0 || value > 1)) throw new Error("forecast_result_probability_invalid");
       previous = value;
     }
   }
@@ -571,16 +584,17 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(body, access.plan);
     const materialized = await materializeSource(options, principal, workspaceId, body.source);
+    if (materialized.source.type === "prediction_market" && configuration.horizon_mode !== "frequency_periods") throw new PredictionMarketDataError("horizon_mode_unsupported", "Prediction markets use frequency periods, not equity trading sessions.", 422);
     const sourceHash = datasetHash(materialized.rows, materialized.source);
     const normalizedRequest = {
       prediction_length: configuration.prediction_length,
       horizon_mode: configuration.horizon_mode,
       quantiles: configuration.quantiles,
-      transform: configuration.transform,
+      transform: materialized.source.type === "prediction_market" ? "logit" : configuration.transform,
       context_length: configuration.context_length,
       failure_policy: configuration.failure_policy,
       frequency: materialized.frequency,
-      calendar: configuration.calendar,
+      calendar: materialized.source.type === "prediction_market" ? "NONE" : configuration.calendar,
       models: configuration.models,
     };
     const hash = requestHash(workspaceId, sourceHash, normalizedRequest);
@@ -633,7 +647,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       runtime_mode: runtimeMode(),
       status: "queued",
       progress: { completed_models: 0, total_models: Object.values(configuration.models).filter((model) => model.enabled && model.weight > 0).length, current_model: null },
-      warnings: [],
+      warnings: materialized.source.warnings || [],
       error: null,
       created_at: now,
       started_at: null,
@@ -671,7 +685,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(plain(original.request), access.plan);
     await enforceComputeQuota(options, access.plan, workspaceId);
-    const rows = await loadInputRows(originalRef);
+    const rows = await loadInputRows(originalRef, plain(original.source).type === "prediction_market" ? 2 : 40);
     const ref = options.db.collection(JOBS).doc();
     const now = new Date().toISOString();
     const checkpoints = plain(original.model_checkpoints);
@@ -810,7 +824,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       transaction.set(ref, { status: "running", started_at: data.started_at || now, lease_expires_at: new Date(Date.now() + 5 * 60 * 60_000).toISOString(), worker_claim_id: requestId }, { merge: true });
       return data;
     });
-    const rows = await loadInputRows(ref);
+    const rows = await loadInputRows(ref, plain(job.source).type === "prediction_market" ? 2 : 40);
     sendData(res, {
       forecast_id: ref.id,
       request: job.request,

@@ -7,15 +7,21 @@ import logging
 import numpy as np
 
 from ensemble_forecasting.worker import execute_job
-from ensemble_forecasting.capabilities import MODEL_REGISTRY
+from ensemble_forecasting.capabilities import MODEL_REGISTRY, timesfm_availability
 from .engine import QUANTILES, Quote, digest, iso
+
+
+def default_research_models() -> tuple[str, ...]:
+    models = ("prophet", "toto", "granite", "chronos")
+    return (*models, "timesfm") if timesfm_availability("production")[0] else models
 
 
 def forecast_window(
     window: list[Quote],
     horizon: int,
-    models: tuple[str, ...] = ("prophet", "toto", "granite", "chronos"),
+    models: tuple[str, ...] | None = None,
 ) -> dict:
+    models = default_research_models() if models is None else models
     if (
         not models
         or len(set(models)) != len(models)

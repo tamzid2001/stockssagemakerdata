@@ -13,6 +13,16 @@ from market_research.engine import QUANTILES, Quote, iso, validate_forecast
 from market_research import forecast
 
 
+def test_research_defaults_include_fifth_model_only_with_both_production_gates(monkeypatch):
+    monkeypatch.setenv("TIMESFM_HF_ACCESS_APPROVED", "true")
+    monkeypatch.setenv("TIMESFM_COMMERCIAL_LICENSED", "false")
+    assert len(forecast.default_research_models()) == 4
+    monkeypatch.setenv("TIMESFM_COMMERCIAL_LICENSED", "true")
+    assert forecast.default_research_models() == ("prophet", "toto", "granite", "chronos", "timesfm")
+    monkeypatch.setenv("TIMESFM_HF_ACCESS_APPROVED", "false")
+    assert len(forecast.default_research_models()) == 4
+
+
 @pytest.mark.parametrize("count", [32, 40, 50, 500, 512])
 def test_toto_patch_alignment_preserves_observations_and_masks_padding(count):
     values = np.arange(count, dtype=np.float32)

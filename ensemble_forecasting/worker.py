@@ -83,6 +83,12 @@ def execute_job(
     request = ForecastRequest.from_dict(request_payload)
     validate_request_capabilities(request)
     source = dict(job.get("input") or {})
+    # The authenticated API verifies provider identity, side and real bars before
+    # setting this immutable source. This is not an arbitrary client min-rows flag.
+    if (job.get("source") or {}).get("type") == "prediction_market":
+        minimum_history_rows = 2
+        if request.transform != "logit":
+            raise ValueError("prediction-market jobs require bounded logit forecasting")
     rows = source.get("rows")
     if not isinstance(rows, list):
         raise ValueError("worker input rows are missing")
@@ -117,7 +123,11 @@ def execute_job(
     ]
     forecasts = {}
     model_runs: list[dict[str, Any]] = []
-    warnings: list[str] = []
+    warnings: list[str] = list((job.get("source") or {}).get("warnings") or [])
+    if series.transform == "logit":
+        warnings.append("Probability targets use logit (epsilon 1e-6), ensemble in transformed space, then inverse-logit; no extrapolated probability clipping.")
+    if len(series.values) < 40:
+        warnings.append("Very short history: numerical execution does not establish historical forecasting reliability.")
     failures: list[dict[str, Any]] = []
     total_started = time.monotonic()
     for index, model_id in enumerate(enabled):

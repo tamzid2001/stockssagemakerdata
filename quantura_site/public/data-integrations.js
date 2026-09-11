@@ -325,6 +325,7 @@
     let capabilities = {};
     let page = 1;
     let total = 0;
+    let discoveryVersion = 0;
     const pageSize = 30;
     const source = () => form.querySelector('input[name="pm-source"]:checked')?.value || "polymarket_us";
     const mode = () => form.querySelector('input[name="pm-mode"]:checked')?.value || "normalized";
@@ -351,6 +352,34 @@
       byId("pm-selected-count").textContent = `${selected.size} selected`;
       invalidatePreview();
     }
+    function selectResolvedContracts(contracts, selectOne = false) {
+      if (!contracts.length) throw new Error("No supported contracts were returned for this link.");
+      const provider = contracts[0].source;
+      const radio = form.querySelector(`input[name="pm-source"][value="${provider}"]`);
+      if (!radio) throw new Error("Unsupported provider.");
+      ++discoveryVersion;
+      radio.checked = true;
+      selected.clear(); markets = contracts; total = contracts.length; page = 1;
+      if (selectOne) selected.set(marketKey(contracts[0]), contracts[0]);
+      byId("pm-pregame").checked = false;
+      const end = new Date();
+      byId("pm-history-end").value = localDateTime(end);
+      byId("pm-history-start").value = localDateTime(new Date(end.getTime() - 7 * 86400000));
+      updateCapabilities(); updateSelection(); renderMarkets();
+      status(providerStatus, selectOne ? "Selected side is ready. Choose a date range, preview, then download." : "Link resolved. Select the team/side(s), preview, then download.", "success");
+    }
+    window.addEventListener("quantura:market-selected", event => {
+      if (event.detail?.intent === "download" && event.detail.resource?.contract) selectResolvedContracts([event.detail.resource.contract], true);
+    });
+    byId("pm-resolve-link")?.addEventListener("click", async () => {
+      const button = byId("pm-resolve-link");
+      disable(button, true, "Resolving…");
+      try {
+        const payload = await jsonRequest(`/api/market-search/resolve?${new URLSearchParams({ url: byId("pm-market-link").value.trim() })}`);
+        selectResolvedContracts(Object.values(payload.groups || {}).flat().map(row => row.contract).filter(Boolean));
+      } catch (error) { status(providerStatus, error.message, "error"); }
+      finally { disable(button, false); }
+    });
     function updateCapabilities() {
       const provider = capabilities[source()] || {};
       const allowedTargets = new Set(provider.targets || ["price"]);
@@ -387,13 +416,16 @@
       finally { disable(button, false); }
     }
     async function loadCategories(loadMarketsAfter = false) {
+      const version = ++discoveryVersion;
+      const requestedSource = source();
       category.disabled = true;
       category.innerHTML = '<option value="">Loading categories…</option>';
       marketList.innerHTML = '<div class="loading-state">Loading supported sports from the provider…</div>';
       status(providerStatus, `Loading ${source() === "kalshi" ? "Kalshi" : "Polymarket US"} sports categories…`);
       try {
-        const payload = await jsonRequest(`/api/sports/prediction-markets/categories?source=${encodeURIComponent(source())}`);
-        capabilities[source()] = payload.capabilities || capabilities[source()] || {};
+        const payload = await jsonRequest(`/api/sports/prediction-markets/categories?source=${encodeURIComponent(requestedSource)}`);
+        if (version !== discoveryVersion) return;
+        capabilities[requestedSource] = payload.capabilities || capabilities[requestedSource] || {};
         const categories = Array.isArray(payload.categories) ? payload.categories : [];
         const preferred = categories.find((item) => /(^|\s)mlb($|\s)|baseball/i.test(`${item.id} ${item.label}`)) || categories[0];
         category.innerHTML = categories.length ? categories.map((item) => `<option value="${html(item.id)}"${item.id === preferred?.id ? " selected" : ""}>${html(item.label)}${item.seriesCount ? ` · ${Number(item.seriesCount).toLocaleString()} series` : ""}</option>`).join("") : '<option value="">No supported sports available</option>';
@@ -403,6 +435,7 @@
         marketList.innerHTML = '<div class="empty-state">Choose filters, then find available contracts.</div>';
         if (loadMarketsAfter && categories.length) await loadMarkets();
       } catch (error) {
+        if (version !== discoveryVersion) return;
         category.innerHTML = '<option value="">Categories unavailable</option>';
         marketList.innerHTML = `<div class="error-state">${html(error.message)}</div>`;
         status(providerStatus, error.message, "error");
@@ -434,7 +467,8 @@
         }
         if (input.checked) {
           selected.set(key, contract);
-          const eventEnd = contract.eventStart ? new Date(Math.min(Date.now(), Date.parse(contract.eventStart))) : now;
+          const eventEnd = byId("pm-pregame").checked && contract.eventStart
+            ? new Date(Math.min(Date.now(), Date.parse(contract.eventStart))) : new Date();
           if (Number.isFinite(eventEnd.getTime())) {
             byId("pm-history-end").value = localDateTime(eventEnd);
             byId("pm-history-start").value = localDateTime(new Date(eventEnd.getTime() - 7 * 86400000));
@@ -445,18 +479,21 @@
     }
     async function loadMarkets() {
       if (!category.value) { status(providerStatus, "Choose a sport or league first.", "warning"); return; }
+      const version = ++discoveryVersion;
       const button = byId("pm-find-markets");
       disable(button, true, "Finding markets…");
       marketList.innerHTML = '<div class="loading-state">Discovering provider markets and contracts…</div>';
       const params = new URLSearchParams({ source: source(), category: category.value, status: byId("pm-status").value, search: byId("pm-search").value.trim(), dateFrom: byId("pm-event-from").value, dateTo: byId("pm-event-to").value, page: String(page), pageSize: String(pageSize) });
       try {
         const payload = await jsonRequest(`/api/sports/prediction-markets/markets?${params}`);
+        if (version !== discoveryVersion) return;
         markets = Array.isArray(payload.items) ? payload.items : [];
         total = Number(payload.total || markets.length);
         renderMarkets();
         const coverage = payload.scanLimited ? ` Scanned ${Number(payload.seriesScanned || 0).toLocaleString()} of ${Number(payload.seriesAvailable || 0).toLocaleString()} provider series; refine search or filters for a narrower result.` : "";
         status(providerStatus, markets.length ? `Found ${total.toLocaleString()} matching contracts.${coverage} Select one or more outcomes.` : "No contracts match the current filters.", markets.length ? (payload.providerFailures ? "warning" : "success") : "warning");
       } catch (error) {
+        if (version !== discoveryVersion) return;
         markets = []; total = 0;
         marketList.innerHTML = `<div class="error-state">${html(error.message)}</div>`;
         status(providerStatus, error.message, "error");

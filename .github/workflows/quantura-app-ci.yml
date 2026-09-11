@@ -93,9 +93,9 @@ jobs:
         run: |
           npm run build --prefix quantura_site
 
-      - name: Build Explore backend
+      - name: Build and test Explore backend
         run: |
-          npm run build --prefix quantura_site/functions_explore
+          npm test --prefix quantura_site/functions_explore
 
       - name: Set up Java for Firebase emulators
         uses: actions/setup-java@v5

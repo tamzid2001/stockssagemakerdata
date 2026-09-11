@@ -684,6 +684,7 @@ select option, select optgroup { background: var(--popover) !important; color: v
 .forecast-hero h1, .forecast-detail-heading h1 { font-size: clamp(1.8rem, 4vw, 3.1rem); line-height: 1.1; }
 .section-title, .panel-header { margin-bottom: 12px; }
 .panel-header h2, .section-title h2 { font-size: clamp(1.25rem, 2vw, 1.8rem); margin-block: 4px 8px; }
+.panel-header p { margin-block: 0; }
 .forecast-card { min-height: 0 !important; padding: 16px !important; }
 .forecast-card-probability { margin-block: 12px 8px; font-size: 2.6rem; }
 .forecast-section-heading { margin-bottom: 12px; align-items: start; gap: 12px; flex-wrap: wrap; }
@@ -695,10 +696,29 @@ select option, select optgroup { background: var(--popover) !important; color: v
 .cta, button.cta, a.cta { min-height: var(--control-height); padding: 7px 12px; min-width: 0; line-height: 1.2; }
 .cta.small { padding: 6px 10px; }
 .hero-actions { gap: 8px; flex-wrap: wrap; }
-.form-grid input, .form-grid select, .market-search-form input, .market-search-form select { width: 100%; }
+.form-grid input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), .form-grid select, .market-search-form input, .market-search-form select { width: 100%; }
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { padding-block: 6px; }
 .ensemble-model-grid { gap: 8px; }
-.ensemble-model-card { padding: 10px; }
+.ensemble-model-card { padding: 8px; gap: 4px; }
+.ensemble-model-capability { min-height: 0; }
+.ensemble-model-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); }
+input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-width: 16px; min-height: 16px; padding: 0; margin: 0; flex: 0 0 16px; accent-color: var(--primary); }
+.market-search-heading, .market-mode-controls, .market-link-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.market-search-heading { justify-content: space-between; margin-bottom: 6px; }
+.market-search-heading h2 { margin: 0; }
+.market-link-toolbar > .field { flex: 1 1 220px; }
+.market-mode-controls [aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+.ensemble-model-weight { display: flex; align-items: center; gap: 6px; }
+.ensemble-model-weight input { max-width: 80px; }
+.ensemble-model-fieldset, .ensemble-quantile-fieldset { padding: 8px 0; margin: 8px 0; }
+.ensemble-forecast-body { padding: 10px; }
+.panel[data-panel="forecast"] > .ensemble-forecast-shell { margin-top: 8px; }
+.market-timing { color: var(--success); }
+@media (max-width: 760px) {
+  .toggle-select-option, .market-mode-controls button, .ensemble-model-toggle, .ensemble-quantile-chips label { min-height: 44px; }
+  .ensemble-model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ensemble-model-name { font-size: .85rem; }
+}
 .ensemble-model-card .small { line-height: 1.4; }
 .forecast-workspace-section, .data-results-panel { margin-top: 12px; }
 .table-wrap, .responsive-table-wrap { max-width: 100%; overflow: auto; overscroll-behavior: contain; }

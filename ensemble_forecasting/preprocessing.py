@@ -36,12 +36,17 @@ def prepare_series(
     if not np.isfinite(values).all():
         raise ValueError("target contains NaN/inf")
     requested_transform = str(transform).lower()
-    if requested_transform not in {"auto", "log", "none"}:
-        raise ValueError("transform must be auto, log, or none")
+    if requested_transform not in {"auto", "log", "none", "logit"}:
+        raise ValueError("transform must be auto, log, none, or logit")
     chosen = "log" if requested_transform == "auto" and bool(np.all(values > 0)) else requested_transform
     if chosen == "auto":
         chosen = "none"
-    if chosen == "log":
+    if chosen == "logit":
+        if bool(np.any((values < 0) | (values > 1))):
+            raise ValueError("logit transform requires probabilities between zero and one")
+        stable = np.clip(values.astype(np.float64), 1e-6, 1 - 1e-6)
+        transformed = (np.log(stable) - np.log1p(-stable)).astype(np.float32)
+    elif chosen == "log":
         if bool(np.any(values <= 0)):
             raise ValueError("log transform requires strictly positive target values")
         transformed = np.log(values).astype(np.float32)

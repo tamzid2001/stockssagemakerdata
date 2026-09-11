@@ -12,6 +12,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-ensemble-forecast.lock ./
+COPY market_research/requirements.lock ./market_research/requirements.lock
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements-ensemble-forecast.lock
 

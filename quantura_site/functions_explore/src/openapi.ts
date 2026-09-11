@@ -629,7 +629,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
             prediction_length: { type: "integer", minimum: 1, maximum: 512, default: 30 },
             horizon_mode: { type: "string", enum: ["trading_sessions", "calendar_days", "frequency_periods"] },
             quantiles: { type: "array", minItems: 1, maxItems: 21, uniqueItems: true, items: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 } },
-            transform: { type: "string", enum: ["auto", "log", "none"], default: "auto" },
+            transform: { type: "string", enum: ["auto", "log", "none", "logit"], default: "auto", description: "Prediction-market sources enforce bounded logit forecasting, with epsilon 1e-6 at transform boundaries." },
             context_length: { type: ["integer", "null"], minimum: 40, maximum: 16384, default: 512 },
             model_failure_policy: { type: "string", enum: ["fail", "renormalize"], default: "fail" },
             frequency: { type: "string", default: "1D" },
@@ -653,6 +653,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
                 source: {
                   oneOf: [
                     { type: "object", required: ["type", "symbol"], properties: { type: { const: "ticker" }, symbol: { type: "string" }, provider: { type: "string", enum: ["auto", "alpaca", "yahoo"] }, start: { type: "string", format: "date" }, field: { type: "string", enum: ["open", "high", "low", "close", "volume"] } } },
+                    { type: "object", additionalProperties: false, required: ["type", "provider", "symbol", "contract_id"], properties: { type: { const: "prediction_market" }, provider: { type: "string", enum: ["polymarket_us", "kalshi"] }, symbol: { type: "string", description: "Provider market slug (Polymarket US) or market ticker (Kalshi)." }, contract_id: { type: "string", description: "Exact selected side ID from market lookup; verified server-side." }, frequency: { type: "string", enum: ["1min", "1h", "1D"], default: "1min" } } },
                     { type: "object", required: ["type", "dataset_id", "timestamp_column", "target_column"], properties: { type: { const: "workspace_dataset" }, dataset_id: { type: "string" }, timestamp_column: { type: "string" }, target_column: { type: "string" }, frequency: { type: "string" }, timezone: { type: "string" } } },
                     { type: "object", required: ["type", "rows"], properties: { type: { const: "series" }, rows: { type: "array", maxItems: 10000, items: { type: "object" } }, timestamp_column: { type: "string" }, target_column: { type: "string" }, frequency: { type: "string" }, timezone: { type: "string" } } },
                   ],
