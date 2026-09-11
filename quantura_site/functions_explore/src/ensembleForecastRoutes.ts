@@ -150,6 +150,7 @@ export function publicModelCapabilities(plan: PlanKey = "free"): JsonRecord {
       quantile_support: source.quantileSupport,
       max_prediction_length: source.maxPredictionLength,
       max_context_length: source.maxContextLength,
+      minimum_observed_context: source.minimumObservedContext || 2,
       default_device: source.defaultDevice,
       license: source.license || null,
     };
@@ -269,6 +270,20 @@ function normalizeSeriesRows(rows: unknown, timestampColumn: string, targetColum
   const output = [...byTimestamp.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([timestamp, target]) => ({ timestamp, target }));
   if (output.length < minimumRows) throw new Error("history_minimum_rows_required");
   return output;
+}
+
+export function validateModelHistory(configuration: NormalizedConfiguration, observedRows: number): void {
+  const enabled = APPROVED_MODELS.filter(id => configuration.models[id].enabled && configuration.models[id].weight > 0);
+  const contextRows = Math.min(observedRows, configuration.context_length || 512);
+  const tooShort = enabled.filter(id => contextRows < Number((modelRegistry.models as Record<string, any>)[id].minimumObservedContext || 2));
+  if (tooShort.length && configuration.failure_policy === "fail") {
+    const descriptions = tooShort.map(id => `${(modelRegistry.models as Record<string, any>)[id].name} needs at least ${(modelRegistry.models as Record<string, any>)[id].minimumObservedContext || 2} observed values`);
+    throw new PredictionMarketDataError("model_context_too_short", `${descriptions.join("; ")}; this source has ${contextRows}. Choose another model, wait for more history, or explicitly permit renormalization. Missing observations are never fabricated.`, 422);
+  }
+  const usable = enabled.filter(id => !tooShort.includes(id));
+  if (configuration.quantiles.some(q => !usable.some(id => modelSupportsQuantile(id, q)))) {
+    throw new PredictionMarketDataError("model_history_quantile_unavailable", "No enabled positive-weight model with sufficient observed history supports every requested quantile. Choose another model or use more history.", 422);
+  }
 }
 
 function parseCsv(textValue: string): string[][] {
@@ -584,6 +599,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(body, access.plan);
     const materialized = await materializeSource(options, principal, workspaceId, body.source);
+    validateModelHistory(configuration, materialized.rows.length);
     if (materialized.source.type === "prediction_market" && configuration.horizon_mode !== "frequency_periods") throw new PredictionMarketDataError("horizon_mode_unsupported", "Prediction markets use frequency periods, not equity trading sessions.", 422);
     const sourceHash = datasetHash(materialized.rows, materialized.source);
     const normalizedRequest = {
@@ -684,8 +700,9 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
     requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(plain(original.request), access.plan);
-    await enforceComputeQuota(options, access.plan, workspaceId);
     const rows = await loadInputRows(originalRef, plain(original.source).type === "prediction_market" ? 2 : 40);
+    validateModelHistory(configuration, rows.length);
+    await enforceComputeQuota(options, access.plan, workspaceId);
     const ref = options.db.collection(JOBS).doc();
     const now = new Date().toISOString();
     const checkpoints = plain(original.model_checkpoints);

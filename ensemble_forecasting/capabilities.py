@@ -95,6 +95,7 @@ def public_capabilities(runtime_mode: str = "production") -> dict[str, Any]:
                 "quantile_support": value["quantileSupport"],
                 "max_prediction_length": value["maxPredictionLength"],
                 "max_context_length": value["maxContextLength"],
+                "minimum_observed_context": value.get("minimumObservedContext", 2),
                 "default_device": value["defaultDevice"],
                 "license": value.get("license"),
             }

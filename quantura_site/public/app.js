@@ -14432,7 +14432,8 @@
 
   const describeEnsembleCapability = (model) => {
     const support = model?.quantile_support || {};
-    if (support.type === "bounded_native") return "Native P10–P90; interpolation only within that range.";
+    const history = Number(model?.minimum_observed_context) > 2 ? ` Requires ${Number(model.minimum_observed_context)} observed values.` : "";
+    if (support.type === "bounded_native") return `Native P10–P90; interpolation only within that range.${history}`;
     if (support.type === "requested_verified_native_range") return "Requested quantiles, verified against the loaded checkpoint.";
     return "Requested quantiles supported.";
   };
