@@ -105,6 +105,33 @@ def test_custom_quantile_sorting_and_deduplication() -> None:
     assert normalize_quantiles([0.75, 0.123456, 0.5, 0.123456, 0.1]) == (0.1, 0.123456, 0.5, 0.75)
 
 
+def test_prediction_market_short_history_uses_bounded_transform() -> None:
+    rows = [
+        {"timestamp": "2026-09-11T12:00:00Z", "target": 0.0},
+        {"timestamp": "2026-09-11T12:01:00Z", "target": 1.0},
+    ]
+    job = {
+        "source": {"type": "prediction_market", "provider": "kalshi"},
+        "request": {
+            "prediction_length": 30, "horizon_mode": "frequency_periods",
+            "frequency": "1min", "calendar": "NONE", "transform": "logit",
+            "quantiles": [0.01, 0.1, 0.5, 0.9, 0.99],
+            "models": {"prophet": {"enabled": True, "weight": 1}},
+        },
+        "input": {"rows": rows},
+    }
+    result = execute_job(job, mock=True)
+    assert len(result["predictions"]) == 30
+    assert result["predictions"][0]["timestamp"] == "2026-09-11T12:02:00Z"
+    for row in result["predictions"]:
+        values = list(row["quantiles"].values())
+        assert all(0 <= value <= 1 for value in values)
+        assert values == sorted(values)
+    assert any("Very short history" in warning for warning in result["warnings"])
+    with pytest.raises(ValueError, match="probabilities"):
+        prepare_series([{**row, "target": 2} for row in rows], minimum_rows=2, frequency="1min", transform="logit")
+
+
 def test_monotonic_rearrangement() -> None:
     repaired = monotonic_rearrangement(np.array([[3.0, 1.0], [1.0, 2.0], [2.0, 3.0]]))
     assert repaired.tolist() == [[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]

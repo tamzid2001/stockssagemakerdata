@@ -53,12 +53,14 @@ def build_ensemble(
     warnings = []
     if not np.array_equal(repaired_transformed, combined):
         warnings.append("Quantile crossing was repaired with deterministic monotonic rearrangement.")
-    if chosen_transform == "log":
+    if chosen_transform == "logit":
+        repaired = np.exp(-np.logaddexp(0, -repaired_transformed))
+    elif chosen_transform == "log":
         repaired = np.exp(repaired_transformed)
     elif chosen_transform == "none":
         repaired = repaired_transformed
     else:
-        raise ValueError("chosen_transform must be log or none")
+        raise ValueError("chosen_transform must be log, logit, or none")
     if not np.isfinite(repaired).all():
         raise ValueError("inverse-transformed ensemble contains NaN/inf")
     return EnsembleResult(

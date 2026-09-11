@@ -118,6 +118,43 @@ test('market selector does not render late responses over a newer query', async 
   assert.match(w.document.getElementById('market-search-status').textContent,/^0 results/);d.window.close();
 });
 
+test('live moneylines browse without a search term and select the exact side for forecasts or downloads', async () => {
+  const d=dom(page('forecasting.html')); const w=d.window; let request; const selections=[];
+  w.__quanturaSetPanel=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
+  w.addEventListener('quantura:market-selected',event=>selections.push(event.detail));
+  const contract={source:'polymarket_us',contractId:'side-b',side:'short',eventTitle:'A vs B'};
+  w.fetch=async url=>{request=url;return {ok:true,json:async()=>({count:1,groups:{polymarket_us:[{resource_type:'prediction_market_contract',resource_id:'polymarket_us:side-b',source:'polymarket_us',symbol:'game',contract_id:'side-b',outcome:'B',name:'B · A vs B',status:'open',timing:'live',contract}]}})};};
+  w.eval(source('market-search.js'));w.document.querySelector('[data-market-mode="live"]').click();await tick();
+  assert.match(request,/mode=live/);assert.equal(w.document.getElementById('market-search-query').required,false);
+  w.document.querySelector('[data-market-action="prediction-forecast"]').click();
+  assert.equal(selections[0].intent,'forecast');assert.equal(selections[0].resource.contract.side,'short');
+  w.document.getElementById('market-search-query').value='https://polymarket.us/event/game';
+  w.document.getElementById('market-search-form').dispatchEvent(new w.Event('submit'));await tick();
+  assert.match(request,/market-search\/resolve\?url=/);
+  w.document.querySelector('[data-market-action="prediction-download"]').click();
+  assert.equal(selections[1].intent,'download'); assert.equal(w.QuanturaMarketSelection.contract_id,'side-b');
+  d.window.close();
+});
+
+test('primary form builds prediction-market minute and single-model requests without treating contracts as tickers', () => {
+  const d=dom(page('forecasting.html'));const w=d.window;
+  w.document.getElementById('ensemble-model-list').innerHTML='<article data-ensemble-model="prophet"><input name="ensemble_model_enabled" type="checkbox" checked><input data-model-weight="prophet" value="1"></article>';
+  w.QuanturaMarketSelection={source:'kalshi',symbol:'KXGAME-TEAM',contract_id:'KXGAME-TEAM:yes'};
+  w.document.getElementById('ensemble-source-type').value='prediction_market';
+  w.eval(`const ui={ensembleForecastForm:document.getElementById('ensemble-forecast-form'),ensembleModelList:document.getElementById('ensemble-model-list')};
+    const ensembleUiState={capabilities:{models:[{id:'prophet',available:true}]}};
+    const state={activeWorkspaceId:'workspace-fixture',user:{uid:'user-fixture'},tickerContext:{}};
+    const ensembleQuantileKey=v=>String(Number(v));const normalizeTicker=v=>String(v).trim().toUpperCase();
+    ${source('app.js').split('  const getEnsembleSelections =')[1].split('  const renderEnsembleProgress =')[0].replace(/^/, 'const getEnsembleSelections =')}
+    window.build=buildEnsembleRequest;`);
+  const request=w.build();assert.equal(request.source.type,'prediction_market');assert.equal(request.source.contract_id,'KXGAME-TEAM:yes');
+  assert.equal(request.frequency,'1min');assert.equal(request.horizon_mode,'frequency_periods');assert.equal(request.calendar,'NONE');assert.equal(request.transform,'logit');
+  assert.deepEqual(JSON.parse(JSON.stringify(request.models)),{prophet:{enabled:true,weight:1}});
+  w.document.getElementById('ensemble-source-type').value='ticker';w.document.getElementById('ensemble-ticker').value='MSFT';
+  const stock=w.build();assert.equal(stock.source.symbol,'MSFT');assert.equal(stock.source.limit,500);assert.equal(stock.source.start,undefined);
+  d.window.close();
+});
+
 test('Quantura Forecast is the expanded primary form with exactly one submission action', () => {
   const d=dom(page('forecasting.html')); const document=d.window.document;
   const panel=document.querySelector('[data-panel="forecast"]');

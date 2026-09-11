@@ -123,10 +123,11 @@
 	            <div class="container">
 	              <section class="market-search-workspace" aria-labelledby="market-search-title">
                     <div class="market-search-heading">
-                      <h2 id="market-search-title">Search markets</h2>
+                      <h2 id="market-search-title">Select a market</h2>
+                      <div class="market-mode-controls" role="group" aria-label="Market discovery"><button type="button" class="task-chip" data-market-mode="open" aria-pressed="true">Markets</button><button type="button" class="task-chip" data-market-mode="live" aria-pressed="false">Live moneylines</button><button type="button" class="task-chip" data-market-mode="any" aria-pressed="false">Include historical</button></div>
                     </div>
                     <form id="market-search-form" class="market-search-form">
-                      <div class="field"><label class="label" for="market-search-query">Search asset or market</label><input id="market-search-query" type="search" minlength="2" placeholder="Company, symbol, FX pair, commodity, rate, team, or event" required /></div>
+                      <div class="field"><label class="label" for="market-search-query">Ticker, team, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, Yankees, or paste a Polymarket US / Kalshi link" required /></div>
                       <div class="field"><label class="label" for="market-search-source">Source</label><select id="market-search-source"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="polymarket_us">Polymarket US</option><option value="kalshi">Kalshi</option></select></div>
                       <button class="cta" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Search</span></button>
                     </form>
@@ -137,19 +138,18 @@
 	                <div class="studio-panel">
                   <section class="panel" data-panel="forecast">
 	                    <div class="panel-header">
-	                      <div class="eyebrow">Unified quantitative workspace</div>
 	                      <h2>Quantura Forecast</h2>
-	                      <p class="small">Multi-model probabilistic forecasting. Configure once, run asynchronously, and download your final ensemble.</p>
+	                      <p class="small">Choose models and a horizon. Receive one probabilistic ensemble.</p>
 	                    </div>
                     <section class="ensemble-forecast-shell forecast-workspace-section" id="ensemble-forecast-settings" aria-label="Quantura Forecast configuration">
                       <div class="ensemble-forecast-body">
-                        <p class="small muted">Choose your models, weights, quantiles, and horizon. Availability follows your workspace access and model licensing.</p>
                         <form id="ensemble-forecast-form">
                           <div class="form-grid">
                             <div class="field">
                               <label class="label" for="ensemble-source-type">Historical data source</label>
                               <select id="ensemble-source-type" name="source_type">
                                 <option value="ticker">Market ticker</option>
+                                <option value="prediction_market">Selected prediction market</option>
                                 <option value="workspace_dataset">Workspace dataset</option>
                               </select>
                             </div>
@@ -157,6 +157,8 @@
                               <label class="label" for="ensemble-ticker">Ticker</label>
                               <input id="ensemble-ticker" name="ticker" placeholder="AAPL" autocomplete="off" />
                             </div>
+                            <div class="field" data-ensemble-source="prediction_market" hidden><span class="label">Selected team / side</span><strong id="ensemble-selected-market">Choose a market above</strong></div>
+                            <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-market-frequency">Observed bars</label><select id="ensemble-market-frequency" name="market_frequency"><option value="1min">Minute</option><option value="1h">Hourly</option><option value="1D">Daily</option></select><span class="small muted">Up to 500 real bars, including pregame history. Missing bars are never invented.</span></div>
                             <div class="field" data-ensemble-source="ticker">
                               <label class="label" for="ensemble-provider">Market-data provider</label>
                               <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
@@ -403,6 +405,7 @@
                         <article class="provider-status-card" id="pm-status-kalshi"><span>Kalshi</span><strong>Checking discovery…</strong></article>
                       </div>
                       <div class="integration-status" id="pm-provider-status" role="status" aria-live="polite">Choose a source to begin.</div>
+                      <div class="market-link-toolbar"><div class="field"><label class="label" for="pm-market-link">Download from a market link</label><input id="pm-market-link" type="url" maxlength="2048" placeholder="Paste a Polymarket US or Kalshi market/event link" /></div><button id="pm-resolve-link" class="cta secondary" type="button">Find contracts</button></div>
 
                       <form id="prediction-market-form" autocomplete="off">
                         <section class="workflow-step-card" aria-labelledby="pm-step-source-title">

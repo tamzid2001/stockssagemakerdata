@@ -8,6 +8,8 @@ import numpy as np
 from .adapters.toto import TotoAdapter
 from .preprocessing import prepare_series
 from .schemas import APPROVED_MODELS, ForecastRequest
+from .capabilities import timesfm_availability
+from .worker import execute_job
 
 
 def run_toto_smoke() -> dict[str, object]:
@@ -50,8 +52,33 @@ def run_toto_smoke() -> dict[str, object]:
     }
 
 
+def run_five_model_smoke() -> dict[str, object]:
+    """Strict inference verification, not a predictive-quality benchmark."""
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    result = execute_job({
+        "request": {
+            "prediction_length": 2, "horizon_mode": "frequency_periods",
+            "frequency": "1min", "quantiles": [.01, .1, .25, .5, .75, .9, .99],
+            "transform": "log", "context_length": 64, "failure_policy": "fail",
+            "models": {model: {"enabled": True, "weight": 1} for model in APPROVED_MODELS},
+        },
+        "input": {"frequency": "1min", "rows": [
+            {"timestamp": (start + timedelta(minutes=i)).isoformat(), "target": 100 + .1 * i + np.sin(i / 4)}
+            for i in range(96)
+        ]},
+        "runtime_mode": "production",
+    })
+    completed = [m for m in result["models"] if m["status"] == "completed"]
+    if len(completed) != 5:
+        raise RuntimeError("Five-model smoke requires five successful participants")
+    return {"status": "passed", "models": completed,
+            "effective_weights_by_quantile": result["effective_weights_by_quantile"],
+            "runtime_seconds": result["runtime_seconds"], "performance_claim": False}
+
+
 def main() -> int:
-    print(json.dumps(run_toto_smoke(), sort_keys=True))
+    result = run_five_model_smoke() if timesfm_availability("production")[0] else run_toto_smoke()
+    print(json.dumps(result, sort_keys=True))
     return 0
 
 

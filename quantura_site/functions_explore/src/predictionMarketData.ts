@@ -1,5 +1,6 @@
 import { constants, createPrivateKey, sign } from "node:crypto";
 import { Router } from "express";
+import { parseMarketLink } from "./marketLink";
 import { KALSHI_API_BASE, kalshiPrice, kalshiCandlePrice, kalshiMilestoneStart } from "./kalshiProtocol";
 import {
   PolymarketMlbError,
@@ -1110,7 +1111,7 @@ export function predictionDatasetCsv(dataset: PredictionMarketDataset): string {
   return [dataset.headers.join(","), ...dataset.rows.map((row) => dataset.headers.map((header) => csvCell(row[header] ?? null)).join(","))].join("\r\n") + "\r\n";
 }
 
-async function prepareDataset(body: JsonRecord): Promise<PredictionMarketDataset> {
+export async function prepareDataset(body: JsonRecord): Promise<PredictionMarketDataset> {
   const source = providerSource(body.source);
   const selectedFrequency = frequency(body.frequency || "1m");
   const mode = exportMode(body.mode || "normalized");
@@ -1167,6 +1168,137 @@ export async function resolveKalshiContract(selected: PredictionMarketContract):
     .find(contract => contract.side === selected.side);
   if (!verified) throw new PredictionMarketDataError("unsupported_market", "This export supports binary Kalshi contracts only.", 422);
   return remember(key, verified, 60_000);
+}
+
+function polymarketEventContracts(event: JsonRecord): PredictionMarketContract[] {
+  const league = asRecord(asRecord(event.primaryTag)?.league);
+  return normalizePolymarketEvents({ events: [event] }, {
+    id: text(league?.slug || "sports"), providerId: "", label: text(league?.name || "Sports"), sport: text(league?.name || "Sports"),
+  });
+}
+
+/** A provider-confirmed full-game winner, not a spread, total, or player prop. */
+export function isMoneyline(contract: PredictionMarketContract): boolean {
+  if (contract.source === "polymarket_us") return /^(SPORTS_MARKET_TYPE_(MONEYLINE|DRAWABLE_OUTCOME)|moneyline)$|_full_game_(moneyline|winner)$/i.test(contract.marketType || "");
+  return /(?:GAME|MATCH|MONEYLINE)$/.test(contract.league) && !/(1H|2H|F3|F5|QUARTER|PERIOD|SPREAD|TOTAL)/.test(contract.league);
+}
+
+/** Kalshi's open status means tradable, not necessarily an in-progress game. */
+export function gameTiming(contract: PredictionMarketContract, now = Date.now()): "live" | "in_progress" | "upcoming" | "closed" | "open" {
+  if (["closed", "settled"].includes(contract.status)) return "closed";
+  if (contract.live === true) return "live";
+  const start = Date.parse(contract.eventStart || "");
+  if (start > now) return "upcoming";
+  if (contract.source === "kalshi" && Number.isFinite(start) && start <= now && now - start < 18 * 3600_000 && contract.status === "open") return "in_progress";
+  return "open";
+}
+
+/** Shared by URL selection and job materialization. Only fixed provider origins. */
+export async function resolveMarketIdentifier(source: PredictionMarketSource, identifier: string, kind: "event" | "market" | "either" = "either"): Promise<PredictionMarketContract[]> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,219}$/.test(identifier)) throw new PredictionMarketDataError("market_identifier_invalid", "Choose a valid provider market.", 422);
+  if (source === "kalshi") {
+    const id = identifier.toUpperCase();
+    if (kind !== "market") {
+      const event = await fetchJson(`${KALSHI_API}/events/${encodeURIComponent(id)}?with_nested_markets=true`, {}, [404]);
+      if (event.status !== 404) {
+        const milestones = await fetchJson(queryUrl(`${KALSHI_API}/milestones`, { related_event_ticker: id, limit: 500 }));
+        const rows = normalizeKalshiEvent({ ...event.payload, milestones: milestones.payload.cursor ? [] : milestones.payload.milestones }, text(asRecord(event.payload.event)?.category));
+        if (rows.length) return rows;
+      }
+    }
+    const yes = await resolveKalshiContract({ providerSymbol: id, side: "yes" } as PredictionMarketContract);
+    const no = await resolveKalshiContract({ providerSymbol: id, side: "no" } as PredictionMarketContract);
+    return [yes, no];
+  }
+  if (kind !== "market") {
+    const event = await fetchJson(`${POLYMARKET_GATEWAY}/v1/events/slug/${encodeURIComponent(identifier)}`, {}, [404]);
+    if (event.status !== 404 && asRecord(event.payload.event)) return polymarketEventContracts(asRecord(event.payload.event)!);
+  }
+  const { payload } = await fetchJson(`${POLYMARKET_GATEWAY}/v1/market/slug/${encodeURIComponent(identifier)}`);
+  const market = asRecord(payload.market);
+  if (!market) throw new PredictionMarketDataError("market_not_found", "The provider did not return this market.", 404);
+  // Market-by-slug does not promise a parent event. Keep an explicit market-only
+  // reference rather than inventing a parent event ID or game-live flag.
+  return polymarketEventContracts({ id: `market:${text(market.id)}`, title: market.title || market.question, markets: [market], closed: market.closed });
+}
+
+export async function resolveMarketLink(value: unknown): Promise<PredictionMarketContract[]> {
+  let parsed: ReturnType<typeof parseMarketLink>;
+  try { parsed = parseMarketLink(value); } catch {
+    throw new PredictionMarketDataError("market_link_invalid", "Paste an HTTPS market or event link from polymarket.us or kalshi.com. Polymarket.com is a different provider.", 422);
+  }
+  const contracts = await resolveMarketIdentifier(parsed.source, parsed.identifier, parsed.kind);
+  if (!contracts.length) throw new PredictionMarketDataError("market_not_found", "No supported contracts were returned for this link.", 404);
+  const moneylines = contracts.filter(isMoneyline);
+  // Event pages often contain hundreds of player props; prioritize full-game
+  // outcomes. A direct prop-market URL still resolves its own two sides.
+  return (moneylines.length ? moneylines : contracts).slice(0, 100);
+}
+
+const liveSearchPending = new Map<string, Promise<PredictionMarketContract[]>>();
+/** Bounded, shared server metadata cache; no full history in browser autocomplete. */
+export async function discoverForecastMarkets(source: PredictionMarketSource, query: string, mode: "live" | "open" | "any" = "open"): Promise<PredictionMarketContract[]> {
+  const key = `forecast-discovery:${source}:${mode}:${source === "kalshi" ? query.toLowerCase() : ""}`;
+  const existing = cached<PredictionMarketContract[]>(key);
+  if (existing) return existing;
+  if (liveSearchPending.has(key)) return liveSearchPending.get(key)!;
+  const pending = (async () => {
+    let contracts: PredictionMarketContract[];
+    if (source === "polymarket_us") {
+      const { payload } = await fetchJson(queryUrl(`${POLYMARKET_GATEWAY}/v1/events`, {
+        limit: 100, closed: false, ...(mode === "live" ? { live: true } : {}), categories: "sports", orderBy: "id", orderDirection: "desc",
+      }));
+      contracts = asArray(payload.events).map(asRecord).filter((e): e is JsonRecord => !!e).flatMap(polymarketEventContracts);
+    } else {
+      const index = await kalshiSeriesIndex();
+      const series = [...index.tagsBySeries.keys()].filter(id => /(?:GAME|MATCH|MONEYLINE)$/.test(id))
+        .sort((a, b) => {
+          const score = (id: string) => `${id} ${(index.tagsBySeries.get(id) || []).join(" ")}`.toLowerCase().includes(query.toLowerCase()) ? -1 : /MLB|NFL|NBA|NHL|WNBA/.test(id) ? 0 : 1;
+          return score(a) - score(b) || a.localeCompare(b);
+        }).slice(0, 16);
+      const pages = await Promise.allSettled(series.map(id => fetchJson(queryUrl(`${KALSHI_API}/events`, { series_ticker: id, status: "open", limit: 200, with_nested_markets: true, with_milestones: true }))));
+      if (pages.length && pages.every(page => page.status === "rejected")) throw new PredictionMarketDataError("provider_unavailable", "Kalshi discovery is temporarily unavailable.", 502);
+      contracts = pages.flatMap(page => page.status === "fulfilled" ? asArray(page.value.payload.events).map(asRecord).filter((e): e is JsonRecord => !!e)
+        .flatMap(event => normalizeKalshiEvent({ event, milestones: page.value.payload.milestones }, "Sports")) : []);
+    }
+    const output = contracts.filter(c => isMoneyline(c) && (mode !== "live" || ["live", "in_progress"].includes(gameTiming(c))))
+      .sort((a, b) => Number(["live", "in_progress"].includes(gameTiming(b))) - Number(["live", "in_progress"].includes(gameTiming(a))));
+    return remember(key, output, 30_000);
+  })();
+  liveSearchPending.set(key, pending);
+  try { return await pending; } finally { liveSearchPending.delete(key); }
+}
+
+export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string) {
+  if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
+  const contracts = await resolveMarketIdentifier(source, symbol, "market");
+  const contract = contracts.find(c => c.contractId === contractId);
+  if (!contract) throw new PredictionMarketDataError("contract_not_found", "Select a team/side belonging to this market.", 422);
+  if (["closed", "settled"].includes(contract.status)) throw new PredictionMarketDataError("market_resolved", "This market has ended. Download its history instead of creating a future forecast.", 422);
+  const now = Date.now();
+  const interval = frequencyValue === "1min" ? 60_000 : frequencyValue === "1h" ? 3600_000 : 86400_000;
+  const start = Math.max(Date.parse(contract.availableFrom || "") || 0, now - Math.min(90 * 86400_000, 1500 * interval));
+  const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", pregameOnly: false });
+  // Keep actual observations; never fill missing minutes. Foundation models need
+  // regular inputs, so use the latest contiguous suffix and disclose gaps.
+  const { rows, observed_rows } = forecastObservationWindow(dataset.rows, interval, now);
+  return { rows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows,
+    warnings: rows.length < 500 ? [`Using ${rows.length} consecutive observed bars of up to 500; unavailable intervals are not filled.`] : [] };
+}
+
+export function forecastObservationWindow(input: Array<Record<string, unknown>>, interval: number, now: number) {
+  const unique = new Map<number, number>();
+  for (const row of input) {
+    const timestamp = Date.parse(String(row.timestamp));
+    const value = finite(row.price);
+    if (Number.isFinite(timestamp) && timestamp <= now && value !== null && value >= 0 && value <= 1) unique.set(timestamp, value);
+  }
+  const observed = [...unique].sort((a, b) => a[0] - b[0]).map(([timestamp, target]) => ({ timestamp: new Date(timestamp).toISOString(), target }));
+  let begin = observed.length - 1;
+  while (begin > 0 && Date.parse(observed[begin].timestamp) - Date.parse(observed[begin - 1].timestamp) === interval && observed.length - begin < 500) begin--;
+  const rows = observed.slice(Math.max(0, begin));
+  if (rows.length < 2) throw new PredictionMarketDataError("history_minimum_rows_required", "This side needs at least two consecutive observed bars. Try another interval or retry when more history arrives.", 422);
+  return { rows, observed_rows: observed.length };
 }
 
 function polymarketAuthHeaders(method: string, path: string): Record<string, string> | null {

@@ -1038,6 +1038,7 @@ huggingface-hub==1.30.0 \
     #   -r market_research/requirements.in
     #   accelerate
     #   datasets
+    #   timesfm
     #   tokenizers
     #   toto-2
     #   transformers
@@ -1750,6 +1751,7 @@ numpy==2.5.2 \
     #   scikit-learn
     #   scipy
     #   stanio
+    #   timesfm
     #   torchmetrics
     #   toto-2
     #   transformers
@@ -2579,6 +2581,7 @@ safetensors==0.8.0 \
     --hash=sha256:fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774
     # via
     #   accelerate
+    #   timesfm
     #   toto-2
     #   transformers
 scikit-learn==1.7.2 \
@@ -2708,6 +2711,10 @@ threadpoolctl==3.6.0 \
     --hash=sha256:43a0b8fd5a2928500110039e43a5eed8480b918967083ea48dc3ab9f13c4a7fb \
     --hash=sha256:8ab8b4aa3491d812b623328249fab5302a68d2d71745c8a4c719a2fcaba9f44e
     # via scikit-learn
+timesfm==3.0.0 \
+    --hash=sha256:0ad3e6b2226a85d665ebca3b5711b875cdef816a6f8ae0d3acbd5361f3e4b63d \
+    --hash=sha256:cecc808135cdada0d8222a42c33e876481c2048f986de090eac58ce46223e729
+    # via -r market_research/requirements.in
 tokenizers==0.23.2 \
     --hash=sha256:12f0835dc2ee694746a76adf7b1567d4346a4a502ebe93fb1f5f80ea49799b78 \
     --hash=sha256:2e96f5699d5249c9c64aa8412e044f727aae3a4098cf830f9901ec1afc361cde \

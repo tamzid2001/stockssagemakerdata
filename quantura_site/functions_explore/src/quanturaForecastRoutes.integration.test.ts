@@ -7,8 +7,70 @@ import type { Server } from "node:http";
 import { registerQuanturaForecastRoutes } from "./quanturaForecastRoutes";
 import { hashForecastApiKey, normalizeForecastDraft } from "./quanturaForecasts";
 import { quanturaExploreApi } from "./index";
+import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
+import { generatePlatformApiKey, hashPlatformApiKey, workspaceMembershipId } from "./apiAccess";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+test("ensemble job persists inputs, claims two-bar market history, downloads, and checks current membership", { skip: !emulatorAvailable }, async () => {
+  const firebaseApp = admin.initializeApp({ projectId: "quantura-forecast-integration" }, `ensemble-route-test-${Date.now()}`);
+  const db = firebaseApp.firestore();
+  const workspace = `ws_ensemble_${Date.now()}`;
+  const owner = `${workspace}_owner`, viewer = `${workspace}_viewer`;
+  const oldEnv = { ...process.env };
+  process.env.QUANTURA_API_KEY_PEPPER = "integration-only-pepper-with-at-least-32-characters";
+  process.env.QUANTURA_ENSEMBLE_WORKER_MODE = "manual";
+  process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM = "true";
+  const workerToken = "integration-only-worker-token-with-32-characters";
+  process.env.QUANTURA_ENSEMBLE_WORKER_TOKEN = workerToken;
+  const keys = [generatePlatformApiKey().rawKey, generatePlatformApiKey().rawKey];
+  for (const [i, user] of [owner, viewer].entries()) {
+    await db.collection("users").doc(user).set({ plan: "quant" });
+    await db.collection("quantura_api_keys").doc(hashPlatformApiKey(keys[i])).set({ user_id: user, name: "Integration only", scopes: ["forecasts:read", "forecasts:write"] });
+  }
+  await db.collection("workspaces").doc(workspace).set({ owner_user_id: owner, name: "Integration only" });
+  const member = db.collection("workspace_memberships").doc(workspaceMembershipId(workspace, viewer));
+  await member.set({ role: "viewer", status: "active" });
+  const app = express(); app.use(express.json());
+  const router = express.Router(); registerEnsembleForecastRoutes(router, { db, auth: firebaseApp.auth(), publicOrigin: "http://localhost" }); app.use("/api", router);
+  const server = await new Promise<Server>(resolve => { const listening = app.listen(0, "127.0.0.1", () => resolve(listening)); });
+  const address = server.address() as { port: number };
+  const call = (path: string, token = keys[0], body?: unknown) => fetch(`http://127.0.0.1:${address.port}/api${path}`, { method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  try {
+    const request = { workspace_id: workspace, source: { type: "series", frequency: "1min", rows: Array.from({ length: 40 }, (_, i) => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), target: .4 })) }, prediction_length: 2, horizon_mode: "frequency_periods", quantiles: [.1, .5, .9], models: { prophet: { enabled: true, weight: 1 } } };
+    assert.equal((await call("/v1/ensemble-forecasts", keys[1], request)).status, 403);
+    assert.equal((await call("/v1/ensemble-forecasts", "invalid", request)).status, 401);
+    const created = await call("/v1/ensemble-forecasts", keys[0], request);
+    assert.equal(created.status, 202, await created.clone().text());
+    const id = (await created.json()).data.forecast_id;
+    const ref = db.collection("ensemble_forecast_jobs").doc(id);
+    assert.equal((await ref.collection("input_chunks").doc("0000").get()).data()?.rows.length, 40);
+    // A server-verified prediction-market fixture exercises the trusted two-bar
+    // claim boundary, independently of upstream provider availability in CI.
+    await ref.update({ source: { type: "prediction_market", provider: "kalshi" }, "request.transform": "logit" });
+    await ref.collection("input_chunks").doc("0000").set({ rows: request.source.rows.slice(-2) });
+    const claimed = await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {});
+    assert.equal(claimed.status, 200, await claimed.clone().text());
+    const job = (await claimed.json()).data;
+    assert.equal(job.input.rows.length, 2); assert.equal(job.request.transform, "logit");
+    assert.equal((await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {})).status, 409);
+    const result = { quantiles: [.1, .5, .9], predictions: [40, 41].map(i => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), quantiles: { "0.1": .2, "0.5": .4, "0.9": .6 } })), effective_weights_by_quantile: { "0.1": { prophet: 1 }, "0.5": { prophet: 1 }, "0.9": { prophet: 1 } }, models: ["prophet"], model_runs: [], transform: "logit", warnings: [], failures: [], dataset_hash: job.dataset_hash, prepared_series_hash: "fixture", result_hash: "fixture", runtime_seconds: 1, runtime: { test: true } };
+    assert.equal((await call(`/internal/ensemble-forecasts/${id}/complete`, workerToken, result)).status, 200);
+    const downloaded = await call(`/v1/ensemble-forecasts/${id}/download?format=csv`, keys[1]);
+    assert.equal(downloaded.status, 200); assert.match(await downloaded.text(), /timestamp,q_0.1,q_0.5,q_0.9/);
+    const json = await call(`/v1/ensemble-forecasts/${id}/download?format=json`, keys[1]);
+    assert.equal((await json.json()).predictions.length, 2);
+    await member.update({ status: "removed" });
+    assert.equal((await call(`/v1/ensemble-forecasts/${id}`, keys[1])).status, 403);
+    assert.equal((await call(`/v1/ensemble-forecasts/${id}/download`, keys[1])).status, 403);
+    assert.equal((await call(`/v1/forecast/models?workspace_id=${viewer}`, keys[1])).status, 200);
+    assert.equal((await call(`/v1/ensemble-forecasts/${id}`, keys[0])).status, 200);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    for (const name of ["QUANTURA_API_KEY_PEPPER", "QUANTURA_ENSEMBLE_WORKER_MODE", "QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM", "QUANTURA_ENSEMBLE_WORKER_TOKEN"]) { if (oldEnv[name] === undefined) delete process.env[name]; else process.env[name] = oldEnv[name]; }
+    await firebaseApp.delete();
+  }
+});
 
 function assertSecurityHeaders(response: Response): void {
   assert.ok(response.headers.get("content-security-policy"));

@@ -14541,7 +14541,7 @@
       field.hidden = field.dataset.ensembleSource !== type;
     });
     const horizon = document.getElementById("ensemble-horizon-mode");
-    if (horizon && type === "workspace_dataset" && horizon.value === "trading_sessions") horizon.value = "frequency_periods";
+    if (horizon && type !== "ticker" && horizon.value === "trading_sessions") horizon.value = "frequency_periods";
   };
 
   const buildEnsembleRequest = () => {
@@ -14549,7 +14549,11 @@
     if (!form) throw new Error("The ensemble form is unavailable.");
     const data = new FormData(form);
     const sourceType = String(data.get("source_type") || "ticker");
-    const source = sourceType === "workspace_dataset"
+    const selection = window.QuanturaMarketSelection;
+    if (sourceType === "prediction_market" && !selection?.contract_id) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
+    const source = sourceType === "prediction_market"
+      ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min") }
+      : sourceType === "workspace_dataset"
       ? {
           type: "workspace_dataset",
           dataset_id: String(data.get("dataset_id") || "").trim(),
@@ -14563,7 +14567,7 @@
           symbol: normalizeTicker(data.get("ticker") || ui.forecastTicker?.value || state.tickerContext.ticker || ""),
           provider: String(data.get("provider") || "auto"),
           field: "close",
-          start: "2000-01-01",
+          limit: 500,
           frequency: "1Day",
         };
     if (sourceType === "workspace_dataset" && !source.dataset_id) throw new Error("Enter a workspace dataset ID.");
@@ -14577,11 +14581,11 @@
       workspace_id: state.activeWorkspaceId || state.user?.uid || "",
       source,
       prediction_length: Number(data.get("prediction_length") || 30),
-      horizon_mode: String(data.get("horizon_mode") || "trading_sessions"),
+      horizon_mode: sourceType === "prediction_market" ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
       quantiles: getEnsembleQuantiles(),
-      transform: String(data.get("transform") || "auto"),
+      transform: sourceType === "prediction_market" ? "logit" : String(data.get("transform") || "auto"),
       context_length: contextRaw ? Number(contextRaw) : null,
-      frequency: String(data.get("frequency") || "1D").trim() || "1D",
+      frequency: sourceType === "prediction_market" ? source.frequency : String(data.get("frequency") || "1D").trim() || "1D",
       calendar: sourceType === "ticker" ? "NYSE" : "NONE",
       model_failure_policy: String(data.get("model_failure_policy") || "fail"),
       models,
@@ -14643,7 +14647,7 @@
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
       margin: { l: 62, r: 24, t: 26, b: 58 }, height: 420, hovermode: "x unified",
       xaxis: { type: "date", title: { text: "Date" }, rangeslider: { visible: true, thickness: 0.12 } },
-      yaxis: { title: { text: source.type === "ticker" ? "Price" : "Target" } },
+      yaxis: { title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target" } },
       legend: { orientation: "h", y: -0.25 },
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
   };
@@ -14673,7 +14677,8 @@
     }
     if (ui.ensembleResultTable) {
       const headers = ["Date", ...quantiles.map(ensembleQuantileLabel)];
-      const body = predictions.map((row) => `<tr><td>${escapeHtml(formatIsoDate(row.timestamp))}</td>${quantiles.map((quantile) => {
+      const intraday = job.source?.type === "prediction_market" || /min|hour|^\d+h$/i.test(job.frequency || "");
+      const body = predictions.map((row) => `<tr><td>${escapeHtml(intraday ? new Date(row.timestamp).toLocaleString() : formatIsoDate(row.timestamp))}</td>${quantiles.map((quantile) => {
         const value = Number(row?.quantiles?.[ensembleQuantileKey(quantile)]);
         return `<td>${Number.isFinite(value) ? escapeHtml(value.toLocaleString(undefined, { maximumFractionDigits: 6 })) : "—"}</td>`;
       }).join("")}</tr>`).join("");
@@ -14682,7 +14687,7 @@
     const base = `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/download`;
     if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = `${base}?format=csv`;
     if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = `${base}?format=json`;
-    setEnsembleStatus("Final ensemble complete. Component prediction arrays remain private; downloads contain the final ensemble only.", "success");
+    setEnsembleStatus(`Final ensemble complete. Component prediction arrays remain private. ${(job.warnings || []).join(" ")}`, "success");
     await renderEnsembleChart(job);
   };
 
@@ -14803,6 +14808,17 @@
     ui.ensembleForecastSettings.dataset.bound = "1";
     syncEnsembleSourceFields();
     ui.ensembleSourceType?.addEventListener("change", syncEnsembleSourceFields);
+    window.addEventListener("quantura:market-selected", (event) => {
+      if (event.detail?.intent !== "forecast") return;
+      const row = event.detail.resource;
+      if (!row?.contract_id) return;
+      ui.ensembleSourceType.value = "prediction_market";
+      const selected = document.getElementById("ensemble-selected-market");
+      if (selected) selected.textContent = `${row.outcome} · ${row.contract.eventTitle || row.name} · ${row.source}`;
+      document.getElementById("ensemble-horizon-mode").value = "frequency_periods";
+      syncEnsembleSourceFields();
+      setEnsembleStatus("Market selected. Choose models and run forecast. Prices use decimal probabilities and a bounded logit transform.");
+    });
     refreshPrimaryForecast();
     ui.ensembleModelList?.addEventListener("input", updateEnsembleWeightsAndSupport);
     ui.ensembleForecastForm?.addEventListener("input", (event) => {
@@ -14841,7 +14857,7 @@
         logEvent("ensemble_forecast_created", { model_count: Object.values(request.models).filter((model) => model.enabled).length, quantile_count: request.quantiles.length, prediction_length: request.prediction_length });
       } catch (error) {
         if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
-        setEnsembleStatus(error.message || "Unable to create ensemble forecast.", "error");
+        setEnsembleStatus(`${error.message || "Unable to create ensemble forecast."}${error.code ? ` (${error.code})` : ""}${error.requestId ? ` · Reference ${error.requestId}` : ""}`, "error");
         showToast(error.message || "Unable to create ensemble forecast.", "warn");
       }
     });

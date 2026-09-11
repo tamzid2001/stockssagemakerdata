@@ -10,10 +10,12 @@
   let timer;
   let controller;
   let requestSequence = 0;
+  let mode = "open";
+  const resources = new Map();
   const cache = new Map();
   queryInput.setAttribute("aria-controls", "market-search-results");
   queryInput.setAttribute("aria-describedby", "market-search-status");
-  queryInput.maxLength = 160;
+  queryInput.maxLength = 2048;
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
@@ -27,20 +29,22 @@
   }
 
   function render(groups, errors) {
+    resources.clear();
     const sections = ["alpaca", "yahoo", "polymarket_us", "kalshi"].flatMap((source) => {
       const rows = Array.isArray(groups?.[source]) ? groups[source] : [];
       if (!rows.length && !errors?.[source]) return [];
       const cards = rows.length
         ? rows.map((row) => {
             const prediction = row.resource_type === "prediction_market_contract";
+            resources.set(row.resource_id, row);
             return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}">
               <div class="market-search-result-main">
-                <div class="market-search-result-symbol">${escapeHtml(row.symbol || row.contract_id || "Market")}</div>
+                <div class="market-search-result-symbol">${escapeHtml(prediction ? row.outcome || row.side : row.symbol || "Market")}</div>
                 <div><strong title="${escapeHtml(row.name || row.symbol || "Supported market")}">${escapeHtml(row.name || row.symbol || "Supported market")}</strong><div class="small muted">${escapeHtml(titleCase(row.asset_class))} · ${escapeHtml(providerLabel(row.source))}${row.exchange ? ` · ${escapeHtml(row.exchange)}` : ""}${row.currency ? ` · ${escapeHtml(row.currency)}` : ""}${row.status ? ` · ${escapeHtml(titleCase(row.status))}` : ""}</div>${row.unit ? `<div class="small muted">${escapeHtml(row.unit)}</div>` : ""}</div>
               </div>
               <div class="hero-actions market-search-result-actions">
                 ${prediction
-                  ? `<button class="cta secondary small" type="button" data-market-action="prediction" data-source="${escapeHtml(row.source)}" data-query="${escapeHtml(row.symbol || row.name)}">Open market data</button>`
+                  ? `<span class="market-timing small">${escapeHtml(row.timing === "live" ? "LIVE" : row.timing === "in_progress" ? "Started · open" : titleCase(row.timing || row.status))}</span>${!["closed", "settled"].includes(row.status) ? '<button class="cta small" type="button" data-market-action="prediction-forecast">Select for forecast</button>' : ""}<button class="cta secondary small" type="button" data-market-action="prediction-download">Download history</button>`
                   : `${row.forecast_available ? `<button class="cta small" type="button" data-market-action="forecast" data-symbol="${escapeHtml(row.symbol)}" data-source="${escapeHtml(row.source)}" data-asset-class="${escapeHtml(row.asset_class)}">Forecast</button>` : ""}<button class="cta secondary small" type="button" data-market-action="history" data-symbol="${escapeHtml(row.symbol)}" data-source="${escapeHtml(row.source)}">Historical data</button>`}
               </div>
             </article>`;
@@ -57,7 +61,7 @@
     controller?.abort();
     const sequence = ++requestSequence;
     const query = String(queryInput.value || "").trim();
-    if (query.length < 2) {
+    if (query.length < 2 && mode !== "live") {
       results.hidden = true;
       status.textContent = "Enter at least two characters to search markets.";
       results.removeAttribute("aria-busy");
@@ -67,20 +71,22 @@
     status.textContent = "Searching configured providers…";
     results.setAttribute("aria-busy", "true");
     try {
-      const params = new URLSearchParams({ q: query, source: String(sourceInput.value || "auto"), limit: "8" });
-      const key = params.toString();
+      const link = /^https?:\/\//i.test(query);
+      const params = new URLSearchParams(link ? { url: query } : { q: query, source: String(sourceInput.value || "auto"), limit: "20", mode });
+      const endpoint = link ? "/api/market-search/resolve" : "/api/market-search";
+      const key = `${endpoint}?${params.toString()}`;
       const cached = cache.get(key);
       let payload = cached && Date.now() - cached.time < 60000 ? cached.payload : null;
       if (!payload) {
-        const response = await fetch(`/api/market-search?${key}`, { headers: { Accept: "application/json" }, signal: controller.signal });
+        const response = await fetch(key, { headers: { Accept: "application/json" }, signal: controller.signal });
         payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error("Market search is temporarily unavailable. Try again.");
+        if (!response.ok) throw new Error(payload.message || "Market search is temporarily unavailable. Try again.");
         cache.set(key, { time: Date.now(), payload });
         if (cache.size > 20) cache.delete(cache.keys().next().value);
       }
       if (sequence !== requestSequence) return;
       render(payload.groups || {}, payload.errors || {});
-      status.textContent = `${Number(payload.count || 0).toLocaleString()} results · ↓ to explore, Escape to close.`;
+      status.textContent = `${Number(payload.count || 0).toLocaleString()} results · Choose a team/side. ${payload.coverage || "↓ to explore, Escape to close."}`;
     } catch (error) {
       if (error.name === "AbortError" || sequence !== requestSequence) return;
       results.hidden = false;
@@ -97,6 +103,13 @@
     timer = setTimeout(search, 300);
   });
   sourceInput.addEventListener("change", () => void search());
+  document.querySelectorAll("[data-market-mode]").forEach(button => button.addEventListener("click", () => {
+    mode = button.dataset.marketMode;
+    document.querySelectorAll("[data-market-mode]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+    queryInput.required = mode !== "live";
+    if (mode === "live" && ["alpaca", "yahoo"].includes(sourceInput.value)) sourceInput.value = "auto";
+    void search();
+  }));
   queryInput.addEventListener("keydown", event => {
     if (event.key === "ArrowDown" && !results.hidden) {
       const first = results.querySelector("[data-market-action]");
@@ -120,9 +133,22 @@
     const button = event.target.closest("[data-market-action]");
     if (!button) return;
     const action = button.dataset.marketAction;
+    if (action === "prediction-forecast" || action === "prediction-download") {
+      const row = resources.get(button.closest("[data-market-resource]")?.dataset.marketResource);
+      if (!row?.contract) return;
+      const download = action === "prediction-download";
+      if (!download) window.QuanturaMarketSelection = row;
+      setPanel(download ? "sports-autopilot" : "forecast");
+      window.dispatchEvent(new CustomEvent("quantura:market-selected", { detail: { resource: row, intent: download ? "download" : "forecast" } }));
+      status.textContent = `Selected ${row.outcome} · ${row.contract.eventTitle || row.name} · ${providerLabel(row.source)}.`;
+      results.hidden = true;
+      document.getElementById(download ? "prediction-market-hub" : "ensemble-forecast-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     const symbol = String(button.dataset.symbol || "").trim();
     const source = String(button.dataset.source || "auto").trim();
     if (action === "forecast") {
+      window.QuanturaMarketSelection = null;
       const ticker = document.getElementById("ensemble-ticker") || document.getElementById("forecast-ticker");
       const forecastSource = document.getElementById("ensemble-provider") || document.getElementById("forecast-source");
       const assetClass = document.getElementById("forecast-asset-class");

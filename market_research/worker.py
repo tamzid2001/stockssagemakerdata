@@ -201,7 +201,7 @@ def run(args):
 
     strategy = Strategy()
     configuration = {
-        "version": 3,
+        "version": 4,
         "mode": args.mode,
         "horizon": args.horizon,
         "models": args.models,
@@ -405,6 +405,7 @@ def run(args):
 
 
 def main():
+    from .forecast import default_research_models
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("live", "historical"), required=True)
     parser.add_argument("--horizon", type=int, choices=(30, 60), default=30)
@@ -416,7 +417,7 @@ def main():
         "--models",
         nargs="+",
         choices=("prophet", "toto", "granite", "chronos", "timesfm"),
-        default=["prophet", "toto", "granite", "chronos"],
+        default=list(default_research_models()),
     )
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()

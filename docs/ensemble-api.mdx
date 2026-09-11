@@ -36,3 +36,38 @@ Reproduction creates a new job from the original input snapshot, stored configur
 ## TimesFM licensing
 
 Hugging Face repository access and commercial production rights are separate conditions. TimesFM is unavailable to public production users unless the server explicitly records commercial licensing. Internal non-commercial evaluation requires a separate explicit flag and is labeled evaluation-only.
+
+## Select live games or paste a market link
+
+On Q Forecast, choose **Live moneylines** to browse full-game outcomes, or paste an HTTPS `polymarket.us` or `kalshi.com` event/market link in market search. Select the intended team/side and use the single **Run forecast** action. Kalshi YES and NO are separate contracts: NO is not automatically another team's moneyline. Soccer draw outcomes remain explicit.
+
+In **Sports / Prediction Markets**, use **Download from a market link**, choose the side(s), date range and interval, preview, then download CSV or JSON. Resolved markets can be downloaded but cannot be submitted as future forecasts.
+
+Market lookup uses bounded, short-lived server caches; it is not an exhaustive global index. A Kalshi “Started · open” badge is inferred from official game start and open-market status, not a live score feed. Direct links resolve against the provider even when a market is outside the discovery window. Polymarket.com links are not interchangeable with Polymarket US.
+
+### Prediction-market forecast request
+
+The authenticated ensemble endpoint accepts this source alongside ticker, workspace dataset, and programmatic series sources:
+
+```json
+{
+  "source": {
+    "type": "prediction_market",
+    "provider": "kalshi",
+    "symbol": "PROVIDER_MARKET_TICKER",
+    "contract_id": "PROVIDER_MARKET_TICKER:yes",
+    "frequency": "1min"
+  },
+  "prediction_length": 30,
+  "horizon_mode": "frequency_periods",
+  "transform": "logit",
+  "quantiles": [0.01, 0.1, 0.5, 0.9, 0.99],
+  "models": { "prophet": { "enabled": true, "weight": 1 } }
+}
+```
+
+Replace identifiers with actual lookup results. History and contract identity are verified server-side; callers cannot supply arbitrary checkpoint IDs, URLs, prices or live-status claims. Existing workspace permissions, API scopes, plan limits and compute quotas apply.
+
+Use `1min`, `1h`, or `1D`. The input is the latest contiguous suffix of up to 500 observed bars, including pregame observations when available. Missing intervals are **not** fabricated or forward-filled. Two observations permit execution, not a claim of reliable forecasting; individual models can still fail on short context under the selected failure policy. Job warnings report the actual history count. Prices use decimal probabilities, transformed with logit (epsilon `1e-6` only for transform stability), ensembled, then inverse-transformed. The output never substitutes a stock calendar for a game timeline.
+
+Provider rate limits, missing history and unsupported side selections return explicit safe errors rather than a generic invalid-request message. Five registered models does not mean five participated: licensing, selected models, quantile capability and reported failures determine actual effective weights.

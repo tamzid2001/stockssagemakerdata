@@ -10,7 +10,10 @@ Default models: Prophet, Toto 2.0 4M, Granite PatchTST-FM-r2 (CPU), Chronos-2.
 Each selected model receives raw weight 1. For each requested quantile, successful
 capable models receive equal normalized weights. At least two models must succeed;
 a lone Prophet result is not reported as an ensemble. Model failures are recorded.
-TimesFM is not selected by these workflows: commercial licensing remains required.
+TimesFM is also selected when both `TIMESFM_COMMERCIAL_LICENSED` and
+`TIMESFM_HF_ACCESS_APPROVED` are true. The operator confirmed production commercial
+permission on September 11, 2026. License approval does not replace checkpoint
+access or a successful runtime check; actual participation remains explicit.
 Toto's pinned implementation requires a full 32-observation patch. With 32 or
 more observations, leading alignment slots are masked as unknown, never prices;
 with fewer, Toto is unavailable with `MODEL_CONTEXT_TOO_SHORT`. This does not
@@ -24,16 +27,17 @@ is solely for transform stability. The input, seed, effective weights, package
 versions and actual returned model metadata are preserved privately.
 
 Use up to 500 completed, observed minutes before each origin, including pregame
-and in-game observations. Method v3 accepts a minimum of **two genuine consecutive
+and in-game observations. Method v4 accepts a minimum of **two genuine consecutive
 minute observations** in research. Missing minutes restart the regular model
 context: no forward filling or time compression. Older data remains in the replay
 archive. Models unable to infer from short history are reported unavailable and
 excluded; two successful models are still required to call the result an ensemble.
 Short-context results carry a warning, not an accuracy claim. Historical origins
 begin after two observations, then advance 30/60 minutes, resuming at a valid
-observed pair after gaps. The public forecast API's existing 40-row default is
-unchanged; the research minimum is a trusted Python caller option, not a client
-override. Original historical run records remain immutable.
+observed pair after gaps. The public forecast API also permits two observations
+for server-verified prediction-market history; other sources retain the 40-row
+default. This is not an arbitrary client override. Original historical run records
+remain immutable.
 
 Forecast horizon and rolling refresh cadence are independently selectable runs
 of either 30 or 60 minutes. No final outcome or post-origin price enters inference.
@@ -53,7 +57,13 @@ which can truncate long games and is not a verified resolution timestamp).
 
 Either P10 crossing direction can trigger a paper limit intent. Entry cannot fill
 on the signal observation. A later ask plus configured slippage must be at or
-below the frozen P10 limit. Stop is frozen P1; targets independently test P20–P90.
+below the frozen P10 limit. Stop is frozen P1; targets independently test P20–P90
+in ten-point increments, plus P99. Method v4 preserves upward/downward P10
+crossing direction through signals, fills and exits. Reports give separate
+directional trigger-to-target and cost-adjusted trade results. Old records without
+direction remain `unrecorded`; old P20–P90 experiments are not retroactively
+represented as P99 tests. A cross above P10 is not an immediate market buy: a
+subsequent quote must satisfy the P10 limit before a paper fill is counted.
 Exit uses observed bid, with stop-first ordering and no invented intraminute path.
 Quotes provide no depth/queue priority: these are assumptions, not verified fills.
 

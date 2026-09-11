@@ -6,7 +6,7 @@ from typing import Any, Literal, Mapping
 import numpy as np
 
 ModelId = Literal["prophet", "toto", "granite", "chronos", "timesfm"]
-Transform = Literal["auto", "log", "none"]
+Transform = Literal["auto", "log", "none", "logit"]
 HorizonMode = Literal["trading_sessions", "calendar_days", "frequency_periods"]
 FailurePolicy = Literal["fail", "renormalize"]
 
@@ -89,7 +89,7 @@ class ForecastRequest:
             raise ValueError("prediction_length must be between 1 and 1024")
         if self.horizon_mode not in {"trading_sessions", "calendar_days", "frequency_periods"}:
             raise ValueError("unsupported horizon_mode")
-        if self.transform not in {"auto", "log", "none"}:
+        if self.transform not in {"auto", "log", "none", "logit"}:
             raise ValueError("unsupported transform")
         if self.failure_policy not in {"fail", "renormalize"}:
             raise ValueError("unsupported model_failure_policy")
@@ -114,7 +114,7 @@ class PreparedSeries:
     timestamps: tuple[str, ...]
     values: np.ndarray
     transformed_values: np.ndarray
-    transform: Literal["log", "none"]
+    transform: Literal["log", "none", "logit"]
     frequency: str
     timezone: str
     dataset_hash: str
