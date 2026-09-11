@@ -1,4 +1,4 @@
-name: Polymarket US Private Historical Replay Archive
+name: Kalshi Private Historical Sports Replay Archive
 on:
   workflow_dispatch:
     inputs:
@@ -7,23 +7,27 @@ on:
         type: number
         default: 0
       max_pages:
-        description: Discovery pages, 100 events each (1–1000)
+        description: Maximum settled event pages this run (1–1000)
         type: number
-        default: 100
+        default: 20
+      series_ticker:
+        description: Optional Sports series (blank scans game/match/moneyline series)
+        type: string
+        default: ''
       start_cursor:
-        description: Next discovery cursor from a previous coverage report
-        type: number
-        default: 0
+        description: Exact JSON next cursor from previous coverage report, or 0
+        type: string
+        default: '0'
       catalog_id:
-        description: Stored catalog ID to resume (blank discovers a new catalog)
+        description: Immutable catalog ID for resuming an incomplete page
         type: string
         default: ''
       market_offset:
-        description: Resume game index inside the stored catalog
+        description: Market offset within the resumed catalog
         type: number
         default: 0
       smoke_mode:
-        description: Safety tests or real private historical downloads (no inference)
+        description: Safety tests or actual private downloads (no model inference or orders)
         type: choice
         options: [mock, real]
         default: mock
@@ -31,7 +35,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: polymarket-replay-archive
+  group: kalshi-replay-archive
   cancel-in-progress: false
 jobs:
   archive:
@@ -68,20 +72,21 @@ jobs:
         env:
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
         run: python -m market_research.artifact check-key
-      - name: Collect all discoverable games within bounded runtime
+      - name: Collect and checkpoint settled sports events
         if: inputs.smoke_mode == 'real'
         env:
           MAX_PAGES: ${{ inputs.max_pages }}
+          SERIES_TICKER: ${{ inputs.series_ticker }}
           START_CURSOR: ${{ inputs.start_cursor }}
           CATALOG_ID: ${{ inputs.catalog_id }}
           MARKET_OFFSET: ${{ inputs.market_offset }}
-        run: python -m market_research.archive --max-pages "$MAX_PAGES" --start-cursor "$START_CURSOR" --catalog-id "$CATALOG_ID" --market-offset "$MARKET_OFFSET"
+        run: python -m market_research.archive --source kalshi --series-ticker "$SERIES_TICKER" --max-pages "$MAX_PAGES" --start-cursor "$START_CURSOR" --catalog-id "$CATALOG_ID" --market-offset "$MARKET_OFFSET"
       - name: Preserve compressed encrypted replay archive
         if: always() && inputs.smoke_mode == 'real'
         uses: ./.github/actions/research-artifact
         with:
           encryption_key: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
-          name: polymarket-replay-${{ github.run_id }}-${{ github.run_attempt }}
+          name: kalshi-replay-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Failure disclosure
         if: failure()
-        run: echo 'Collection failed. Partial local checkpoints are encrypted before upload when present. No exchange orders were submitted.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Collection failed. Earlier immutable page reports and private data remain recoverable. No exchange orders were submitted.' >> "$GITHUB_STEP_SUMMARY"

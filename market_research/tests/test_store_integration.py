@@ -81,6 +81,27 @@ def test_checkpoint_immutability_fencing_and_atomic_outcome_replay():
     assert first.archived_history(contract, 0, 1000) == revised
     catalog = first.save_catalog([contract], {"next_cursor": None}, 1000)
     assert first.load_catalog(catalog)[0] == [contract]
+    # A heartbeat renew and a write share one serialized local transaction path.
+    import threading
+
+    renewal = threading.Thread(target=first.renew)
+    renewal.start()
+    first.archive_progress(
+        catalog, 0, contract, {"status": "downloaded"}, {"raw_rows": 1}
+    )
+    renewal.join(timeout=10)
+    assert not renewal.is_alive()
+    # Kalshi's same-named symbols cannot address the Polymarket archive.
+    kalshi = make("kalshi-holder")
+    kalshi.session = "kalshi-test-" + session
+    kalshi.ref = db.collection("market_research_sessions").document(kalshi.session)
+    kalshi.claim(config)
+    assert kalshi.archived_history(contract, 0, 1000) is None
+    kalshi.archive_history(
+        {**contract, "source": "kalshi", "side": "yes"}, 0, 1000, raw
+    )
+    assert kalshi.archive_ref.path != first.archive_ref.path
+    kalshi.release()
     first.release()
     second.claim(config)
     with pytest.raises(RuntimeError, match="LEASE_LOST"):

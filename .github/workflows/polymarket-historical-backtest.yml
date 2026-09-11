@@ -43,6 +43,7 @@ jobs:
         run: |
           echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
           echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/research-output" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -54,17 +55,27 @@ jobs:
       - name: Install locked CPU research environment
         if: inputs.smoke_mode == 'real'
         run: python -m pip install --no-cache-dir --require-hashes --requirement market_research/requirements.lock
+      - name: Verify artifact encryption configuration
+        if: inputs.smoke_mode == 'real'
+        env:
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.artifact check-key
       - name: Run and persist actual historical rolling ensemble backtest
         if: inputs.smoke_mode == 'real'
         env:
           PAPER_HORIZON: ${{ inputs.horizon }}
           MAX_CONTRACTS: ${{ inputs.max_contracts }}
           MAX_ORIGINS: ${{ inputs.max_origins }}
-          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
           TIMESFM_COMMERCIAL_LICENSED: 'false'
         run: python -m market_research.worker --mode historical --horizon "$PAPER_HORIZON" --max-contracts "$MAX_CONTRACTS" --max-origins "$MAX_ORIGINS" --duration-minutes 345
+      - name: Preserve compressed encrypted results, including partial failures
+        if: always() && inputs.smoke_mode == 'real'
+        uses: ./.github/actions/research-artifact
+        with:
+          encryption_key: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          name: polymarket-backtest-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Failure disclosure
         if: failure()
-        run: echo 'Historical research failed. Detailed data is not uploaded to public artifacts; no profitability claim is implied.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Historical research failed. Available partial output is encrypted before upload; no profitability claim is implied.' >> "$GITHUB_STEP_SUMMARY"

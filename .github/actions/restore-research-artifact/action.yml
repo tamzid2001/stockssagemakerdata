@@ -1,0 +1,27 @@
+name: Restore encrypted research checkpoint
+description: Restore only an authenticated SQLite checkpoint from a retained artifact.
+inputs:
+  artifact_id:
+    required: true
+    description: GitHub artifact numeric ID
+  github_token:
+    required: true
+    description: Read-only Actions token
+  encryption_key:
+    required: true
+    description: Repository artifact encryption secret
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v8
+      with:
+        artifact-ids: ${{ inputs.artifact_id }}
+        github-token: ${{ inputs.github_token }}
+        path: ${{ runner.temp }}/research-restore
+        merge-multiple: true
+    - shell: bash
+      env:
+        QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ inputs.encryption_key }}
+      run: |
+        python -m pip install --no-cache-dir cryptography==50.0.1
+        python -m market_research.artifact restore --source "$RUNNER_TEMP/research-restore/research.qra.enc" --output "$QUANTURA_RESEARCH_DIR"

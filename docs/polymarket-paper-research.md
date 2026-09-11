@@ -91,6 +91,11 @@ Backtests automatically reuse matching archived time ranges. Reports distinguish
 download availability from valid forecast origins and actual simulated trades.
 Snapshot revisions preserve earlier bytes rather than overwriting them.
 
+Discovery now checkpoints and downloads one page at a time. Read-phase Firestore
+contention is retried with a fresh fenced transaction, and the worker's heartbeat
+does not compete with its own writes. See [sports replay archives](sports-replay-archives.md)
+for shared Kalshi collection, data fields and provider-specific limitations.
+
 These are logically separate Ubuntu CPU jobs, not dedicated GPU machines. They
 cannot guarantee uninterrupted 24/7 execution: GitHub queue delays, installation,
 provider outages and rate limits can cause gaps. The worker reserves time before
@@ -107,7 +112,7 @@ released. Hard-killed workers recover through the watchdog after lease expiry.
 
 ## Storage, credentials and configuration
 
-Existing secrets: `HF_TOKEN`, `FIREBASE_SERVICE_ACCOUNT_JSON`; automatic
+Existing live-worker secrets: `HF_TOKEN`, `FIREBASE_SERVICE_ACCOUNT_JSON`; automatic
 `GITHUB_TOKEN` is scoped to contents read and Actions dispatch. No exchange
 trading secrets are used. Repository variables:
 `POLYMARKET_PAPER_ENABLED` (default false), `POLYMARKET_PAPER_HORIZON` (30 or 60).
@@ -118,13 +123,18 @@ Private collections: `market_research_sessions` (contract checkpoints),
 (idempotent outcomes), `market_research_runs` (run reports). Browser Firestore
 access is denied. These internal research records are not a new public API or
 licensed bulk release. Raw provider redistribution remains `review_required`.
-Archive catalogs, manifests, chunks and per-game outcomes live beneath the existing
-private `market_research_sessions/polymarket-replay-archive-v1` document; no new
-client database permission or public download URL is introduced.
+New historical backtests and both replay download workers **do not write to
+Firestore** and are not given Firebase credentials. They use local SQLite,
+compressed ZIP output and AES-256-GCM encryption with
+`QUANTURA_RESEARCH_ARTIFACT_KEY`. GitHub receives only the encrypted payload,
+capped at 25 MiB with three-day retention. Reports, forecasts, raw observations,
+trade events and checksummed catalogs are recoverable inside the ZIP. Public
+summaries contain safe counts and the artifact link, never the encryption key.
+Existing Firestore history is not deleted until a verified export exists.
+See [archive storage and recovery](sports-replay-archives.md).
 
-No raw datasets, forecasts, trading statistics, secrets, model caches or large
-artifacts are uploaded to GitHub. Public Actions summaries expose only coverage
-counts and safe execution receipts. This avoids increasing GitHub artifact storage.
+No credentials or model caches enter artifacts. GitHub artifact storage is still
+metered; retention and size limits bound this feature's per-run contribution.
 The Linux/Python 3.12 CPU lock is generated from `market_research/requirements.in`;
 dependencies install during worker setup, never inside a web request.
 

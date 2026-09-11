@@ -1,4 +1,4 @@
-import { KALSHI_API_BASE, kalshiPrice } from "./kalshiProtocol";
+import { KALSHI_API_BASE, kalshiCandlePrice } from "./kalshiProtocol";
 const MINUTE_SECONDS = 60;
 const MAX_MINUTES_PER_REQUEST = 4_500;
 export const KALSHI_MINUTE_HISTORY_MAX_MINUTES = 7 * 24 * 60;
@@ -98,7 +98,7 @@ function minuteBoundary(value: unknown, field: "start" | "end"): Date {
 function amountField(value: unknown, field: string): number | null {
   const record = asRecord(value);
   if (!record) return null;
-  return kalshiPrice(record, field);
+  return kalshiCandlePrice(record, field);
 }
 
 function csvCell(value: unknown): string {

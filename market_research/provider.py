@@ -9,6 +9,8 @@ import copy
 
 
 class QuanturaProvider:
+    source = "polymarket_us"
+
     def __init__(self, origin="https://quantura.studio"):
         if origin != "https://quantura.studio":
             raise ValueError("unapproved_api_origin")
@@ -36,6 +38,19 @@ class QuanturaProvider:
                 with urllib.request.urlopen(request, timeout=60) as response:
                     return json.load(response)
             except urllib.error.HTTPError as error:
+                if (
+                    error.code == 404
+                    and path == "/api/sports/prediction-markets/export"
+                ):
+                    try:
+                        payload = json.load(error)
+                    except (ValueError, OSError):
+                        payload = {}
+                    if payload.get("error") == "no_data":
+                        return {
+                            "rows": [],
+                            "metadata": {"availability": "missing_history"},
+                        }
                 if error.code in {429, 502, 503, 504} and attempt < 3:
                     time.sleep(2**attempt)
                     continue
@@ -90,11 +105,11 @@ class QuanturaProvider:
         result = self.request(
             "/api/sports/prediction-markets/export",
             {
-                "source": "polymarket_us",
+                "source": self.source,
                 "contracts": [contract],
                 "start": iso(start),
                 "end": iso(end),
-                "frequency": "raw",
+                "frequency": "1m" if self.source == "kalshi" else "raw",
                 "mode": "raw",
                 "target": "price",
                 "missing": "leave",
@@ -109,10 +124,88 @@ class QuanturaProvider:
         return result["rows"]
 
 
+class KalshiProvider(QuanturaProvider):
+    """Same website download service; cursor addresses one Sports game at a time."""
+
+    source = "kalshi"
+
+    def __init__(self, series_ticker=""):
+        super().__init__()
+        self.series_ticker = series_ticker
+        self.series = None
+
+    def discover(self, mode, max_pages=1, start_cursor="0"):
+        if mode != "historical" or max_pages != 1:
+            raise ValueError("KALSHI_ARCHIVE_REQUIRES_SINGLE_EVENT_PAGES")
+        root = "/api/sports/prediction-markets/research-catalog?"
+        if self.series is None:
+            inventory = self.request(root + "source=kalshi")["series"]
+            self.series_total = len(inventory)
+            self.series = sorted(
+                [
+                    s["ticker"]
+                    for s in inventory
+                    if (
+                        s["ticker"] == self.series_ticker
+                        if self.series_ticker
+                        else s["game_candidate"]
+                    )
+                ]
+            )
+            if not self.series:
+                raise ValueError("NO_ELIGIBLE_SPORTS_SERIES")
+        state = {} if str(start_cursor) in {"", "0"} else json.loads(start_cursor)
+        if not isinstance(state, dict) or set(state) - {"series", "cursor"}:
+            raise ValueError("INVALID_DISCOVERY_CURSOR")
+        selected = state.get("series", self.series[0])
+        if selected not in self.series or not isinstance(state.get("cursor", ""), str):
+            raise ValueError("INVALID_DISCOVERY_CURSOR")
+        result = self.request(
+            root
+            + urllib.parse.urlencode(
+                {
+                    "source": "kalshi",
+                    "series_ticker": selected,
+                    "cursor": state.get("cursor", ""),
+                }
+            )
+        )
+        if result.get("next_cursor"):
+            next_state = {"series": selected, "cursor": result["next_cursor"]}
+        else:
+            index = self.series.index(selected) + 1
+            next_state = (
+                {"series": self.series[index], "cursor": ""}
+                if index < len(self.series)
+                else None
+            )
+        cursor = json.dumps(next_state, separators=(",", ":")) if next_state else None
+        return result["items"], {
+            "source": self.source,
+            "series": selected,
+            "series_discovered": self.series_total,
+            "eligible_game_series": len(self.series),
+            "events_scanned": result["events_scanned"],
+            "contracts_discovered": len(result["items"]),
+            "next_cursor": cursor,
+            "discovery_truncated": cursor is not None,
+            "classification": "game_match_moneyline_series_suffix_excluding_periods_props",
+        }
+
+
 def historical_range(contract, now):
     """Pregame plus game replay, bounded to 48h and never beyond collection time."""
     from .engine import stamp
 
+    if contract.get("source") == "kalshi" and not contract.get("eventStart"):
+        # Missing sports milestones do not erase raw data. Use the market's
+        # genuine open/close metadata, without calling open time a game start.
+        start = stamp(contract["availableFrom"])
+        end = min(now, stamp(contract.get("resolutionTime") or contract["availableTo"]))
+        # The shared web download service is bounded to 90 days.
+        if end <= start or end - start > 90 * 86400:
+            raise ValueError("KALSHI_HISTORY_RANGE_REQUIRES_PARTITIONING")
+        return start, end
     event_start = stamp(contract["eventStart"])
     start = event_start - 501 * 60
     resolution = contract.get("resolutionTime")
