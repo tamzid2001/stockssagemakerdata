@@ -152,6 +152,48 @@ test('primary form builds prediction-market minute and single-model requests wit
   assert.deepEqual(JSON.parse(JSON.stringify(request.models)),{prophet:{enabled:true,weight:1}});
   w.document.getElementById('ensemble-source-type').value='ticker';w.document.getElementById('ensemble-ticker').value='MSFT';
   const stock=w.build();assert.equal(stock.source.symbol,'MSFT');assert.equal(stock.source.limit,500);assert.equal(stock.source.start,undefined);
+  w.document.getElementById('ensemble-history-lag').value='30';
+  assert.equal(w.build().history_lag_minutes,30);
+  w.document.getElementById('ensemble-history-lag').value='custom';
+  w.document.getElementById('ensemble-history-lag-custom').value='25';
+  assert.equal(w.build().history_lag_minutes,25);
+  d.window.close();
+});
+
+test('forecast chart focuses recent hour plus future and includes explicitly requested P10/P90 lines', async () => {
+  const d=dom(page('forecasting.html')); const w=d.window;
+  w.eval('const ensembleChartDefaultRange =' + source('app.js').split('  const ensembleChartDefaultRange =')[1].split('  const ensembleDatasetFrequency =')[0] + '\nwindow.range=ensembleChartDefaultRange;');
+  const job={forecast_id:'fixture',source:{type:'prediction_market'},frequency:'1min',created_at:'2026-09-12T16:30:00Z',
+    history:[{timestamp:'2026-09-12T16:00:00Z',target:.4}],quantiles:[.1,.5,.9],predictions:[{timestamp:'2026-09-12T17:00:00Z',quantiles:{'0.1':.3,'0.5':.5,'0.9':.7}}]};
+  assert.deepEqual(Array.from(w.range(job)),[Date.parse('2026-09-12T15:30:00Z'),Date.parse('2026-09-12T17:00:00Z')]);
+  assert.equal(w.range({...job,source:{type:'ticker'},frequency:'1D'}),null);
+  w.record=[];w.eval(`const ui={ensembleForecastChart:document.getElementById('ensemble-forecast-chart')};
+    const ensembleUiState={chartWindowId:'',chartWindow:null}; const ensembleChartDefaultRange=window.range; const getPlotly=async()=>({react:async(...a)=>window.record.push(a)});
+    const isDarkMode=()=>false, ensembleQuantileKey=String, ensembleQuantileLabel=q=>'P'+Math.round(q*100);
+    const ensembleTimeZone=()=> 'America/New_York',ensembleChartTime=v=>v,ensembleLocalTime=v=>String(v);
+    const renderEnsembleChart =${source('app.js').split('  const renderEnsembleChart =')[1].split('  const startEnsembleObservations =')[0]}
+    window.renderChart=renderEnsembleChart;`);
+  await w.renderChart(job);
+  assert.ok(w.record[0][1].some(t=>t.name==='P10 ensemble'));
+  assert.ok(w.record[0][1].some(t=>t.name==='P90 ensemble'));
+  assert.equal(w.record[0][2].uirevision,'fixture');
+  await w.renderChart({...job,quantiles:[.5]});
+  assert.ok(!w.record[1][1].some(t=>/^P(10|90) ensemble$/.test(t.name)));
+  d.window.close();
+});
+
+test('advanced help is an accessible modal and dataset frequency only belongs to uploaded data', () => {
+  const d=dom(page('forecasting.html')); const w=d.window;
+  const dialog=w.document.getElementById('ensemble-settings-help');
+  dialog.showModal=function(){this.open=true;};dialog.close=function(){this.open=false;};
+  w.eval('const help ='+source('app.js').split('    const help = document.getElementById("ensemble-settings-help");')[1].split('    window.addEventListener("quantura:market-selected"')[0].replace(/^/, 'document.getElementById("ensemble-settings-help");'));
+  w.document.getElementById('ensemble-settings-help-open').click(); assert.equal(dialog.open,true);
+  w.document.getElementById('ensemble-settings-help-close').click(); assert.equal(dialog.open,false);
+  assert.equal(dialog.getAttribute('aria-labelledby'),'ensemble-settings-help-title');
+  const frequency=w.document.getElementById('ensemble-frequency');
+  assert.equal(frequency.tagName,'SELECT'); assert.equal(frequency.closest('[data-ensemble-source]').dataset.ensembleSource,'workspace_dataset');
+  frequency.value='custom';frequency.dispatchEvent(new w.Event('change'));
+  assert.equal(w.document.getElementById('ensemble-frequency-custom').hidden,false);
   d.window.close();
 });
 

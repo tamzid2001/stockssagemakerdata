@@ -336,6 +336,12 @@
     const now = new Date();
     byId("pm-history-end").value = localDateTime(now);
     byId("pm-history-start").value = localDateTime(new Date(now.getTime() - 7 * 86400000));
+    byId("pm-history-cutoff")?.addEventListener("change", event => {
+      if (event.target.value === "") return;
+      byId("pm-history-end").value = localDateTime(new Date(Date.now() - Number(event.target.value)*60000));
+      invalidatePreview();
+    });
+    byId("pm-history-end")?.addEventListener("input", () => { if (byId("pm-history-cutoff")) byId("pm-history-cutoff").value = ""; });
 
     function invalidatePreview() {
       csvButton.disabled = true;

@@ -9,10 +9,37 @@ import {
   validateWorkerResult,
   apiError,
   validateModelHistory,
+  historyCutoffAt,
 } from "./ensembleForecastRoutes";
 import { AlpacaError } from "./alpacaClient";
 import { parseMarketLink } from "./marketLink";
-import { forecastObservationWindow, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink } from "./predictionMarketData";
+import { forecastObservationWindow, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink, normalizePolymarketEvents } from "./predictionMarketData";
+
+test("minute cutoffs are strict, exclude the latest observations before choosing the 500 inputs", () => {
+  const now = Date.parse("2026-09-12T16:30:35Z");
+  const cutoff = historyCutoffAt(30, now)!;
+  assert.equal(new Date(cutoff).toISOString(), "2026-09-12T16:00:00.000Z");
+  assert.equal(historyCutoffAt(0, now), undefined);
+  for (const v of [NaN, Infinity, -1, 1.5, 1441, "30", true, null]) assert.throws(() => historyCutoffAt(v, now));
+  const rows = Array.from({length:600}, (_,i) => ({timestamp:new Date(now-35_000-(599-i)*60_000).toISOString(),price:.4}));
+  const selected = forecastObservationWindow(rows, 60_000, cutoff);
+  assert.equal(selected.rows.length, 500);
+  assert.equal(Date.parse(selected.rows.at(-1)!.timestamp), cutoff);
+  assert.ok(selected.rows.every(r => Date.parse(r.timestamp) <= cutoff));
+});
+
+test("school names supplement provider nicknames without changing contract identities or prop YES/NO", () => {
+  const event = {id:"97962",title:"Oklahoma vs. Michigan",markets:[{id:"579992",slug:"aec-cfb-okl-mich-2026-09-12",title:"Sooners vs Wolverines",sportsMarketTypeV2:"SPORTS_MARKET_TYPE_MONEYLINE",marketSides:[
+    {id:"1159496",long:true,team:{name:"Sooners",safeName:"Oklahoma"}},
+    {id:"1159497",long:false,team:{name:"Wolverines",safeName:"Michigan"}}]}]};
+  const category = {id:"cfb",label:"CFB",sport:"football",providerId:"6"};
+  const rows = normalizePolymarketEvents({events:[event]}, category);
+  assert.deepEqual(rows.map(r => [r.contractId,r.outcome,r.side]), [["1159496","Oklahoma Sooners","long"],["1159497","Michigan Wolverines","short"]]);
+  assert.ok(rows.every(r => r.league === "CFB" && r.eventTitle === "Oklahoma vs. Michigan"));
+  event.markets[0].sportsMarketTypeV2 = "SPORTS_MARKET_TYPE_PROP";
+  Object.assign(event.markets[0].marketSides[0], {description:"Yes"});
+  assert.equal(normalizePolymarketEvents({events:[event]}, category)[0].outcome, "Yes");
+});
 
 test("market links reject SSRF, lookalike origins, credentials, ports and traversal", () => {
   assert.deepEqual(parseMarketLink("https://kalshi.com/markets/kxmlbgame/mlb/kxmlbgame-26sep11abc"), { source: "kalshi", identifier: "KXMLBGAME-26SEP11ABC", kind: "either" });
@@ -37,6 +64,8 @@ test("open Kalshi is not a live game without an official start; props are not mo
   const contract = { source: "kalshi", status: "open", eventStart: null, league: "KXMLBGAME" } as any;
   assert.equal(gameTiming(contract), "open"); assert.equal(isMoneyline(contract), true);
   assert.equal(isMoneyline({ ...contract, league: "KXMLBTOTAL" }), false);
+  assert.equal(isMoneyline({ ...contract, league: "KX1STHOMEGAME", eventTitle: "Buffalo's 1st Opponent at Highmark Stadium" }), false);
+  assert.equal(isMoneyline({ ...contract, league: "KXCFBGAME", eventTitle: "Oklahoma at Michigan" }), true);
   assert.equal(gameTiming({ ...contract, eventStart: new Date(Date.now()-60_000).toISOString() }), "in_progress");
   assert.equal(gameTiming({ ...contract, status: "settled", live: true }), "closed");
 });
