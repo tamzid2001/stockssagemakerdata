@@ -14671,7 +14671,11 @@
     setEnsembleStatus(status === "queued"
       ? "Queued · Data saved → Waiting for worker → Models → Final ensemble. You can leave this page; the job is saved in My Requests."
       : `Running model ${Math.min(completed + 1, total || 1)} of ${total || 1}${current ? `: ${current}` : ""}.`, "working");
-    if (ui.ensembleResultMeta) ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id || "")}</span><span><strong>Completed:</strong> ${completed}/${total}</span>`;
+    if (ui.ensembleResultMeta) ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id || "")}</span><span><strong>Completed:</strong> ${completed}/${total}</span><span><strong>Downloaded input:</strong> ${escapeHtml(job.input_row_count ?? "Loading")} observed bars</span>`;
+    // Never show the previous job's distribution or metrics under a new ID.
+    if (ui.ensembleSummary) { ui.ensembleSummary.hidden = true; ui.ensembleSummary.replaceChildren(); }
+    if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = "";
+    if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = "";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = true;
     if (ui.ensembleResultTable) ui.ensembleResultTable.hidden = true;
   };
@@ -14789,6 +14793,7 @@
     const visibleWarnings = [...new Set([...(job.source?.warnings || []), ...(job.warnings || [])])].filter(warning => !/logit|epsilon|inverse-logit|transformed space/i.test(warning));
     setEnsembleStatus(`Forecast complete. ${visibleWarnings.join(" ")}`, "success");
     if (ui.ensembleSummary) {
+      ui.ensembleSummary.hidden = false;
       const summary = ensembleDistributionSummary(job);
       const format = value => Number(value).toLocaleString(undefined,{maximumFractionDigits:4});
       const latest = summary.price === undefined ? "" : `Latest downloaded input: ${format(summary.price)} at ${ensembleChartTime(summary.timestamp,ensembleTimeZone())}; closest to the end-of-horizon ${ensembleQuantileLabel(summary.nearest)}. `;
@@ -14928,7 +14933,7 @@
       if (selected) selected.textContent = `${row.outcome} · ${row.contract.eventTitle || row.name} · ${row.source}`;
       document.getElementById("ensemble-horizon-mode").value = "frequency_periods";
       syncEnsembleSourceFields();
-      setEnsembleStatus("Market selected. Choose models and run forecast. Prices use decimal probabilities and a bounded logit transform.");
+      setEnsembleStatus("Market selected. Run forecast to download up to 500 available historical observations from the provider; keeping this page open is not required.");
     });
     refreshPrimaryForecast();
     ui.ensembleModelList?.addEventListener("input", updateEnsembleWeightsAndSupport);
@@ -14967,6 +14972,7 @@
           await pollEnsembleForecast(ensembleUiState.forecastId, { immediate: false });
         }
         logEvent("ensemble_forecast_created", { model_count: Object.values(request.models).filter((model) => model.enabled).length, quantile_count: request.quantiles.length, prediction_length: request.prediction_length });
+        await fetchMyRequestsList({ force: true }); renderMyRequestsPanels();
       } catch (error) {
         setEnsembleBusy(false);
         if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;

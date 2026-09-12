@@ -202,6 +202,19 @@ test('forecast summary averages columns and qualifies terminal quantile probabil
   d.window.close();
 });
 
+test('queued forecast clears the preceding distribution and shows downloaded input count', () => {
+  const d=dom(page('forecasting.html')); const w=d.window;
+  w.ui={}; for(const [key,id] of Object.entries({ensembleForecastResults:'ensemble-forecast-results',ensembleResultState:'ensemble-result-state',ensembleResultMeta:'ensemble-result-meta',ensembleSummary:'ensemble-forecast-summary',ensembleObservedMetrics:'ensemble-observed-metrics',ensembleObservationStatus:'ensemble-observation-status',ensembleForecastChart:'ensemble-forecast-chart',ensembleResultTable:'ensemble-result-table'})) w.ui[key]=w.document.getElementById(id);
+  w.ensembleUiState={}; w.setEnsembleBusy=()=>{};w.setEnsembleStatus=()=>{};w.titleCaseLabel=s=>s;w.escapeHtml=s=>String(s);
+  w.ui.ensembleSummary.innerHTML='<p>Previous forecast</p>';
+  w.ui.ensembleObservedMetrics.textContent='Old metrics';
+  w.eval('const renderEnsembleProgress ='+source('app.js').split('  const renderEnsembleProgress =')[1].split('  const renderEnsembleChart =')[0]+'\nwindow.renderProgress=renderEnsembleProgress;');
+  w.renderProgress({forecast_id:'new-job',status:'queued',input_row_count:500,progress:{total_models:5}});
+  assert.equal(w.ui.ensembleSummary.hidden,true); assert.equal(w.ui.ensembleSummary.textContent,'');
+  assert.equal(w.ui.ensembleObservedMetrics.textContent,''); assert.match(w.ui.ensembleResultMeta.textContent,/500 observed bars/);
+  d.window.close();
+});
+
 test('market selection configures the primary ensemble, including dataset-to-ticker switching', async () => {
   const d=dom(page('forecasting.html')); const w=d.window; const document=w.document;
   w.HTMLElement.prototype.scrollIntoView=()=>{};
