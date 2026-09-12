@@ -14771,7 +14771,8 @@
     if (ui.ensembleResultState) ui.ensembleResultState.textContent = "Completed";
     if (ui.ensembleResultMeta) {
       const models = Object.entries(job?.models || {}).filter(([, value]) => value?.enabled).map(([id]) => id);
-      ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id)}</span><span><strong>Models:</strong> ${escapeHtml(models.join(", "))}</span><span><strong>Horizon:</strong> ${escapeHtml(ensembleHorizonLabel(job))}</span><span><strong>Timezone:</strong> ${escapeHtml(ensembleTimeZone())}</span><span><strong>Validation metrics:</strong> Not yet evaluated out-of-sample for this run. MAE/RMSE and quantile coverage require a separate walk-forward backtest.</span>`;
+      const participated = (job.model_runtime || []).filter(model=>typeof model === "string" || model.status === "completed").map(model=>typeof model === "string" ? model : model.id);
+      ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id)}</span><span><strong>Requested models:</strong> ${escapeHtml(models.join(", "))}</span><span><strong>Participated:</strong> ${escapeHtml(participated.join(", ") || "See saved runtime metadata")}</span><span><strong>Horizon:</strong> ${escapeHtml(ensembleHorizonLabel(job))}</span><span><strong>Timezone:</strong> ${escapeHtml(ensembleTimeZone())}</span><span><strong>Historical validation:</strong> A separate walk-forward backtest is required. Live metrics below measure only this saved forecast.</span>`;
     }
     if (ui.ensembleResultTable) {
       const headers = ["Date", ...quantiles.map(ensembleQuantileLabel)];
