@@ -170,6 +170,38 @@ test('Quantura Forecast is the expanded primary form with exactly one submission
   d.window.close();
 });
 
+test('ensemble refresh retains configuration, fetches latest history, and formats local 12-hour times', () => {
+  const d=dom(page('forecasting.html'));const w=d.window;
+  w.eval(source('app.js').split('  const ensembleTimeZone =')[1].split('  const ensembleQuantileLabel =')[0].replace(/^/, 'const ensembleTimeZone =') + '\nwindow.helpers={ensembleLocalTime,ensembleChartTime,ensembleHorizonLabel,refreshedEnsembleRequest,setEnsembleBusy};');
+  const h=w.helpers;
+  assert.match(h.ensembleLocalTime('2026-09-11T22:00:00Z','America/New_York'),/6:00 PM/);
+  assert.match(h.ensembleLocalTime('2026-01-11T22:00:00Z','America/New_York'),/5:00 PM/);
+  assert.notEqual(h.ensembleLocalTime('2026-11-01T05:30:00Z','America/New_York'),h.ensembleLocalTime('2026-11-01T06:30:00Z','America/New_York'));
+  assert.equal(h.ensembleChartTime('2026-09-11','America/New_York'),'2026-09-11');
+  const job={workspace_id:'ws',source:{type:'prediction_market',provider:'polymarket_us',symbol:'game',contract_id:'side',end:'stale'},prediction_length:30,frequency:'1min',horizon_mode:'frequency_periods',models:{prophet:{enabled:true,weight:1}},quantiles:[.1,.5],transform:'logit'};
+  const refreshed=h.refreshedEnsembleRequest(job);
+  assert.equal(refreshed.source.end,undefined);assert.equal(refreshed.source.contract_id,'side');assert.equal(refreshed.models,job.models);
+  assert.equal(h.ensembleHorizonLabel(job),'30 minutes');assert.equal(h.ensembleHorizonLabel({...job,frequency:'1h'}),'30 hours');
+  assert.equal(w.document.querySelectorAll('#ensemble-refresh-latest').length,1);
+  assert.equal(w.document.getElementById('ensemble-progress').hidden,true);
+  assert.match(source('app.js'),/sourceRef.collection === "ensemble_forecast_jobs"/);
+  assert.doesNotMatch(source('app.js').split('const renderCompletedEnsemble =')[1].split('const stopEnsemblePolling =')[0],/<strong>Transform:/);
+  d.window.close();
+});
+
+test('forecast summary averages columns and qualifies terminal quantile probabilities', () => {
+  const d=dom(page('forecasting.html'));const w=d.window;
+  w.eval('const ensembleQuantileKey=v=>String(Number(v)); const ensembleDistributionSummary =' + source('app.js').split('  const ensembleDistributionSummary =')[1].split('  const ensembleQuantileLabel =')[0] + '\nwindow.summary=ensembleDistributionSummary;');
+  const result=w.summary({history:[{timestamp:'2026-09-11T12:00:00Z',target:.4}],quantiles:[.25,.5,.75],predictions:[{quantiles:{'0.25':.3,'0.5':.5,'0.75':.7}},{quantiles:{'0.25':.4,'0.5':.6,'0.75':.8}}]});
+  assert.equal(result.nearest,.25);assert.equal(result.probabilityHigher,.75);assert.ok(Math.abs(result.averages['0.25']-.35)<1e-10);
+  assert.match(source('app.js'),/model-implied, not a validated win rate/);
+  assert.match(source('app.js'),/Recipients must sign in and have access/);
+  assert.match(source('app.js'),/Downloaded input history/);
+  assert.match(source('app.js'),/Observed after forecast/);
+  assert.doesNotMatch(source('app.js').split('const renderEnsembleChart =')[1].split('const startEnsembleObservations =')[0],/apiFetchTickerHistory/);
+  d.window.close();
+});
+
 test('market selection configures the primary ensemble, including dataset-to-ticker switching', async () => {
   const d=dom(page('forecasting.html')); const w=d.window; const document=w.document;
   w.HTMLElement.prototype.scrollIntoView=()=>{};

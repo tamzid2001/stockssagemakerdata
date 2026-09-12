@@ -265,6 +265,7 @@ export async function fetchPolymarketPricePoints(
     const payload = await response.json() as { history?: PolymarketPricePoint[] };
     if (!Array.isArray(payload.history)) throw new PolymarketMlbError("Polymarket US returned invalid history.");
     for (const raw of payload.history) {
+      if (raw.timestamp == null || raw.longPrice == null || raw.shortPrice == null) continue;
       const point = { timestamp: Number(raw.timestamp), longPrice: Number(raw.longPrice), shortPrice: Number(raw.shortPrice) };
       if (!Object.values(point).every(Number.isFinite) || point.timestamp*1000 < startMs || point.timestamp*1000 > endMs || point.longPrice < 0 || point.longPrice > 1 || point.shortPrice < 0 || point.shortPrice > 1) continue;
       points.set(point.timestamp, point);

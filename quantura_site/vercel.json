@@ -5,6 +5,9 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
+    { "source": "/developers/api", "destination": "https://quantura.mintlifysite.com/", "permanent": true },
+    { "source": "/docs/api", "destination": "https://quantura.mintlifysite.com/", "permanent": true },
+    { "source": "/developers-api", "destination": "https://quantura.mintlifysite.com/", "permanent": true },
     { "source": "/assets/logo.png", "destination": "/favicon.svg", "permanent": true },
     { "source": "/trading", "destination": "/dashboard", "permanent": true },
     { "source": "/purchase", "destination": "/pricing", "permanent": true },

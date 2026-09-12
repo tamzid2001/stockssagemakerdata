@@ -9348,6 +9348,9 @@ html .toast[data-variant="warn"] {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
+.ensemble-progress { width: min(100%, 420px); height: 8px; margin-block: 8px; accent-color: var(--accent); }
+.ensemble-progress[hidden] { display: none; }
+
 .ensemble-results {
   margin-top: 18px;
   padding: 18px;

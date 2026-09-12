@@ -121,7 +121,10 @@ class QuanturaProvider:
             k: v for k, v in self.cache.items() if time.monotonic() - v[0] < 30
         }
         self.cache[key] = (time.monotonic(), result["rows"])
-        return result["rows"]
+        rows = copy.deepcopy(result["rows"])
+        for row in rows:
+            row["selected_position"] = contract["side"]
+        return rows
 
 
 class KalshiProvider(QuanturaProvider):

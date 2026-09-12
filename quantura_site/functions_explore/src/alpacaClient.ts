@@ -310,6 +310,8 @@ export class AlpacaClient {
     const maxRows = requestedRows === 0 ? Number.POSITIVE_INFINITY : Math.max(1, Math.min(requestedRows || 2000, 50000));
     const rows: AlpacaBar[] = [];
     let pageToken = "";
+    const seenPages = new Set<string>();
+    const intraday = /Min|Hour$/.test(timeframe);
     do {
       const query = new URLSearchParams({
         timeframe,
@@ -323,11 +325,15 @@ export class AlpacaClient {
       if (pageToken) query.set("page_token", pageToken);
       const payload = await this.request(`/v2/stocks/${encodeURIComponent(symbol)}/bars`, { query });
       const rawBars = Array.isArray(payload.bars) ? payload.bars : [];
-      rows.push(...rawBars.map((bar) => mapBar((bar || {}) as Record<string, unknown>)));
+      rows.push(...rawBars.map((bar) => mapBar((bar || {}) as Record<string, unknown>))
+        .filter(row => row.timestamp && (!intraday || session !== "regular" || row.session === "regular")));
       pageToken = String(payload.next_page_token || "");
+      if (pageToken && seenPages.has(pageToken)) throw new AlpacaError("upstream", "Alpaca repeated a history page. Retry later.", 502);
+      if (pageToken) seenPages.add(pageToken);
+      if (seenPages.size > 1000) throw new AlpacaError("invalid_request", "Narrow the historical date range.", 413);
     } while (pageToken && rows.length < maxRows);
     const filtered = rows
-      .filter((row) => row.timestamp && (session !== "regular" || row.session === "regular"))
+      .filter((row) => row.timestamp)
       .sort((left, right) => Date.parse(left.timestamp) - Date.parse(right.timestamp))
       .slice(0, maxRows);
     if (!filtered.length) throw new AlpacaError("no_data", "No observations were available for this symbol and date range.", 404);

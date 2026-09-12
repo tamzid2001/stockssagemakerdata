@@ -28,8 +28,9 @@ test("observed forecast window caps 500 bars, retains both endpoints, never fill
   assert.equal(full.rows.at(-1)?.timestamp, new Date(now).toISOString());
   assert.equal(full.rows[0].target, 0);
   const gaps = [...rows.slice(0, -3), ...rows.slice(-2), { timestamp: new Date(now+60_000).toISOString(), price: .5 }];
-  assert.equal(forecastObservationWindow(gaps, 60_000, now).rows.length, 2);
-  assert.throws(() => forecastObservationWindow([{ timestamp: new Date(now).toISOString(), price: null }], 60_000, now), /two consecutive/);
+  assert.equal(forecastObservationWindow(gaps, 60_000, now).rows.length, 500);
+  assert.equal(forecastObservationWindow(gaps, 60_000, now).gap_count, 1);
+  assert.throws(() => forecastObservationWindow([{ timestamp: new Date(now).toISOString(), price: null }], 60_000, now), /two observed/);
 });
 
 test("open Kalshi is not a live game without an official start; props are not moneylines", () => {

@@ -444,6 +444,10 @@ const ssrHandler = async (req, res) => {
   }
 
   const requestPath = normalizePath(req.path || "/");
+  if (["/developers/api", "/docs/api", "/developers-api"].includes(requestPath)) {
+    res.redirect(308, "https://quantura.mintlifysite.com/");
+    return;
+  }
   if (requestPath === "/studio") {
     res.redirect(308, "/research");
     return;

@@ -301,7 +301,8 @@ def test_five_model_ensemble_is_integrated_into_existing_forecast_workspace():
     assert '>Run forecast</span>' in forecasting
     assert 'apiRequestJson("/api/v1/ensemble-forecasts"' in client
     assert "pollEnsembleForecast" in client
-    assert "Component prediction arrays remain private" in client
+    assert "Downloaded input history" in client
+    assert "publicEnsembleJob" in backend
     assert 'router.post("/v1/ensemble-forecasts"' in backend
     assert 'router.get("/v1/ensemble-forecasts/:forecastId"' in backend
     assert "effective_weights_by_quantile" in backend

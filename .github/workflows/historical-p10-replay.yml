@@ -1,0 +1,143 @@
+name: Resumable Kalshi / Polymarket P10 Ensemble Backtest
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        type: choice
+        options: [kalshi, polymarket_us]
+        default: kalshi
+        description: Independent provider replay (paper only)
+      horizon:
+        type: choice
+        options: ['30', '60']
+        default: '30'
+        description: Forecast minutes per rolling origin
+      max_contracts:
+        type: number
+        default: 100
+        description: Maximum sides across the complete chain (even, 2–500)
+      max_origins:
+        type: number
+        default: 1000
+        description: Maximum rolling forecasts per side
+      series:
+        type: string
+        default: ''
+        description: Optional Kalshi Sports series; blank discovers game series
+      resume_artifact_id:
+        type: number
+        default: 0
+        description: Complete encrypted checkpoint artifact ID; 0 starts fresh
+      code_ref:
+        type: string
+        default: main
+        description: main for new runs; exact original commit for a continuation
+      remaining_handoffs:
+        type: number
+        default: 0
+        description: Bounded automatic successors (0–8); preserves code/config
+      smoke_mode:
+        type: choice
+        options: [mock, real]
+        default: mock
+        description: CI mocks or real data and five registered model adapters
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: historical-p10-${{ inputs.provider }}
+  cancel-in-progress: false
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Validate dispatch identifiers
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+          HANDOFFS: ${{ inputs.remaining_handoffs }}
+        run: |
+          [[ "$CODE_REF" == main || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$HANDOFFS" =~ ^[0-8]$ ]] || exit 1
+          echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/research-output" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.code_ref }}
+          persist-credentials: false
+      - run: echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Mock tests without checkpoints/model downloads
+        if: inputs.smoke_mode == 'mock'
+        run: |
+          python -m pip install pytest==8.4.2 pyyaml==6.0.3 numpy pandas pandas-market-calendars httpx cryptography
+          python -m pytest -q market_research/tests ensemble_forecasting/tests
+      - name: Locked CPU inference environment
+        if: inputs.smoke_mode == 'real'
+        run: |
+          python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+          npm ci --prefix market_research/node --ignore-scripts
+      - name: Download prior checkpoint
+        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ inputs.resume_artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/research-restore
+          merge-multiple: true
+      - name: Authenticate and restore all replay state
+        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        env:
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.artifact restore-backtest --source "$RUNNER_TEMP/research-restore/research.qra.enc" --output "$QUANTURA_RESEARCH_DIR"
+      - name: Replay with periodic encrypted online checkpoints
+        id: replay
+        if: inputs.smoke_mode == 'real'
+        uses: actions/github-script@v8
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          HORIZON: ${{ inputs.horizon }}
+          CONTRACTS: ${{ inputs.max_contracts }}
+          ORIGINS: ${{ inputs.max_origins }}
+          SERIES: ${{ inputs.series }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        with:
+          script: |
+            // JavaScript action context supplies the scoped Actions artifact
+            // runtime credentials; they are inherited, never printed.
+            const {spawn} = require('node:child_process');
+            const args = ['market_research/node/run.mjs','--provider',process.env.PROVIDER,'--horizon',process.env.HORIZON,'--max-contracts',process.env.CONTRACTS,'--max-origins',process.env.ORIGINS,'--series',process.env.SERIES,'--duration-minutes','345'];
+            await new Promise((resolve,reject)=>{
+              const child=spawn(process.execPath,args,{stdio:'inherit'});
+              child.on('error',reject);
+              child.on('exit',code=>code===0?resolve():reject(new Error('Replay failed; recover from the latest verified checkpoint.')));
+            });
+      - name: Continue unfinished work on the exact same code
+        if: success() && inputs.smoke_mode == 'real' && inputs.remaining_handoffs > 0 && steps.replay.outputs.resume_required == 'true'
+        uses: actions/github-script@v8
+        env:
+          REPLAY_INPUTS: ${{ toJSON(inputs) }}
+          CHECKPOINT: ${{ steps.replay.outputs.checkpoint_artifact_id }}
+        with:
+          script: |
+            const input = JSON.parse(process.env.REPLAY_INPUTS);
+            if (!/^\d+$/.test(process.env.CHECKPOINT || '')) throw new Error('Verified checkpoint required');
+            input.resume_artifact_id = process.env.CHECKPOINT;
+            input.code_ref = process.env.QUANTURA_CODE_SHA;
+            input.remaining_handoffs = String(Number(input.remaining_handoffs) - 1);
+            const inputs = Object.fromEntries(Object.entries(input).map(([key,value])=>[key,String(value)]));
+            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id:'historical-p10-replay.yml',ref:'main',inputs});

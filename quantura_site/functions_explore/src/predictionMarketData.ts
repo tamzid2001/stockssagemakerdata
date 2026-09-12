@@ -1269,24 +1269,27 @@ export async function discoverForecastMarkets(source: PredictionMarketSource, qu
   try { return await pending; } finally { liveSearchPending.delete(key); }
 }
 
-export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string) {
+export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; minimumRows?: number } = {}) {
   if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
   const contracts = await resolveMarketIdentifier(source, symbol, "market");
   const contract = contracts.find(c => c.contractId === contractId);
   if (!contract) throw new PredictionMarketDataError("contract_not_found", "Select a team/side belonging to this market.", 422);
-  if (["closed", "settled"].includes(contract.status)) throw new PredictionMarketDataError("market_resolved", "This market has ended. Download its history instead of creating a future forecast.", 422);
+  if (!options.allowResolved && ["closed", "settled"].includes(contract.status)) throw new PredictionMarketDataError("market_resolved", "This market has ended. Download its history instead of creating a future forecast.", 422);
   const now = Date.now();
   const interval = frequencyValue === "1min" ? 60_000 : frequencyValue === "1h" ? 3600_000 : 86400_000;
-  const start = Math.max(Date.parse(contract.availableFrom || "") || 0, now - Math.min(90 * 86400_000, 1500 * interval));
+  const start = Math.max(Date.parse(contract.availableFrom || "") || 0, options.since || now - Math.min(90 * 86400_000, 1500 * interval));
   const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", pregameOnly: false });
-  // Keep actual observations; never fill missing minutes. Foundation models need
-  // regular inputs, so use the latest contiguous suffix and disclose gaps.
-  const { rows, observed_rows } = forecastObservationWindow(dataset.rows, interval, now);
+  // Forecast one consistent selected-side quote target. A Kalshi minute may
+  // have a real book close but no trade; do not discard it or mix trade/ask.
+  const observations = dataset.rows.map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(Date.parse(String(row.timestamp)) + interval).toISOString() });
+  const { rows, observed_rows, gap_count } = forecastObservationWindow(observations, interval, now, options.minimumRows ?? 2);
   return { rows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows,
-    warnings: rows.length < 500 ? [`Using ${rows.length} consecutive observed bars of up to 500; unavailable intervals are not filled.`] : [] };
+    warnings: [`Using ${rows.length} observed bars of up to 500 (${observed_rows} available in the fetched range).`,
+      source === "kalshi" ? "Target: selected-side candle closing ask; no trade is invented for minutes without transactions." : "Target: selected-side display quote, timestamped at the completed interval end; not an executed trade.",
+      ...(gap_count ? [`${gap_count} gaps in observed history; no missing prices were invented. Foundation models treat observations as ordered steps; elapsed-time gaps can reduce reliability.`] : [])] };
 }
 
-export function forecastObservationWindow(input: Array<Record<string, unknown>>, interval: number, now: number) {
+export function forecastObservationWindow(input: Array<Record<string, unknown>>, interval: number, now: number, minimumRows = 2) {
   const unique = new Map<number, number>();
   for (const row of input) {
     const timestamp = Date.parse(String(row.timestamp));
@@ -1294,11 +1297,10 @@ export function forecastObservationWindow(input: Array<Record<string, unknown>>,
     if (Number.isFinite(timestamp) && timestamp <= now && value !== null && value >= 0 && value <= 1) unique.set(timestamp, value);
   }
   const observed = [...unique].sort((a, b) => a[0] - b[0]).map(([timestamp, target]) => ({ timestamp: new Date(timestamp).toISOString(), target }));
-  let begin = observed.length - 1;
-  while (begin > 0 && Date.parse(observed[begin].timestamp) - Date.parse(observed[begin - 1].timestamp) === interval && observed.length - begin < 500) begin--;
-  const rows = observed.slice(Math.max(0, begin));
-  if (rows.length < 2) throw new PredictionMarketDataError("history_minimum_rows_required", "This side needs at least two consecutive observed bars. Try another interval or retry when more history arrives.", 422);
-  return { rows, observed_rows: observed.length };
+  const rows = observed.slice(-500);
+  if (rows.length < minimumRows) throw new PredictionMarketDataError("history_minimum_rows_required", "This side needs at least two observed bars. The provider has not returned enough prices in the requested range.", 422);
+  const gap_count = rows.slice(1).filter((row, i) => Date.parse(row.timestamp) - Date.parse(rows[i].timestamp) > interval).length;
+  return { rows, observed_rows: observed.length, gap_count };
 }
 
 function polymarketAuthHeaders(method: string, path: string): Record<string, string> | null {

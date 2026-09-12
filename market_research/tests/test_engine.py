@@ -59,17 +59,17 @@ def test_trailing_500_and_no_future():
 def test_missing_minutes_are_skipped_without_filling_or_compressing_time():
     quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, 100) if i != 70]
     window = history_window(quotes, 99 * 60)
-    assert len(window) == 29 and all(q.observed for q in window)
-    assert window[0].timestamp == 71 * 60
+    assert len(window) == 98 and all(q.observed for q in window)
+    assert window[0].timestamp == 60
     with pytest.raises(ValueError, match="IMPUTED_EXECUTION"):
         advance(
             initial_state(), Quote(660, 0.4, 0.38, observed=False), curve(), Strategy()
         )
 
 
-def test_long_gaps_restart_context_instead_of_unbounded_carry_forward():
+def test_long_gaps_preserve_genuine_history_without_carry_forward():
     quotes = [Quote(i * 60, 0.4, 0.38) for i in range(1, 100) if not 60 <= i <= 70]
-    assert len(history_window(quotes, 99 * 60)) == 29
+    assert len(history_window(quotes, 99 * 60)) == 88
 
 
 def test_one_value_rejected_and_two_value_origin_does_not_wait_half_hour():
