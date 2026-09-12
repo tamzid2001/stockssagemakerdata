@@ -138,8 +138,22 @@ class KalshiProvider(QuanturaProvider):
         self.series = None
 
     def discover(self, mode, max_pages=1, start_cursor="0"):
+        if mode == "live":
+            contracts, cursor, coverage = {}, start_cursor, {}
+            for _ in range(max_pages):
+                items, coverage = self._page(mode, cursor)
+                for item in items:
+                    contracts[item["contractId"]] = {**item, "live": True,
+                        "live_classification": "started_open_market_not_live_score_confirmation"}
+                cursor = coverage["next_cursor"]
+                if cursor is None:
+                    break
+            return list(contracts.values()), {**coverage, "contracts_discovered": len(contracts), "next_cursor": cursor}
         if mode != "historical" or max_pages != 1:
             raise ValueError("KALSHI_ARCHIVE_REQUIRES_SINGLE_EVENT_PAGES")
+        return self._page(mode, start_cursor)
+
+    def _page(self, mode, start_cursor):
         root = "/api/sports/prediction-markets/research-catalog?"
         if self.series is None:
             inventory = self.request(root + "source=kalshi")["series"]
@@ -168,6 +182,7 @@ class KalshiProvider(QuanturaProvider):
             + urllib.parse.urlencode(
                 {
                     "source": "kalshi",
+                    "mode": mode,
                     "series_ticker": selected,
                     "cursor": state.get("cursor", ""),
                 }

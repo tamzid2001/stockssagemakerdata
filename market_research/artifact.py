@@ -39,7 +39,7 @@ def package(directory, destination):
     files = sorted(
         p
         for p in root.iterdir()
-        if p.name == "research.sqlite3"
+        if p.name in {"research.sqlite3", "forecast_quantiles.csv.gz", "quantile_manifest.json"}
         or (p.name.startswith("report-") and p.suffix == ".json")
     )
     if not files or any(p.is_symlink() or not p.is_file() for p in files):
@@ -148,11 +148,26 @@ def main():
 def snapshot_package(directory, destination):
     """SQLite online backup gives a consistent checkpoint even during inference."""
     import sqlite3
+    import shutil
     root = Path(directory)
     with tempfile.TemporaryDirectory() as temporary:
         with sqlite3.connect(f"file:{root / 'research.sqlite3'}?mode=ro", uri=True) as source:
             with sqlite3.connect(Path(temporary) / "research.sqlite3") as target:
                 source.backup(target)
+        # Explicit safe exports only, never environment files/model caches.
+        # The manifest is written after the CSV closes. Intermediate snapshots
+        # still recover all forecast records from SQLite when no export exists.
+        manifest = root / "quantile_manifest.json"
+        csv = root / "forecast_quantiles.csv.gz"
+        if manifest.exists():
+            if manifest.is_symlink() or csv.is_symlink():
+                raise ValueError("UNSAFE_EXPORT_PATH")
+            expected = json.loads(manifest.read_text())["sha256"]
+            with csv.open("rb") as data:
+                if hashlib.file_digest(data, "sha256").hexdigest() != expected:
+                    raise ValueError("EXPORT_CHECKSUM_MISMATCH")
+            for path in (manifest, csv):
+                shutil.copyfile(path, Path(temporary) / path.name)
         return package(temporary, destination)
 
 

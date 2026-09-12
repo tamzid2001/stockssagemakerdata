@@ -66,10 +66,22 @@ def test_median_experiment_uses_shared_worker_with_isolated_bounded_configuratio
     text = (ROOT / ".github/workflows/historical-p10-replay.yml").read_text()
     workflow = yaml.safe_load(text)
     inputs = workflow[True]["workflow_dispatch"]["inputs"]
-    assert inputs["strategy"]["options"] == ["p10", "median_cross"]
+    assert inputs["strategy"]["options"] == ["p10", "median_cross", "quantiles"]
     assert inputs["loss_multiplier"]["default"] == 2.5
     assert inputs["max_shares"]["default"] == 100
     assert "inputs.strategy" in workflow["concurrency"]["group"]
     assert "supportsExperiments" in text and "Original checkpoint code" in text
     assert "spawn(process.execPath,args" in text
     assert "POLYMARKET_SECRET_KEY" not in text and "KALSHI_PRIVATE_KEY" not in text
+
+
+def test_corpus_variants_and_live_shared_provider_dispatch():
+    replay = yaml.safe_load((ROOT / ".github/workflows/historical-p10-replay.yml").read_text())
+    inputs = replay[True]["workflow_dispatch"]["inputs"]
+    assert inputs["lag_minutes"]["options"] == ["0", "15", "30"]
+    assert inputs["horizon"]["options"] == ["30", "45", "60"]
+    live = yaml.safe_load((ROOT / ".github/workflows/polymarket-live-paper.yml").read_text())
+    inputs = live[True]["workflow_dispatch"]["inputs"]
+    assert inputs["forecast_only"]["default"] is True
+    assert inputs["provider"]["options"] == ["polymarket_us", "kalshi"]
+    assert "inputs.provider" in live["concurrency"]["group"]

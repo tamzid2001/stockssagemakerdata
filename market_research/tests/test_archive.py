@@ -181,3 +181,17 @@ def test_archive_keeps_gaps_and_both_polymarket_side_quotes(monkeypatch):
     )
     assert store.histories["game-0"] == rows
     assert len(store.histories["game-0"]) == 2  # no filled intervening minutes
+
+
+def test_kalshi_live_reuses_catalog_with_explicit_live_mode(monkeypatch):
+    provider = KalshiProvider()
+    calls = []
+    def request(path):
+        calls.append(path)
+        if "series_ticker" not in path:
+            return {"series": [{"ticker": "AGAME", "game_candidate": True}]}
+        return {"items": [{"contractId": "A:yes", "side": "yes"}], "events_scanned": 1, "next_cursor": None}
+    monkeypatch.setattr(provider, "request", request)
+    items, coverage = provider.discover("live", 2)
+    assert items[0]["live"] is True
+    assert "mode=live" in calls[-1] and coverage["next_cursor"] is None

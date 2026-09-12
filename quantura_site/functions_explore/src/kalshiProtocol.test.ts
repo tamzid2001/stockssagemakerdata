@@ -101,3 +101,24 @@ test("archive catalog includes old event team markets from both tiers without mi
     await assert.rejects(kalshiResearchCatalog("../bad"), /existing Kalshi Sports series/);
   } finally { global.fetch = original; }
 });
+
+test("live research uses open events with known game starts, excluding future and unknown games", async () => {
+  const original = global.fetch; const paths: URL[] = [];
+  const now = Date.now();
+  global.fetch = async input => {
+    const url = new URL(String(input)); paths.push(url);
+    if (url.pathname.endsWith("/series")) return Response.json({ series: [{ ticker: "TESTGAME", category: "Sports" }] });
+    assert.ok(!url.pathname.includes("/historical/"));
+    return Response.json({ events: ["LIVE", "FUTURE", "UNKNOWN"].map(id => ({ event_ticker: id, series_ticker: "TESTGAME",
+      markets: [{ ticker: `${id}-A`, status: "active", market_type: "binary" }] })),
+      milestones: [{ related_event_tickers: ["LIVE"], start_date: new Date(now-30*60000).toISOString() },
+        { related_event_tickers: ["FUTURE"], start_date: new Date(now+30*60000).toISOString() }], cursor: "" });
+  };
+  try {
+    const page = await kalshiResearchCatalog("TESTGAME", "", "live");
+    assert.equal(page.items.length, 2);
+    assert.ok(page.items.every(c => c.eventId === "LIVE"));
+    assert.equal(paths.find(p => p.pathname.endsWith("/events"))?.searchParams.get("status"), "open");
+    assert.match(page.live_classification || "", /not_live_score_confirmation/);
+  } finally { global.fetch = original; }
+});

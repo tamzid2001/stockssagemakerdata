@@ -9,9 +9,19 @@ on:
         description: Independent provider replay (paper only)
       strategy:
         type: choice
-        options: [p10, median_cross]
+        options: [p10, median_cross, quantiles]
         default: p10
-        description: P10 target lanes or buy-below/sell-above P50 with crossing refresh
+        description: Quantiles stores inputs/curves/actuals without selecting a trading strategy
+      lag_minutes:
+        type: choice
+        options: ['0', '15', '30']
+        default: '0'
+        description: Exclude this many latest minutes from model input (quantiles mode)
+      roll_minutes:
+        type: choice
+        options: ['15', '30', '45', '60']
+        default: '30'
+        description: Advance the next forecast decision by this many minutes
       loss_multiplier:
         type: number
         default: 2.5
@@ -22,7 +32,7 @@ on:
         description: Per-side share cap (1–10000); one starting share
       horizon:
         type: choice
-        options: ['30', '60']
+        options: ['30', '45', '60']
         default: '30'
         description: Forecast minutes per rolling origin
       max_contracts:
@@ -58,7 +68,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: historical-p10-${{ inputs.provider }}-${{ inputs.strategy || 'p10' }}
+  group: historical-p10-${{ inputs.provider }}-${{ inputs.strategy || 'p10' }}-${{ inputs.horizon }}-${{ inputs.lag_minutes || '0' }}
   cancel-in-progress: false
 jobs:
   replay:
@@ -126,6 +136,8 @@ jobs:
           STRATEGY: ${{ inputs.strategy || 'p10' }}
           LOSS_MULTIPLIER: ${{ inputs.loss_multiplier || 2.5 }}
           MAX_SHARES: ${{ inputs.max_shares || 100 }}
+          LAG_MINUTES: ${{ inputs.lag_minutes || '0' }}
+          ROLL_MINUTES: ${{ inputs.roll_minutes || '30' }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
@@ -143,6 +155,9 @@ jobs:
             const supportsExperiments=fs.readFileSync('market_research/historical.py','utf8').includes('"--strategy"');
             if (supportsExperiments) args.push('--strategy',process.env.STRATEGY,'--loss-multiplier',process.env.LOSS_MULTIPLIER,'--max-shares',process.env.MAX_SHARES);
             else if (process.env.STRATEGY !== 'p10' || Number(process.env.LOSS_MULTIPLIER)!==2.5 || Number(process.env.MAX_SHARES)!==100) throw new Error('Original checkpoint code does not support these new settings.');
+            const supportsLag=fs.readFileSync('market_research/historical.py','utf8').includes('"--lag-minutes"');
+            if (supportsLag) args.push('--lag-minutes',process.env.LAG_MINUTES,'--roll-minutes',process.env.ROLL_MINUTES);
+            else if (Number(process.env.LAG_MINUTES)!==0 || process.env.STRATEGY==='quantiles') throw new Error('Original checkpoint code does not support lagged forecasts.');
             await new Promise((resolve,reject)=>{
               const child=spawn(process.execPath,args,{stdio:'inherit'});
               child.on('error',reject);

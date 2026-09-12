@@ -1,13 +1,33 @@
-name: Polymarket US Live Ensemble Paper Monitor
+name: Kalshi / Polymarket Live Rolling Ensemble Paper Monitor
+run-name: ${{ inputs.provider || 'polymarket_us' }} paper · lag ${{ inputs.lag_minutes || '0' }}m · horizon ${{ inputs.horizon }}m
 
 on:
   workflow_dispatch:
     inputs:
-      horizon:
-        description: Forecast horizon and refresh cadence (minutes)
+      provider:
         type: choice
-        options: ['30', '60']
+        options: [polymarket_us, kalshi]
+        default: polymarket_us
+        description: Independent live provider, shared inference worker
+      lag_minutes:
+        type: choice
+        options: ['0', '15', '30']
         default: '30'
+        description: Model input ends this many minutes before the decision
+      roll_minutes:
+        type: choice
+        options: ['15', '30', '45', '60']
+        default: '30'
+        description: Rolling refresh cadence, subject to actual inference latency
+      forecast_only:
+        type: boolean
+        default: true
+        description: Save quantiles without opening simulated positions
+      horizon:
+        description: Forecast minutes after input cutoff; must exceed lag
+        type: choice
+        options: ['30', '45', '60']
+        default: '60'
       run_once:
         description: One bounded validation cycle; no successor
         type: boolean
@@ -23,7 +43,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: polymarket-live-paper
+  group: polymarket-live-paper-${{ inputs.provider || 'polymarket_us' }}
   cancel-in-progress: false
 
 jobs:
@@ -37,6 +57,11 @@ jobs:
       MKL_NUM_THREADS: '2'
       POLYMARKET_PAPER_ENABLED: ${{ vars.POLYMARKET_PAPER_ENABLED || 'false' }}
       PAPER_HORIZON: ${{ inputs.horizon }}
+      PAPER_PROVIDER: ${{ inputs.provider || 'polymarket_us' }}
+      PAPER_LAG_MINUTES: ${{ inputs.lag_minutes || '0' }}
+      PAPER_ROLL_MINUTES: ${{ inputs.roll_minutes || '30' }}
+      PAPER_FORECAST_ONLY: ${{ inputs.forecast_only }}
+      KALSHI_PAPER_ENABLED: ${{ vars.KALSHI_PAPER_ENABLED || 'false' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -68,7 +93,8 @@ jobs:
           TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: |
-          args=(--mode live --horizon "$PAPER_HORIZON" --duration-minutes 345)
+          args=(--mode live --provider "$PAPER_PROVIDER" --horizon "$PAPER_HORIZON" --lag-minutes "$PAPER_LAG_MINUTES" --roll-minutes "$PAPER_ROLL_MINUTES" --duration-minutes 345)
+          if [[ "$PAPER_FORECAST_ONLY" == 'true' ]]; then args+=(--forecast-only); fi
           if [[ "$RUN_ONCE" == 'true' ]]; then args+=(--once --max-contracts 4); fi
           python -m market_research.worker "${args[@]}"
       - name: Checkpoint-confirmed successor handoff

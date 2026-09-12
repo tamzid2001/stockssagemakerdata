@@ -20,7 +20,7 @@ from .engine import (
     summarize,
     validate_forecast,
 )
-from .provider import QuanturaProvider, historical_range
+from .provider import QuanturaProvider, KalshiProvider, historical_range
 from .store import Store
 from .local_store import LocalStore
 
@@ -81,31 +81,41 @@ def replay_quotes(store, contract, state, quotes, forecast, strategy, events):
 
 
 def process_live(
-    store, provider, contract, now, horizon, strategy, forecaster, events, heartbeat
+    store, provider, contract, now, horizon, strategy, forecaster, events, heartbeat,
+    lag_minutes=0, roll_minutes=None, forecast_only=False,
 ):
+    from .corpus import lagged_window, annotate_forecast, matching_actuals
+    if not 0 <= lag_minutes < horizon:
+        raise ValueError("LAG_MUST_BE_LESS_THAN_HORIZON")
     saved = store.load(contract["contractId"])
     state = saved.get("state") or initial_state()
     old_forecast = saved.get("forecast")
     # Recover enough history for pending/position exits after a handoff gap.
-    start = max(now - 48 * 3600, min(now - 501 * 60, state["last_timestamp"] or now))
+    start = max(now - 7 * 86400, min(now - (1500 + lag_minutes) * 60, state["last_timestamp"] or now))
     quotes = normalize_quotes(provider.history(contract, start, now), now)
     gap = max(0, now - state["last_timestamp"] - 60) if state["last_timestamp"] else 0
     fresh = [q for q in quotes if q.timestamp > state["last_timestamp"]]
-    if old_forecast:
+    if old_forecast and not forecast_only:
         replay_quotes(store, contract, state, fresh, old_forecast, strategy, events)
     if not contract.get("live"):
         return {"forecast": False, "gap_seconds": gap, "status": "closed_followup"}
     origin = now // 60 * 60
-    if old_forecast and origin - old_forecast["origin"] < horizon * 60:
+    if old_forecast and origin - old_forecast.get("decision_time", old_forecast["origin"]) < (roll_minutes or horizon) * 60:
         return {"forecast": False, "gap_seconds": gap, "status": "monitoring"}
-    window = history_window(quotes, origin)
+    window, cutoff = lagged_window(quotes, origin, lag_minutes)
+    if window[-1].timestamp + horizon * 60 <= origin:
+        raise ValueError("FORECAST_EXPIRES_BEFORE_DECISION")
     new_forecast = forecaster(window, horizon)
     heartbeat.check()
-    validate_forecast(new_forecast, origin, horizon)
+    validate_forecast(new_forecast, window[-1].timestamp, horizon)
+    annotate_forecast(new_forecast, contract, origin, cutoff, lag_minutes)
     # ceil to the next minute: no historical quote preceding publication may
     # trigger a prospective signal, including time consumed by model inference.
     new_forecast["available_at"] = (int(time.time()) // 60 + 1) * 60
     new_forecast["mode"] = "prospective_paper"
+    new_forecast["strategy"] = None if forecast_only else "p10"
+    new_forecast["actuals"] = matching_actuals(new_forecast, quotes)
+    new_forecast["expired_before_publication"] = new_forecast["rows"][-1]["timestamp"] <= new_forecast["available_at"]
     if not old_forecast:
         state["previous"] = asdict(window[-1])
         state["last_timestamp"] = origin
@@ -203,6 +213,10 @@ def run(args):
         "horizon": args.horizon,
         "models": args.models,
         "strategy": asdict(strategy),
+        "provider": args.provider,
+        "lag_minutes": args.lag_minutes,
+        "roll_minutes": args.roll_minutes,
+        "forecast_only": args.forecast_only,
     }
     run_id = (
         os.environ.get("GITHUB_RUN_ID", str(time.time_ns()))
@@ -210,7 +224,7 @@ def run(args):
         + os.environ.get("GITHUB_RUN_ATTEMPT", "1")
     )
     session = (
-        ("polymarket-paper-" + digest(configuration)[:20])
+        (args.provider + "-paper-" + digest(configuration)[:20])
         if args.mode == "live"
         else "polymarket-history-" + run_id
     )
@@ -220,7 +234,8 @@ def run(args):
     store.claim(configuration)
     heartbeat = Heartbeat(store)
     heartbeat.thread.start()
-    provider = QuanturaProvider()
+    provider = KalshiProvider() if args.provider == "kalshi" else QuanturaProvider()
+    discovery_cursor = "0"
     events = []
     failures = []
     cycles = []
@@ -248,7 +263,9 @@ def run(args):
     try:
         while time.monotonic() < deadline:
             heartbeat.check()
-            contracts, coverage = provider.discover(args.mode, args.max_pages)
+            contracts, coverage = provider.discover(args.mode, args.max_pages, discovery_cursor)
+            if args.mode == "live" and args.provider == "kalshi":
+                discovery_cursor = coverage.get("next_cursor") or "0"
             eligible = paired_contracts(contracts)
             selected = eligible[: args.max_contracts]
             # Keep unresolved simulated positions from games that stopped being live.
@@ -257,7 +274,7 @@ def run(args):
                 selected += [
                     {**c, "live": False}
                     for c in store.tracked()
-                    if c["contractId"] not in current_ids
+                    if c["contractId"] not in current_ids and not args.forecast_only
                 ]
             coverage.update(
                 {
@@ -288,6 +305,9 @@ def run(args):
                             forecaster,
                             events,
                             heartbeat,
+                            lag_minutes=args.lag_minutes,
+                            roll_minutes=args.roll_minutes,
+                            forecast_only=args.forecast_only,
                         )
                     else:
                         result = process_historical(
@@ -392,7 +412,7 @@ def run(args):
         if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(summary, "a", encoding="utf-8") as handle:
                 handle.write(
-                    f"## Polymarket US {args.mode} paper research\n\nCommit: `{code_sha}`\n\n"
+                    f"## {args.provider} {args.mode} paper research\n\nCommit: `{code_sha}`\n\n"
                     f"Selected contracts: {coverage['selected_contracts']}; successful: {coverage['successful']}; unavailable: {coverage['failed']}.\n\n"
                     f"Registered models: 5. Requested for this run: {', '.join(args.models)}. Actual participation counts: `{json.dumps(participation)}`. TimesFM is not included unless explicitly selected and commercially licensed.\n\n"
                     f"Detailed results storage: {getattr(store, 'storage_name', 'private_firestore')}. No exchange orders were submitted.\n"
@@ -405,7 +425,11 @@ def main():
     from .forecast import default_research_models
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("live", "historical"), required=True)
-    parser.add_argument("--horizon", type=int, choices=(30, 60), default=30)
+    parser.add_argument("--provider", choices=("polymarket_us", "kalshi"), default="polymarket_us")
+    parser.add_argument("--horizon", type=int, choices=(30, 45, 60), default=30)
+    parser.add_argument("--lag-minutes", type=int, choices=(0, 15, 30), default=0)
+    parser.add_argument("--roll-minutes", type=int, choices=(15, 30, 45, 60), default=30)
+    parser.add_argument("--forecast-only", action="store_true")
     parser.add_argument("--duration-minutes", type=int, default=345)
     parser.add_argument("--max-contracts", type=int, default=100)
     parser.add_argument("--max-pages", type=int, default=20)
@@ -418,6 +442,8 @@ def main():
     )
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
+    if args.lag_minutes >= args.horizon or (args.mode != "live" and (args.lag_minutes or args.horizon == 45 or args.provider != "polymarket_us")):
+        parser.error("Use historical corpus runner for lagged/multi-provider archives; lag must be shorter than horizon")
     if (
         not 3 <= args.duration_minutes <= 345
         or not 2 <= args.max_contracts <= 500
