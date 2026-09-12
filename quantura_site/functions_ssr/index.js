@@ -78,7 +78,11 @@ const injectRemoteConfig = (html, { initialFetchResponse }) => {
   return `${payload}\n${html}`;
 };
 
-const PUBLIC_SHELL_ASSET_VERSION = "20260909a";
+// Follow the committed deployment, not a manually maintained date string.
+// Validate metadata before using it in markup. Local development has a stable
+// fallback; production deploy.sh and Vercel Git builds both provide a commit.
+const PUBLIC_SHELL_ASSET_VERSION = [process.env.GITLAB_SERVICE_VERSION, process.env.VERCEL_GIT_COMMIT_SHA]
+  .find((value) => /^[a-f0-9]{40}$/i.test(value || ""))?.slice(0, 12) || "20260912b";
 const injectPublicShellAssets = (html) =>
   String(html || "")
     .replace(/\/app\.js(?:\?v=[A-Za-z0-9._-]+)?/g, `/app.min.js?v=${PUBLIC_SHELL_ASSET_VERSION}`)
