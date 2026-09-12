@@ -17,3 +17,17 @@ P10 crossings from either direction are measured separately. Nine independent ex
 - Coverage reports distinguish configured bounds, unavailable data, completed sides, and unfinished work. No run claims all-history coverage merely because its job succeeded.
 
 Metrics are computed on timestamp-matched future observed asks: MAE, RMSE, bias, quantile pinball loss and empirical coverage. They are out-of-sample simulated research, not in-sample Prophet metrics or guarantees of future returns.
+
+## Median-crossing experiment
+
+Select `strategy=median_cross` on the same workflow for either provider. It uses the same real data adapters, five-model ensemble and encrypted checkpoints, not a separate trading service.
+
+- Buy below the available P50: signal at a genuine ask below the median, then require a **later** observed ask plus slippage below that frozen limit. Sell above P50: signal when the observed bid is above the available median, then require a **later** bid minus slippage above that frozen sell limit. One position per side, no same-observation entry/exit.
+- Every observed crossing of P50 from either direction requests another ensemble using only the latest up-to-500 observations available then. Crossings compare adjacent real minute observations against the same saved curve; gaps do not fabricate crossing events. Initial/expired forecasts also refresh.
+- Recalculation is not instantaneous. Each forecast records measured execution time; simulated serial publication is rounded up to a minute. Crossing requests can queue, and a forecast can expire before it becomes available. Such latency is counted, not hidden. No refreshed curve rewrites the crossing or its prior orders.
+- Retains the P01 protective stop fixed at entry signal and the entry forecast's horizon timeout. An unfinished position at the end of available history remains open/censored. A median exit is not necessarily profitable after spread, costs and forecast changes.
+- `loss_multiplier` defaults to 2.5 and `max_shares` to 100; start with 1 share and reset after a net profitable trade. Setting multiplier to 1 supplies a fixed-size comparison. Cap applies separately per contract side, **not** as a global portfolio risk limit. Increasing size after losses increases risk; it does not guarantee recovery.
+- The common cost assumptions remain $0.01 per contract per side and $0.005 adverse slippage per side. They are illustrative sensitivity inputs, not asserted venue fees or proof of order-book depth.
+- Forecast budget counts every attempted refresh, not just successful forecasts. Hitting the budget stops that side and is reported as `forecast_budget`, not full historical coverage. Results separate closed-trade win rate, net P&L, open positions, crossings, actual model participation and ML metrics after simulated publication.
+
+P10 and median experiments have separate provider/strategy concurrency groups. Existing pinned P10 continuations keep their original code and configuration. Historical artifacts remain private encrypted ZIPs with three-day retention; there is no live-order execution in this workflow.

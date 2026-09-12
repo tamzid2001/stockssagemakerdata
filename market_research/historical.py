@@ -14,6 +14,7 @@ from .engine import Strategy, VERSION, digest, summarize
 from .local_store import LocalStore
 from .provider import KalshiProvider, QuanturaProvider
 from .worker import Heartbeat, paired_contracts, process_historical
+from .median import MEDIAN_VERSION, process_median_historical
 
 
 def evaluate_metrics(forecasts, snapshots):
@@ -33,7 +34,7 @@ def evaluate_metrics(forecasts, snapshots):
         actuals = by_contract.get((context.get("symbol"), context.get("side")), {})
         for row in forecast["rows"]:
             timestamp = row["timestamp"]
-            if timestamp <= forecast["origin"] or timestamp not in actuals:
+            if timestamp <= max(forecast["origin"], forecast.get("available_at", 0)) or timestamp not in actuals:
                 continue
             actual = actuals[timestamp]
             error = row["quantiles"]["0.5"] - actual
@@ -56,10 +57,12 @@ def evaluate_metrics(forecasts, snapshots):
 def run(args):
     from .forecast import default_research_models, forecast_window
     models = default_research_models()
+    strategy = Strategy(loss_multiplier=args.loss_multiplier, max_shares=args.max_shares)
     code = os.environ.get("QUANTURA_CODE_SHA", "local")
     config = {"version": VERSION, "provider": args.provider, "series": args.series, "horizon": args.horizon,
               "models": models, "max_contracts": args.max_contracts, "max_origins": args.max_origins,
-              "strategy": asdict(Strategy()), "code": code}
+              "strategy": asdict(strategy), "experiment": args.strategy,
+              "experiment_version": MEDIAN_VERSION if args.strategy == "median_cross" else VERSION, "code": code}
     # JSON-normalized so tuple/list distinctions cannot break a valid resume.
     config = json.loads(json.dumps(config))
     run_id = os.environ.get("GITHUB_RUN_ID", str(time.time_ns())) + "-" + os.environ.get("GITHUB_RUN_ATTEMPT", "1")
@@ -101,11 +104,13 @@ def run(args):
                 return result
 
             try:
-                result = process_historical(store, provider, contract, checkpoint["as_of"], args.horizon, Strategy(), forecaster, args.max_origins, events, heartbeat, deadline - 180)
+                replay = process_median_historical if args.strategy == "median_cross" else process_historical
+                result = replay(store, provider, contract, checkpoint["as_of"], args.horizon, strategy, forecaster, args.max_origins, events, heartbeat, deadline - 180)
             except (ValueError, RuntimeError) as error:
                 checkpoint["failures"].append({"contract_id": contract["contractId"], "code": "HISTORY_UNAVAILABLE", "type": type(error).__name__})
                 result = {"complete": True}
             if result["complete"]:
+                store.checkpoint("result:" + contract["contractId"], {"contract_id": contract["contractId"], **result})
                 checkpoint.setdefault("seen_contracts", []).append(contract["contractId"])
                 checkpoint["index"] += 1
                 checkpoint["attempted"] += 1
@@ -118,8 +123,16 @@ def run(args):
         store.checkpoint("head", checkpoint)
         forecasts = store.values("forecasts")
         trades = store.values("trades")
+        summary = summarize(trades, ("0.5",)) if args.strategy == "median_cross" else summarize(trades)
+        if args.strategy == "median_cross":
+            summary.update(experiment=MEDIAN_VERSION, levels_are_independent=False,
+                           crossings=sum(t.get("kind") == "median_crossing" for t in trades),
+                           forecast_failures=sum(t.get("kind") == "forecast_failure" for t in trades),
+                           open_positions=sum(bool(c["state"].get("position")) for c in store.values("contracts")),
+                           latency_policy="serial_measured_inference_rounded_up_to_minutes")
         report = {"configuration": config, "statistics_scope": "entire_resumed_checkpoint", "registered_models": 5,
-                  "forecast_count": len(forecasts), "checkpoint": checkpoint, "summary": summarize(trades),
+                  "forecast_count": len(forecasts), "checkpoint": checkpoint, "summary": summary,
+                  "contract_results": [c for c in store.values("checkpoints") if "contract_id" in c],
                   "metrics": evaluate_metrics(forecasts, store.values("snapshots")),
                   "model_participation": {m: sum(any(r.get("id") == m and r.get("status") == "completed" for r in f.get("models", [])) for f in forecasts) for m in models},
                   "resume_required": not checkpoint["done"], "storage_limit_reached": store.at_capacity,
@@ -130,7 +143,7 @@ def run(args):
                 handle.write(f"resume_required={str(not checkpoint['done'] and not store.at_capacity).lower()}\n")
         if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(summary, "a") as handle:
-                handle.write(f"## {args.provider} historical P10 research\n\nSimulated, out-of-sample; no orders. {checkpoint['attempted']} contract sides processed; {len(forecasts)} stored forecasts. Resume required: {not checkpoint['done']}.\n\nDetailed win rates, ML metrics, inputs and checkpoints are in the encrypted artifact. No Firestore backtest storage.\n")
+                handle.write(f"## {args.provider} historical {args.strategy} research\n\nSimulated, out-of-sample; no orders. {checkpoint['attempted']} contract sides processed; {len(forecasts)} stored forecasts. Resume required: {not checkpoint['done']}.\n\nDetailed win rates, ML metrics, inputs and checkpoints are in the encrypted artifact. No Firestore backtest storage.\n")
         return report
     finally:
         heartbeat.close()
@@ -145,9 +158,16 @@ def main():
     parser.add_argument("--max-contracts", type=int, default=100)
     parser.add_argument("--max-origins", type=int, default=1000)
     parser.add_argument("--duration-minutes", type=int, default=345)
+    parser.add_argument("--strategy", choices=("p10", "median_cross"), default="p10")
+    parser.add_argument("--loss-multiplier", type=float, default=2.5)
+    parser.add_argument("--max-shares", type=float, default=100)
     args = parser.parse_args()
     if not 2 <= args.max_contracts <= 500 or args.max_contracts % 2 or not 1 <= args.max_origins <= 1000 or not 3 <= args.duration_minutes <= 345:
         parser.error("Bounded duration/origins and even contract count required")
+    try:
+        Strategy(loss_multiplier=args.loss_multiplier, max_shares=args.max_shares)
+    except ValueError:
+        parser.error("Invalid loss multiplier or share cap")
     try:
         run(args)
     except Exception as error:

@@ -60,3 +60,16 @@ def test_long_replay_has_pinned_handoff_complete_restore_and_private_online_chec
     assert "45 * 60 * 1000" in script and "retentionDays: 3" in script
     assert script.index("uploadArtifact") < script.index("deleteArtifact")
     assert "retained.length > 2" in script
+
+
+def test_median_experiment_uses_shared_worker_with_isolated_bounded_configuration():
+    text = (ROOT / ".github/workflows/historical-p10-replay.yml").read_text()
+    workflow = yaml.safe_load(text)
+    inputs = workflow[True]["workflow_dispatch"]["inputs"]
+    assert inputs["strategy"]["options"] == ["p10", "median_cross"]
+    assert inputs["loss_multiplier"]["default"] == 2.5
+    assert inputs["max_shares"]["default"] == 100
+    assert "inputs.strategy" in workflow["concurrency"]["group"]
+    assert "supportsExperiments" in text and "Original checkpoint code" in text
+    assert "spawn(process.execPath,args" in text
+    assert "POLYMARKET_SECRET_KEY" not in text and "KALSHI_PRIVATE_KEY" not in text

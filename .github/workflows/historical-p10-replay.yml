@@ -1,4 +1,4 @@
-name: Resumable Kalshi / Polymarket P10 Ensemble Backtest
+name: Resumable Kalshi / Polymarket Ensemble Strategy Backtest
 on:
   workflow_dispatch:
     inputs:
@@ -7,6 +7,19 @@ on:
         options: [kalshi, polymarket_us]
         default: kalshi
         description: Independent provider replay (paper only)
+      strategy:
+        type: choice
+        options: [p10, median_cross]
+        default: p10
+        description: P10 target lanes or buy-below/sell-above P50 with crossing refresh
+      loss_multiplier:
+        type: number
+        default: 2.5
+        description: Next size after a net loss (1–10); resets after a net profit
+      max_shares:
+        type: number
+        default: 100
+        description: Per-side share cap (1–10000); one starting share
       horizon:
         type: choice
         options: ['30', '60']
@@ -45,7 +58,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: historical-p10-${{ inputs.provider }}
+  group: historical-p10-${{ inputs.provider }}-${{ inputs.strategy || 'p10' }}
   cancel-in-progress: false
 jobs:
   replay:
@@ -110,6 +123,9 @@ jobs:
           CONTRACTS: ${{ inputs.max_contracts }}
           ORIGINS: ${{ inputs.max_origins }}
           SERIES: ${{ inputs.series }}
+          STRATEGY: ${{ inputs.strategy || 'p10' }}
+          LOSS_MULTIPLIER: ${{ inputs.loss_multiplier || 2.5 }}
+          MAX_SHARES: ${{ inputs.max_shares || 100 }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
@@ -121,6 +137,12 @@ jobs:
             // runtime credentials; they are inherited, never printed.
             const {spawn} = require('node:child_process');
             const args = ['market_research/node/run.mjs','--provider',process.env.PROVIDER,'--horizon',process.env.HORIZON,'--max-contracts',process.env.CONTRACTS,'--max-origins',process.env.ORIGINS,'--series',process.env.SERIES,'--duration-minutes','345'];
+            // Old pinned P10 checkpoints retain their original CLI/config.
+            // Only add newer flags when the checked-out engine supports them.
+            const fs=require('node:fs');
+            const supportsExperiments=fs.readFileSync('market_research/historical.py','utf8').includes('"--strategy"');
+            if (supportsExperiments) args.push('--strategy',process.env.STRATEGY,'--loss-multiplier',process.env.LOSS_MULTIPLIER,'--max-shares',process.env.MAX_SHARES);
+            else if (process.env.STRATEGY !== 'p10' || Number(process.env.LOSS_MULTIPLIER)!==2.5 || Number(process.env.MAX_SHARES)!==100) throw new Error('Original checkpoint code does not support these new settings.');
             await new Promise((resolve,reject)=>{
               const child=spawn(process.execPath,args,{stdio:'inherit'});
               child.on('error',reject);
