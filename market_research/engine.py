@@ -446,9 +446,9 @@ def direction_statistics(rows: list[dict], observations: list[dict]) -> dict:
     return output
 
 
-def summarize(trades: list[dict]) -> dict:
+def summarize(trades: list[dict], exit_levels=EXIT_LEVELS) -> dict:
     result = {}
-    for level in EXIT_LEVELS:
+    for level in exit_levels:
         rows = [
             t
             for t in trades

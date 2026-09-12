@@ -70,3 +70,6 @@ def test_ml_metrics_only_match_out_of_sample_timestamps_and_observed_quotes():
     assert result["mae"]==pytest.approx(.1)
     assert result["quantiles"]["0.1"]["count"]==2
     assert result["quantiles"]["0.1"]["empirical_coverage"]==0
+    delayed={**forecast,"available_at":180}
+    delayed_result=evaluate_metrics([delayed],[{"contract":{"providerSymbol":"s"},"rows":rows,"end":240}])
+    assert delayed_result["observations_scored"]==1

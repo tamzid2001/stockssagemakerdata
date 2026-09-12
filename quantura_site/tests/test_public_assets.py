@@ -489,7 +489,11 @@ def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
     client = (PUBLIC / "app.js").read_text()
     ssr = (ROOT / "functions_ssr" / "index.js").read_text()
     assert 'const QUANTURA_ICON_URL = "/favicon.svg?v=20260909a"' in client
-    assert 'const PUBLIC_SHELL_ASSET_VERSION = "20260909a"' in ssr
+    assert 'const PUBLIC_SHELL_ASSET_VERSION = [process.env.GITLAB_SERVICE_VERSION, process.env.VERCEL_GIT_COMMIT_SHA]' in ssr
+    config = json.loads((ROOT / "vercel.json").read_text())
+    for asset in ("/app.min.js", "/styles.min.css"):
+        header = next(h for h in config["headers"] if h["source"] == asset)
+        assert header["headers"][0]["value"] == "public, max-age=0, must-revalidate"
     assert ".replace(/\\/assets\\/quantura-icon\\.svg/g" in ssr
     assert "node.innerHTML = '<a href=\"mailto:hello@quantura.studio\">hello@quantura.studio</a>'" in client
     for marker in [
