@@ -15,6 +15,7 @@ from .local_store import LocalStore
 from .provider import KalshiProvider, QuanturaProvider
 from .worker import Heartbeat, paired_contracts, process_historical
 from .median import MEDIAN_VERSION, process_median_historical
+from .corpus import CORPUS_VERSION, export_corpus, process_quantile_historical
 
 
 def evaluate_metrics(forecasts, snapshots):
@@ -65,6 +66,9 @@ def run(args):
               "experiment_version": MEDIAN_VERSION if args.strategy == "median_cross" else VERSION, "code": code}
     # JSON-normalized so tuple/list distinctions cannot break a valid resume.
     config = json.loads(json.dumps(config))
+    if args.strategy == "quantiles":
+        config.update(strategy=None, experiment_version=CORPUS_VERSION,
+                      lag_minutes=args.lag_minutes, roll_minutes=args.roll_minutes)
     run_id = os.environ.get("GITHUB_RUN_ID", str(time.time_ns())) + "-" + os.environ.get("GITHUB_RUN_ATTEMPT", "1")
     store = LocalStore("historical-v5", run_id)
     store.claim(config)
@@ -104,8 +108,13 @@ def run(args):
                 return result
 
             try:
-                replay = process_median_historical if args.strategy == "median_cross" else process_historical
-                result = replay(store, provider, contract, checkpoint["as_of"], args.horizon, strategy, forecaster, args.max_origins, events, heartbeat, deadline - 180)
+                if args.strategy == "quantiles":
+                    result = process_quantile_historical(store, provider, contract, checkpoint["as_of"],
+                        args.horizon, forecaster, args.max_origins, heartbeat, deadline - 180,
+                        args.lag_minutes, args.roll_minutes)
+                else:
+                    replay = process_median_historical if args.strategy == "median_cross" else process_historical
+                    result = replay(store, provider, contract, checkpoint["as_of"], args.horizon, strategy, forecaster, args.max_origins, events, heartbeat, deadline - 180)
             except (ValueError, RuntimeError) as error:
                 checkpoint["failures"].append({"contract_id": contract["contractId"], "code": "HISTORY_UNAVAILABLE", "type": type(error).__name__})
                 result = {"complete": True}
@@ -124,6 +133,17 @@ def run(args):
         forecasts = store.values("forecasts")
         trades = store.values("trades")
         summary = summarize(trades, ("0.5",)) if args.strategy == "median_cross" else summarize(trades)
+        if args.strategy == "quantiles":
+            counts = sorted(f["history_count"] for f in forecasts)
+            summary = {"experiment": CORPUS_VERSION, "strategy": None, "trade_count": 0,
+                       "forecast_count": len(forecasts),
+                       "input_observations": {"minimum": min(counts) if counts else None,
+                           "maximum": max(counts) if counts else None,
+                           "median": counts[len(counts) // 2] if counts else None,
+                           "with_500": counts.count(500)},
+                       "observed_overlay_rows": sum(a["observed"] and a["phase"] == "already_observed_at_decision" for f in forecasts for a in f["actuals"]),
+                       "observed_future_rows": sum(a["observed"] and a["phase"] == "after_decision" for f in forecasts for a in f["actuals"]),
+                       "all_five_completed": sum(len([m for m in f["models"] if m.get("status") == "completed"]) == 5 for f in forecasts)}
         if args.strategy == "median_cross":
             summary.update(experiment=MEDIAN_VERSION, levels_are_independent=False,
                            crossings=sum(t.get("kind") == "median_crossing" for t in trades),
@@ -138,6 +158,8 @@ def run(args):
                   "resume_required": not checkpoint["done"], "storage_limit_reached": store.at_capacity,
                   "limitations": ["Simulated quote fills, not executed orders. Independent target experiments must not be summed as a portfolio.", "Missing minutes are not fabricated. No crossing is inferred across a gap.", "Short/irregular history is disclosed; five registered models do not imply five successful models at every origin.", "Coverage is bounded by the configured contract/origin budget, not all historical sports."]}
         store.report(run_id, report)
+        if args.strategy == "quantiles":
+            export_corpus(store, forecasts, config)
         if output := os.environ.get("GITHUB_OUTPUT"):
             with open(output, "a") as handle:
                 handle.write(f"resume_required={str(not checkpoint['done'] and not store.at_capacity).lower()}\n")
@@ -154,14 +176,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--provider", choices=("kalshi", "polymarket_us"), required=True)
     parser.add_argument("--series", default="")
-    parser.add_argument("--horizon", choices=(30, 60), type=int, default=30)
+    parser.add_argument("--horizon", choices=(30, 45, 60), type=int, default=30)
     parser.add_argument("--max-contracts", type=int, default=100)
     parser.add_argument("--max-origins", type=int, default=1000)
     parser.add_argument("--duration-minutes", type=int, default=345)
-    parser.add_argument("--strategy", choices=("p10", "median_cross"), default="p10")
+    parser.add_argument("--strategy", choices=("p10", "median_cross", "quantiles"), default="p10")
+    parser.add_argument("--lag-minutes", type=int, choices=(0, 15, 30), default=0)
+    parser.add_argument("--roll-minutes", type=int, choices=(15, 30, 45, 60), default=30)
     parser.add_argument("--loss-multiplier", type=float, default=2.5)
     parser.add_argument("--max-shares", type=float, default=100)
     args = parser.parse_args()
+    if args.lag_minutes >= args.horizon or (args.strategy != "quantiles" and (args.lag_minutes or args.horizon == 45)):
+        parser.error("Lagged/45-minute experiments require quantiles mode; lag must be shorter than horizon")
     if not 2 <= args.max_contracts <= 500 or args.max_contracts % 2 or not 1 <= args.max_origins <= 1000 or not 3 <= args.duration_minutes <= 345:
         parser.error("Bounded duration/origins and even contract count required")
     try:

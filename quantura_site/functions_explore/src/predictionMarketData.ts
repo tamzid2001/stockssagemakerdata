@@ -1442,7 +1442,7 @@ export const PREDICTION_MARKET_CAPABILITIES = {
  * Old events remain in /events; their markets must be joined from /historical.
  * Outcome annotations stay in metadata, never in the historical model target.
  */
-export async function kalshiResearchCatalog(seriesTicker = "", cursor = "") {
+export async function kalshiResearchCatalog(seriesTicker = "", cursor = "", mode: "live" | "historical" = "historical") {
   if (cursor.length > 2048 || /[\x00-\x1f]/.test(cursor)) throw new PredictionMarketDataError("invalid_cursor", "Invalid catalog cursor.");
   let seriesPayload = cached<JsonRecord>("kalshi:research-series");
   if (!seriesPayload) {
@@ -1460,7 +1460,7 @@ export async function kalshiResearchCatalog(seriesTicker = "", cursor = "") {
   if (!/^[A-Z0-9._-]{1,120}$/.test(seriesTicker) || !summaries.some(s => s.ticker === seriesTicker)) {
     throw new PredictionMarketDataError("invalid_series", "Choose an existing Kalshi Sports series.");
   }
-  const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/events`, { series_ticker: seriesTicker, status: "settled", limit: 1,
+  const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/events`, { series_ticker: seriesTicker, status: mode === "live" ? "open" : "settled", limit: mode === "live" ? 200 : 1,
     with_nested_markets: true, with_milestones: true, cursor }));
   const events = asArray(payload.events).map(asRecord).filter((e): e is JsonRecord => !!e);
   const items: PredictionMarketContract[] = [];
@@ -1469,6 +1469,11 @@ export async function kalshiResearchCatalog(seriesTicker = "", cursor = "") {
     if (text(event.series_ticker) !== seriesTicker || !/^[A-Z0-9._-]{1,180}$/.test(eventTicker)) continue;
     const markets = new Map<string, JsonRecord>();
     asArray(event.markets).map(asRecord).filter((m): m is JsonRecord => !!m).forEach(m => markets.set(text(m.ticker), { ...m, source_tier: "live" }));
+    if (mode === "live") {
+      items.push(...normalizeKalshiEvent({ event, markets: [...markets.values()], milestones: payload.milestones }, "Sports")
+        .filter(c => isMoneyline(c) && gameTiming(c) === "in_progress"));
+      continue;
+    }
     const archived = await fetchJson(queryUrl(`${KALSHI_API}/historical/markets`, { event_ticker: eventTicker, limit: 1000 }));
     // A game normally has two or three outcome markets. Never silently truncate
     // an anomalous huge event or present it as complete game coverage.
@@ -1481,7 +1486,8 @@ export async function kalshiResearchCatalog(seriesTicker = "", cursor = "") {
   }
   const next = text(payload.cursor, 2048) || null;
   if (next && next === cursor) throw new PredictionMarketDataError("repeated_cursor", "Kalshi repeated a catalog cursor.", 502);
-  return { ok: true, source: "kalshi", items, events_scanned: events.length, next_cursor: next,
+  return { ok: true, source: "kalshi", mode, items, events_scanned: events.length, next_cursor: next,
+    live_classification: mode === "live" ? "open_market_with_known_sports_start_within_18_hours_not_live_score_confirmation" : null,
     fetched_at: new Date().toISOString(), redistribution_status: "review_required" };
 }
 
@@ -1490,8 +1496,10 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
   router.get("/sports/prediction-markets/research-catalog", async (req, res) => {
     try {
       if (req.query.source === "kalshi") {
+        const mode = text(req.query.mode || "historical", 20);
+        if (mode !== "live" && mode !== "historical") throw new PredictionMarketDataError("invalid_mode", "Choose live or historical.");
         res.setHeader("Cache-Control", "public, max-age=30");
-        res.status(200).json(await kalshiResearchCatalog(String(req.query.series_ticker || ""), String(req.query.cursor || "")));
+        res.status(200).json(await kalshiResearchCatalog(String(req.query.series_ticker || ""), String(req.query.cursor || ""), mode));
         return;
       }
       if (req.query.source && req.query.source !== "polymarket_us") throw new PredictionMarketDataError("invalid_source", "Choose Polymarket US or Kalshi.");
