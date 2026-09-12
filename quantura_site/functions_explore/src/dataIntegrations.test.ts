@@ -79,6 +79,20 @@ test("Alpaca all-history selection follows every provider page", async () => {
   assert.equal(result.rows.length, 3);
 });
 
+test("Alpaca daily regular-session bars retain midnight timestamps and 500 observations", async () => {
+  withAlpacaEnvironment();
+  const client = new AlpacaClient({ fetchImpl: (async () => Response.json({ bars: Array.from({length:500}, (_,i) => ({ t:new Date(Date.UTC(2024,0,1+i,5)).toISOString(), o:1,h:2,l:1,c:2,v:1 })) })) as typeof fetch });
+  const result = await client.getStockBars({symbol:"PLTR",timeframe:"1Day",session:"regular",limit:500,start:"2024-01-01",end:"2026-09-11"});
+  assert.equal(result.rows.length,500);
+});
+
+test("Alpaca filters intraday extended bars before counting the requested limit", async () => {
+  withAlpacaEnvironment();let calls=0;
+  const client = new AlpacaClient({fetchImpl: (async () => { calls++;return Response.json({bars:[{t: calls===1 ? "2026-09-10T05:00:00Z":"2026-09-10T15:00:00Z",o:1,h:1,l:1,c:1,v:1}],next_page_token:calls===1?"second":null}); }) as typeof fetch});
+  const result=await client.getStockBars({symbol:"PLTR",timeframe:"1Min",session:"regular",limit:1,start:"2026-09-10",end:"2026-09-11"});
+  assert.equal(calls,2);assert.equal(result.rows.length,1);assert.equal(result.rows[0].session,"regular");
+});
+
 test("Alpaca session classification distinguishes extended-hours observations", () => {
   assert.equal(classifyEquitySession("2026-08-21T12:00:00Z"), "premarket");
   assert.equal(classifyEquitySession("2026-08-21T15:00:00Z"), "regular");

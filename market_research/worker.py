@@ -56,7 +56,7 @@ def paired_contracts(contracts):
     return [
         c
         for group in groups.values()
-        if len(group) == 2 and {c["side"] for c in group} == {"long", "short"}
+        if len(group) == 2 and {c["side"] for c in group} in ({"long", "short"}, {"yes", "no"})
         for c in group
     ]
 
@@ -144,12 +144,23 @@ def process_historical(
     saved = store.load(contract["contractId"])
     state = saved.get("state") or initial_state()
     successful = failed = 0
+    def finish_origin(forecast, origin):
+        replay_quotes(store, contract, state, [q for q in quotes if origin < q.timestamp <= origin + horizon * 60], forecast, strategy, events)
+        state["completed_origin"] = origin
+        state["origin_count"] = state.get("origin_count", 0) + 1
+        state.pop("active_origin", None)
+        store.save(contract["contractId"], state, forecast, [], contract)
+
+    # Crash after forecast publication or during replay: finish the SAME stored
+    # forecast, never refit with newly revealed observations or double count.
+    if state.get("active_origin") is not None:
+        finish_origin(saved.get("forecast"), state["active_origin"])
     for origin in rolling_origins(quotes, horizon):
         if getattr(store, "at_capacity", False):
             break
         if (
-            origin < state["last_timestamp"]
-            or successful + failed >= max_origins
+            origin <= state.get("completed_origin", 0)
+            or state.get("origin_count", 0) >= max_origins
             or time.monotonic() >= deadline
         ):
             continue
@@ -160,31 +171,16 @@ def process_historical(
             validate_forecast(forecast, origin, horizon)
         except (ValueError, RuntimeError):
             failed += 1
-            replay_quotes(
-                store,
-                contract,
-                state,
-                [q for q in quotes if origin < q.timestamp <= origin + horizon * 60],
-                None,
-                strategy,
-                events,
-            )
+            finish_origin(None, origin)
             continue
         forecast["mode"] = "out_of_sample_historical_simulation"
         if not state["last_timestamp"]:
             state["previous"] = asdict(window[-1])
             state["last_timestamp"] = origin
         # Immutable forecast is saved before its future observations are scored.
+        state["active_origin"] = origin
         store.save(contract["contractId"], state, forecast, [], contract)
-        replay_quotes(
-            store,
-            contract,
-            state,
-            [q for q in quotes if origin < q.timestamp <= origin + horizon * 60],
-            forecast,
-            strategy,
-            events,
-        )
+        finish_origin(forecast, origin)
         successful += 1
     return {
         "forecasts": successful,
@@ -193,6 +189,7 @@ def process_historical(
         "archive_cache_hit": cache_hit,
         "open_positions": sum(bool(l["position"]) for l in state["levels"].values()),
         "unresolved_triggers": len(state.get("observations", [])),
+        "complete": state.get("origin_count", 0) >= max_origins or all(origin <= state.get("completed_origin", 0) for origin in rolling_origins(quotes, horizon)),
     }
 
 

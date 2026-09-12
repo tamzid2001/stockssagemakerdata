@@ -15,7 +15,7 @@ import math
 from typing import Callable
 
 QUANTILES = (0.01, *tuple(i / 10 for i in range(1, 10)), 0.99)
-VERSION = "quantura_quote_research_v4"
+VERSION = "quantura_quote_research_v5"
 EXIT_LEVELS = (*tuple(str(i / 10) for i in range(2, 10)), "0.99")
 
 
@@ -126,10 +126,24 @@ def normalize_quotes(rows: list[dict], as_of: int) -> list[Quote]:
     buckets = {}
     for row in sorted(rows, key=lambda r: stamp(r["timestamp"])):
         t = stamp(row["timestamp"])
-        end = (t // 60 + 1) * 60
+        # Kalshi candles are already timestamped at the completed interval end.
+        end = t if row.get("source") == "kalshi" else (t // 60 + 1) * 60
         if end > as_of or row.get("is_forward_filled"):
             continue
         raw = row.get("raw") or {}
+        if row.get("source") == "kalshi":
+            yes_ask = row.get("yes_ask_close", raw.get("yes_ask_close"))
+            yes_bid = row.get("yes_bid_close", raw.get("yes_bid_close"))
+            side = row.get("selected_position", raw.get("selected_position", "yes"))
+            ask, bid = (None, None)
+            if yes_ask is not None and yes_bid is not None:
+                ask, bid = (1 - float(yes_bid), 1 - float(yes_ask)) if side == "no" else (yes_ask, yes_bid)
+            if ask is not None and bid is not None:
+                try:
+                    buckets[end] = Quote(end, float(ask), float(bid))
+                except (ValueError, TypeError):
+                    pass
+            continue
         # Normalized exports flatten provider fields; raw exports retain raw.
         long = row.get("long_price", raw.get("long_price"))
         short = row.get("short_price", raw.get("short_price"))
@@ -151,23 +165,19 @@ def normalize_quotes(rows: list[dict], as_of: int) -> list[Quote]:
 def history_window(
     quotes: list[Quote], origin: int, minutes: int = 500, minimum: int = 2
 ) -> list[Quote]:
-    """Up to 500 genuine minute observations, never compress or fill a gap.
+    """Last 500 genuine observations through origin, preserving original times.
 
-    Foundation models use evenly spaced steps. A missing minute therefore
-    starts a new contiguous context; older observations stay in the archive.
-    Two actual observations are sufficient to attempt research inference.
+    Gaps are retained and disclosed by inference, never filled. Foundation
+    model observation-step semantics are a limitation for irregular histories.
     """
     eligible = [
         q
         for q in quotes
-        if q.observed and origin - minutes * 60 < q.timestamp <= origin
+        if q.observed and q.timestamp <= origin
     ]
     if not eligible or eligible[-1].timestamp != origin:
         raise ValueError("missing_origin_quote")
-    first = len(eligible) - 1
-    while first > 0 and eligible[first].timestamp - eligible[first - 1].timestamp == 60:
-        first -= 1
-    window = eligible[first:]
+    window = eligible[-minutes:]
     if len(window) < minimum:
         raise ValueError("insufficient_observed_minute_history")
     return window
@@ -182,7 +192,6 @@ def rolling_origins(quotes: list[Quote], horizon: int):
         if (
             previous.observed
             and current.observed
-            and current.timestamp - previous.timestamp == 60
             and current.timestamp >= due
         ):
             yield current.timestamp

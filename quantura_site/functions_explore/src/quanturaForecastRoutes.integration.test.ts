@@ -50,6 +50,9 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     const created = await call("/v1/ensemble-forecasts", keys[0], request);
     assert.equal(created.status, 202, await created.clone().text());
     const id = (await created.json()).data.forecast_id;
+    const requestIndex = db.collection("users").doc(owner).collection("requests").doc(`ensemble__${id}`);
+    assert.equal((await requestIndex.get()).data()?.sourceRef.id,id);
+    await requestIndex.set({title:"My custom saved forecast",titleEdited:true},{merge:true});
     const ref = db.collection("ensemble_forecast_jobs").doc(id);
     assert.equal((await ref.collection("input_chunks").doc("0000").get()).data()?.rows.length, 40);
     // A server-verified prediction-market fixture exercises the trusted two-bar
@@ -63,11 +66,16 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {})).status, 409);
     const result = { quantiles: [.1, .5, .9], predictions: [40, 41].map(i => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), quantiles: { "0.1": .2, "0.5": .4, "0.9": .6 } })), effective_weights_by_quantile: { "0.1": { prophet: 1 }, "0.5": { prophet: 1 }, "0.9": { prophet: 1 } }, models: ["prophet"], model_runs: [], transform: "logit", warnings: [], failures: [], dataset_hash: job.dataset_hash, prepared_series_hash: "fixture", result_hash: "fixture", runtime_seconds: 1, runtime: { test: true } };
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/complete`, workerToken, result)).status, 200);
+    assert.equal((await requestIndex.get()).data()?.title,"My custom saved forecast");
+    assert.equal((await requestIndex.get()).data()?.outputsMeta.status,"completed");
+    const saved = (await (await call(`/v1/ensemble-forecasts/${id}`,keys[0])).json()).data;
+    assert.equal(saved.history.length,2);
     const downloaded = await call(`/v1/ensemble-forecasts/${id}/download?format=csv`, keys[1]);
     assert.equal(downloaded.status, 200); assert.match(await downloaded.text(), /timestamp,q_0.1,q_0.5,q_0.9/);
     const json = await call(`/v1/ensemble-forecasts/${id}/download?format=json`, keys[1]);
     assert.equal((await json.json()).predictions.length, 2);
     await member.update({ status: "removed" });
+    assert.equal((await call(`/v1/ensemble-forecasts/${id}/observations`, keys[1])).status, 403);
     assert.equal((await call(`/v1/ensemble-forecasts/${id}`, keys[1])).status, 403);
     assert.equal((await call(`/v1/ensemble-forecasts/${id}/download`, keys[1])).status, 403);
     assert.equal((await call(`/v1/forecast/models?workspace_id=${viewer}`, keys[1])).status, 200);

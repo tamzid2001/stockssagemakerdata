@@ -43,3 +43,20 @@ def test_private_storage_rules():
             f"match /market_research_{collection}/{{document=**}} {{ allow read, write: if false; }}"
             in rules
         )
+
+
+def test_long_replay_has_pinned_handoff_complete_restore_and_private_online_checkpoints():
+    text = (ROOT / ".github/workflows/historical-p10-replay.yml").read_text()
+    workflow = yaml.safe_load(text)
+    assert workflow["jobs"]["replay"]["timeout-minutes"] == 360
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+    assert "restore-backtest" in text and "resume_artifact_id" in text
+    assert "input.code_ref = process.env.QUANTURA_CODE_SHA" in text
+    assert "FIREBASE_SERVICE_ACCOUNT_JSON" not in text
+    assert "POLYMARKET_SECRET_KEY" not in text
+    assert "actions/github-script@v8" in text
+    script = (ROOT / "market_research/node/run.mjs").read_text()
+    assert "snapshot" not in script or "checkpoint" in script
+    assert "45 * 60 * 1000" in script and "retentionDays: 3" in script
+    assert script.index("uploadArtifact") < script.index("deleteArtifact")
+    assert "retained.length > 2" in script

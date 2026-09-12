@@ -232,13 +232,19 @@
 
                           <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
                         </form>
+                        <progress id="ensemble-progress" class="ensemble-progress" aria-label="Forecast job progress" hidden></progress>
                         <div id="ensemble-forecast-status" class="ensemble-job-status small muted" role="status" aria-live="polite">Sign in to load your available forecasting models.</div>
                         <section id="ensemble-forecast-results" class="ensemble-results" aria-labelledby="ensemble-results-title" hidden>
                           <div class="forecast-section-heading"><div><div class="eyebrow">Final ensemble</div><h3 id="ensemble-results-title">Probabilistic forecast</h3></div><span id="ensemble-result-state" class="status-pill">Queued</span></div>
                           <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
                           <div id="ensemble-forecast-chart" class="chart ensemble-chart" aria-label="Final ensemble forecast chart"></div>
+                          <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>
+                          <div id="ensemble-observation-status" class="small muted" role="status"></div>
+                          <div id="ensemble-observed-metrics" class="small muted" role="status"></div>
                           <div id="ensemble-result-table" class="table-wrap"></div>
                           <div class="ensemble-result-actions">
+                            <button id="ensemble-share-link" class="task-chip" type="button">Copy workspace share link</button>
+                            <button id="ensemble-refresh-latest" class="task-chip" type="button">Refresh latest data &amp; forecast</button>
                             <a id="ensemble-download-csv" class="cta secondary small" href="#">Download CSV</a>
                             <a id="ensemble-download-json" class="cta secondary small" href="#">Download JSON</a>
                             <button id="ensemble-copy-config" class="task-chip" type="button">Copy API request</button>

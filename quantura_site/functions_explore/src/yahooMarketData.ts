@@ -100,7 +100,7 @@ function adjustedOhlc(raw: { open: number; high: number; low: number; close: num
 
 export function parseYahooChartResponse(
   payload: Record<string, unknown>,
-  options: { adjustment?: string; session?: string; limit?: number } = {}
+  options: { adjustment?: string; session?: string; limit?: number; timeframe?: string } = {}
 ): AlpacaBar[] {
   const chart = payload.chart && typeof payload.chart === "object" ? (payload.chart as Record<string, unknown>) : {};
   const results = Array.isArray(chart.result) ? chart.result : [];
@@ -118,7 +118,7 @@ export function parseYahooChartResponse(
   const volumes = Array.isArray(quote.volume) ? quote.volume : [];
   const adjustedCloses = Array.isArray(adjusted.adjclose) ? adjusted.adjclose : [];
   const adjustment = String(options.adjustment || "raw").toLowerCase();
-  const regularOnly = String(options.session || "extended").toLowerCase() === "regular";
+  const regularOnly = String(options.session || "extended").toLowerCase() === "regular" && !/Day|Week|Month/i.test(options.timeframe || "");
 
   const rows = timestamps.flatMap((rawTimestamp, index) => {
     const timestampSeconds = finite(rawTimestamp);
@@ -148,6 +148,8 @@ export function parseYahooChartResponse(
   return requested > 0 ? rows.slice(-Math.min(requested, 50000)) : rows;
 }
 
+const yahooCooldowns = new WeakMap<FetchLike, number>();
+
 export class YahooFinanceClient {
   private readonly fetchImpl: FetchLike;
   private optionSession: YahooOptionSession | null = null;
@@ -158,6 +160,9 @@ export class YahooFinanceClient {
   }
 
   private async requestJson(url: string, extraHeaders: Record<string, string> = {}): Promise<Record<string, unknown>> {
+    if ((yahooCooldowns.get(this.fetchImpl) || 0) > Date.now()) {
+      throw new AlpacaError("rate_limit", "Yahoo Finance is cooling down after a rate limit. Wait a minute or select Auto/Alpaca for supported US equities.", 429);
+    }
     let response: Response;
     try {
       response = await this.fetchImpl(url, {
@@ -168,7 +173,12 @@ export class YahooFinanceClient {
       throw new AlpacaError("network", "Yahoo Finance market data could not be reached. Try again.", 502);
     }
     if (response.status === 404) throw new AlpacaError("unsupported_symbol", "Yahoo Finance could not find this symbol.", 404);
-    if (response.status === 429) throw new AlpacaError("rate_limit", "Yahoo Finance rate-limited this request. Wait briefly and retry.", 429);
+    if (response.status === 429) {
+      const retry = response.headers.get("retry-after") || "60";
+      const milliseconds = /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now();
+      yahooCooldowns.set(this.fetchImpl, Date.now() + Math.min(3600_000, Math.max(60_000, Number.isFinite(milliseconds) ? milliseconds : 60_000)));
+      throw new AlpacaError("rate_limit", "Yahoo Finance rate-limited this request. Wait a minute or select Auto/Alpaca for supported US equities.", 429);
+    }
     if (response.status === 401 || response.status === 403) {
       throw new AlpacaError("authentication", "Yahoo Finance requires a refreshed provider session.", 502);
     }
@@ -358,6 +368,7 @@ export class YahooFinanceClient {
       adjustment: String(input.adjustment || "raw"),
       session: String(input.session || "extended"),
       limit: Number(input.limit),
+      timeframe: timeframe.canonical,
     });
     if (!rows.length) throw new AlpacaError("no_data", "Yahoo Finance returned no observations for this ticker and timeframe.", 404);
     return {

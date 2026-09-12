@@ -60,6 +60,14 @@ class LocalStore:
             (kind, identifier, data),
         )
 
+    def values(self, kind):
+        with self.lock:
+            return [json.loads(gzip.decompress(row[0])) for row in self.db.execute("SELECT data FROM records WHERE kind=?", (kind,)).fetchall()]
+
+    def checkpoint(self, identifier, value):
+        with self.lock, self.db:
+            self._put("checkpoints", identifier, value)
+
     def claim(self, configuration=None):
         with self.lock, self.db:
             old = self._get("configuration", self.session)

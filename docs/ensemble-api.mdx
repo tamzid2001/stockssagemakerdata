@@ -68,7 +68,17 @@ The authenticated ensemble endpoint accepts this source alongside ticker, worksp
 
 Replace identifiers with actual lookup results. History and contract identity are verified server-side; callers cannot supply arbitrary checkpoint IDs, URLs, prices or live-status claims. Existing workspace permissions, API scopes, plan limits and compute quotas apply.
 
-Use `1min`, `1h`, or `1D`. The input is the latest contiguous suffix of up to 500 observed bars, including pregame observations when available. Missing intervals are **not** fabricated or forward-filled. Two observations permit execution, not a claim of reliable forecasting; individual models can still fail on short context under the selected failure policy. Job warnings report the actual history count. Prices use decimal probabilities, transformed with logit (epsilon `1e-6` only for transform stability), ensembled, then inverse-transformed. The output never substitutes a stock calendar for a game timeline.
+Use `1min`, `1h`, or `1D`. The server downloads up to 500 latest genuine observations, including available pregame observations; gaps no longer discard earlier history. Original timestamps are preserved, and missing intervals are **not** fabricated or forward-filled. Foundation models treat observations as ordered steps, so irregular elapsed-time gaps remain a disclosed limitation requiring validation. Kalshi uses the selected side's closing ask, including real book quotes in minutes without trades. Two observations permit execution, not a claim of reliable forecasting; individual models can still fail on short context under the selected failure policy. Job warnings report the actual history count. Prices use decimal probabilities, transformed with logit (epsilon `1e-6` only for transform stability), ensembled, then inverse-transformed. The output never substitutes a stock calendar for a game timeline.
+
+## Refresh, share and compare actual observations
+
+Completed jobs return `input_row_count` and up to 500 original `history` rows. **Refresh latest data & forecast** downloads current history and creates a new immutable job (or reuses an identical cached input). **Reproduce saved configuration** intentionally retains the previous data snapshot. Both remain in **My Requests**; prior probabilities are not overwritten.
+
+**Copy workspace share link** copies the forecast URL. Recipients must sign in and currently have permission to read that workspace; this does not publish private datasets to the internet.
+
+`GET /api/v1/ensemble-forecasts/{forecast_id}/observations` requires `forecasts:read` plus current workspace/resource permission. Poll at most once per minute. It returns `rows`, `input_cutoff`, `observed_at`, `availability`, and `refresh_after_seconds`. This read-only operation overlays genuine later observations without re-running models or modifying the forecast. It is bounded to seven days after input cutoff. Uploaded immutable datasets have no automatic live provider.
+
+The chart uses the browser's timezone and AM/PM formatting. The summary compares the last downloaded quote against **end-of-horizon** quantiles and shows column averages across future steps. Any interpolated probability of finishing above the input quote is **model-implied**, not a validated win rate or a probability of profit after fees.
 
 Provider rate limits, missing history and unsupported side selections return explicit safe errors rather than a generic invalid-request message. Five registered models does not mean five participated: licensing, selected models, quantile capability and reported failures determine actual effective weights.
 

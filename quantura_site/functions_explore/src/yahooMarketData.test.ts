@@ -54,6 +54,19 @@ test("Yahoo client classifies missing symbols without exposing upstream bodies",
   await assert.rejects(() => client.getStockBars({ symbol: "ZZZZ", timeframe: "1Day" }), /could not find/i);
 });
 
+test("Yahoo daily bars do not use an intraday regular-session filter", () => {
+  const data=payload();data.chart.result[0].timestamp=[Date.parse("2026-09-10T04:00:00Z")/1000,Date.parse("2026-09-11T04:00:00Z")/1000];
+  assert.equal(parseYahooChartResponse(data,{session:"regular",timeframe:"1Day"}).length,2);
+  assert.equal(parseYahooChartResponse(data,{session:"regular",timeframe:"1Min"}).length,0);
+});
+
+test("Yahoo rate limits impose a shared cooldown without hammering upstream", async () => {
+  let calls=0;const fetchImpl:typeof fetch=async()=>{calls++;return new Response("",{status:429,headers:{"Retry-After":"120"}});};
+  await assert.rejects(()=>new YahooFinanceClient({fetchImpl}).getStockBars({symbol:"PLTR"}),/rate-limited/);
+  await assert.rejects(()=>new YahooFinanceClient({fetchImpl}).getStockBars({symbol:"PLTR"}),/cooling down/);
+  assert.equal(calls,1);
+});
+
 test("Yahoo options expirations and chains normalize genuine provider fields without inventing Greeks", async () => {
   const optionPayload = {
     optionChain: {

@@ -30,8 +30,9 @@ def forecast_window(
         raise ValueError("unsupported_models")
     if len(window) < 2 or any(not q.observed for q in window):
         raise ValueError("TWO_GENUINE_OBSERVATIONS_REQUIRED")
-    if any(b.timestamp - a.timestamp != 60 for a, b in zip(window, window[1:])):
-        raise ValueError("IRREGULAR_MINUTE_CONTEXT")
+    if any(b.timestamp <= a.timestamp for a, b in zip(window, window[1:])):
+        raise ValueError("NON_CHRONOLOGICAL_CONTEXT")
+    gaps = sum(b.timestamp - a.timestamp > 60 for a, b in zip(window, window[1:]))
     source = [
         {"timestamp": iso(q.timestamp), "target": q.ask, "observed": q.observed}
         for q in window
@@ -122,7 +123,9 @@ def forecast_window(
         "history_count": sum(q.observed for q in window),
         "model_context_steps": len(window),
         "imputed_context_steps": sum(not q.observed for q in window),
-        "imputation": "none_contiguous_observations_only",
+        "imputation": "none_observed_values_only",
+        "history_gap_count": gaps,
+        "history_elapsed_minutes": (window[-1].timestamp - window[0].timestamp) / 60,
         "history_requested_minutes": 500,
         "source_hash": digest(source),
         "seed": seed,
@@ -134,7 +137,7 @@ def forecast_window(
         "rows": rows,
         "weights": result["effective_weights_by_quantile"],
         "models": result.get("models"),
-        "warnings": result.get("warnings", [])
+        "warnings": result.get("warnings", []) + (["IRREGULAR_HISTORY: missing minutes retained; foundation-model observation steps are not equal elapsed time. Reliability requires validation."] if gaps else [])
         + (
             [
                 f"SHORT_HISTORY: only {len(window)} genuine minute observations; forecast reliability is unvalidated."

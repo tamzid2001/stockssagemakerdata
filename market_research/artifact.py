@@ -125,7 +125,7 @@ def decrypt(source, destination):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "operation", choices=["check-key", "package", "decrypt", "restore"]
+        "operation", choices=["check-key", "package", "decrypt", "restore", "restore-backtest", "checkpoint"]
     )
     parser.add_argument("--source")
     parser.add_argument("--output")
@@ -135,15 +135,28 @@ def main():
         print("Artifact encryption configured; key not displayed.")
     elif args.operation == "package":
         print(json.dumps(package(args.source, args.output)))
-    elif args.operation == "restore":
-        restore(args.source, args.output)
+    elif args.operation == "checkpoint":
+        snapshot_package(args.source, args.output)
+    elif args.operation in {"restore", "restore-backtest"}:
+        restore(args.source, args.output, preserve_results=args.operation == "restore-backtest")
         print("Authenticated checkpoint restored to runner-local storage.")
     else:
         decrypt(args.source, args.output)
         print("Authenticated archive decrypted locally.")
 
 
-def restore(source, directory):
+def snapshot_package(directory, destination):
+    """SQLite online backup gives a consistent checkpoint even during inference."""
+    import sqlite3
+    root = Path(directory)
+    with tempfile.TemporaryDirectory() as temporary:
+        with sqlite3.connect(f"file:{root / 'research.sqlite3'}?mode=ro", uri=True) as source:
+            with sqlite3.connect(Path(temporary) / "research.sqlite3") as target:
+                source.backup(target)
+        return package(temporary, destination)
+
+
+def restore(source, directory, preserve_results=False):
     import sqlite3
 
     root = Path(directory)
@@ -174,19 +187,18 @@ def restore(source, directory):
         # A continuation artifact is a new bounded shard, not a growing copy of
         # every prior dataset. Original results remain in the source artifact.
         # Retain immutable catalogs/configuration required by catalog+offset.
-        with sqlite3.connect(target) as db:
-            db.execute(
-                "DELETE FROM records WHERE kind NOT IN ('catalogs','configuration')"
-            )
-            db.commit()
-            db.execute("VACUUM")
+        if not preserve_results:
+            with sqlite3.connect(target) as db:
+                db.execute("DELETE FROM records WHERE kind NOT IN ('catalogs','configuration')")
+                db.commit()
+                db.execute("VACUUM")
         with Path(source).open("rb") as handle:
             source_hash = hashlib.file_digest(handle, "sha256").hexdigest()
         with (root / "report-restored-source.json").open("x") as handle:
             json.dump(
                 {
                     "source_artifact_sha256": source_hash,
-                    "restoration": "catalog_only_new_shard",
+                    "restoration": "complete_backtest_checkpoint" if preserve_results else "catalog_only_new_shard",
                     "prior_results": "retained_in_original_encrypted_artifact",
                 },
                 handle,

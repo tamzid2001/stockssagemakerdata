@@ -352,7 +352,7 @@ async function materializeWorkspaceDataset(
   }
   return {
     rows: normalizeSeriesRows(rawRows, timestampColumn, targetColumn),
-    source: { type: "workspace_dataset", dataset_id: datasetId, dataset_version: text(data.datasetVersion || data.updatedAt || data.createdAt, 120) || snapshot.updateTime?.toDate().toISOString() || "unknown" },
+    source: { type: "workspace_dataset", dataset_id: datasetId, timestamp_column: timestampColumn, target_column: targetColumn, timezone: text(source.timezone || data.timezone || "UTC", 60), dataset_version: text(data.datasetVersion || data.updatedAt || data.createdAt, 120) || snapshot.updateTime?.toDate().toISOString() || "unknown" },
     frequency: text(source.frequency || data.frequency || "infer", 30) || "infer",
     timezone: text(source.timezone || data.timezone || "UTC", 60) || "UTC",
   };
@@ -489,6 +489,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     completed_at: data.completed_at || null,
     workspace_id: data.workspace_id,
     source: data.source,
+    input_row_count: data.input_row_count,
     prediction_length: plain(data.request).prediction_length,
     horizon_mode: plain(data.request).horizon_mode,
     quantiles: plain(data.request).quantiles,
@@ -519,6 +520,25 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     output.model_runtime = Array.isArray(result.models) ? result.models : [];
   }
   return output;
+}
+
+async function indexEnsembleRequest(options: Options, id: string, job: JsonRecord): Promise<void> {
+  const source = plain(job.source);
+  const ref = options.db.collection("users").doc(text(job.user_id)).collection("requests").doc(`ensemble__${id}`);
+  const metadata = {
+    type: "forecast", ownerUid: job.user_id, workspaceId: job.workspace_id,
+    title: `Quantura Forecast · ${text(source.title || source.symbol || source.dataset_id || "Dataset", 140)}`,
+    input: { ticker: source.type === "ticker" ? source.symbol : "", panel: "forecast" },
+    outputsMeta: { status: job.status, summary: "Saved probabilistic ensemble. Open to view the immutable result." },
+    sourceRef: { collection: JOBS, id }, published: false, deleted: false,
+    visibility: "private", share: { visibility: "private", slug: "" },
+    createdAt: new Date(String(job.created_at)), updatedAt: new Date(),
+  };
+  await options.db.runTransaction(async transaction => {
+    const existing = await transaction.get(ref);
+    // Completing a job must not undo the user's rename/archive preferences.
+    transaction.set(ref, existing.exists ? { outputsMeta: metadata.outputsMeta, updatedAt: metadata.updatedAt } : metadata, { merge: true });
+  });
 }
 
 function validWorkerToken(req: Request): boolean {
@@ -671,6 +691,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     };
     await ref.create(job);
     try {
+      await indexEnsembleRequest(options, ref.id, job);
       await persistInputChunks(ref, materialized.rows);
       if (idempotencyKey) {
         const idempotencyId = crypto.createHash("sha256").update(`${principal.userId}:${idempotencyKey}`).digest("hex");
@@ -736,6 +757,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     };
     try {
       await ref.create(job);
+      await indexEnsembleRequest(options, ref.id, job);
       await persistInputChunks(ref, rows);
       await dispatchWorker(ref.id);
       await ref.set({ dispatched_at: new Date().toISOString(), dispatch_backend: text(process.env.QUANTURA_ENSEMBLE_WORKER_MODE || "github_actions", 40) }, { merge: true });
@@ -757,7 +779,37 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
     requireWorkspacePermission(access, "forecast.read", forecastId);
     const result = text(data.status, 40) === "completed" ? await options.db.collection(RESULTS).doc(forecastId).get() : null;
-    sendData(res, publicEnsembleJob(forecastId, data, result?.exists ? plain(result.data()) : null), requestId);
+    const payload = publicEnsembleJob(forecastId, data, result?.exists ? plain(result.data()) : null);
+    if (result?.exists) payload.history = (await loadInputRows(job.ref, 2)).slice(-500);
+    sendData(res, payload, requestId);
+  }));
+
+  router.get("/v1/ensemble-forecasts/:forecastId/observations", wrap(options, async (req, res, principal, requestId) => {
+    const id = safeId(req.params.forecastId, 220);
+    const snap = await options.db.collection(JOBS).doc(id).get();
+    if (!snap.exists) throw new Error("forecast_job_not_found");
+    const data = plain(snap.data());
+    const access = await resolveWorkspaceAccess(options.db, principal, data.workspace_id);
+    authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
+    requireWorkspacePermission(access, "forecast.read", id);
+    const source = plain(data.source), config = plain(data.request);
+    const input = await loadInputRows(snap.ref, 2);
+    const cutoff = Date.parse(input[input.length - 1].timestamp);
+    const frequency = text(config.frequency, 30);
+    let rows: Array<{ timestamp: string; target: number }> = [];
+    let availability = "available";
+    // No heavy inference and no changes to immutable predictions/input snapshot.
+    if (Date.now() - cutoff > 7 * 86400_000) availability = "live_overlay_window_expired";
+    else if (source.type === "prediction_market") {
+      const result = await predictionForecastHistory(source.provider as "kalshi" | "polymarket_us", text(source.symbol), text(source.contract_id), frequency, { allowResolved: true, since: cutoff, minimumRows: 0 });
+      rows = result.rows;
+    } else if (source.type === "ticker") {
+      try {
+        const history = await fetchStockHistoryData({ symbol: text(source.symbol), source: source.provider, start: new Date(cutoff).toISOString(), end: new Date().toISOString(), timeframe: ({ "1D": "1Day", "1h": "1Hour", "1min": "1Min" } as Record<string,string>)[frequency] || frequency, session: "regular", limit: 500 });
+        rows = history.rows.map(row => ({timestamp:row.timestamp,target:Number(row.close)}));
+      } catch (error) { if (error instanceof AlpacaError && error.code === "no_data") availability = "no_new_observations"; else throw error; }
+    } else availability = "immutable_dataset";
+    sendData(res, { forecast_id: id, rows: rows.filter(row => Date.parse(row.timestamp) > cutoff), input_cutoff: new Date(cutoff).toISOString(), observed_at: new Date().toISOString(), availability, refresh_after_seconds: 60 }, requestId);
   }));
 
   router.get("/v1/ensemble-forecasts/:forecastId/download", wrap(options, async (req, res, principal, requestId) => {
@@ -899,6 +951,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     await ref.set({ status: "completed", completed_at: completedAt, lease_expires_at: null, warnings: body.warnings || [], progress: { completed_models: Array.isArray(body.models) ? body.models.length : 0, total_models: Array.isArray(body.models) ? body.models.length : 0, current_model: null } }, { merge: true });
     const cacheId = crypto.createHash("sha256").update(`${text(job.workspace_id, 220)}:${text(job.request_hash, 128)}`).digest("hex");
     await options.db.collection(CACHE).doc(cacheId).set({ forecast_id: ref.id, request_hash: job.request_hash, completed_at: completedAt }, { merge: false });
+    await indexEnsembleRequest(options, ref.id, { ...job, status: "completed" });
     await releaseComputeSlot(options, text(job.workspace_id, 220));
     sendData(res, { completed: true, forecast_id: ref.id }, requestId);
   }));

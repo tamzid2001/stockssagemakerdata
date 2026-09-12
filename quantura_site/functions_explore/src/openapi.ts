@@ -508,6 +508,15 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
           responses: { "200": { description: "CSV or JSON attachment containing final ensemble values only." }, "404": { description: "Completed result not found." }, ...commonErrors },
         },
       },
+      "/ensemble-forecasts/{forecast_id}/observations": {
+        get: {
+          tags: ["Ensemble Forecasts"], summary: "Read newly observed prices to overlay a saved forecast", operationId: "getEnsembleForecastObservations",
+          description: "Returns genuine selected-side closing asks for prediction markets or equity closes after the immutable input cutoff. Does not run models or revise predictions. Poll no faster than once per minute. Live retrieval is bounded to seven days after input cutoff; dataset-only jobs return no live observations.",
+          "x-quantura-scope": "forecasts:read", "x-workspace-behavior": "Current membership and forecast.read resource permission required, including for Viewers.",
+          parameters: [idParameter],
+          responses: { "200": { description: "Authorized current observations, possibly empty when no new data is available.", content: { "application/json": { schema: { type: "object", properties: { data: { type: "object", properties: { forecast_id: {type:"string"}, rows: { type:"array", items:{type:"object",properties:{timestamp:{type:"string",format:"date-time"},target:{type:"number"}}}}, input_cutoff: {type:"string",format:"date-time"}, observed_at:{type:"string",format:"date-time"}, availability:{type:"string"},refresh_after_seconds:{type:"integer"}}},meta:{type:"object"}}}, example: {data:{forecast_id:"ens_example",rows:[{timestamp:"2026-09-11T22:01:00Z",target:0.51}],input_cutoff:"2026-09-11T22:00:00Z",observed_at:"2026-09-11T22:01:10Z",availability:"available",refresh_after_seconds:60},meta:{api_version:"v1"}} } } }, ...commonErrors },
+        },
+      },
       "/ensemble-forecast-presets": {
         get: {
           tags: ["Ensemble Forecasts"], summary: "List workspace ensemble presets", operationId: "listEnsembleForecastPresets", "x-quantura-scope": "forecasts:read",
