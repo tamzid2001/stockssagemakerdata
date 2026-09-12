@@ -114,7 +114,7 @@ export function predictionResult(source: PredictionMarketSource, contract: any):
     resource_type: "prediction_market_contract",
     resource_id: `${source}:${contract.contractId}`,
     symbol: contract.providerSymbol,
-    name: `${contract.outcome} · ${contract.marketTitle || contract.eventTitle}`,
+    name: `${contract.outcome} · ${contract.eventTitle || contract.marketTitle}`,
     asset_class: "prediction_market",
     source,
     exchange: source === "kalshi" ? "Kalshi" : "Polymarket US",

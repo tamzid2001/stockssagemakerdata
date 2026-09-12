@@ -9339,6 +9339,12 @@ html .toast[data-variant="warn"] {
 
 .ensemble-advanced-settings > summary { cursor: pointer; font-weight: 800; }
 .ensemble-advanced-settings[open] > .form-grid { margin-top: 12px; }
+.ensemble-advanced-settings > .task-chip { margin-block: 8px 0; }
+.ensemble-help-dialog { width: min(560px, calc(100vw - 24px)); max-height: min(80dvh, 720px); padding: 18px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: var(--surface); overflow-y: auto; box-sizing: border-box; }
+.ensemble-help-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.ensemble-help-dialog dt { font-weight: 700; margin-top: 12px; }
+.ensemble-help-dialog dd { color: var(--ink-2); margin: 4px 0 0; line-height: 1.5; }
+.ensemble-help-dialog .task-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .ensemble-job-status {
   margin-top: 14px;

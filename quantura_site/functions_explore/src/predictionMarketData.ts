@@ -336,7 +336,12 @@ export function normalizePolymarketEvents(
         const contractId = text(side.id || side.identifier, 220);
         const position = side.long === false ? "short" : "long";
         const team = asRecord(side.team);
-        const outcome = text(team?.name || side.description || (position === "long" ? "Long" : "Short"), 180);
+        const teamName = text(team?.name || team?.alias, 120);
+        const schoolName = text(team?.safeName, 120);
+        const fullTeamName = schoolName && teamName && !schoolName.toLowerCase().includes(teamName.toLowerCase()) && !teamName.toLowerCase().includes(schoolName.toLowerCase())
+          ? `${schoolName} ${teamName}` : schoolName || teamName;
+        const moneyline = /MONEYLINE|DRAWABLE_OUTCOME|_full_game_winner$/i.test(text(market.sportsMarketTypeV2 || market.sportsMarketType));
+        const outcome = text((moneyline ? fullTeamName : "") || side.description || fullTeamName || (position === "long" ? "Long" : "Short"), 180);
         if (!contractId || !outcome) return;
         const sidePrice = normalizeProbability(asRecord(side.quote)?.value ?? side.price);
         rows.push({
@@ -1178,9 +1183,15 @@ function polymarketEventContracts(event: JsonRecord): PredictionMarketContract[]
 }
 
 /** A provider-confirmed full-game winner, not a spread, total, or player prop. */
+export function isKalshiGameSeries(ticker: string, title = ""): boolean {
+  return /(?:GAME|MATCH|MONEYLINE)$/.test(ticker)
+    && !/(1H|2H|F3|F5|QUARTER|PERIOD|SPREAD|TOTAL|HALF|RFI|BTTS|1STHOME|FIRSTHOME|OPPONENT)/.test(ticker)
+    && !/(?:first|1st) opponent|who (?:will|is).{0,30}play|opponent at/i.test(title);
+}
+
 export function isMoneyline(contract: PredictionMarketContract): boolean {
   if (contract.source === "polymarket_us") return /^(SPORTS_MARKET_TYPE_(MONEYLINE|DRAWABLE_OUTCOME)|moneyline)$|_full_game_(moneyline|winner)$/i.test(contract.marketType || "");
-  return /(?:GAME|MATCH|MONEYLINE)$/.test(contract.league) && !/(1H|2H|F3|F5|QUARTER|PERIOD|SPREAD|TOTAL)/.test(contract.league);
+  return isKalshiGameSeries(contract.league, contract.eventTitle || contract.marketTitle);
 }
 
 /** Kalshi's open status means tradable, not necessarily an in-progress game. */
@@ -1251,7 +1262,7 @@ export async function discoverForecastMarkets(source: PredictionMarketSource, qu
       contracts = asArray(payload.events).map(asRecord).filter((e): e is JsonRecord => !!e).flatMap(polymarketEventContracts);
     } else {
       const index = await kalshiSeriesIndex();
-      const series = [...index.tagsBySeries.keys()].filter(id => /(?:GAME|MATCH|MONEYLINE)$/.test(id))
+      const series = [...index.tagsBySeries.keys()].filter(id => isKalshiGameSeries(id))
         .sort((a, b) => {
           const score = (id: string) => `${id} ${(index.tagsBySeries.get(id) || []).join(" ")}`.toLowerCase().includes(query.toLowerCase()) ? -1 : /MLB|NFL|NBA|NHL|WNBA/.test(id) ? 0 : 1;
           return score(a) - score(b) || a.localeCompare(b);
@@ -1269,13 +1280,14 @@ export async function discoverForecastMarkets(source: PredictionMarketSource, qu
   try { return await pending; } finally { liveSearchPending.delete(key); }
 }
 
-export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; minimumRows?: number } = {}) {
+export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number } = {}) {
   if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
   const contracts = await resolveMarketIdentifier(source, symbol, "market");
   const contract = contracts.find(c => c.contractId === contractId);
   if (!contract) throw new PredictionMarketDataError("contract_not_found", "Select a team/side belonging to this market.", 422);
   if (!options.allowResolved && ["closed", "settled"].includes(contract.status)) throw new PredictionMarketDataError("market_resolved", "This market has ended. Download its history instead of creating a future forecast.", 422);
-  const now = Date.now();
+  const now = options.until ?? Date.now();
+  if (!Number.isFinite(now) || now > Date.now()) throw new PredictionMarketDataError("input_cutoff_invalid", "Input cutoff must not be in the future.", 422);
   const interval = frequencyValue === "1min" ? 60_000 : frequencyValue === "1h" ? 3600_000 : 86400_000;
   const start = Math.max(Date.parse(contract.availableFrom || "") || 0, options.since || now - Math.min(90 * 86400_000, 1500 * interval));
   const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", pregameOnly: false });
@@ -1454,7 +1466,7 @@ export async function kalshiResearchCatalog(seriesTicker = "", cursor = "", mode
     tags: asArray(s.tags).map(t => text(t, 80)),
     // Conservative automatic game-series classification; props/championships
     // remain discoverable in the series inventory but aren't called moneylines.
-    game_candidate: /(?:GAME|MATCH|MONEYLINE)$/.test(text(s.ticker)) && !/(SPREAD|TOTAL|HALF|QUARTER|PERIOD|F5|F3|RFI|BTTS)/.test(text(s.ticker)),
+    game_candidate: isKalshiGameSeries(text(s.ticker), text(s.title)),
   })).sort((a, b) => a.ticker.localeCompare(b.ticker));
   if (!seriesTicker) return { ok: true, source: "kalshi", series: summaries, items: [], events_scanned: 0, next_cursor: null };
   if (!/^[A-Z0-9._-]{1,120}$/.test(seriesTicker) || !summaries.some(s => s.ticker === seriesTicker)) {

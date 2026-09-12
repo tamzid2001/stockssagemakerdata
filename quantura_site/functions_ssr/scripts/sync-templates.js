@@ -19,7 +19,9 @@ const walk = async (dir) => {
 };
 
 const main = async () => {
-  await fs.rm(destRoot, { recursive: true, force: true });
+  // Overlay canonical generated pages. A developer's untracked template files
+  // are not build output we own and must never be removed by synchronization.
+  // Production deploys start from a clean git archive, not this local directory.
   await fs.mkdir(destRoot, { recursive: true });
 
   const files = await walk(sourceRoot);

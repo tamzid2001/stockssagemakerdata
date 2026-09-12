@@ -659,6 +659,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
             {
               type: "object", required: ["source"], properties: {
                 workspace_id: { type: "string" },
+                history_lag_minutes: { type: "integer", minimum: 0, maximum: 1440, default: 0, description: "Use only observations through this many minutes before request time (UTC minute boundary). Prediction-market history selects up to 500 observations BEFORE the cutoff. Positive values mark the result as historical replay, not a previously published forecast. Later observations are separate overlays." },
                 source: {
                   oneOf: [
                     { type: "object", required: ["type", "symbol"], properties: { type: { const: "ticker" }, symbol: { type: "string" }, provider: { type: "string", enum: ["auto", "alpaca", "yahoo"] }, start: { type: "string", format: "date" }, field: { type: "string", enum: ["open", "high", "low", "close", "volume"] } } },

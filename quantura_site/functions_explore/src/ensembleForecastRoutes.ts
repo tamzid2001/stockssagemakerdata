@@ -201,7 +201,8 @@ type NormalizedConfiguration = {
 };
 
 export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey): NormalizedConfiguration {
-  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models"], "configuration");
+  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "history_lag_minutes"], "configuration");
+  historyCutoffAt(body.history_lag_minutes);
   const predictionLength = Math.floor(Number(body.prediction_length ?? 30));
   const planMaximum: Record<PlanKey, number> = { free: 30, pro: 90, quant: 365, research: 512 };
   if (!Number.isFinite(predictionLength) || predictionLength < 1 || predictionLength > planMaximum[plan]) throw new Error("prediction_length_unsupported");
@@ -358,11 +359,20 @@ async function materializeWorkspaceDataset(
   };
 }
 
+export function historyCutoffAt(value: unknown, now = Date.now()): number | undefined {
+  if (value === undefined || value === 0) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 1440) {
+    throw new PredictionMarketDataError("history_lag_invalid", "Choose a whole number from 0 to 1440 minutes before now.", 422);
+  }
+  return Math.floor(now / 60_000) * 60_000 - value * 60_000;
+}
+
 async function materializeSource(
   options: Options,
   principal: ApiPrincipal,
   workspaceId: string,
-  sourceValue: unknown
+  sourceValue: unknown,
+  cutoff?: number
 ): Promise<{ rows: Array<{ timestamp: string; target: number }>; source: JsonRecord; frequency: string; timezone: string }> {
   const source = plain(sourceValue);
   const type = text(source.type || "ticker", 40);
@@ -370,7 +380,7 @@ async function materializeSource(
     assertOnlyKeys(source, ["type", "provider", "symbol", "contract_id", "frequency"], "source");
     const provider = text(source.provider);
     if (provider !== "polymarket_us" && provider !== "kalshi") throw new Error("source_provider_unsupported");
-    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20));
+    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined });
     return { rows: history.rows, source: { type, provider, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
   }
   if (type === "ticker") {
@@ -381,14 +391,14 @@ async function materializeSource(
       source: source.provider || source.source || "auto",
       symbol,
       start: source.start || undefined,
-      end: source.end || new Date().toISOString(),
+      end: cutoff === undefined ? source.end || new Date().toISOString() : new Date(Math.min(cutoff, Date.parse(String(source.end || "")) || cutoff)).toISOString(),
       timeframe: source.frequency || "1Day",
       adjustment: source.adjustment || "raw",
       session: source.session || "regular",
       limit: Math.min(Math.max(Math.floor(Number(source.limit) || 500), 40), MAX_HISTORY_ROWS),
     });
     return {
-      rows: normalizeSeriesRows(history.rows, "timestamp", text(source.field || "close", 50) || "close"),
+      rows: normalizeSeriesRows(history.rows.filter(row => cutoff === undefined || Date.parse(String(row.timestamp)) <= cutoff), "timestamp", text(source.field || "close", 50) || "close"),
       source: { type: "ticker", symbol, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, start: source.start || null, end: source.end || null },
       frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
       timezone: "UTC",
@@ -396,12 +406,14 @@ async function materializeSource(
   }
   if (type === "workspace_dataset") {
     assertOnlyKeys(source, ["type", "dataset_id", "timestamp_column", "target_column", "frequency", "timezone"], "source");
-    return materializeWorkspaceDataset(options, principal, workspaceId, source);
+    const dataset = await materializeWorkspaceDataset(options, principal, workspaceId, source);
+    if (cutoff !== undefined) dataset.rows = normalizeSeriesRows(dataset.rows.filter(row => Date.parse(row.timestamp) <= cutoff), "timestamp", "target");
+    return dataset;
   }
   if (type === "series") {
     assertOnlyKeys(source, ["type", "name", "rows", "timestamp_column", "target_column", "frequency", "timezone"], "source");
     return {
-      rows: normalizeSeriesRows(source.rows, text(source.timestamp_column || "timestamp", 100), text(source.target_column || "target", 100)),
+      rows: normalizeSeriesRows(normalizeSeriesRows(source.rows, text(source.timestamp_column || "timestamp", 100), text(source.target_column || "target", 100)).filter(row => cutoff === undefined || Date.parse(row.timestamp) <= cutoff), "timestamp", "target"),
       source: { type: "series", name: text(source.name || "API historical series", 120) },
       frequency: text(source.frequency || "infer", 30),
       timezone: text(source.timezone || "UTC", 60),
@@ -612,13 +624,16 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
 
   router.post("/v1/ensemble-forecasts", wrap(options, async (req, res, principal, requestId) => {
     const body = plain(req.body);
-    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models"], "request");
+    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "history_lag_minutes"], "request");
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
     requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(body, access.plan);
-    const materialized = await materializeSource(options, principal, workspaceId, body.source);
+    const cutoff = historyCutoffAt(body.history_lag_minutes);
+    const materialized = await materializeSource(options, principal, workspaceId, body.source, cutoff);
+    if (cutoff !== undefined) Object.assign(materialized.source, { history_lag_minutes: body.history_lag_minutes,
+      requested_input_cutoff_at: new Date(cutoff).toISOString(), analysis_mode: "historical_replay" });
     validateModelHistory(configuration, materialized.rows.length);
     if (materialized.source.type === "prediction_market" && configuration.horizon_mode !== "frequency_periods") throw new PredictionMarketDataError("horizon_mode_unsupported", "Prediction markets use frequency periods, not equity trading sessions.", 422);
     const sourceHash = datasetHash(materialized.rows, materialized.source);

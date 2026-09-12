@@ -40,7 +40,7 @@
             return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}">
               <div class="market-search-result-main">
                 <div class="market-search-result-symbol">${escapeHtml(prediction ? row.outcome || row.side : row.symbol || "Market")}</div>
-                <div><strong title="${escapeHtml(row.name || row.symbol || "Supported market")}">${escapeHtml(row.name || row.symbol || "Supported market")}</strong><div class="small muted">${escapeHtml(titleCase(row.asset_class))} · ${escapeHtml(providerLabel(row.source))}${row.exchange ? ` · ${escapeHtml(row.exchange)}` : ""}${row.currency ? ` · ${escapeHtml(row.currency)}` : ""}${row.status ? ` · ${escapeHtml(titleCase(row.status))}` : ""}</div>${row.unit ? `<div class="small muted">${escapeHtml(row.unit)}</div>` : ""}</div>
+                <div><strong title="${escapeHtml(row.name || row.symbol || "Supported market")}">${escapeHtml(row.name || row.symbol || "Supported market")}</strong><div class="small muted">${escapeHtml(prediction ? [row.contract?.sport, row.contract?.league].filter(Boolean).join(" · ") || "Prediction market" : titleCase(row.asset_class))} · ${escapeHtml(providerLabel(row.source))}${row.exchange && row.exchange !== providerLabel(row.source) ? ` · ${escapeHtml(row.exchange)}` : ""}${row.currency ? ` · ${escapeHtml(row.currency)}` : ""}${row.status ? ` · ${escapeHtml(titleCase(row.status))}` : ""}</div>${row.unit ? `<div class="small muted">${escapeHtml(row.unit)}</div>` : ""}</div>
               </div>
               <div class="hero-actions market-search-result-actions">
                 ${prediction

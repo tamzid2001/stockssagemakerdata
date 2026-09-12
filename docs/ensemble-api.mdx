@@ -41,7 +41,17 @@ Hugging Face repository access and commercial production rights are separate con
 
 On Q Forecast, choose **Live moneylines** to browse full-game outcomes, or paste an HTTPS `polymarket.us` or `kalshi.com` event/market link in market search. Select the intended team/side and use the single **Run forecast** action. Kalshi YES and NO are separate contracts: NO is not automatically another team's moneyline. Soccer draw outcomes remain explicit.
 
-In **Sports / Prediction Markets**, use **Download from a market link**, choose the side(s), date range and interval, preview, then download CSV or JSON. Resolved markets can be downloaded but cannot be submitted as future forecasts.
+In **Sports / Prediction Markets**, use **Download from a market link**, choose the side(s), date range and interval, preview, then download CSV or JSON. Resolved markets can be downloaded or analyzed in explicitly labeled historical replay mode, not presented as new prospective forecasts.
+
+### Historical cutoff and chart controls
+
+**Data cutoff** defaults to latest data. Choose 15, 30, 60, or a custom number of minutes ago (1–1440) to exclude newer observations **before** selecting up to 500 genuine inputs. The API accepts top-level `history_lag_minutes`; it resolves the cutoff once to a stored UTC minute. For example, use `history_lag_minutes: 30` and `prediction_length: 60` with `1min` data. Forecast timestamps begin after the last actual input, so gaps can shorten the part extending past now.
+
+These runs are labeled **Historical replay**: generated now, not predictions published before the already-known outcomes. The chart overlays available actual observations after the cutoff, then continues updating. Live metrics exclude observations known before the new forecast completed. Reproducing a saved forecast retains its original input snapshot; **Refresh latest data & forecast** intentionally returns to current data.
+
+For minute/intraday markets, the chart initially shows the latest hour plus the forecast horizon. **Latest 60 minutes + forecast** resets the view; automatic observation updates preserve manual zoom. P10 and P90 appear as explicit dashed lines when requested. Daily stock charts retain their broader history. Advanced settings has a keyboard-accessible help dialog. Dataset frequency is configurable only for uploaded datasets; provider series use their selected interval.
+
+Search uses provider-supplied team names and event titles. For example, the Oklahoma–Michigan CFB moneyline displays **Oklahoma Sooners** and **Michigan Wolverines**, preserving Polymarket's original contract IDs. Kalshi YES/NO sides retain their actual proposition and are never relabeled as an assumed opposing team.
 
 Market lookup uses bounded, short-lived server caches; it is not an exhaustive global index. A Kalshi “Started · open” badge is inferred from official game start and open-market status, not a live score feed. Direct links resolve against the provider even when a market is outside the discovery window. Polymarket.com links are not interchangeable with Polymarket US.
 
