@@ -20,6 +20,11 @@ on:
         description: Resume automatically until historical discovery is exhausted
         type: boolean
         default: false
+      duration_minutes:
+        description: Five minutes verifies recovery; normal successors use 330
+        type: choice
+        options: ['5', '330']
+        default: '330'
       smoke_mode:
         type: choice
         options: [mock, real]
@@ -72,6 +77,7 @@ jobs:
           CAMPAIGN: ${{ inputs.campaign_id }}
           HORIZON: ${{ inputs.horizon }}
           CONTINUOUS: ${{ inputs.continuous }}
+          DURATION: ${{ inputs.duration_minutes }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -79,7 +85,7 @@ jobs:
           TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: |
-          args=(--campaign-id "$CAMPAIGN" --horizon "$HORIZON" --duration-minutes 330)
+          args=(--campaign-id "$CAMPAIGN" --horizon "$HORIZON" --duration-minutes "$DURATION")
           if [[ "$CONTINUOUS" == true ]]; then args+=(--continuous); fi
           python -m market_research.recovery_campaign "${args[@]}"
       - name: Checkpoint-fenced successor

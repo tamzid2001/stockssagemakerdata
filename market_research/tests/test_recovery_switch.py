@@ -84,6 +84,20 @@ def test_partial_pair_and_future_forecast_cannot_trade():
     assert not simulate(forecasts(published=301), rows, {}, as_of=300)["trades"]
 
 
+def test_soccer_reversal_uses_paired_binary_side_not_unrelated_outcome():
+    fs = []
+    for outcome in ("home", "draw", "away"):
+        for f in forecasts(outcome):
+            f["market_context"]["event_id"] = "soccer"
+            f["expected_side_count"] = 6
+            fs.append(f)
+    rows = [quote(180, .5, game="home"), quote(240, .9, game="home"), quote(300, .91, game="home"),
+            quote(360, .2, game="home"), quote(420, .11, game="home"),
+            quote(420, .9, side="no", game="home"), quote(420, .99, game="away")]
+    trades = simulate(fs, rows, {}, as_of=420)["trades"]
+    assert [t["contract_id"] for t in trades] == ["home-yes", "home-no"]
+
+
 def test_streaks_returns_and_breakeven():
     trades = [{"trade_id": str(i), "status": "closed", "exit_at": i, "game_id": "g", "net_pnl": value,
                "gross_pnl": value+.01, "fees": .01, "entry_price": .5, "quantity": 1}
