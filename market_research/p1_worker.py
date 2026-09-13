@@ -236,7 +236,7 @@ def main():
             for record in store.values("contracts"):
                 c=record.get("contract") or {}
                 if c.get("sides") and c["marketId"] not in selected:
-                    selected[c["marketId"]]=[{**s,"live":False} for s in c["sides"]]
+                    selected[c["marketId"]]=grouped.get(c["marketId"],[{**s,"live":False} for s in c["sides"]])
             coverage.update(eligible_games=len(grouped),selected_games=len(selected),processed_games=0,
                 forecasts=0,failed_games=0,partial=sum(len(p) for p in grouped.values())>args.max_contracts)
             for game,pair in selected.items():
