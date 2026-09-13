@@ -14495,7 +14495,7 @@
     if (ui.ensembleRefreshLatest) ui.ensembleRefreshLatest.disabled = busy;
     if (ui.ensembleRunAgain) ui.ensembleRunAgain.disabled = busy;
     const statusButton = document.getElementById("ensemble-check-status");
-    if (statusButton) statusButton.hidden = !busy;
+    if (statusButton) statusButton.hidden = !busy && ensembleUiState.lastJob?.status === "completed";
     for (const id of ["ensemble-chart-focus", "ensemble-chart-refresh", "ensemble-other-side"]) {
       const button = document.getElementById(id);
       if (button) button.disabled = busy;
@@ -14919,6 +14919,8 @@
     if (!Array.isArray(job.history)) job = (await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}`)).data;
     setEnsembleBusy(false);
     ensembleUiState.lastJob = job;
+    const statusButton = document.getElementById("ensemble-check-status");
+    if (statusButton) statusButton.hidden = true;
     const otherSide = document.getElementById("ensemble-other-side");
     if (otherSide) otherSide.hidden = job.source?.type !== "prediction_market";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = false;
