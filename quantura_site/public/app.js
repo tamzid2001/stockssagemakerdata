@@ -14423,6 +14423,8 @@
     forecastId: "",
     pollTimer: 0,
     observationTimer: 0,
+    observationGeneration: 0,
+    refreshObservations: null,
     capabilitiesLoaded: false,
     accessKey: "",
     chartWindowId: "",
@@ -14812,13 +14814,23 @@
 
   const startEnsembleObservations = (job) => {
     window.clearTimeout(ensembleUiState.observationTimer);
+    const generation = ++ensembleUiState.observationGeneration;
+    ensembleUiState.refreshObservations = null;
+    const refreshButton = document.getElementById("ensemble-chart-refresh");
+    if (refreshButton) { refreshButton.disabled = false; refreshButton.hidden = !["ticker","prediction_market"].includes(job.source?.type); refreshButton.textContent = "Refresh quotes"; }
     if (!["ticker","prediction_market"].includes(job.source?.type)) return;
-    const update = async () => {
-      if (ensembleUiState.forecastId !== job.forecast_id || ensembleUiState.busy) return;
-      if (!document.hidden && ui.ensembleForecastResults?.getClientRects().length) {
-        try {
-          const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`);
-          if (ensembleUiState.forecastId !== job.forecast_id || ensembleUiState.busy) return;
+    let inFlight = false, stopped = false;
+    const current = () => generation === ensembleUiState.observationGeneration && ensembleUiState.forecastId === job.forecast_id;
+    const update = async ({ focusLatest = false } = {}) => {
+      if (!current() || inFlight || stopped) return;
+      window.clearTimeout(ensembleUiState.observationTimer);
+      try {
+        // Browser background throttling must never permanently kill the loop.
+        if (ensembleUiState.busy || document.hidden || !ui.ensembleForecastResults?.getClientRects().length) return;
+        inFlight = true;
+        if (refreshButton) { refreshButton.disabled = true; refreshButton.textContent = "Updating quotes…"; refreshButton.setAttribute("aria-busy", "true"); }
+          const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`, { headers: { "Cache-Control": "no-cache" } });
+          if (!current() || ensembleUiState.busy) return;
           job.observations = response.data.rows || [];
           renderEnsembleLiveQuote(job);
           const replay = job.source?.analysis_mode === "historical_replay";
@@ -14828,12 +14840,26 @@
           if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = errors.length
             ? `Observed since publication: ${errors.length} matched forecast steps · MAE ${(errors.reduce((s,e)=>s+Math.abs(e),0)/errors.length).toFixed(4)} · RMSE ${Math.sqrt(errors.reduce((s,e)=>s+e*e,0)/errors.length).toFixed(4)} · Bias ${(errors.reduce((s,e)=>s+e,0)/errors.length).toFixed(4)}. This single live forecast is not a historical backtest.`
             : "Live validation: waiting for timestamp-matched observations after forecast publication. No accuracy score is invented.";
+          const latest = Date.parse(job.observations.at(-1)?.timestamp);
+          const moveWindow = focusLatest || (ensembleUiState.chartWindow && latest > ensembleUiState.chartWindow[1]);
+          if (moveWindow) ensembleUiState.chartWindow = ensembleChartDefaultRange(job);
           await renderEnsembleChart(job);
-          if (["immutable_dataset","live_overlay_window_expired"].includes(response.data.availability)) return;
-        } catch (error) { if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = `Actual-price update unavailable: ${error.message}. Saved forecast is unchanged.`; }
+          if (moveWindow && current() && ensembleUiState.chartWindow) {
+            const Plotly = await getPlotly();
+            if (Plotly && current()) await Plotly.relayout(ui.ensembleForecastChart, { "xaxis.range": ensembleUiState.chartWindow, "xaxis.autorange": false });
+          }
+          stopped = ["immutable_dataset","live_overlay_window_expired"].includes(response.data.availability);
+      } catch (error) {
+        if (current() && ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = `Actual-price update unavailable: ${error.message}. Retrying automatically; use Refresh quotes to retry now. Saved forecast is unchanged.`;
+      } finally {
+        inFlight = false;
+        if (current()) {
+          if (refreshButton) { refreshButton.disabled = false; refreshButton.textContent = "Refresh quotes"; refreshButton.removeAttribute("aria-busy"); }
+          if (!stopped) ensembleUiState.observationTimer = window.setTimeout(update,60000);
+        }
       }
-      ensembleUiState.observationTimer = window.setTimeout(update,60000);
     };
+    ensembleUiState.refreshObservations = update;
     ensembleUiState.observationTimer = window.setTimeout(update,1000);
   };
 
@@ -15105,6 +15131,12 @@
       ensembleUiState.chartWindow = range;
       if (Plotly && ui.ensembleForecastChart) { await renderEnsembleChart(job); await Plotly.relayout(ui.ensembleForecastChart, range ? {"xaxis.range":range,"xaxis.autorange":false} : {"xaxis.autorange":true}); }
     });
+    document.getElementById("ensemble-chart-refresh")?.addEventListener("click", () => ensembleUiState.refreshObservations?.({ focusLatest: true }));
+    const resumeQuoteOverlay = () => { if (!document.hidden) ensembleUiState.refreshObservations?.(); };
+    document.addEventListener("visibilitychange", resumeQuoteOverlay);
+    window.addEventListener("focus", resumeQuoteOverlay);
+    window.addEventListener("online", resumeQuoteOverlay);
+    window.addEventListener("pageshow", resumeQuoteOverlay);
     window.addEventListener("quantura:market-selected", (event) => {
       if (event.detail?.intent !== "forecast") return;
       const row = event.detail.resource;

@@ -11,8 +11,11 @@ import time
 def export(directory):
     store=LocalStore("export","export",directory)
     try:
-        if not any(c and c.get("version")==VERSION for c in store.values("configuration")):
+        versions={c.get("version") for c in store.values("configuration") if c}
+        if not versions.intersection({VERSION,"kalshi_btc_first2_next13_v1"}):
             return
+        from .quantile_paths import export as export_paths
+        export_paths(store,int(time.time()))
         fields=["timestamp","sequence","game_id","contract_id","kind","level","price",
             "added_quantity","quantity","average_cost","cost_basis","exit","fees","net_pnl","details_json"]
         with (store.directory/"p1_orders_and_fills.csv.gz").open("wb") as raw, gzip.GzipFile(fileobj=raw,mode="wb",mtime=0) as gz:
@@ -21,7 +24,8 @@ def export(directory):
                 for e in sorted(store.values("trades"),key=lambda e:(e["timestamp"],e.get("game_id",""),e["sequence"])):
                     writer.writerow({**{k:e.get(k) for k in fields[:-1]},"details_json":json.dumps(e,sort_keys=True)})
         fields=["forecast_id","game_id","contract_id","side","input_cutoff","available_at","history_count","timestamp",*[f"p{int(q*100):02d}" for q in QUANTILES]]
-        with (store.directory/"p1_forecast_quantiles.csv.gz").open("wb") as raw,gzip.GzipFile(fileobj=raw,mode="wb",mtime=0) as gz:
+        filename="p1_forecast_quantiles.csv.gz" if VERSION in versions else "btc_forecast_quantiles.csv.gz"
+        with (store.directory/filename).open("wb") as raw,gzip.GzipFile(fileobj=raw,mode="wb",mtime=0) as gz:
             with io.TextIOWrapper(gz,encoding="utf-8",newline="") as out:
                 writer=csv.writer(out);writer.writerow(fields)
                 for f in sorted(store.values("forecasts"),key=lambda f:(f["origin"],f["forecast_id"])):

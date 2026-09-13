@@ -1,0 +1,133 @@
+name: Kalshi BTC First Two Minutes Quantile Paper Research
+run-name: Kalshi BTC paper · ${{ inputs.mode }} · first 2m → next 13m
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [live, historical]
+        default: live
+        description: Live prospective paper tracking or bounded recent settled-market replay
+      smoke_mode:
+        type: choice
+        options: [mock, real]
+        default: mock
+        description: Mock runs safety tests only; real fetches provider data and models
+      duration_minutes:
+        type: choice
+        options: ['30', '60', '345']
+        default: '345'
+        description: Wall-clock budget; setup and inference latency are recorded
+      max_markets:
+        type: choice
+        options: ['2', '10', '50', '100']
+        default: '10'
+        description: Discovery page bound, not a claim of complete historical coverage
+      continuous:
+        type: boolean
+        default: false
+        description: Request checkpoint-confirmed successor when repository enable flag is true
+      resume_artifact_id:
+        type: number
+        default: 0
+        description: Encrypted checkpoint ID; zero explicitly starts a new paper lineage
+      code_ref:
+        type: string
+        default: main
+        description: main for new run or original 40-character commit for checkpoint recovery
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: kalshi-btc-first2-paper-${{ inputs.mode }}
+  cancel-in-progress: false
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Validate immutable code and checkpoint identifiers
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+          RESTORE_ID: ${{ inputs.resume_artifact_id }}
+        run: |
+          [[ "$CODE_REF" == main || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$RESTORE_ID" =~ ^[0-9]+$ ]] || exit 1
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.code_ref }}
+          persist-credentials: false
+      - name: Record runtime and isolated artifact directory
+        run: |
+          echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+          echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/btc-paper-output" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Mock safety tests without model downloads
+        if: inputs.smoke_mode == 'mock'
+        run: |
+          python -m pip install pytest==8.4.2 numpy pandas httpx pandas-market-calendars cryptography pyyaml
+          python -m pytest -q market_research/tests/test_kalshi_btc.py market_research/tests/test_quantile_paths.py
+      - name: Install locked CPU research environment
+        if: inputs.smoke_mode == 'real'
+        run: |
+          python -m pip install --no-cache-dir --require-hashes --requirement market_research/requirements.lock
+          npm ci --prefix market_research/node --ignore-scripts
+      - name: Download prior encrypted checkpoint
+        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ inputs.resume_artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/btc-restore
+          merge-multiple: true
+      - name: Authenticate and restore original state
+        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        env:
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.artifact restore-backtest --source "$RUNNER_TEMP/btc-restore/research.qra.enc" --output "$QUANTURA_RESEARCH_DIR"
+      - name: Read-only paper worker with five-minute encrypted checkpoints
+        id: worker
+        if: inputs.smoke_mode == 'real'
+        uses: actions/github-script@v8
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+          PAPER_MODE: ${{ inputs.mode }}
+          PAPER_DURATION: ${{ inputs.duration_minutes }}
+          PAPER_MAX: ${{ inputs.max_markets }}
+        with:
+          script: |
+            const {spawn}=require('node:child_process');
+            const env=process.env;
+            if(!['live','historical'].includes(env.PAPER_MODE) || !['30','60','345'].includes(env.PAPER_DURATION) || !['2','10','50','100'].includes(env.PAPER_MAX)) throw new Error('INVALID_BTC_INPUTS');
+            await new Promise((resolve,reject)=>{
+              const args=['market_research/node/run.mjs','--paper-btc','--mode',env.PAPER_MODE,'--duration-minutes',env.PAPER_DURATION,'--max-markets',env.PAPER_MAX];
+              const child=spawn(process.execPath,args,{stdio:'inherit'});
+              child.on('error',reject);
+              child.on('exit',code=>code===0?resolve():reject(new Error('BTC research failed; recover latest verified checkpoint.')));
+            });
+      - name: Checkpoint-confirmed live successor
+        if: success() && inputs.mode == 'live' && inputs.smoke_mode == 'real' && inputs.continuous && steps.worker.outputs.handoff_ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KALSHI_BTC_PAPER_ENABLED: ${{ vars.KALSHI_BTC_PAPER_ENABLED || 'false' }}
+          PAPER_CHECKPOINT: ${{ steps.worker.outputs.checkpoint_artifact_id }}
+          PAPER_CODE_REF: ${{ steps.worker.outputs.checkpoint_code_sha }}
+        run: python -m market_research.btc_handoff
+      - name: Explicit failure disclosure
+        if: failure()
+        run: echo 'BTC paper research failed. No uptime, coverage or profit guarantee. Restore the encrypted checkpoint before continuing.' >> "$GITHUB_STEP_SUMMARY"

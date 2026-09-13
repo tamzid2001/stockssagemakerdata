@@ -1,0 +1,28 @@
+name: Kalshi BTC Paper Checkpoint Watchdog
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: kalshi-btc-paper-watchdog
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: vars.KALSHI_BTC_PAPER_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Resume verified state only if no live worker is active
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KALSHI_BTC_PAPER_ENABLED: ${{ vars.KALSHI_BTC_PAPER_ENABLED }}
+        run: python -m market_research.btc_handoff

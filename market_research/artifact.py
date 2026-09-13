@@ -40,7 +40,8 @@ def package(directory, destination):
         p
         for p in root.iterdir()
         if p.name in {"research.sqlite3", "forecast_quantiles.csv.gz", "quantile_manifest.json",
-                      "p1_orders_and_fills.csv.gz", "p1_forecast_quantiles.csv.gz", "p1_summary.json", "p1_path_outcomes.json"}
+                      "p1_orders_and_fills.csv.gz", "p1_forecast_quantiles.csv.gz", "p1_summary.json", "p1_path_outcomes.json",
+                      "quantile_path_report.json", "quantile_path_trades.csv.gz", "btc_forecast_quantiles.csv.gz"}
         or (p.name.startswith("report-") and p.suffix == ".json")
     )
     if not files or any(p.is_symlink() or not p.is_file() for p in files):
