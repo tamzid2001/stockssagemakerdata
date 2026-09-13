@@ -12,6 +12,9 @@ def export(directory):
     store=LocalStore("export","export",directory)
     try:
         versions={c.get("version") for c in store.values("configuration") if c}
+        if "in_game_p90_switch_v1" in versions:
+            from .recovery_switch import export as export_recovery
+            export_recovery(store)
         if not versions.intersection({VERSION,"kalshi_btc_first2_next13_v1"}):
             return
         from .quantile_paths import export as export_paths
