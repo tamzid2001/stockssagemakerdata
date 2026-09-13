@@ -318,6 +318,18 @@ test("Polymarket US discovery produces selectable provider-neutral contracts", (
   assert.equal(contracts[1].side, "short");
 });
 
+test("Polymarket soccer retains all six Yes/No identities including the draw", () => {
+  const contracts = normalizePolymarketEvents({ events: [{ id: "soccer", title: "Home vs Away", markets:
+    ["Home", "Away", "Tie"].map((name, i) => ({ id: String(i), slug: `soccer-${i}`, title: `${name} (Reg. Time)`,
+      sportsMarketTypeV2: "SPORTS_MARKET_TYPE_DRAWABLE_OUTCOME", marketSides: [
+        { id: `${i}-yes`, long: true, description: "Yes", team: i < 2 ? { name } : null },
+        { id: `${i}-no`, long: false, description: "No", team: i < 2 ? { name } : null },
+      ] })) }] }, { id: "soccer", label: "Soccer", providerId: "", sport: "Soccer" });
+  assert.equal(contracts.length, 6);
+  assert.deepEqual(contracts.map(c => c.outcome), ["Home", "Not Home", "Away", "Not Away", "Tie (Reg. Time)", "Not Tie (Reg. Time)"]);
+  assert.equal(new Set(contracts.map(c => c.contractId)).size, 6);
+});
+
 test("Kalshi discovery creates YES and NO contracts with correctly complemented quotes", () => {
   const contracts = normalizeKalshiEvent({
     event: { event_ticker: "KXMLB-26AUG20", title: "New York at Boston", series_ticker: "KXMLBGAME" },

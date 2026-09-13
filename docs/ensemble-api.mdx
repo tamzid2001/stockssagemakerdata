@@ -49,7 +49,9 @@ In **Sports / Prediction Markets**, use **Download from a market link**, choose 
 
 ### Pregame, in-game and history lookback
 
-Prediction-market sources accept `history_phase: "both" | "pregame" | "in_game"` (default `both`) and `history_lookback_minutes` (0–129600, default 0). Zero uses up to 500 available observations; 60 restricts the input to the last hour, not 500 fabricated rows. For pregame, lookback ends at the earlier of game start and input cutoff. Game start is resolved from provider metadata, never trusted from client input. Unknown start times reject phase-specific requests.
+**Last N observations** controls `source.limit` (2–500 in the website; default 500), separately from elapsed time. The server applies cutoff and history filters first, then selects the latest N genuine bars. Fewer bars are used when unavailable; gaps are not filled. The immutable source stores the limit, and refresh/preset reuse preserves it. Individual enabled-model minimums still apply. Workspace datasets retain their existing complete-dataset workflow.
+
+Prediction-market sources accept `history_phase: "both" | "pregame" | "in_game"` (default `both`) and `history_lookback_minutes` (0–129600, default 0). Zero imposes no additional time restriction; 60 restricts input to the last hour, not 500 fabricated rows. `source.limit` applies afterward. For pregame, lookback ends at the earlier of game start and input cutoff. Game start is resolved from provider metadata, never trusted from client input. Unknown start times reject phase-specific requests.
 
 ```json
 {

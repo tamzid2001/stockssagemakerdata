@@ -12,7 +12,7 @@ import {
 import modelRegistry from "./ensembleModelRegistry.json";
 import { fetchStockHistoryData } from "./marketDataRoutes";
 import { AlpacaError } from "./alpacaClient";
-import { PredictionMarketDataError, predictionForecastHistory } from "./predictionMarketData";
+import { PredictionMarketDataError, predictionForecastHistory, forecastObservationLimit } from "./predictionMarketData";
 import { historySelection } from "./eventHistory";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 
@@ -259,9 +259,9 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
   };
 }
 
-function normalizeSeriesRows(rows: unknown, timestampColumn: string, targetColumn: string, minimumRows = 40): Array<{ timestamp: string; target: number }> {
+function normalizeSeriesRows(rows: unknown, timestampColumn: string, targetColumn: string, minimumRows = 40, maximumRows = MAX_HISTORY_ROWS): Array<{ timestamp: string; target: number }> {
   if (!Array.isArray(rows)) throw new Error("source_series_rows_required");
-  if (rows.length > MAX_HISTORY_ROWS) throw new Error("history_row_limit_exceeded");
+  if (rows.length > maximumRows) throw new Error("history_row_limit_exceeded");
   const byTimestamp = new Map<string, number>();
   rows.forEach((entry) => {
     const row = plain(entry);
@@ -378,17 +378,19 @@ async function materializeSource(
   const source = plain(sourceValue);
   const type = text(source.type || "ticker", 40);
   if (type === "prediction_market") {
-    assertOnlyKeys(source, ["type", "provider", "symbol", "contract_id", "frequency", "history_phase", "history_lookback_minutes"], "source");
+    assertOnlyKeys(source, ["type", "provider", "symbol", "contract_id", "frequency", "history_phase", "history_lookback_minutes", "limit"], "source");
+    const limit = forecastObservationLimit(source.limit);
     const provider = text(source.provider);
     if (provider !== "polymarket_us" && provider !== "kalshi") throw new Error("source_provider_unsupported");
     let selection;
     try { selection = historySelection(source); }
     catch (error) { throw new PredictionMarketDataError((error as Error).message, "Choose a valid history phase and lookback (0–129600 minutes).", 422); }
-    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined, selection });
-    return { rows: history.rows, source: { type, provider, ...selection, history_quality: history.quality, event_start: history.contract.eventStart, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
+    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined, selection, limit });
+    return { rows: history.rows, source: { type, provider, limit, ...selection, history_quality: history.quality, event_start: history.contract.eventStart, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
   }
   if (type === "ticker") {
     assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "limit"], "source");
+    const limit = forecastObservationLimit(source.limit, MAX_HISTORY_ROWS);
     const symbol = text(source.symbol, 30).toUpperCase();
     if (!/^(?:\^[A-Z0-9.\-]{1,23}|[A-Z0-9][A-Z0-9.^=\-]{0,23})$/.test(symbol)) throw new Error("source_symbol_invalid");
     const history = await fetchStockHistoryData({
@@ -399,11 +401,13 @@ async function materializeSource(
       timeframe: source.frequency || "1Day",
       adjustment: source.adjustment || "raw",
       session: source.session || "regular",
-      limit: Math.min(Math.max(Math.floor(Number(source.limit) || 500), 40), MAX_HISTORY_ROWS),
+      // Provider download buckets are coarser than the requested forecast size.
+      // Fetch a sufficient bucket, then take exactly the latest eligible N rows.
+      limit: [500, 1000, 1500, 2000, 50000].find(size => size >= limit),
     });
     return {
-      rows: normalizeSeriesRows(history.rows.filter(row => cutoff === undefined || Date.parse(String(row.timestamp)) <= cutoff), "timestamp", text(source.field || "close", 50) || "close"),
-      source: { type: "ticker", symbol, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, start: source.start || null, end: source.end || null },
+      rows: normalizeSeriesRows(history.rows.filter(row => cutoff === undefined || Date.parse(String(row.timestamp)) <= cutoff), "timestamp", text(source.field || "close", 50) || "close", 2, 50000).slice(-limit),
+      source: { type: "ticker", symbol, limit, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, start: source.start || null, end: source.end || null },
       frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
       timezone: "UTC",
     };

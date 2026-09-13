@@ -165,7 +165,29 @@ test('primary form builds prediction-market minute and single-model requests wit
   w.document.getElementById('ensemble-history-phase').value='in_game';
   w.document.getElementById('ensemble-history-lookback').value='60';
   assert.equal(w.build().source.history_phase,'in_game');assert.equal(w.build().source.history_lookback_minutes,60);
+  w.document.getElementById('ensemble-history-limit').value='45';
+  assert.equal(w.build().source.limit,45);
+  w.document.getElementById('ensemble-source-type').value='ticker';
+  assert.equal(w.build().source.limit,45);
+  for(const invalid of ['0','1','501','2.5','']) {
+    w.document.getElementById('ensemble-history-limit').value=invalid;
+    assert.throws(()=>w.build(),/observations/);
+  }
+  w.document.getElementById('ensemble-history-limit').value='500';
+  w.document.getElementById('ensemble-source-type').value='prediction_market';
   w.document.getElementById('ensemble-history-lookback').value='-1';assert.throws(()=>w.build(),/duration/);
+  d.window.close();
+});
+
+test('refresh retains last N observations and phase filters; old forecasts default safely', () => {
+  const d=dom(page('forecasting.html'));const w=d.window;
+  w.eval('const refreshedEnsembleRequest ='+source('app.js').split('  const refreshedEnsembleRequest =')[1].split('  const setEnsembleBusy =')[0]+'\nwindow.refresh=refreshedEnsembleRequest;');
+  const job={source:{type:'prediction_market',limit:45,history_phase:'in_game',history_lookback_minutes:120},frequency:'1min'};
+  assert.equal(w.refresh(job).source.limit,45);
+  assert.equal(w.refresh(job).source.history_lookback_minutes,120);
+  assert.equal(w.refresh(job).source.history_phase,'in_game');
+  assert.equal(w.refresh({...job,source:{type:'ticker',limit:60}}).source.limit,60);
+  assert.equal(w.refresh({...job,source:{type:'ticker'}}).source.limit,500);
   d.window.close();
 });
 
