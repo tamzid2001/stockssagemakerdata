@@ -7,7 +7,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 const artifact = new DefaultArtifactClient();
+const inputs = process.argv.slice(2);
+const paper = inputs[0] === '--paper-p1';
+if (paper) inputs.shift();
+const p1Replay = !paper && inputs.includes('--strategy') && inputs[inputs.indexOf('--strategy') + 1] === 'p1_oco';
 const root = process.env.QUANTURA_RESEARCH_DIR;
+if (!root || !path.isAbsolute(root)) throw new Error('ABSOLUTE_RESEARCH_DIRECTORY_REQUIRED');
 const retained = [];
 let sequence = 0;
 let publishing;
@@ -24,11 +29,12 @@ async function checkpoint() {
   const file = path.join(temporary, 'research.qra.enc');
   try {
     await command(['-m', 'market_research.artifact', 'checkpoint', '--source', root, '--output', file]);
-    const name = `replay-checkpoint-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}-${++sequence}`;
+    const prefix = paper ? `p1-paper-checkpoint-${process.env.QUANTURA_CODE_SHA}` : 'replay-checkpoint';
+    const name = `${prefix}-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}-${++sequence}`;
     const uploaded = await artifact.uploadArtifact(name, [file], temporary, { retentionDays: 3, compressionLevel: 0 });
     if (!uploaded.id) throw new Error('CHECKPOINT_UPLOAD_FAILED');
     retained.push(name);
-    await appendFile(process.env.GITHUB_OUTPUT, `checkpoint_artifact_id=${uploaded.id}\n`);
+    await appendFile(process.env.GITHUB_OUTPUT, `checkpoint_artifact_id=${uploaded.id}\ncheckpoint_code_sha=${process.env.QUANTURA_CODE_SHA}\n`);
     await appendFile(process.env.GITHUB_STEP_SUMMARY, `\nEncrypted recoverable checkpoint: artifact **${uploaded.id}** (${name}); 3-day retention.\n`);
     // Latest two verified uploads retained; never remove another run's data.
     if (retained.length > 2) await artifact.deleteArtifact(retained.shift());
@@ -38,10 +44,13 @@ function publish() {
   if (!publishing) publishing = checkpoint().finally(() => { publishing = undefined; });
   return publishing;
 }
-const timer = setInterval(() => publish().catch(() => console.error('CHECKPOINT_UPLOAD_FAILED; local checkpoint retained')), 45 * 60 * 1000);
+const timer = setInterval(() => publish().catch(() => console.error('CHECKPOINT_UPLOAD_FAILED; local checkpoint retained')), paper ? 5 * 60 * 1000 : 45 * 60 * 1000);
 const firstCheckpoint = setTimeout(() => publish().catch(() => console.error('INITIAL_CHECKPOINT_UPLOAD_FAILED')), 60 * 1000);
 let failure;
-try { await command(['-m', 'market_research.historical', ...process.argv.slice(2)]); }
+try {
+  await command(['-m', 'market_research.artifact', 'check-key']);
+  await command(['-m', paper ? 'market_research.p1_worker' : p1Replay ? 'market_research.p1_historical' : 'market_research.historical', ...inputs]);
+}
 catch (error) { failure = error; }
 finally {
   clearInterval(timer);

@@ -31,7 +31,7 @@ on:
       horizon:
         description: Forecast minutes after input cutoff; must exceed lag
         type: choice
-        options: ['30', '45', '60']
+        options: ['5', '15', '30', '45', '60']
         default: '60'
       run_once:
         description: One bounded validation cycle; no successor
@@ -42,13 +42,21 @@ on:
         type: choice
         options: [mock, real]
         default: mock
+      resume_artifact_id:
+        description: Encrypted P1 checkpoint ID; 0 starts a NEW paper lineage
+        type: number
+        default: 0
+      code_ref:
+        description: main for a new run; original 40-character commit for a checkpoint continuation
+        type: string
+        default: main
 
 permissions:
   contents: read
   actions: write
 
 concurrency:
-  group: polymarket-live-paper-${{ inputs.provider || 'polymarket_us' }}
+  group: polymarket-live-paper-${{ inputs.provider || 'polymarket_us' }}-${{ inputs.strategy || 'rolling' }}-${{ inputs.horizon }}
   cancel-in-progress: false
 
 jobs:
@@ -69,28 +77,76 @@ jobs:
       PAPER_STRATEGY: ${{ inputs.strategy || 'rolling' }}
       KALSHI_PAPER_ENABLED: ${{ vars.KALSHI_PAPER_ENABLED || 'false' }}
     steps:
+      - name: Validate code reference
+        env:
+          CODE_REF: ${{ inputs.code_ref || 'main' }}
+          RESTORE_ID: ${{ inputs.resume_artifact_id || 0 }}
+        run: |
+          [[ "$CODE_REF" == main || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$RESTORE_ID" =~ ^[0-9]+$ ]] || exit 1
       - uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ inputs.code_ref || 'main' }}
           persist-credentials: false
       - name: Record hard runner deadline
         run: |
           echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
           echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/p1-paper-output" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
       - name: Mock safety tests (no model downloads)
         if: inputs.smoke_mode == 'mock'
         run: |
-          python -m pip install pytest==8.4.2 pyyaml==6.0.3
-          python -m pytest -q market_research/tests/test_engine.py market_research/tests/test_workflows.py
+          python -m pip install pytest==8.4.2 pyyaml==6.0.3 numpy pandas httpx pandas-market-calendars cryptography
+          python -m pytest -q market_research/tests/test_engine.py market_research/tests/test_workflows.py market_research/tests/test_p1_oco.py market_research/tests/test_p1_artifacts.py
       - name: Install locked research environment
         if: inputs.smoke_mode == 'real'
-        run: python -m pip install --no-cache-dir --require-hashes --requirement market_research/requirements.lock
+        run: |
+          python -m pip install --no-cache-dir --require-hashes --requirement market_research/requirements.lock
+          npm ci --prefix market_research/node --ignore-scripts
+      - name: Download prior P1 checkpoint
+        if: inputs.smoke_mode == 'real' && inputs.strategy == 'p1_oco' && inputs.resume_artifact_id != 0
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ inputs.resume_artifact_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/paper-restore
+          merge-multiple: true
+      - name: Authenticate and restore P1 checkpoint
+        if: inputs.smoke_mode == 'real' && inputs.strategy == 'p1_oco' && inputs.resume_artifact_id != 0
+        env:
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.artifact restore-backtest --source "$RUNNER_TEMP/paper-restore/research.qra.enc" --output "$QUANTURA_RESEARCH_DIR"
+      - name: P1 minute accumulation with five-minute encrypted checkpoints
+        id: p1_worker
+        if: inputs.smoke_mode == 'real' && inputs.strategy == 'p1_oco'
+        uses: actions/github-script@v8
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          RUN_ONCE: ${{ inputs.run_once }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        with:
+          script: |
+            if (process.env.PAPER_PROVIDER !== 'polymarket_us' || !['5','15','30'].includes(process.env.PAPER_HORIZON) || process.env.PAPER_LAG_MINUTES !== '0') throw new Error('P1 requires Polymarket/latest/5,15,30 minutes');
+            const {spawn}=require('node:child_process');
+            const args=['market_research/node/run.mjs','--paper-p1','--horizon',process.env.PAPER_HORIZON];
+            if(process.env.RUN_ONCE==='true') args.push('--once','--max-contracts','8');
+            await new Promise((resolve,reject)=>{
+              const child=spawn(process.execPath,args,{stdio:'inherit'});
+              child.on('error',reject);
+              child.on('exit',code=>code===0?resolve():reject(new Error('P1 paper failed; recover the verified encrypted checkpoint, do not reset positions.')));
+            });
       - name: Resume private paper simulation
         id: worker
-        if: inputs.smoke_mode == 'real'
+        if: inputs.smoke_mode == 'real' && inputs.strategy != 'p1_oco'
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -99,21 +155,16 @@ jobs:
           TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: |
-          if [[ "$PAPER_STRATEGY" == 'p1_oco' ]]; then
-            [[ "$PAPER_PROVIDER" == 'polymarket_us' && "$PAPER_HORIZON" == '30' && "$PAPER_LAG_MINUTES" == '0' ]] || { echo 'P1 OCO requires Polymarket latest/30 minutes'; exit 1; }
-            p1args=()
-            if [[ "$RUN_ONCE" == 'true' ]]; then p1args+=(--once --max-contracts 4); fi
-            python -m market_research.p1_worker "${p1args[@]}"
-            exit 0
-          fi
           args=(--mode live --provider "$PAPER_PROVIDER" --horizon "$PAPER_HORIZON" --lag-minutes "$PAPER_LAG_MINUTES" --roll-minutes "$PAPER_ROLL_MINUTES" --duration-minutes 345)
           if [[ "$PAPER_FORECAST_ONLY" == 'true' ]]; then args+=(--forecast-only); fi
           if [[ "$RUN_ONCE" == 'true' ]]; then args+=(--once --max-contracts 4); fi
           python -m market_research.worker "${args[@]}"
       - name: Checkpoint-confirmed successor handoff
-        if: success() && inputs.smoke_mode == 'real' && !inputs.run_once && steps.worker.outputs.handoff_ready == 'true'
+        if: success() && inputs.smoke_mode == 'real' && !inputs.run_once && (steps.worker.outputs.handoff_ready == 'true' || steps.p1_worker.outputs.handoff_ready == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
+          PAPER_CHECKPOINT: ${{ steps.p1_worker.outputs.checkpoint_artifact_id }}
+          PAPER_CODE_REF: ${{ steps.p1_worker.outputs.checkpoint_code_sha }}
         run: python -m market_research.handoff
       - name: Failure disclosure
         if: failure()

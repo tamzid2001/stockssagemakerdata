@@ -9,9 +9,9 @@ on:
         description: Independent provider replay (paper only)
       strategy:
         type: choice
-        options: [p10, median_cross, quantiles]
+        options: [p10, median_cross, quantiles, p1_oco]
         default: p10
-        description: Quantiles stores inputs/curves/actuals without selecting a trading strategy
+        description: P1 accumulation uses latest/Polymarket/5,15,30m; quantiles stores curves without trades
       lag_minutes:
         type: choice
         options: ['0', '15', '30']
@@ -32,7 +32,7 @@ on:
         description: Per-side share cap (1–10000); one starting share
       horizon:
         type: choice
-        options: ['30', '45', '60']
+        options: ['5', '15', '30', '45', '60']
         default: '30'
         description: Forecast minutes per rolling origin
       max_contracts:

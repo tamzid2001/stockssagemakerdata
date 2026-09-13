@@ -27,7 +27,7 @@ def test_workflow_isolation_timeouts_privacy_and_safe_inputs():
         else:
             assert "upload-artifact" not in text
         assert "place_order" not in text and "POLYMARKET_SECRET_KEY" not in text
-        assert "ref: main" in text
+        assert "ref: main" in text or "ref: ${{ inputs.code_ref || 'main' }}" in text
         assert all(j["timeout-minutes"] <= 360 for j in value["jobs"].values())
     assert len({w["concurrency"]["group"] for w in workflows}) == 5
     live = (ROOT / ".github/workflows/polymarket-live-paper.yml").read_text()
@@ -67,7 +67,7 @@ def test_median_experiment_uses_shared_worker_with_isolated_bounded_configuratio
     text = (ROOT / ".github/workflows/historical-p10-replay.yml").read_text()
     workflow = yaml.safe_load(text)
     inputs = workflow[True]["workflow_dispatch"]["inputs"]
-    assert inputs["strategy"]["options"] == ["p10", "median_cross", "quantiles"]
+    assert inputs["strategy"]["options"] == ["p10", "median_cross", "quantiles", "p1_oco"]
     assert inputs["loss_multiplier"]["default"] == 2.5
     assert inputs["max_shares"]["default"] == 100
     assert "inputs.strategy" in workflow["concurrency"]["group"]
@@ -80,7 +80,7 @@ def test_corpus_variants_and_live_shared_provider_dispatch():
     replay = yaml.safe_load((ROOT / ".github/workflows/historical-p10-replay.yml").read_text())
     inputs = replay[True]["workflow_dispatch"]["inputs"]
     assert inputs["lag_minutes"]["options"] == ["0", "15", "30"]
-    assert inputs["horizon"]["options"] == ["30", "45", "60"]
+    assert inputs["horizon"]["options"] == ["5", "15", "30", "45", "60"]
     live = yaml.safe_load((ROOT / ".github/workflows/polymarket-live-paper.yml").read_text())
     inputs = live[True]["workflow_dispatch"]["inputs"]
     assert inputs["forecast_only"]["default"] is True
@@ -102,3 +102,8 @@ def test_p1_paper_and_hourly_screeners_share_models_but_isolate_books_and_provid
     for name in ["p1_worker.py","p1_oco.py","hourly_screener.py"]:
         source=(ROOT / "market_research" / name).read_text()
         assert not re.search(r"\bplace_order\b",source) and "POLYMARKET_SECRET_KEY" not in source
+def test_live_p1_has_explicit_artifact_directory():
+    from pathlib import Path
+    workflow=Path('.github/workflows/polymarket-live-paper.yml').read_text()
+    assert 'QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/p1-paper-output' in workflow
+    assert 'ABSOLUTE_RESEARCH_DIRECTORY_REQUIRED' in Path('market_research/node/run.mjs').read_text()

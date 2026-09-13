@@ -6,6 +6,7 @@ import urllib.request
 import urllib.error
 import time
 import copy
+import re
 
 
 class QuanturaProvider:
@@ -128,6 +129,35 @@ class QuanturaProvider:
         for row in rows:
             row["selected_position"] = contract["side"]
         return rows
+
+    def resolution(self, contract):
+        """Read-only official outcome evidence, never inferred from a last quote."""
+        slug=contract["providerSymbol"]
+        if self.source!="polymarket_us" or not re.fullmatch(r"[A-Za-z0-9_-]{1,220}",slug):
+            raise ValueError("UNSUPPORTED_RESOLUTION_IDENTIFIER")
+        root="https://gateway.polymarket.us/v1/"
+        def get(path):
+            with urllib.request.urlopen(root+path,timeout=20) as response:
+                return json.load(response)
+        market=get("market/slug/"+slug).get("market",{})
+        status=market.get("status")
+        evidence={"provider":"polymarket_us","symbol":slug,"contract_id":contract["contractId"],
+            "side":contract["side"],"outcome_label":contract.get("outcome"),"market_status":status,
+            "checked_at":int(time.time()),"source_url":root+"markets/"+slug+"/settlement",
+            "selected_side_won":None}
+        if status!="MARKET_STATUS_RESOLVED":return {**evidence,"resolution_status":"pending"}
+        raw=get("markets/"+slug+"/settlement")
+        value=raw.get("settlement")
+        if raw.get("slug")!=slug or type(value) not in (int,float) or value not in (0,1):
+            return {**evidence,"resolution_status":"partial_void_or_unverified","raw_settlement":value}
+        selected=next((s for s in market.get("marketSides",[]) if str(s.get("id"))==str(contract["contractId"])),None)
+        if not selected or selected.get("long")!=(contract["side"]=="long"):
+            return {**evidence,"resolution_status":"side_identity_unverified"}
+        payout=value if contract["side"]=="long" else 1-value
+        if str(selected.get("price")) not in (str(payout),str(float(payout))):
+            return {**evidence,"resolution_status":"conflicting_evidence"}
+        return {**evidence,"resolution_status":"resolved","long_settlement":value,
+            "selected_side_won":bool(payout),"selected_side_payout":payout}
 
 
 class KalshiProvider(QuanturaProvider):
