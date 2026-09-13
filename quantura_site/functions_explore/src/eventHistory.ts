@@ -5,7 +5,7 @@ export type HistorySelection = { history_phase: HistoryPhase; history_lookback_m
 export function historySelection(input: Record<string, unknown>, legacyPregameDefault = false): HistorySelection {
   const phase = input.history_phase ?? (input.pregameOnly === true || (input.pregameOnly === undefined && legacyPregameDefault) ? "pregame" : "both");
   const lookback = input.history_lookback_minutes ?? 0;
-  if (!["both", "pregame", "in_game"].includes(String(phase))) throw new Error("history_phase_invalid");
+  if (typeof phase !== "string" || !["both", "pregame", "in_game"].includes(phase)) throw new Error("history_phase_invalid");
   if (typeof lookback !== "number" || !Number.isInteger(lookback) || lookback < 0 || lookback > 129600) throw new Error("history_lookback_invalid");
   return { history_phase: phase as HistoryPhase, history_lookback_minutes: lookback };
 }

@@ -25,7 +25,7 @@ test("event history phase and bounded lookback intersect before cutoff; unknown 
   assert.deepEqual(eventHistoryRange(start,event+30*60000,event,historySelection({history_phase:"in_game",history_lookback_minutes:60})),{start:event,end:event+30*60000});
   assert.equal(historySelection({pregameOnly:true}).history_phase,"pregame");
   assert.throws(()=>eventHistoryRange(start,end,NaN,historySelection({history_phase:"in_game"})),/event_start/);
-  for(const input of [{history_phase:"unknown"},{history_lookback_minutes:-1},{history_lookback_minutes:NaN},{history_lookback_minutes:"60"},{history_lookback_minutes:129601}]) assert.throws(()=>historySelection(input));
+  for(const input of [{history_phase:["both"]},{history_phase:{toString:()=>"both"}},{history_phase:"unknown"},{history_lookback_minutes:-1},{history_lookback_minutes:NaN},{history_lookback_minutes:"60"},{history_lookback_minutes:129601}]) assert.throws(()=>historySelection(input));
 });
 
 test("flat history is preserved but blocks inference; changing in-game data remains usable", () => {
