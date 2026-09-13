@@ -191,6 +191,8 @@
                             </div>
                           </div>
 
+                          <details class="ensemble-advanced-settings">
+                            <summary>Advanced settings · models and quantiles</summary>
                           <fieldset class="field ensemble-model-fieldset">
                             <legend class="label">Models</legend>
                             <p class="small muted">Prophet · Toto 2.0 · Granite · Chronos-2 · TimesFM 3.0 — availability is checked for your workspace.</p>
@@ -219,8 +221,6 @@
                             <p id="ensemble-quantile-status" class="small muted" role="status" aria-live="polite">Toto and TimesFM contribute only within P10–P90; eligible models are reweighted separately for each quantile.</p>
                           </fieldset>
 
-                          <details class="ensemble-advanced-settings">
-                            <summary>Advanced settings</summary>
                             <button id="ensemble-settings-help-open" class="task-chip" type="button" aria-haspopup="dialog" aria-controls="ensemble-settings-help">About these settings</button>
                             <div class="form-grid">
                               <div class="field"><label class="label" for="ensemble-context-length">Context length</label><input id="ensemble-context-length" name="context_length" type="number" min="40" max="16384" value="512" /></div>
@@ -228,14 +228,13 @@
                               <div class="field"><label class="label" for="ensemble-failure-policy">Model failure policy</label><select id="ensemble-failure-policy" name="model_failure_policy"><option value="fail">Fail reproducibly</option><option value="renormalize">Renormalize remaining models</option></select></div>
                               <div class="field" data-ensemble-source="workspace_dataset" hidden><label class="label" for="ensemble-frequency">Dataset interval</label><select id="ensemble-frequency" name="frequency"><option value="infer">Detect from timestamps</option><option value="1min">1 minute</option><option value="5min">5 minutes</option><option value="15min">15 minutes</option><option value="30min">30 minutes</option><option value="1h">1 hour</option><option value="1D" selected>Daily</option><option value="custom">Custom interval</option></select><input id="ensemble-frequency-custom" aria-label="Custom dataset interval" placeholder="For example: 2h" maxlength="30" hidden disabled /><span class="small muted">Market intervals come from the selected data source.</span></div>
                             </div>
-                          </details>
-
                           <div class="ensemble-preset-row">
                             <div class="field"><label class="label" for="ensemble-preset-select">Saved preset</label><select id="ensemble-preset-select"><option value="">No preset selected</option></select></div>
                             <button id="ensemble-load-preset" class="task-chip" type="button">Load</button>
                             <div class="field"><label class="label" for="ensemble-preset-name">Preset name</label><input id="ensemble-preset-name" maxlength="100" placeholder="Chronos heavy" /></div>
                             <button id="ensemble-save-preset" class="task-chip" type="button">Save preset</button>
                           </div>
+                          </details>
 
                           <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
                         </form>
@@ -255,8 +254,11 @@
                         <section id="ensemble-forecast-results" class="ensemble-results" aria-labelledby="ensemble-results-title" hidden>
                           <div class="forecast-section-heading"><div><div class="eyebrow">Final ensemble</div><h3 id="ensemble-results-title">Probabilistic forecast</h3></div><span id="ensemble-result-state" class="status-pill">Queued</span></div>
                           <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
+                          <button id="ensemble-check-status" class="task-chip" type="button">Check job status</button>
+                          <nav class="request-bulk-toolbar" aria-label="Saved forecast navigation"><button id="ensemble-request-previous" class="task-chip" type="button">Previous request</button><button id="ensemble-request-next" class="task-chip" type="button">Next request</button><button id="ensemble-other-side" class="task-chip" type="button" hidden>Forecast other moneyline</button></nav>
                           <button id="ensemble-chart-focus" class="task-chip" type="button">Latest 60 minutes + forecast</button>
                           <div id="ensemble-forecast-chart" class="chart ensemble-chart" aria-label="Final ensemble forecast chart"></div>
+                          <section id="ensemble-live-quote" class="ensemble-live-quote" aria-label="Latest selected-side quote" aria-live="polite"></section>
                           <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>
                           <div id="ensemble-observation-status" class="small muted" role="status"></div>
                           <div id="ensemble-observed-metrics" class="small muted" role="status"></div>

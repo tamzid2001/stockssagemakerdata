@@ -40,16 +40,28 @@ class WorkerApi:
         return response.json()["data"]
 
     def progress(self, payload: Mapping[str, Any]) -> None:
-        response = self.client.post(f"/api/internal/ensemble-forecasts/{self.job_id}/progress", json=dict(payload))
-        response.raise_for_status()
+        self._write("progress", payload)
 
     def complete(self, payload: Mapping[str, Any]) -> None:
-        response = self.client.post(f"/api/internal/ensemble-forecasts/{self.job_id}/complete", json=dict(payload))
-        response.raise_for_status()
+        self._write("complete", payload)
 
     def fail(self, payload: Mapping[str, Any]) -> None:
-        response = self.client.post(f"/api/internal/ensemble-forecasts/{self.job_id}/fail", json=dict(payload))
-        response.raise_for_status()
+        self._write("fail", payload)
+
+    def _write(self, action: str, payload: Mapping[str, Any]) -> None:
+        # Only idempotent status/result callbacks are retried. Claim and model
+        # execution are never repeated because of a lost network response.
+        for attempt in range(4):
+            try:
+                response = self.client.post(f"/api/internal/ensemble-forecasts/{self.job_id}/{action}", json=dict(payload))
+                response.raise_for_status()
+                return
+            except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+                transient = isinstance(exc, httpx.TransportError) or exc.response.status_code in {408, 429, 500, 502, 503, 504}
+                if not transient or attempt == 3:
+                    raise
+                LOGGER.warning("worker callback retry: forecast_id=%s action=%s attempt=%s", self.job_id, action, attempt + 1)
+                time.sleep(2 ** attempt)
 
 
 def adapter_factory(model_id: ModelId, *, mock: bool = False) -> ForecastAdapter:

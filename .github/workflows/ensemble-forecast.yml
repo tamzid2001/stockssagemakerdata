@@ -124,6 +124,25 @@ jobs:
             python -m ensemble_forecasting.cli --forecast-job-id "${FORECAST_JOB_ID}" | tee artifacts/worker-result.json
           fi
 
+      - name: Report startup failures without overwriting running or completed jobs
+        if: ${{ failure() && inputs.forecast_job_id != '' }}
+        env:
+          FORECAST_JOB_ID: ${{ inputs.forecast_job_id }}
+        run: |
+          python - <<'PY'
+          import json, os, re, urllib.request
+          from urllib.parse import urlparse
+          identifier = os.environ['FORECAST_JOB_ID']
+          base = os.environ['QUANTURA_WORKER_API_BASE'].rstrip('/')
+          if not re.fullmatch(r'[A-Za-z0-9_-]{1,220}', identifier) or urlparse(base).scheme != 'https':
+              raise SystemExit('Invalid worker destination')
+          request = urllib.request.Request(base+'/api/internal/ensemble-forecasts/'+identifier+'/fail',
+              data=json.dumps({'code':'WORKER_STARTUP_FAILED','retryable':True,'only_if_queued':True}).encode(),
+              headers={'Authorization':'Bearer '+os.environ['QUANTURA_ENSEMBLE_WORKER_TOKEN'],'Content-Type':'application/json'},method='POST')
+          with urllib.request.urlopen(request,timeout=20) as response:
+              print('Startup failure notification delivered:',response.status)
+          PY
+
       - name: Upload safe worker receipt
         if: ${{ always() && inputs.forecast_job_id != '' }}
         uses: actions/upload-artifact@v4

@@ -13472,6 +13472,30 @@ ROUTES.get("/my-requests", async (req, res) => {
       data: (doc.data() || {}) as Record<string, unknown>,
     }));
 
+    // Enrich legacy request cards from the authoritative job, without changing
+    // published forecasts, user titles, or request deletion preferences.
+    const ensembleDocs = requestDocs.filter(doc => !asBoolean(doc.data.deleted,false) && asPlainObject(doc.data.sourceRef).collection === "ensemble_forecast_jobs" && /^[A-Za-z0-9_-]{1,220}$/.test(asString(asPlainObject(doc.data.sourceRef).id))).slice(0,240);
+    if (ensembleDocs.length) {
+      const principal = await authenticatePlatformRequest(req,{db,auth});
+      const jobs = await db.getAll(...ensembleDocs.map(doc => db.collection("ensemble_forecast_jobs").doc(asString(asPlainObject(doc.data.sourceRef).id))),{fieldMask:["user_id","workspace_id","source","status"]});
+      const accesses = new Map<string,Awaited<ReturnType<typeof resolveWorkspaceAccess>>>();
+      for (let i=0;i<jobs.length;i++) {
+        const job = jobs[i].data();
+        if (!job || job.user_id !== viewer.uid) continue;
+        try {
+          const workspaceId = asString(job.workspace_id);
+          const access = accesses.get(workspaceId) || await resolveWorkspaceAccess(db,principal,workspaceId);
+          accesses.set(workspaceId,access);
+          requireWorkspacePermission(access,"forecast.read",jobs[i].id);
+          const doc = ensembleDocs[i], source = asPlainObject(job.source);
+          const symbol = asString(source.symbol || source.dataset_id);
+          doc.data.input = {...asPlainObject(doc.data.input),ticker:symbol,market_symbol:symbol,provider:source.provider || "",side:source.side || "",outcome:source.outcome || ""};
+          if (!asBoolean(doc.data.titleEdited,false)) doc.data.title = [source.outcome,source.side,symbol].filter(Boolean).join(" · ");
+          doc.data.outputsMeta = {...asPlainObject(doc.data.outputsMeta),status:job.status};
+        } catch { /* Removed workspace membership cannot reveal job metadata. */ }
+      }
+    }
+
     const rows = requestDocs
       .map((doc) => toMyRequestResponse(doc.id, doc.data, { includePayload: true }))
       .filter((item) => !asBoolean(item.deleted, false))

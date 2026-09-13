@@ -10,10 +10,20 @@ import {
   apiError,
   validateModelHistory,
   historyCutoffAt,
+  expiredEnsembleJobCode,
 } from "./ensembleForecastRoutes";
 import { AlpacaError } from "./alpacaClient";
 import { parseMarketLink } from "./marketLink";
 import { forecastObservationWindow, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink, normalizePolymarketEvents } from "./predictionMarketData";
+
+test("only genuinely expired queued/running jobs time out; completed results remain immutable", () => {
+  const now=Date.parse('2026-09-12T20:00:00Z');
+  assert.equal(expiredEnsembleJobCode({status:'queued',created_at:'2026-09-12T12:00:00Z'},now),'WORKER_QUEUE_TIMEOUT');
+  assert.equal(expiredEnsembleJobCode({status:'queued',created_at:'2026-09-12T19:59:00Z'},now),null);
+  assert.equal(expiredEnsembleJobCode({status:'running',lease_expires_at:'2026-09-12T19:00:00Z'},now),'WORKER_LEASE_EXPIRED');
+  assert.equal(expiredEnsembleJobCode({status:'running',lease_expires_at:'2026-09-12T21:00:00Z'},now),null);
+  assert.equal(expiredEnsembleJobCode({status:'completed',lease_expires_at:'2026-09-12T19:00:00Z'},now),null);
+});
 
 test("minute cutoffs are strict, exclude the latest observations before choosing the 500 inputs", () => {
   const now = Date.parse("2026-09-12T16:30:35Z");

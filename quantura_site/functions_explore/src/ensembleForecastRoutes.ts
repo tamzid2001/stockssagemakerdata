@@ -381,7 +381,7 @@ async function materializeSource(
     const provider = text(source.provider);
     if (provider !== "polymarket_us" && provider !== "kalshi") throw new Error("source_provider_unsupported");
     const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined });
-    return { rows: history.rows, source: { type, provider, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
+    return { rows: history.rows, source: { type, provider, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
   }
   if (type === "ticker") {
     assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "limit"], "source");
@@ -498,6 +498,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     status: data.status,
     created_at: data.created_at,
     started_at: data.started_at || null,
+    updated_at: data.updated_at || data.started_at || data.created_at,
     completed_at: data.completed_at || null,
     workspace_id: data.workspace_id,
     source: data.source,
@@ -534,13 +535,68 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
   return output;
 }
 
+export function expiredEnsembleJobCode(job: JsonRecord, now = Date.now()): string | null {
+  if (job.status === "queued" && now - Date.parse(String(job.created_at)) > 6*60*60_000) return "WORKER_QUEUE_TIMEOUT";
+  if (job.status === "running" && Date.parse(String(job.lease_expires_at)) <= now) return "WORKER_LEASE_EXPIRED";
+  return null;
+}
+
+export async function failEnsembleJob(options: Options, ref: FirebaseFirestore.DocumentReference, error: JsonRecord, onlyQueued = false, expiredOnly = false) {
+  return options.db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new Error("forecast_job_not_found");
+    const job = plain(snapshot.data());
+    if (!["queued","running"].includes(String(job.status)) || (onlyQueued && job.status !== "queued") || (expiredOnly && !expiredEnsembleJobCode(job))) return false;
+    const date = String(job.created_at).slice(0,10);
+    const usage = options.db.collection(USAGE).doc(crypto.createHash("sha256").update(`${job.workspace_id}:${date}`).digest("hex"));
+    const usageSnap = await transaction.get(usage);
+    const now = new Date().toISOString();
+    transaction.set(ref,{status:"failed",completed_at:now,updated_at:now,lease_expires_at:null,error}, {merge:true});
+    if (usageSnap.exists) transaction.set(usage,{active:Math.max(0,Number(usageSnap.data()?.active || 0)-1),updated_at:now},{merge:true});
+    return true;
+  });
+}
+
+export async function completeEnsembleJob(options: Options, ref: FirebaseFirestore.DocumentReference, body: JsonRecord): Promise<JsonRecord> {
+  return options.db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new Error("forecast_job_not_found");
+    const job = plain(snapshot.data());
+    const resultRef = options.db.collection(RESULTS).doc(ref.id);
+    const existing = await transaction.get(resultRef);
+    // A lost HTTP response can be retried without rewriting the result or
+    // decrementing quota again. A different result must never replace it.
+    if (job.status === "completed" && existing.exists && existing.data()?.result_hash === body.result_hash) return job;
+    if (job.status !== "running") throw new Error("forecast_claim_conflict");
+    if (text(body.dataset_hash, 128) !== text(job.dataset_hash, 128)) throw new Error("forecast_result_invalid");
+    const validated = validateWorkerResult(body, job);
+    if (existing.exists && existing.data()?.result_hash !== body.result_hash) throw new Error("forecast_result_invalid");
+    const completedAt = new Date().toISOString();
+    const usageDate = String(job.created_at).slice(0, 10);
+    const usage = options.db.collection(USAGE).doc(crypto.createHash("sha256").update(`${job.workspace_id}:${usageDate}`).digest("hex"));
+    const usageSnap = await transaction.get(usage);
+    // Recover an old partial completion too: preserve its immutable result.
+    if (!existing.exists) transaction.create(resultRef, {
+      forecast_id: ref.id, schema_version: WORKER_SCHEMA_VERSION,
+      ...Object.fromEntries(["effective_weights_by_quantile", "models", "model_runs", "transform", "warnings", "failures", "dataset_hash", "prepared_series_hash", "result_hash", "runtime_seconds", "runtime"].map(key => [key, body[key] ?? null])),
+      predictions: validated.predictions, quantiles: validated.quantiles, created_at: completedAt,
+    });
+    const completed = {status:"completed",completed_at:completedAt,updated_at:completedAt,lease_expires_at:null,warnings:body.warnings || [],progress:{completed_models:Array.isArray(body.models)?body.models.length:0,total_models:Array.isArray(body.models)?body.models.length:0,current_model:null}};
+    transaction.set(ref, completed, {merge:true});
+    if (usageSnap.exists) transaction.set(usage,{active:Math.max(0,Number(usageSnap.data()?.active || 0)-1),updated_at:completedAt},{merge:true});
+    const cacheId = crypto.createHash("sha256").update(`${job.workspace_id}:${job.request_hash}`).digest("hex");
+    transaction.set(options.db.collection(CACHE).doc(cacheId),{forecast_id:ref.id,request_hash:job.request_hash,completed_at:completedAt});
+    return {...job,...completed};
+  });
+}
+
 async function indexEnsembleRequest(options: Options, id: string, job: JsonRecord): Promise<void> {
   const source = plain(job.source);
   const ref = options.db.collection("users").doc(text(job.user_id)).collection("requests").doc(`ensemble__${id}`);
   const metadata = {
     type: "forecast", ownerUid: job.user_id, workspaceId: job.workspace_id,
-    title: `Quantura Forecast · ${text(source.title || source.symbol || source.dataset_id || "Dataset", 140)}`,
-    input: { ticker: source.type === "ticker" ? source.symbol : "", panel: "forecast" },
+    title: [text(source.outcome,100), text(source.side,20), text(source.symbol || source.dataset_id || "Dataset",140)].filter(Boolean).join(" · "),
+    input: { ticker: source.symbol || "", market_symbol: source.symbol || "", outcome: source.outcome || "", side: source.side || "", provider: source.provider || "", panel: "forecast" },
     outputsMeta: { status: job.status, summary: "Saved probabilistic ensemble. Open to view the immutable result." },
     sourceRef: { collection: JOBS, id }, published: false, deleted: false,
     visibility: "private", share: { visibility: "private", slug: "" },
@@ -789,10 +845,24 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const forecastId = safeId(req.params.forecastId, 220);
     const job = await options.db.collection(JOBS).doc(forecastId).get();
     if (!job.exists) throw new Error("forecast_job_not_found");
-    const data = plain(job.data());
+    let data = plain(job.data());
     const access = await resolveWorkspaceAccess(options.db, principal, data.workspace_id);
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
     requireWorkspacePermission(access, "forecast.read", forecastId);
+    if (data.status === "running") {
+      // Older deployments could create a result then fail before setting
+      // completed. Recover that exact result, never re-run inference.
+      const persisted = await options.db.collection(RESULTS).doc(forecastId).get();
+      if (persisted.exists) {
+        await completeEnsembleJob(options, job.ref, plain(persisted.data()));
+        data = plain((await job.ref.get()).data());
+      }
+    }
+    const expiredCode = expiredEnsembleJobCode(data);
+    if (expiredCode) {
+      await failEnsembleJob(options,job.ref,{code:expiredCode,retryable:true},false,true);
+      data = plain((await job.ref.get()).data());
+    }
     const result = text(data.status, 40) === "completed" ? await options.db.collection(RESULTS).doc(forecastId).get() : null;
     const payload = publicEnsembleJob(forecastId, data, result?.exists ? plain(result.data()) : null);
     if (result?.exists) payload.history = (await loadInputRows(job.ref, 2)).slice(-500);
@@ -902,13 +972,19 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       if (!snapshot.exists) throw new Error("forecast_job_not_found");
       const data = plain(snapshot.data());
       const status = text(data.status, 40);
-      if (status !== "queued" && status !== "running") throw new Error("forecast_claim_conflict");
-      if (status === "running" && iso(data.lease_expires_at) && Date.parse(String(data.lease_expires_at)) > Date.now()) throw new Error("forecast_claim_conflict");
+      // Immutable jobs execute once. Retries create a new job; an expired
+      // worker must not compete with a replacement for the same result.
+      if (status !== "queued") throw new Error("forecast_claim_conflict");
       const now = new Date().toISOString();
       transaction.set(ref, { status: "running", started_at: data.started_at || now, lease_expires_at: new Date(Date.now() + 5 * 60 * 60_000).toISOString(), worker_claim_id: requestId }, { merge: true });
       return data;
     });
-    const rows = await loadInputRows(ref, plain(job.source).type === "prediction_market" ? 2 : 40);
+    let rows;
+    try { rows = await loadInputRows(ref, plain(job.source).type === "prediction_market" ? 2 : 40); }
+    catch (error) {
+      await failEnsembleJob(options, ref, {code:"WORKER_INPUT_UNAVAILABLE",retryable:true});
+      throw error;
+    }
     sendData(res, {
       forecast_id: ref.id,
       request: job.request,
@@ -924,61 +1000,32 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
 
   router.post("/internal/ensemble-forecasts/:forecastId/progress", internal(options, async (req, res, requestId) => {
     const ref = options.db.collection(JOBS).doc(safeId(req.params.forecastId, 220));
-    const snapshot = await ref.get();
-    if (!snapshot.exists || text(snapshot.data()?.status, 40) !== "running") throw new Error("forecast_job_not_found");
     const body = plain(req.body);
     const total = Math.max(1, Math.min(Math.floor(Number(body.total_models) || 1), APPROVED_MODELS.length));
     const completed = Math.max(0, Math.min(Math.floor(Number(body.completed_models) || 0), total));
     const current = text(body.current_model, 40);
     if (current && !APPROVED_MODELS.includes(current as ModelId)) throw new Error("model_unsupported");
-    await ref.set({ progress: { completed_models: completed, total_models: total, current_model: current || null }, lease_expires_at: new Date(Date.now() + 5 * 60 * 60_000).toISOString(), updated_at: new Date().toISOString() }, { merge: true });
+    await options.db.runTransaction(async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists || snapshot.data()?.status !== "running") throw new Error("forecast_claim_conflict");
+      transaction.set(ref, { progress: { completed_models: completed, total_models: total, current_model: current || null }, lease_expires_at: new Date(Date.now() + 5 * 60 * 60_000).toISOString(), updated_at: new Date().toISOString() }, { merge: true });
+    });
     sendData(res, { updated: true }, requestId);
   }));
 
   router.post("/internal/ensemble-forecasts/:forecastId/complete", internal(options, async (req, res, requestId) => {
     const ref = options.db.collection(JOBS).doc(safeId(req.params.forecastId, 220));
-    const snapshot = await ref.get();
-    if (!snapshot.exists || text(snapshot.data()?.status, 40) !== "running") throw new Error("forecast_job_not_found");
-    const job = plain(snapshot.data());
     const body = plain(req.body);
-    if (text(body.dataset_hash, 128) !== text(job.dataset_hash, 128)) throw new Error("forecast_result_invalid");
-    const validated = validateWorkerResult(body, job);
-    const result = {
-      forecast_id: ref.id,
-      schema_version: WORKER_SCHEMA_VERSION,
-      predictions: validated.predictions,
-      quantiles: validated.quantiles,
-      effective_weights_by_quantile: body.effective_weights_by_quantile,
-      models: body.models,
-      model_runs: body.model_runs,
-      transform: body.transform,
-      warnings: body.warnings,
-      failures: body.failures,
-      dataset_hash: body.dataset_hash,
-      prepared_series_hash: body.prepared_series_hash,
-      result_hash: body.result_hash,
-      runtime_seconds: body.runtime_seconds,
-      runtime: body.runtime,
-      created_at: new Date().toISOString(),
-    };
-    await options.db.collection(RESULTS).doc(ref.id).create(result);
-    const completedAt = new Date().toISOString();
-    await ref.set({ status: "completed", completed_at: completedAt, lease_expires_at: null, warnings: body.warnings || [], progress: { completed_models: Array.isArray(body.models) ? body.models.length : 0, total_models: Array.isArray(body.models) ? body.models.length : 0, current_model: null } }, { merge: true });
-    const cacheId = crypto.createHash("sha256").update(`${text(job.workspace_id, 220)}:${text(job.request_hash, 128)}`).digest("hex");
-    await options.db.collection(CACHE).doc(cacheId).set({ forecast_id: ref.id, request_hash: job.request_hash, completed_at: completedAt }, { merge: false });
-    await indexEnsembleRequest(options, ref.id, { ...job, status: "completed" });
-    await releaseComputeSlot(options, text(job.workspace_id, 220));
+    const job = await completeEnsembleJob(options, ref, body);
+    // Indexing is secondary; it cannot turn persisted success into failure.
+    await indexEnsembleRequest(options, ref.id, job).catch(() => console.warn(JSON.stringify({event:"ensemble_request_index_failed",forecast_id:ref.id,request_id:requestId})));
     sendData(res, { completed: true, forecast_id: ref.id }, requestId);
   }));
 
   router.post("/internal/ensemble-forecasts/:forecastId/fail", internal(options, async (req, res, requestId) => {
     const ref = options.db.collection(JOBS).doc(safeId(req.params.forecastId, 220));
-    const snapshot = await ref.get();
-    if (!snapshot.exists) throw new Error("forecast_job_not_found");
-    const job = plain(snapshot.data());
     const body = plain(req.body);
-    await ref.set({ status: "failed", completed_at: new Date().toISOString(), lease_expires_at: null, error: { code: text(body.code || "FORECAST_JOB_FAILED", 100), model: text(body.model, 40) || null, retryable: boolean(body.retryable) } }, { merge: true });
-    await releaseComputeSlot(options, text(job.workspace_id, 220));
-    sendData(res, { failed: true, forecast_id: ref.id }, requestId);
+    const failed = await failEnsembleJob(options, ref, {code:text(body.code || "FORECAST_JOB_FAILED",100),model:text(body.model,40)||null,retryable:boolean(body.retryable)},body.only_if_queued === true);
+    sendData(res, { failed, forecast_id: ref.id }, requestId);
   }));
 }

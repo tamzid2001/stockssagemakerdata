@@ -2946,6 +2946,8 @@
           const next = panelNames.has(requested) ? requested : String(router?.defaultPanel || buttons[0]?.dataset?.panelTarget || "").trim();
 		      if (!next) return;
 		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
+          const marketSelector = document.querySelector(".market-search-workspace");
+          if (marketSelector) marketSelector.hidden = ["autopilot", "foundry"].includes(next);
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
 		      if (pushPath && router?.panelToPath?.[next]) {
 		        const desiredUrl = buildPanelUrl(next);
@@ -14399,6 +14401,7 @@
       headers,
       credentials: "same-origin",
       body: includeJson ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(method === "GET" ? 20000 : 180000),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -14424,6 +14427,7 @@
     accessKey: "",
     chartWindowId: "",
     chartWindow: null,
+    pollGeneration: 0,
   };
 
   const ensembleQuantileKey = (value) => Number(Number(value).toPrecision(12)).toString();
@@ -14504,6 +14508,30 @@
     const percent = quantile * 100;
     if (Number.isInteger(percent)) return `P${String(percent).padStart(2, "0")}`;
     return `Q${ensembleQuantileKey(quantile)}`;
+  };
+
+  const ensembleMarketIdentity = (job) => {
+    const s = job.source || {};
+    const symbol = String(s.symbol || s.dataset_id || "Dataset");
+    const side = s.type === "prediction_market" ? `${s.outcome || "Selected outcome"} (${s.side || "selected side"})` : symbol;
+    const title = s.type === "prediction_market" ? `${side} · ${symbol}` : side;
+    return {symbol, side, title};
+  };
+
+  const renderEnsembleLiveQuote = (job, now = Date.now()) => {
+    const host = document.getElementById("ensemble-live-quote");
+    if (!host) return;
+    const latest = [...(job.history || []), ...(job.observations || [])].filter(r => typeof r.target === "number" && Number.isFinite(r.target) && Date.parse(r.timestamp) <= now).sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp)).at(-1);
+    if (!latest) {host.textContent="No observed quote available for the selected side.";return;}
+    const summary = ensembleDistributionSummary({...job,history:[latest]});
+    const end = job.predictions?.at(-1), ended = !end || Date.parse(end.timestamp) <= now;
+    const age = Math.max(0, Math.floor((now-Date.parse(latest.timestamp))/60000));
+    const format = v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:4});
+    const median = end?.quantiles?.['0.5'];
+    const higher = summary.probabilityHigher;
+    const direction = Number.isFinite(Number(median)) ? `Forecast-end P50: ${format(median)} — ${Number(median)>Number(latest.target)?"above":Number(median)<Number(latest.target)?"below":"equal to"} the current quote.` : "P50 was not requested.";
+    const probability = ended ? "This forecast horizon has ended; no remaining-horizon probability is implied." : higher === null || higher === undefined ? "Current quote is outside the interpolable quantile range; no tail probability is invented." : `Saved forecast implies approximately ${Math.round(higher*100)}% above / ${Math.round((1-higher)*100)}% below this quote at ${ensembleLocalTime(end.timestamp)}. This is not an updated conditional forecast or a validated win rate.`;
+    host.innerHTML = `<strong>${escapeHtml(ensembleMarketIdentity(job).side)} · latest observed quote ${escapeHtml(format(latest.target))}</strong><p>${escapeHtml(ensembleLocalTime(latest.timestamp))} · ${age > 2 ? "Stale: " : ""}${age} min old · checked every minute, not a tick stream.</p><p>Nearest end-of-horizon quantile: ${escapeHtml(ensembleQuantileLabel(summary.nearest))}. ${escapeHtml(direction)}</p><p>${escapeHtml(probability)} A median denotes approximately 50% of modeled outcomes on each side, not a trading win rate.</p>`;
   };
 
   const setEnsembleStatus = (message, tone = "") => {
@@ -14687,14 +14715,17 @@
     const completed = Number(progress.completed_models || 0);
     const total = Number(progress.total_models || 0);
     const current = String(progress.current_model || "");
+    const elapsed = Math.max(0,Math.floor((Date.now()-Date.parse(job.created_at))/60000));
+    ensembleUiState.lastJob = job;
     setEnsembleBusy(true, status === "queued" ? null : completed, total);
     window.clearTimeout(ensembleUiState.observationTimer);
     setEnsembleStatus(status === "queued"
       ? "Queued · Data saved → Waiting for worker → Models → Final ensemble. You can leave this page; the job is saved in My Requests."
-      : `Running model ${Math.min(completed + 1, total || 1)} of ${total || 1}${current ? `: ${current}` : ""}.`, "working");
+      : `Running model ${Math.min(completed + 1, total || 1)} of ${total || 1}${current ? `: ${current}` : ""}. ${Number.isFinite(elapsed)?elapsed:0} min since request.`, "working");
     if (ui.ensembleResultMeta) ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id || "")}</span><span><strong>Completed:</strong> ${completed}/${total}</span><span><strong>Downloaded input:</strong> ${escapeHtml(job.input_row_count ?? "Loading")} observed bars</span>`;
     // Never show the previous job's distribution or metrics under a new ID.
     if (ui.ensembleSummary) { ui.ensembleSummary.hidden = true; ui.ensembleSummary.replaceChildren(); }
+    document.getElementById("ensemble-live-quote")?.replaceChildren();
     if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = "";
     if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = "";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = true;
@@ -14745,8 +14776,9 @@
     await Plotly.react(ui.ensembleForecastChart, traces, {
       font: { family: "Manrope, sans-serif", color: dark ? "rgba(246,244,238,.92)" : "#12182a" },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
-      margin: { l: 62, r: 24, t: 26, b: 58 }, height: 420, hovermode: "x unified", uirevision: job.forecast_id,
-      xaxis: { type: "date", ...(chartRange ? { range: chartRange, autorange: false } : {}), title: { text: `Time (${timeZone})` }, tickmode: "array", tickvals: tickTimes, ticktext: tickTimes.map(t => ensembleLocalTime(t, timeZone)), rangeslider: { visible: true, thickness: 0.12 } },
+      title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
+      margin: { l: 62, r: 24, t: 58, b: 58 }, height: 440, hovermode: "closest", uirevision: job.forecast_id,
+      xaxis: { type: "date", ...(chartRange ? { range: chartRange, autorange: false } : {}), title: { text: `Time (${timeZone})` }, tickmode: "array", tickvals: tickTimes, ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,{timeZone,hour:'numeric',minute:'2-digit',hour12:true}).format(t)), tickformat: "%I:%M %p", hoverformat: "%I:%M %p", rangeslider: { visible: true, thickness: 0.12 } },
       yaxis: { title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target" } },
       legend: { orientation: "h", y: -0.25 },
       shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:Date.parse(inputHistory.at(-1).timestamp),x1:Date.parse(inputHistory.at(-1).timestamp),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
@@ -14763,6 +14795,7 @@
           const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`);
           if (ensembleUiState.forecastId !== job.forecast_id || ensembleUiState.busy) return;
           job.observations = response.data.rows || [];
+          renderEnsembleLiveQuote(job);
           const replay = job.source?.analysis_mode === "historical_replay";
           if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = `Actual-price overlay: ${job.observations.length} observed bars after input cutoff. ${replay ? "Some outcomes were already known when this replay was generated. " : ""}Updated ${ensembleLocalTime(response.data.observed_at)}. Refreshes once per minute; the forecast remains unchanged.`;
           const forecastByTime = new Map((job.predictions || []).map(row=>[Date.parse(row.timestamp),row.quantiles]));
@@ -14784,6 +14817,8 @@
     if (!Array.isArray(job.history)) job = (await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}`)).data;
     setEnsembleBusy(false);
     ensembleUiState.lastJob = job;
+    const otherSide = document.getElementById("ensemble-other-side");
+    if (otherSide) otherSide.hidden = job.source?.type !== "prediction_market";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = false;
     if (ui.ensembleResultTable) ui.ensembleResultTable.hidden = false;
     ensembleUiState.lastRequest = {
@@ -14832,20 +14867,28 @@
       ui.ensembleSummary.innerHTML = `<p>${escapeHtml(latest+implied)}</p><p class="muted">${escapeHtml(job.input_row_count || job.history?.length || 0)} observations downloaded before inference. Missing intervals are not fabricated. The vertical marker separates input history from forecast.</p><div class="table-wrap"><table class="data-table"><caption>Average of each forecast column across ${predictions.length} future steps</caption><thead><tr>${quantiles.map(q=>`<th>${escapeHtml(ensembleQuantileLabel(q))}</th>`).join("")}</tr></thead><tbody><tr>${quantiles.map(q=>`<td>${escapeHtml(format(summary.averages[ensembleQuantileKey(q)]))}</td>`).join("")}</tr></tbody></table></div>`;
     }
     await renderEnsembleChart(job);
-    await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: `Quantura Forecast · ${job.source?.title || job.source?.symbol || "Dataset"}`, input: { panel: "forecast" }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
+    renderEnsembleLiveQuote(job);
+    const identity = ensembleMarketIdentity(job);
+    await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
     startEnsembleObservations(job);
   };
 
   const stopEnsemblePolling = () => {
     if (ensembleUiState.pollTimer) window.clearTimeout(ensembleUiState.pollTimer);
     ensembleUiState.pollTimer = 0;
+    ensembleUiState.pollGeneration++;
   };
 
   const pollEnsembleForecast = async (forecastId, { immediate = true } = {}) => {
     stopEnsemblePolling();
+    ensembleUiState.forecastId = forecastId;
+    const generation = ensembleUiState.pollGeneration;
+    let failures = 0;
     const check = async () => {
       try {
         const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(forecastId)}`);
+        if (generation !== ensembleUiState.pollGeneration) return;
+        failures = 0;
         const job = response.data || {};
         if (job.status === "completed") {
           if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
@@ -14856,15 +14899,22 @@
           setEnsembleBusy(false);
           if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
           if (ui.ensembleResultState) ui.ensembleResultState.textContent = "Failed";
-          setEnsembleStatus(`Forecast failed${job?.error?.model ? ` while running ${job.error.model}` : ""}. Retry or change the configuration.`, "error");
+          setEnsembleStatus(`Forecast failed${job?.error?.model ? ` while running ${job.error.model}` : ""}: ${job?.error?.code || "WORKER_FAILED"}. Saved inputs remain available. Retry or change the configuration.`, "error");
           return;
         }
         renderEnsembleProgress(job);
         ensembleUiState.pollTimer = window.setTimeout(check, 3000);
       } catch (error) {
-        setEnsembleBusy(false);
-        if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = false;
-        setEnsembleStatus(error.message || "Unable to read forecast status.", "error");
+        if (generation !== ensembleUiState.pollGeneration) return;
+        failures++;
+        if (failures <= 3 && !/401|403|AUTH|SCOPE/i.test(error.code || "")) {
+          setEnsembleStatus(`Status connection interrupted. Retrying check ${failures}/3; the saved worker job is not restarted.`, "working");
+          ensembleUiState.pollTimer = window.setTimeout(check, failures*5000);
+        } else {
+          setEnsembleBusy(false);
+          if (ui.ensembleResultState) ui.ensembleResultState.textContent = "Status unavailable";
+          setEnsembleStatus(`Unable to confirm worker status. Use Check job status or reopen this saved job in My Requests; do not resubmit just to check progress. ${error.message || ""}`, "error");
+        }
       }
     };
     if (immediate) await check(); else ensembleUiState.pollTimer = window.setTimeout(check, 3000);
@@ -14961,6 +15011,31 @@
     ui.ensembleForecastSettings.dataset.bound = "1";
     syncEnsembleSourceFields();
     ui.ensembleSourceType?.addEventListener("change", syncEnsembleSourceFields);
+    document.getElementById("ensemble-check-status")?.addEventListener("click", () => { if (ensembleUiState.forecastId) pollEnsembleForecast(ensembleUiState.forecastId); });
+    for (const [id, direction] of [["ensemble-request-previous", 1],["ensemble-request-next", -1]]) document.getElementById(id)?.addEventListener("click",async()=>{
+      await fetchMyRequestsList({force:true});
+      const rows=(state.myRequests || []).filter(item=>item.sourceRef?.collection==="ensemble_forecast_jobs" && !item.deleted).sort((a,b)=>Number(b.createdAtMs||Date.parse(b.createdAt))-Number(a.createdAtMs||Date.parse(a.createdAt)));
+      const index=rows.findIndex(row=>row.sourceRef.id===ensembleUiState.forecastId);
+      const row=rows[index<0?0:index+direction];
+      if(!row)return showToast("No more requests in this direction.");
+      history.replaceState({},"",`${window.location.pathname}?panel=forecast&ensembleForecastId=${encodeURIComponent(row.sourceRef.id)}`);
+      await pollEnsembleForecast(row.sourceRef.id);
+    });
+    document.getElementById("ensemble-other-side")?.addEventListener("click",async(event)=>{
+      const job=ensembleUiState.lastJob,s=job?.source;
+      if(s?.type!=="prediction_market"||ensembleUiState.busy)return;
+      event.currentTarget.disabled=true;
+      try {
+        const link=s.provider==="kalshi"?`https://kalshi.com/markets/${encodeURIComponent(s.symbol)}`:`https://polymarket.us/market/${encodeURIComponent(s.symbol)}`;
+        const response=await apiRequestJson(`/api/market-search/resolve?url=${encodeURIComponent(link)}`);
+        const candidates=Object.values(response.groups||{}).flat().filter(row=>row.contract?.marketId===s.market_id&&row.contract_id!==s.contract_id);
+        if(candidates.length!==1)throw new Error("Could not identify exactly one opposite side. Select a moneyline in market search.");
+        applyEnsemblePreset(refreshedEnsembleRequest(job));
+        window.QuanturaMarketSelection=candidates[0];
+        window.dispatchEvent(new CustomEvent("quantura:market-selected",{detail:{resource:candidates[0],intent:"forecast"}}));
+        ui.ensembleForecastForm.requestSubmit();
+      }catch(error){showToast(error.message,"warn");}finally{document.getElementById("ensemble-other-side").disabled=false;}
+    });
     const help = document.getElementById("ensemble-settings-help");
     document.getElementById("ensemble-settings-help-open")?.addEventListener("click", () => help?.showModal());
     document.getElementById("ensemble-settings-help-close")?.addEventListener("click", () => help?.close());
@@ -15396,8 +15471,11 @@
         const id = escapeHtml(String(item?.id || ""));
         const type = normalizeMyRequestType(item?.type) || "forecast";
         const typeLabel = escapeHtml(String(item?.typeLabel || MY_REQUEST_TYPE_LABELS[type] || type));
-        const title = escapeHtml(String(item?.title || "Request"));
-        const ticker = escapeHtml(String(item?.ticker || "—"));
+        const title = escapeHtml(String(item?.title || "Request").replace(/^Quantura Forecast\s*·\s*/i,""));
+        const rawTicker = String(item?.input?.market_symbol || item?.ticker || item?.input?.ticker || "");
+        const ticker = escapeHtml(rawTicker || "—");
+        const provider = item?.input?.provider;
+        const marketLink = /^[A-Za-z0-9_-]{2,220}$/.test(rawTicker) ? provider === "kalshi" ? `https://kalshi.com/markets/${encodeURIComponent(rawTicker.split('-')[0].toLowerCase())}/${encodeURIComponent(rawTicker.toLowerCase())}` : provider === "polymarket_us" ? `https://polymarket.us/event/${encodeURIComponent(rawTicker.replace(/^aec-/,''))}` : "" : "";
         const createdAt = escapeHtml(formatTimestamp(item?.createdAt || item?.createdAtMs));
         const updatedAt = escapeHtml(formatTimestamp(item?.updatedAt || item?.updatedAtMs));
         const share = item?.share && typeof item.share === "object" ? item.share : {};
@@ -15417,14 +15495,14 @@
           <div class="order-card" data-request-id="${id}">
             <div class="order-header">
               <div>
-                <div class="order-title">${title}</div>
+                <label><input type="checkbox" data-request-select value="${id}" aria-label="Select ${title}" /> <span class="order-title">${title}</span></label>
                 <div class="small">ID: ${id}</div>
               </div>
-              <span class="status fulfilled">Private</span>
+              <span class="status fulfilled" role="img" aria-label="${shareVisibility === 'public' ? 'Public' : 'Private'}" title="${shareVisibility === 'public' ? 'Public' : 'Private'}">${icon(shareVisibility === 'public' ? "lock-open" : "lock")}</span>
             </div>
             <div class="order-meta">
               <div><strong>Type</strong> ${typeLabel}</div>
-              <div><strong>Ticker</strong> ${ticker}</div>
+              <div><strong>Market</strong> ${marketLink ? `<a href="${marketLink}" target="_blank" rel="noopener noreferrer">${ticker}</a>` : ticker}</div>
               <div><strong>Status</strong> ${requestStatus}</div>
               <div><strong>Created</strong> ${createdAt}</div>
               <div><strong>Updated</strong> ${updatedAt}</div>
@@ -15500,6 +15578,22 @@
       if (!panel || panel.dataset.bound === "1") return;
       panel.dataset.bound = "1";
       const { controls, key, filters } = readMyRequestPanelState(panel, idx);
+      const toolbar = document.createElement("div");
+      toolbar.className = "request-bulk-toolbar";
+      toolbar.innerHTML = '<button type="button" class="task-chip" data-request-select-all>Select visible</button><button type="button" class="task-chip danger" data-request-delete-selected disabled>Delete selected</button><span class="small muted" data-request-selection-status></span>';
+      controls?.list?.before(toolbar);
+      const updateSelection = () => {const count=panel.querySelectorAll('[data-request-select]:checked').length;toolbar.querySelector('[data-request-delete-selected]').disabled=!count;toolbar.querySelector('[data-request-selection-status]').textContent=count?`${count} selected (maximum 50)`:'';};
+      panel.addEventListener('change',event=>{if(event.target.matches('[data-request-select]'))updateSelection();});
+      toolbar.querySelector('[data-request-select-all]').addEventListener('click',()=>{const boxes=[...panel.querySelectorAll('[data-request-select]')];const select=boxes.some(box=>!box.checked);boxes.forEach((box,i)=>{box.checked=select&&i<50;});updateSelection();});
+      toolbar.querySelector('[data-request-delete-selected]').addEventListener('click',async()=>{
+        const ids=[...panel.querySelectorAll('[data-request-select]:checked')].map(box=>box.value);
+        if(!ids.length||ids.length>50)return;
+        if(!await openConfirmModal({title:`Delete ${ids.length} requests?`,message:'Removes these entries and their request-share links. Immutable ensemble forecast records are retained. Each deletion is authorized separately.',confirmLabel:'Delete selected',danger:true}))return;
+        let deleted=0,failed=0;
+        toolbar.querySelector('[data-request-delete-selected]').disabled=true;
+        for(const id of ids){try{await updateMyRequest(id,{}, {method:'DELETE'});deleted++;}catch{failed++;}}
+        showToast(`${deleted} requests removed${failed?`; ${failed} failed and were retained`:''}.`,failed?'warn':'success');updateSelection();
+      });
       if (controls?.type) controls.type.value = filters.type || "";
       if (controls?.published) controls.published.value = filters.published || "all";
       if (controls?.search) controls.search.value = filters.search || "";

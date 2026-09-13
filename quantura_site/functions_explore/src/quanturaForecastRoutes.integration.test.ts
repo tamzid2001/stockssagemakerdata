@@ -66,6 +66,13 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {})).status, 409);
     const result = { quantiles: [.1, .5, .9], predictions: [40, 41].map(i => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), quantiles: { "0.1": .2, "0.5": .4, "0.9": .6 } })), effective_weights_by_quantile: { "0.1": { prophet: 1 }, "0.5": { prophet: 1 }, "0.9": { prophet: 1 } }, models: ["prophet"], model_runs: [], transform: "logit", warnings: [], failures: [], dataset_hash: job.dataset_hash, prepared_series_hash: "fixture", result_hash: "fixture", runtime_seconds: 1, runtime: { test: true } };
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/complete`, workerToken, result)).status, 200);
+    assert.equal((await call(`/internal/ensemble-forecasts/${id}/complete`, workerToken, result)).status, 200, "lost completion response is safely retryable");
+    const lateFailure = await call(`/internal/ensemble-forecasts/${id}/fail`, workerToken, {code:"LATE_CALLBACK",retryable:true});
+    assert.equal((await lateFailure.json()).data.failed,false,"late failure cannot overwrite success");
+    assert.equal((await call(`/internal/ensemble-forecasts/${id}/complete`, workerToken, {...result,result_hash:"different"})).status,409);
+    assert.equal((await call(`/internal/ensemble-forecasts/${id}/progress`, workerToken, {completed_models:0,total_models:1})).status,409);
+    const usage = await db.collection("ensemble_forecast_usage").where("workspace_id","==",workspace).get();
+    assert.equal(usage.docs[0].data().active,0,"callbacks release the quota exactly once");
     assert.equal((await requestIndex.get()).data()?.title,"My custom saved forecast");
     assert.equal((await requestIndex.get()).data()?.outputsMeta.status,"completed");
     const saved = (await (await call(`/v1/ensemble-forecasts/${id}`,keys[0])).json()).data;
@@ -80,6 +87,15 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     assert.equal((await call(`/v1/ensemble-forecasts/${id}/download`, keys[1])).status, 403);
     assert.equal((await call(`/v1/forecast/models?workspace_id=${viewer}`, keys[1])).status, 200);
     assert.equal((await call(`/v1/ensemble-forecasts/${id}`, keys[0])).status, 200);
+    // Simulate a pre-migration partial write: the already persisted forecast
+    // recovers on an authorized read without changing its numerical values.
+    await ref.update({status:"running",lease_expires_at:new Date(Date.now()-1000).toISOString()});
+    assert.equal((await (await call(`/v1/ensemble-forecasts/${id}`)).json()).data.status,"completed");
+    assert.equal((await db.collection("ensemble_forecast_results").doc(id).get()).data()?.result_hash,"fixture");
+    const expired = db.collection("ensemble_forecast_jobs").doc(`${id}_expired`);
+    await expired.set({...(await ref.get()).data(),status:"running",lease_expires_at:new Date(Date.now()-1000).toISOString()});
+    assert.equal((await (await call(`/v1/ensemble-forecasts/${expired.id}`)).json()).data.error.code,"WORKER_LEASE_EXPIRED");
+    assert.equal((await call(`/internal/ensemble-forecasts/${expired.id}/claim`,workerToken,{})).status,409);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
     for (const name of ["QUANTURA_API_KEY_PEPPER", "QUANTURA_ENSEMBLE_WORKER_MODE", "QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM", "QUANTURA_ENSEMBLE_WORKER_TOKEN", "TIMESFM_HF_ACCESS_APPROVED", "TIMESFM_COMMERCIAL_LICENSED"]) { if (oldEnv[name] === undefined) delete process.env[name]; else process.env[name] = oldEnv[name]; }
