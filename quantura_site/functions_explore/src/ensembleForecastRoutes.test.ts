@@ -14,7 +14,19 @@ import {
 } from "./ensembleForecastRoutes";
 import { AlpacaError } from "./alpacaClient";
 import { parseMarketLink } from "./marketLink";
+import { watchdogAuthorized, shouldRecoverScreener } from "./marketResearchWatchdog";
 import { forecastObservationWindow, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink, normalizePolymarketEvents } from "./predictionMarketData";
+
+test("research watchdog requires a dedicated bearer secret and never duplicates active screeners", () => {
+  const secret="fixture-watchdog-secret-at-least-32-characters";
+  assert.equal(watchdogAuthorized(`Bearer ${secret}`,secret),true);
+  assert.equal(watchdogAuthorized("wrong",secret),false);
+  assert.equal(watchdogAuthorized("", ""),false);
+  assert.equal(shouldRecoverScreener([]),true);
+  assert.equal(shouldRecoverScreener([{status:"queued"}]),false);
+  assert.equal(shouldRecoverScreener([{status:"completed",created_at:new Date().toISOString()}]),false);
+  assert.equal(shouldRecoverScreener([{status:"completed",created_at:"2020-01-01T00:00:00Z"}]),true);
+});
 
 test("only genuinely expired queued/running jobs time out; completed results remain immutable", () => {
   const now=Date.parse('2026-09-12T20:00:00Z');

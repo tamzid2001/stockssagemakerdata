@@ -45,6 +45,9 @@ def main():
     lag = os.environ.get("PAPER_LAG_MINUTES", "0")
     roll = os.environ.get("PAPER_ROLL_MINUTES", "30")
     only = os.environ.get("PAPER_FORECAST_ONLY", "false")
+    strategy = os.environ.get("PAPER_STRATEGY", "rolling")
+    if strategy not in {"rolling","p1_oco"} or (strategy=="p1_oco" and (provider!="polymarket_us" or horizon!="30" or lag!="0")):
+        raise ValueError("invalid_paper_strategy")
     if horizon not in {"30", "45", "60"} or lag not in {"0", "15", "30"} or int(lag) >= int(horizon) or roll not in {"15", "30", "45", "60"} or only not in {"true", "false"}:
         raise ValueError("invalid_horizon")
     api(
@@ -52,7 +55,7 @@ def main():
         {
             "ref": "main",
             "inputs": {"provider": provider, "horizon": horizon, "lag_minutes": lag,
-                       "roll_minutes": roll, "forecast_only": only, "run_once": "false", "smoke_mode": "real"},
+                       "roll_minutes": roll, "forecast_only": only, "strategy": strategy, "run_once": "false", "smoke_mode": "real"},
         },
     )
     print("Successor paper worker dispatched from current main.")

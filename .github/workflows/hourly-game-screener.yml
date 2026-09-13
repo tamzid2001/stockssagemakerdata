@@ -1,0 +1,54 @@
+name: Hourly Polymarket and Kalshi Ensemble Game Screeners
+on:
+  schedule:
+    - cron: '3 * * * *'
+  workflow_dispatch:
+    inputs:
+      max_contracts:
+        type: number
+        default: 4
+        description: Bounded manual validation size (scheduled scans up to 500 sides per provider)
+permissions:
+  contents: read
+concurrency:
+  group: hourly-game-screener
+  cancel-in-progress: false
+jobs:
+  screener:
+    if: github.event_name == 'workflow_dispatch' || vars.HOURLY_GAME_SCREENER_ENABLED == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [polymarket_us, kalshi]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: '1'
+      HF_HOME: ${{ runner.temp }}/quantura-hf
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      QUANTURA_RESEARCH_DIR: ${{ runner.temp }}/hourly-research
+      QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+      PROVIDER: ${{ matrix.provider }}
+      MAX_CONTRACTS: ${{ inputs.max_contracts || 500 }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked ensemble environment
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Verify artifact encryption before acquiring datasets
+        run: python -m market_research.artifact check-key
+      - name: Discover live games and forecast from a 15-minute cutoff
+        run: python -m market_research.hourly_screener --provider "$PROVIDER" --max-contracts "$MAX_CONTRACTS"
+      - name: Preserve partial or complete encrypted results
+        if: always()
+        uses: ./.github/actions/research-artifact
+        with:
+          encryption_key: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          name: hourly-${{ matrix.provider }}-${{ github.run_id }}-${{ github.run_attempt }}
