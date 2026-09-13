@@ -46,6 +46,7 @@ def run(source, maximum):
             except (ValueError,RuntimeError) as error:
                 counts["failed"]+=1
                 failures.append({"contract_id":c["contractId"],"code":str(error) if str(error).isupper() else "HISTORY_OR_MODEL_UNAVAILABLE"})
+                print(json.dumps({"event":"screener_side_skipped",**failures[-1]}),flush=True)
     finally:
         counts["coverage_pct"]=100*counts["successful"]/len(eligible) if eligible else None
         export_corpus(store,forecasts,configuration)

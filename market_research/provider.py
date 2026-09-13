@@ -91,10 +91,11 @@ class QuanturaProvider:
             "next_cursor": cursor,
         }
 
-    def history(self, contract, start, end):
+    def history(self, contract, start, end, history_phase="both", history_lookback_minutes=0):
         from .engine import iso
-
-        key = (contract["providerSymbol"], start, end)
+        if history_phase not in {"both", "pregame", "in_game"} or type(history_lookback_minutes) is not int or not 0 <= history_lookback_minutes <= 129600:
+            raise ValueError("INVALID_HISTORY_SELECTION")
+        key = (contract["providerSymbol"], start, end, history_phase, history_lookback_minutes)
         cached = self.cache.get(key)
         if cached and time.monotonic() - cached[0] < 30:
             rows = copy.deepcopy(cached[1])
@@ -113,7 +114,9 @@ class QuanturaProvider:
                 "mode": "raw",
                 "target": "price",
                 "missing": "leave",
-                "pregameOnly": False,
+                "history_phase": history_phase,
+                "history_lookback_minutes": history_lookback_minutes,
+                "pregameOnly": history_phase == "pregame",
                 "format": "json",
             },
         )

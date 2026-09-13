@@ -13,6 +13,7 @@ import modelRegistry from "./ensembleModelRegistry.json";
 import { fetchStockHistoryData } from "./marketDataRoutes";
 import { AlpacaError } from "./alpacaClient";
 import { PredictionMarketDataError, predictionForecastHistory } from "./predictionMarketData";
+import { historySelection } from "./eventHistory";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 
 type JsonRecord = Record<string, unknown>;
@@ -361,8 +362,8 @@ async function materializeWorkspaceDataset(
 
 export function historyCutoffAt(value: unknown, now = Date.now()): number | undefined {
   if (value === undefined || value === 0) return undefined;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 1440) {
-    throw new PredictionMarketDataError("history_lag_invalid", "Choose a whole number from 0 to 1440 minutes before now.", 422);
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 129600) {
+    throw new PredictionMarketDataError("history_lag_invalid", "Choose a cutoff between now and 90 days ago.", 422);
   }
   return Math.floor(now / 60_000) * 60_000 - value * 60_000;
 }
@@ -377,11 +378,14 @@ async function materializeSource(
   const source = plain(sourceValue);
   const type = text(source.type || "ticker", 40);
   if (type === "prediction_market") {
-    assertOnlyKeys(source, ["type", "provider", "symbol", "contract_id", "frequency"], "source");
+    assertOnlyKeys(source, ["type", "provider", "symbol", "contract_id", "frequency", "history_phase", "history_lookback_minutes"], "source");
     const provider = text(source.provider);
     if (provider !== "polymarket_us" && provider !== "kalshi") throw new Error("source_provider_unsupported");
-    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined });
-    return { rows: history.rows, source: { type, provider, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
+    let selection;
+    try { selection = historySelection(source); }
+    catch (error) { throw new PredictionMarketDataError((error as Error).message, "Choose a valid history phase and lookback (0–129600 minutes).", 422); }
+    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined, selection });
+    return { rows: history.rows, source: { type, provider, ...selection, history_quality: history.quality, event_start: history.contract.eventStart, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
   }
   if (type === "ticker") {
     assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "limit"], "source");

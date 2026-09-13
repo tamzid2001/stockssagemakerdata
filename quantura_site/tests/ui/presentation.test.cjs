@@ -145,6 +145,7 @@ test('primary form builds prediction-market minute and single-model requests wit
     const ensembleUiState={capabilities:{models:[{id:'prophet',available:true}]}};
     const state={activeWorkspaceId:'workspace-fixture',user:{uid:'user-fixture'},tickerContext:{}};
     const ensembleQuantileKey=v=>String(Number(v));const normalizeTicker=v=>String(v).trim().toUpperCase();
+    const ensembleDurationMinutes = ${source('app.js').split('  const ensembleDurationMinutes =')[1].split('  const ensembleTimeZone =')[0]}
     ${source('app.js').split('  const getEnsembleSelections =')[1].split('  const renderEnsembleProgress =')[0].replace(/^/, 'const getEnsembleSelections =')}
     window.build=buildEnsembleRequest;`);
   const request=w.build();assert.equal(request.source.type,'prediction_market');assert.equal(request.source.contract_id,'KXGAME-TEAM:yes');
@@ -153,10 +154,18 @@ test('primary form builds prediction-market minute and single-model requests wit
   w.document.getElementById('ensemble-source-type').value='ticker';w.document.getElementById('ensemble-ticker').value='MSFT';
   const stock=w.build();assert.equal(stock.source.symbol,'MSFT');assert.equal(stock.source.limit,500);assert.equal(stock.source.start,undefined);
   w.document.getElementById('ensemble-history-lag').value='30';
+  w.document.getElementById('ensemble-history-lag-unit').value='minutes';
   assert.equal(w.build().history_lag_minutes,30);
-  w.document.getElementById('ensemble-history-lag').value='custom';
-  w.document.getElementById('ensemble-history-lag-custom').value='25';
-  assert.equal(w.build().history_lag_minutes,25);
+  w.document.getElementById('ensemble-history-lag').value='2';
+  w.document.getElementById('ensemble-history-lag-unit').value='days';
+  assert.equal(w.build().history_lag_minutes,2880);
+  w.document.getElementById('ensemble-ticker-frequency').value='1Hour';
+  assert.equal(w.build().frequency,'1h');assert.equal(w.build().horizon_mode,'frequency_periods');
+  w.document.getElementById('ensemble-source-type').value='prediction_market';
+  w.document.getElementById('ensemble-history-phase').value='in_game';
+  w.document.getElementById('ensemble-history-lookback').value='60';
+  assert.equal(w.build().source.history_phase,'in_game');assert.equal(w.build().source.history_lookback_minutes,60);
+  w.document.getElementById('ensemble-history-lookback').value='-1';assert.throws(()=>w.build(),/duration/);
   d.window.close();
 });
 
