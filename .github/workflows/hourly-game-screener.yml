@@ -24,11 +24,9 @@ jobs:
     timeout-minutes: 60
     env:
       PYTHONUNBUFFERED: '1'
-      HF_HOME: ${{ runner.temp }}/quantura-hf
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
       TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
-      QUANTURA_RESEARCH_DIR: ${{ runner.temp }}/hourly-research
       QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
       PROVIDER: ${{ matrix.provider }}
       MAX_CONTRACTS: ${{ inputs.max_contracts || 500 }}
@@ -40,6 +38,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Use private runner-local model and artifact directories
+        run: |
+          echo "HF_HOME=$RUNNER_TEMP/quantura-hf" >> "$GITHUB_ENV"
+          echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/hourly-research" >> "$GITHUB_ENV"
       - name: Install locked ensemble environment
         run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
       - name: Verify artifact encryption before acquiring datasets
