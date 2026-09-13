@@ -39,7 +39,8 @@ def package(directory, destination):
     files = sorted(
         p
         for p in root.iterdir()
-        if p.name in {"research.sqlite3", "forecast_quantiles.csv.gz", "quantile_manifest.json"}
+        if p.name in {"research.sqlite3", "forecast_quantiles.csv.gz", "quantile_manifest.json",
+                      "p1_orders_and_fills.csv.gz", "p1_forecast_quantiles.csv.gz", "p1_summary.json", "p1_path_outcomes.json"}
         or (p.name.startswith("report-") and p.suffix == ".json")
     )
     if not files or any(p.is_symlink() or not p.is_file() for p in files):
@@ -154,6 +155,8 @@ def snapshot_package(directory, destination):
         with sqlite3.connect(f"file:{root / 'research.sqlite3'}?mode=ro", uri=True) as source:
             with sqlite3.connect(Path(temporary) / "research.sqlite3") as target:
                 source.backup(target)
+        from .p1_exports import export
+        export(temporary)
         # Explicit safe exports only, never environment files/model caches.
         # The manifest is written after the CSV closes. Intermediate snapshots
         # still recover all forecast records from SQLite when no export exists.

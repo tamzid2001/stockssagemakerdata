@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import urllib.request
 
 WORKFLOW = "polymarket-live-paper.yml"
@@ -32,13 +33,15 @@ def main():
         print("Paper worker disabled; no handoff dispatched.")
         return
     current = os.environ.get("GITHUB_RUN_ID")
+    strategy = os.environ.get("PAPER_STRATEGY", "rolling")
+    horizon = os.environ.get("PAPER_HORIZON", "30")
+    def matching(run):
+        title=run.get("display_title", "")
+        return title.startswith(provider + " paper") and (strategy!='p1_oco' or ('p1_oco' in title and f'horizon {horizon}m' in title))
     # Include waiting/queued runs; the Firestore fence is the final race guard.
     for status in ("in_progress", "queued", "waiting", "pending", "requested"):
         result = api(f"/actions/workflows/{WORKFLOW}/runs?status={status}&per_page=100")
-        if any(str(run["id"]) != current and (
-            run.get("display_title", "").startswith(provider + " paper") or
-            (provider == "polymarket_us" and run.get("display_title", "").startswith("Polymarket US"))
-        ) for run in result["workflow_runs"]):
+        if any(str(run["id"]) != current and matching(run) for run in result["workflow_runs"]):
             print("A paper-worker run is already active or queued.")
             return
     horizon = os.environ.get("PAPER_HORIZON", "30")
@@ -46,16 +49,41 @@ def main():
     roll = os.environ.get("PAPER_ROLL_MINUTES", "30")
     only = os.environ.get("PAPER_FORECAST_ONLY", "false")
     strategy = os.environ.get("PAPER_STRATEGY", "rolling")
-    if strategy not in {"rolling","p1_oco"} or (strategy=="p1_oco" and (provider!="polymarket_us" or horizon!="30" or lag!="0")):
+    if strategy not in {"rolling","p1_oco"} or (strategy=="p1_oco" and (provider!="polymarket_us" or horizon not in {"5","15","30"} or lag!="0")):
         raise ValueError("invalid_paper_strategy")
-    if horizon not in {"30", "45", "60"} or lag not in {"0", "15", "30"} or int(lag) >= int(horizon) or roll not in {"15", "30", "45", "60"} or only not in {"true", "false"}:
+    if horizon not in ({"5","15","30"} if strategy=="p1_oco" else {"30","45","60"}) or lag not in {"0", "15", "30"} or int(lag) >= int(horizon) or roll not in {"15", "30", "45", "60"} or only not in {"true", "false"}:
         raise ValueError("invalid_horizon")
+    continuation = {}
+    if strategy == "p1_oco":
+        checkpoint, code = os.environ.get("PAPER_CHECKPOINT"), os.environ.get("PAPER_CODE_REF")
+        if not checkpoint:
+            # Watchdog resumes the newest private P1 lineage instead of silently
+            # resetting open positions after a failed runner. Inspect our own
+            # workflow only; no arbitrary artifact URLs or credentials.
+            runs = api(f"/actions/workflows/{WORKFLOW}/runs?per_page=30")["workflow_runs"]
+            for run in runs:
+                if not matching(run) or run.get('head_branch') != 'main':
+                    continue
+                artifacts = api(f"/actions/runs/{run['id']}/artifacts?per_page=100")["artifacts"]
+                matches = [a for a in artifacts if a['name'].startswith('p1-paper-checkpoint-') and not a['expired']]
+                if matches:
+                    artifact = max(matches,key=lambda a:a['id'])
+                    checkpoint = str(artifact['id'])
+                    match = re.match(r'p1-paper-checkpoint-([a-f0-9]{40})-',artifact['name'])
+                    code = match[1] if match else None
+                    break
+            if not checkpoint:
+                print('P1 requires a verified checkpoint. Start and validate a new lineage manually; watchdog will not reset it.')
+                return
+        if not str(checkpoint).isdigit() or not re.fullmatch(r'[a-f0-9]{40}',code or ''):
+            raise ValueError('VERIFIED_P1_CHECKPOINT_AND_CODE_REQUIRED')
+        continuation = {"resume_artifact_id":str(checkpoint),"code_ref":code}
     api(
         f"/actions/workflows/{WORKFLOW}/dispatches",
         {
             "ref": "main",
             "inputs": {"provider": provider, "horizon": horizon, "lag_minutes": lag,
-                       "roll_minutes": roll, "forecast_only": only, "strategy": strategy, "run_once": "false", "smoke_mode": "real"},
+                       "roll_minutes": roll, "forecast_only": only, "strategy": strategy, "run_once": "false", "smoke_mode": "real", **continuation},
         },
     )
     print("Successor paper worker dispatched from current main.")

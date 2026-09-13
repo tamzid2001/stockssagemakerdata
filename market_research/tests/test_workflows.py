@@ -27,7 +27,7 @@ def test_workflow_isolation_timeouts_privacy_and_safe_inputs():
         else:
             assert "upload-artifact" not in text
         assert "place_order" not in text and "POLYMARKET_SECRET_KEY" not in text
-        assert "ref: main" in text
+        assert "ref: main" in text or "ref: ${{ inputs.code_ref || 'main' }}" in text
         assert all(j["timeout-minutes"] <= 360 for j in value["jobs"].values())
     assert len({w["concurrency"]["group"] for w in workflows}) == 5
     live = (ROOT / ".github/workflows/polymarket-live-paper.yml").read_text()
@@ -67,7 +67,7 @@ def test_median_experiment_uses_shared_worker_with_isolated_bounded_configuratio
     text = (ROOT / ".github/workflows/historical-p10-replay.yml").read_text()
     workflow = yaml.safe_load(text)
     inputs = workflow[True]["workflow_dispatch"]["inputs"]
-    assert inputs["strategy"]["options"] == ["p10", "median_cross", "quantiles"]
+    assert inputs["strategy"]["options"] == ["p10", "median_cross", "quantiles", "p1_oco"]
     assert inputs["loss_multiplier"]["default"] == 2.5
     assert inputs["max_shares"]["default"] == 100
     assert "inputs.strategy" in workflow["concurrency"]["group"]
@@ -80,7 +80,7 @@ def test_corpus_variants_and_live_shared_provider_dispatch():
     replay = yaml.safe_load((ROOT / ".github/workflows/historical-p10-replay.yml").read_text())
     inputs = replay[True]["workflow_dispatch"]["inputs"]
     assert inputs["lag_minutes"]["options"] == ["0", "15", "30"]
-    assert inputs["horizon"]["options"] == ["30", "45", "60"]
+    assert inputs["horizon"]["options"] == ["5", "15", "30", "45", "60"]
     live = yaml.safe_load((ROOT / ".github/workflows/polymarket-live-paper.yml").read_text())
     inputs = live[True]["workflow_dispatch"]["inputs"]
     assert inputs["forecast_only"]["default"] is True
