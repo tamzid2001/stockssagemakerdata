@@ -220,6 +220,7 @@ def report(store, coverage, failures):
     result = {"version": VERSION, "paper_only": True, "coverage": coverage,
               "market_status_counts": {s: sum(r["status"] == s for r in records) for s in sorted({r["status"] for r in records})},
               "forecast_count": len(store.values("forecasts")), "failures": failures,
+              "model_participation": paths["model_participation"],
               "experiments": paths["summary"], "generated_at": int(time.time()),
               "model_policy": "First two genuine observations; Toto excluded by minimum context. Actual participants/effective per-quantile weights persisted. Two-point forecasts are unvalidated research.",
               "execution": "Read-only bid/ask paper simulation; 1% entry/exit notional fee assumption, not a verified exchange fee schedule or executable liquidity."}

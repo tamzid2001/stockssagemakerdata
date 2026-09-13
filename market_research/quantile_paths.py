@@ -16,6 +16,25 @@ TARGETS = ("0.9", "0.99")
 VERSION = "prospective_low_high_v1"
 
 
+def model_participation(forecasts):
+    counts, ensembles = {}, {}
+    for forecast in forecasts:
+        completed = []
+        for model in forecast.get("models", []):
+            name = model.get("id", model.get("model"))
+            if not name:
+                continue
+            bucket = counts.setdefault(name, {"completed": 0, "failed_or_unavailable": 0})
+            if model.get("status") == "completed":
+                bucket["completed"] += 1
+                completed.append(name)
+            else:
+                bucket["failed_or_unavailable"] += 1
+        identity = "+".join(sorted(completed)) or "unreported"
+        ensembles[identity] = ensembles.get(identity, 0) + 1
+    return {"component_runs": counts, "forecast_count_by_actual_participants": ensembles}
+
+
 def in_stratum(ask, levels, stratum):
     if stratum == "below_p1":
         return ask < levels["0.01"]
@@ -153,7 +172,8 @@ def from_store(store, as_of):
                for f in store.values("forecasts") if not f.get("paper_publication_required") or f["forecast_id"] in publication]
     results=[simulate(forecasts,store.values("observations"),outcomes,as_of,stop_price=stop)
              for stop in (None,.51)]
-    return {**results[0],"stop_price":"separate no-stop and absolute $0.51-stop experiments; entries already at/below stop excluded",
+    return {**results[0],"model_participation":model_participation(forecasts),
+            "stop_price":"separate no-stop and absolute $0.51-stop experiments; entries already at/below stop excluded",
             "summary":{k:v for r in results for k,v in r["summary"].items()},
             "episodes":[e for r in results for e in r["episodes"]]}
 

@@ -74,3 +74,12 @@ def test_future_quote_never_used_and_missing_pair_excluded():
 @pytest.mark.parametrize('value',[float('nan'),-1,1])
 def test_bad_stop_rejected(value):
     with pytest.raises(ValueError):simulate([],[],{},0,stop_price=value)
+
+
+def test_failed_model_is_visible_even_when_the_game_forecast_succeeds():
+    from market_research.quantile_paths import model_participation
+    forecasts=[{'models':[{'id':'prophet','status':'failed'},{'id':'chronos','status':'completed'},{'id':'granite','status':'completed'}]},
+               {'models':[{'id':'prophet','status':'completed'},{'id':'chronos','status':'completed'}]}]
+    result=model_participation(forecasts)
+    assert result['component_runs']['prophet']=={'completed':1,'failed_or_unavailable':1}
+    assert result['forecast_count_by_actual_participants']=={'chronos+granite':1,'chronos+prophet':1}
