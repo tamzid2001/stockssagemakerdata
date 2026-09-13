@@ -170,6 +170,7 @@ test('forecast chart focuses recent hour plus future and includes explicitly req
   w.record=[];w.eval(`const ui={ensembleForecastChart:document.getElementById('ensemble-forecast-chart')};
     const ensembleUiState={chartWindowId:'',chartWindow:null}; const ensembleChartDefaultRange=window.range; const getPlotly=async()=>({react:async(...a)=>window.record.push(a)});
     const isDarkMode=()=>false, ensembleQuantileKey=String, ensembleQuantileLabel=q=>'P'+Math.round(q*100);
+    const escapeHtml=String,ensembleMarketIdentity=()=>({title:'Selected side · Fixture game'});
     const ensembleTimeZone=()=> 'America/New_York',ensembleChartTime=v=>v,ensembleLocalTime=v=>String(v);
     const renderEnsembleChart =${source('app.js').split('  const renderEnsembleChart =')[1].split('  const startEnsembleObservations =')[0]}
     window.renderChart=renderEnsembleChart;`);
@@ -177,6 +178,8 @@ test('forecast chart focuses recent hour plus future and includes explicitly req
   assert.ok(w.record[0][1].some(t=>t.name==='P10 ensemble'));
   assert.ok(w.record[0][1].some(t=>t.name==='P90 ensemble'));
   assert.equal(w.record[0][2].uirevision,'fixture');
+  assert.equal(w.record[0][2].title.text,'Selected side · Fixture game');
+  assert.ok(w.record[0][2].xaxis.ticktext.every(t=>/AM|PM/.test(t)));
   await w.renderChart({...job,quantiles:[.5]});
   assert.ok(!w.record[1][1].some(t=>/^P(10|90) ensemble$/.test(t.name)));
   d.window.close();
@@ -191,9 +194,53 @@ test('advanced help is an accessible modal and dataset frequency only belongs to
   w.document.getElementById('ensemble-settings-help-close').click(); assert.equal(dialog.open,false);
   assert.equal(dialog.getAttribute('aria-labelledby'),'ensemble-settings-help-title');
   const frequency=w.document.getElementById('ensemble-frequency');
+  assert.ok(w.document.getElementById('ensemble-model-list').closest('details.ensemble-advanced-settings'));
   assert.equal(frequency.tagName,'SELECT'); assert.equal(frequency.closest('[data-ensemble-source]').dataset.ensembleSource,'workspace_dataset');
   frequency.value='custom';frequency.dispatchEvent(new w.Event('change'));
   assert.equal(w.document.getElementById('ensemble-frequency-custom').hidden,false);
+  d.window.close();
+});
+
+test('latest quote uses the saved side, labels staleness and does not invent updated trading probabilities', () => {
+  const d=dom(page('forecasting.html')),w=d.window;
+  w.eval(`const escapeHtml=s=>String(s).replaceAll('<','&lt;'),ensembleQuantileKey=String;
+    const ensembleTimeZone=${source('app.js').split('  const ensembleTimeZone =')[1].split('  const describeEnsembleCapability =')[0]}
+    window.live=renderEnsembleLiveQuote;`);
+  const now=Date.parse('2026-09-12T20:00:00Z');
+  const job={source:{type:'prediction_market',symbol:'game',outcome:'Michigan Wolverines',side:'short'},history:[{timestamp:'2026-09-12T19:30:00Z',target:.1}],observations:[{timestamp:'2026-09-12T19:59:00Z',target:.4}],quantiles:[.1,.5,.9],predictions:[{timestamp:'2026-09-12T20:30:00Z',quantiles:{'0.1':.2,'0.5':.5,'0.9':.8}}]};
+  w.live(job,now);const text=w.document.getElementById('ensemble-live-quote').textContent;
+  assert.match(text,/Michigan Wolverines \(short\)/);assert.match(text,/quote 0.4/);assert.match(text,/1 min old/);assert.match(text,/not an updated conditional forecast/);assert.doesNotMatch(text,/Stale/);
+  w.live(job,now+3600_000);assert.match(w.document.getElementById('ensemble-live-quote').textContent,/Stale.*horizon has ended/s);
+  d.window.close();
+});
+
+test('forecast polling retries transient failures without submitting duplicate compute', async () => {
+  const d=dom(page('forecasting.html')),w=d.window;
+  w.scheduled=[];w.setTimeout=fn=>{w.scheduled.push(fn);return w.scheduled.length;};w.clearTimeout=()=>{};
+  w.calls=0;w.rendered=false;w.messages=[];
+  w.eval(`const ensembleUiState={pollGeneration:0,pollTimer:0};const ui={};
+    const setEnsembleBusy=()=>{},setEnsembleStatus=s=>window.messages.push(s),renderEnsembleProgress=()=>{};
+    const renderCompletedEnsemble=async()=>{window.rendered=true;};
+    const apiRequestJson=async(path)=>{if(!path.startsWith('/api/v1/ensemble-forecasts/'))throw Error('Unexpected route');if(++window.calls===1)throw Error('Timeout');return {data:{status:'completed'}};};
+    const stopEnsemblePolling=${source('app.js').split('  const stopEnsemblePolling =')[1].split('  const loadEnsembleCapabilities =')[0]}
+    window.poll=pollEnsembleForecast;`);
+  await w.poll('fixture');assert.equal(w.scheduled.length,1);assert.match(w.messages[0],/not restarted/);
+  await w.scheduled[0]();assert.equal(w.calls,2);assert.equal(w.rendered,true);
+  d.window.close();
+});
+
+test('request navigation and opposite-side forecast are explicit actions; Foundry hides market search', () => {
+  const d=dom(page('forecasting.html')),document=d.window.document;
+  assert.equal(document.querySelector('#ensemble-request-previous').type,'button');
+  assert.equal(document.querySelector('#ensemble-request-next').type,'button');
+  assert.equal(document.querySelector('#ensemble-other-side').hidden,true);
+  const app=source('app.js');
+  assert.match(app,/marketSelector.hidden = \["autopilot", "foundry"\].includes\(next\)/);
+  assert.match(app,/candidates.length!==1/);
+  assert.match(app,/row.contract\?\.marketId===s.market_id&&row.contract_id!==s.contract_id/);
+  assert.match(app,/if\(!ids.length\|\|ids.length>50\)return/);
+  assert.match(app,/method:'DELETE'/);
+  assert.match(app,/lock-open/);
   d.window.close();
 });
 
