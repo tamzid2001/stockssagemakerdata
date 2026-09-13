@@ -261,7 +261,10 @@
                           <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
                           <button id="ensemble-check-status" class="task-chip" type="button">Check job status</button>
                           <nav class="request-bulk-toolbar" aria-label="Saved forecast navigation"><button id="ensemble-request-previous" class="task-chip" type="button">Previous request</button><button id="ensemble-request-next" class="task-chip" type="button">Next request</button><button id="ensemble-other-side" class="task-chip" type="button" hidden>Forecast other moneyline</button></nav>
-                          <button id="ensemble-chart-focus" class="task-chip" type="button">Latest 60 minutes + forecast</button>
+                          <div class="request-bulk-toolbar" aria-label="Chart controls">
+                            <button id="ensemble-chart-refresh" class="task-chip" type="button" aria-describedby="ensemble-observation-status">Refresh quotes</button>
+                            <button id="ensemble-chart-focus" class="task-chip" type="button">Latest 60 minutes + forecast</button>
+                          </div>
                           <div id="ensemble-forecast-chart" class="chart ensemble-chart" aria-label="Final ensemble forecast chart"></div>
                           <section id="ensemble-live-quote" class="ensemble-live-quote" aria-label="Latest selected-side quote" aria-live="polite"></section>
                           <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>

@@ -140,6 +140,7 @@ def process_game(store, provider, pair, heartbeat, *, now=None, forecaster=forec
                 validate_forecast(f,origin,horizon)
                 annotate_forecast(f,side,now,origin,0)
                 f.update(available_at=int(time.time()),strategy=VERSION,mode="prospective_paper",
+                    expected_side_count=len(pair),paper_publication_required=True,
                     history_count=len(windows[side["contractId"]]),
                     input_snapshot=[asdict(q) for q in windows[side["contractId"]]])
                 forecasts[side["contractId"]] = f
@@ -161,6 +162,8 @@ def process_game(store, provider, pair, heartbeat, *, now=None, forecaster=forec
                 book["forecast_ids"] = {s:f["forecast_id"] for s,f in forecasts.items()}
                 tagged=[{**e,"game_id":game,"contract_id":e.get("side")} for e in changes]
                 store.save(key,book,None,tagged,metadata)
+                store.checkpoint("path-publication:"+digest(book["forecast_ids"]),
+                    {"path_forecast_ids":list(book["forecast_ids"].values()),"available_at":published})
                 events.extend(tagged)
         return book,created,events
     finally:
@@ -171,12 +174,14 @@ def process_game(store, provider, pair, heartbeat, *, now=None, forecaster=forec
 
 
 def export_report(store, configuration, coverage, failures, error=None):
+    from .quantile_paths import from_store as paths_from_store
     books = [r["state"] for r in store.values("contracts") if r.get("contract_id","").startswith("p1-game:")]
     forecasts = store.values("forecasts")
     from .p1_outcomes import from_store
     report = {"schema_version":2,"configuration":configuration,"coverage":coverage,
         "forecast_count":len(forecasts),"levels":summary(books),"failures":failures[-500:],
         "outcome_cohorts":from_store(store)["cohorts"],
+        "low_high_paper_experiments":paths_from_store(store,int(time.time()))["summary"],
         "fatal_error":error,"statistics_scope":"checkpoint_lineage_cumulative",
         "paper_only":True,"generated_at":int(time.time()),
         "limitations":["Quote-triggered simulated fills, not exchange executions or queue/liquidity confirmation.",

@@ -56,6 +56,7 @@ def process_game(store,provider,pair,as_of,horizon,max_origins,deadline,forecast
                     if {m["id"] for m in f["models"] if m["status"]=="completed"}!=set(MODELS):raise ValueError("FIVE_MODEL_ENSEMBLE_REQUIRED")
                     validate_forecast(f,origin,horizon);annotate_forecast(f,side,decision,origin,0)
                     f.update(strategy=VERSION,mode="historical_paper_with_measured_latency",
+                        expected_side_count=len(pair),
                         history_count=len(windows[side["contractId"]]),input_snapshot=[asdict(q) for q in windows[side["contractId"]]])
                     forecasts[side["contractId"]]=f
                 latency=time.monotonic()-started;available=decision+max(1,math.ceil(latency/60))*60

@@ -81,6 +81,7 @@ def test_live_worker_uses_500_inputs_both_sides_and_persists_before_arming(monke
         def __init__(self): self.values={}
         def load(self,key): return deepcopy(self.values.get(key,{}))
         def save(self,key,state,forecast,events,contract): self.values[key]=deepcopy({"state":state,"forecast":forecast})
+        def checkpoint(self,key,value): self.values[key]=deepcopy(value)
     class Provider:
         def history(self,*args): return [q(40_000-(499-i)*60,.5) for i in range(500)]
     class Heartbeat:

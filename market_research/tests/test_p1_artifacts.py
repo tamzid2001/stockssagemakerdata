@@ -75,4 +75,4 @@ def test_live_p1_is_local_only_and_always_checkpoints():
     assert "FIREBASE_SERVICE_ACCOUNT_JSON" not in p1["env"]
     assert 'QUANTURA_RESEARCH_ARTIFACT_KEY' in p1["env"]
     script=(root/"market_research/node/run.mjs").read_text()
-    assert 'paper ? 5 * 60 * 1000' in script and 'await publish();' in script
+    assert 'paper || btc ? 5 * 60 * 1000' in script and 'await publish();' in script
