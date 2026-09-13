@@ -29,8 +29,9 @@ jobs:
           POLYMARKET_PAPER_ENABLED: ${{ vars.POLYMARKET_PAPER_ENABLED }}
           KALSHI_PAPER_ENABLED: ${{ vars.KALSHI_PAPER_ENABLED }}
           PAPER_PROVIDER: ${{ matrix.provider }}
-          PAPER_HORIZON: ${{ vars.PAPER_ROLLING_HORIZON || '60' }}
-          PAPER_LAG_MINUTES: ${{ vars.PAPER_ROLLING_LAG_MINUTES || '30' }}
+          PAPER_HORIZON: ${{ matrix.provider == 'polymarket_us' && '30' || '60' }}
+          PAPER_LAG_MINUTES: ${{ matrix.provider == 'polymarket_us' && '0' || '30' }}
+          PAPER_STRATEGY: ${{ matrix.provider == 'polymarket_us' && 'p1_oco' || 'rolling' }}
           PAPER_ROLL_MINUTES: ${{ vars.PAPER_ROLLING_CADENCE || '30' }}
           PAPER_FORECAST_ONLY: 'true'
         run: python -m market_research.handoff

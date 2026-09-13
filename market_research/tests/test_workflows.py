@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -85,3 +86,19 @@ def test_corpus_variants_and_live_shared_provider_dispatch():
     assert inputs["forecast_only"]["default"] is True
     assert inputs["provider"]["options"] == ["polymarket_us", "kalshi"]
     assert "inputs.provider" in live["concurrency"]["group"]
+
+
+def test_p1_paper_and_hourly_screeners_share_models_but_isolate_books_and_providers():
+    live=yaml.safe_load((ROOT / ".github/workflows/polymarket-live-paper.yml").read_text())
+    assert live[True]["workflow_dispatch"]["inputs"]["strategy"]["options"]==["rolling","p1_oco"]
+    text=(ROOT / ".github/workflows/hourly-game-screener.yml").read_text()
+    hourly=yaml.safe_load(text)
+    assert hourly[True]["schedule"]==[{"cron":"3 * * * *"}]
+    assert hourly["jobs"]["screener"]["strategy"]["fail-fast"] is False
+    assert hourly["jobs"]["screener"]["strategy"]["matrix"]["provider"]==["polymarket_us","kalshi"]
+    assert "runner.temp" not in str(hourly["jobs"]["screener"]["env"])
+    assert "FIREBASE_SERVICE_ACCOUNT_JSON" not in text
+    assert "uses: ./.github/actions/research-artifact" in text
+    for name in ["p1_worker.py","p1_oco.py","hourly_screener.py"]:
+        source=(ROOT / "market_research" / name).read_text()
+        assert not re.search(r"\bplace_order\b",source) and "POLYMARKET_SECRET_KEY" not in source

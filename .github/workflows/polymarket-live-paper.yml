@@ -1,9 +1,14 @@
 name: Kalshi / Polymarket Live Rolling Ensemble Paper Monitor
-run-name: ${{ inputs.provider || 'polymarket_us' }} paper · lag ${{ inputs.lag_minutes || '0' }}m · horizon ${{ inputs.horizon }}m
+run-name: ${{ inputs.provider || 'polymarket_us' }} paper · ${{ inputs.strategy || 'rolling' }} · lag ${{ inputs.lag_minutes || '0' }}m · horizon ${{ inputs.horizon }}m
 
 on:
   workflow_dispatch:
     inputs:
+      strategy:
+        type: choice
+        options: [rolling, p1_oco]
+        default: rolling
+        description: P1 OCO is Polymarket paper only; latest inputs, 30-minute horizon
       provider:
         type: choice
         options: [polymarket_us, kalshi]
@@ -61,6 +66,7 @@ jobs:
       PAPER_LAG_MINUTES: ${{ inputs.lag_minutes || '0' }}
       PAPER_ROLL_MINUTES: ${{ inputs.roll_minutes || '30' }}
       PAPER_FORECAST_ONLY: ${{ inputs.forecast_only }}
+      PAPER_STRATEGY: ${{ inputs.strategy || 'rolling' }}
       KALSHI_PAPER_ENABLED: ${{ vars.KALSHI_PAPER_ENABLED || 'false' }}
     steps:
       - uses: actions/checkout@v6
@@ -93,6 +99,13 @@ jobs:
           TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: |
+          if [[ "$PAPER_STRATEGY" == 'p1_oco' ]]; then
+            [[ "$PAPER_PROVIDER" == 'polymarket_us' && "$PAPER_HORIZON" == '30' && "$PAPER_LAG_MINUTES" == '0' ]] || { echo 'P1 OCO requires Polymarket latest/30 minutes'; exit 1; }
+            p1args=()
+            if [[ "$RUN_ONCE" == 'true' ]]; then p1args+=(--once --max-contracts 4); fi
+            python -m market_research.p1_worker "${p1args[@]}"
+            exit 0
+          fi
           args=(--mode live --provider "$PAPER_PROVIDER" --horizon "$PAPER_HORIZON" --lag-minutes "$PAPER_LAG_MINUTES" --roll-minutes "$PAPER_ROLL_MINUTES" --duration-minutes 345)
           if [[ "$PAPER_FORECAST_ONLY" == 'true' ]]; then args+=(--forecast-only); fi
           if [[ "$RUN_ONCE" == 'true' ]]; then args+=(--once --max-contracts 4); fi

@@ -20,6 +20,7 @@ def forecast_window(
     window: list[Quote],
     horizon: int,
     models: tuple[str, ...] | None = None,
+    quantiles: tuple[float, ...] = QUANTILES,
 ) -> dict:
     models = default_research_models() if models is None else models
     if (
@@ -58,7 +59,7 @@ def forecast_window(
         "transform": "none",
         "context_length": 500,
         "failure_policy": "renormalize",
-        "quantiles": list(QUANTILES),
+        "quantiles": list(quantiles),
         "models": {m: {"enabled": True, "weight": 1} for m in models},
     }
     seed = int(digest(source)[:8], 16)
@@ -84,7 +85,7 @@ def forecast_window(
     rows = []
     for row in result["predictions"]:
         values = {}
-        for q in QUANTILES:
+        for q in quantiles:
             x = float(row["quantiles"][str(q)])
             values[str(q)] = (
                 float(1 / (1 + np.exp(-x)))
