@@ -63,6 +63,7 @@ def test_publication_latency_and_resume_no_duplicate_forecasts(tmp_path):
     export(tmp_path)
     assert (tmp_path/'btc_forecast_quantiles.csv.gz').exists()
     assert (tmp_path/'quantile_path_report.json').exists()
+    assert (tmp_path/'btc_signal_report.json').exists()
     store.db.close()
 
 
@@ -91,3 +92,19 @@ def test_workflow_cpu_safe_ids_checkpoint_timeout_and_no_exchange_credentials():
     assert 'FIREBASE_SERVICE_ACCOUNT' not in raw and 'KALSHI_PRIVATE_KEY' not in raw
     assert 'restore-backtest' in raw and 'persist-credentials: false' in raw
     assert '--paper-btc' in raw and 'resume_artifact_id' in raw
+
+
+def test_btc_p90_touch_buy_then_other_p90_or_held_p10_reverses_one_position():
+    from market_research.tests.test_recovery_switch import forecasts, quote
+    from market_research.recovery_switch import simulate
+    rows = [quote(180,.81,bid=.8),quote(240,.9),quote(300,.6),quote(300,.85,side='no'),
+            quote(360,.6),quote(360,.9,side='no'),quote(420,.2,side='no'),
+            quote(480,.1,side='no'),quote(480,.91)]
+    r = simulate(forecasts(),rows,{},as_of=480,switch_on_other_p90=True,p90_touch=True)
+    assert [t['contract_id'] for t in r['trades']] == ['g-yes','g-no','g-yes']
+    assert r['trades'][0]['signal_at'] == 180
+    assert r['trades'][0]['exit_reason'] == 'opposite_p90_switch'
+    assert r['trades'][1]['exit_reason'] == 'p10_exit_and_opposite'
+    assert r['trades'][0]['exit_at'] == r['trades'][1]['entry_at']
+    assert r['trades'][1]['exit_at'] == r['trades'][2]['entry_at']
+    assert sum(t['status']=='open' for t in r['trades']) == 1

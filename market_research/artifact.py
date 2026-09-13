@@ -29,7 +29,7 @@ def key_bytes():
         raise ValueError("ARTIFACT_ENCRYPTION_KEY_INVALID") from None
 
 
-def package(directory, destination):
+def package(directory, destination, max_bytes=MAX_ARTIFACT_BYTES):
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
     key = key_bytes()  # Fail before collecting/uploading confidential output.
@@ -41,7 +41,8 @@ def package(directory, destination):
         for p in root.iterdir()
         if p.name in {"research.sqlite3", "forecast_quantiles.csv.gz", "quantile_manifest.json",
                       "p1_orders_and_fills.csv.gz", "p1_forecast_quantiles.csv.gz", "p1_summary.json", "p1_path_outcomes.json",
-                      "quantile_path_report.json", "quantile_path_trades.csv.gz", "btc_forecast_quantiles.csv.gz"}
+                      "quantile_path_report.json", "quantile_path_trades.csv.gz", "btc_forecast_quantiles.csv.gz", "btc_signal_report.json"}
+        or p.name in {"recovery_summary.json", "recovery_trades.csv.gz", "recovery_signals.csv.gz", "recovery_forecast_quantiles.csv.gz"}
         or (p.name.startswith("report-") and p.suffix == ".json")
     )
     if not files or any(p.is_symlink() or not p.is_file() for p in files):
@@ -69,7 +70,7 @@ def package(directory, destination):
                 )
                 archive.write(path, path.name)
             archive.writestr("manifest.json", json.dumps(manifest, indent=2))
-        if compressed.tell() + 32 > MAX_ARTIFACT_BYTES:
+        if compressed.tell() + 32 > max_bytes:
             raise ValueError("ARTIFACT_EXCEEDS_25_MIB_BUDGET")
         compressed.seek(0)
         nonce = os.urandom(12)
@@ -91,7 +92,7 @@ def package(directory, destination):
     }
 
 
-def decrypt(source, destination):
+def decrypt(source, destination, max_bytes=MAX_ARTIFACT_BYTES):
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
     target = Path(destination)
@@ -103,7 +104,7 @@ def decrypt(source, destination):
         if len(header) != 16 or header[:4] != MAGIC:
             raise ValueError("INVALID_ENCRYPTED_ARTIFACT")
         size = handle.seek(0, 2)
-        if not 32 < size <= MAX_ARTIFACT_BYTES:
+        if not 32 < size <= max_bytes:
             raise ValueError("INVALID_ARTIFACT_SIZE")
         handle.seek(-16, 2)
         decryptor = Cipher(
@@ -147,7 +148,7 @@ def main():
         print("Authenticated archive decrypted locally.")
 
 
-def snapshot_package(directory, destination):
+def snapshot_package(directory, destination, max_bytes=MAX_ARTIFACT_BYTES):
     """SQLite online backup gives a consistent checkpoint even during inference."""
     import sqlite3
     import shutil
@@ -172,10 +173,10 @@ def snapshot_package(directory, destination):
                     raise ValueError("EXPORT_CHECKSUM_MISMATCH")
             for path in (manifest, csv):
                 shutil.copyfile(path, Path(temporary) / path.name)
-        return package(temporary, destination)
+        return package(temporary, destination, max_bytes=max_bytes)
 
 
-def restore(source, directory, preserve_results=False):
+def restore(source, directory, preserve_results=False, max_bytes=MAX_ARTIFACT_BYTES, max_database_bytes=32 * 1024 * 1024):
     import sqlite3
 
     root = Path(directory)
@@ -185,14 +186,14 @@ def restore(source, directory, preserve_results=False):
         raise ValueError("RESTORE_REQUIRES_EMPTY_OUTPUT")
     with tempfile.TemporaryDirectory() as temporary:
         clear = Path(temporary) / "verified.zip"
-        decrypt(source, clear)
+        decrypt(source, clear, max_bytes=max_bytes)
         with zipfile.ZipFile(clear) as archive:
             manifest = json.loads(archive.read("manifest.json"))
             entry = next(
                 f for f in manifest["files"] if f["name"] == "research.sqlite3"
             )
             info = archive.getinfo("research.sqlite3")
-            if info.file_size > 32 * 1024 * 1024:
+            if info.file_size > max_database_bytes:
                 raise ValueError("RESTORE_DATABASE_TOO_LARGE")
             data = archive.read(info)
             if hashlib.sha256(data).hexdigest() != entry["sha256"]:

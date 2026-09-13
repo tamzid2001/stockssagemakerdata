@@ -214,17 +214,18 @@ test('forecast chart focuses recent hour plus future and includes explicitly req
     const ensembleUiState={chartWindowId:'',chartWindow:null}; const ensembleChartDefaultRange=window.range; const getPlotly=async()=>({react:async(...a)=>window.record.push(a)});
     const isDarkMode=()=>false, ensembleQuantileKey=String, ensembleQuantileLabel=q=>'P'+Math.round(q*100);
     const escapeHtml=String,ensembleMarketIdentity=()=>({title:'Selected side · Fixture game'});
+    const ensembleMinuteSignals=()=>({events:[]}),renderEnsembleSignals=()=>{};
     const ensembleTimeZone=()=> 'America/New_York',ensembleChartTime=v=>v,ensembleLocalTime=v=>String(v);
     const renderEnsembleChart =${source('app.js').split('  const renderEnsembleChart =')[1].split('  const startEnsembleObservations =')[0]}
     window.renderChart=renderEnsembleChart;`);
   await w.renderChart(job);
-  assert.ok(w.record[0][1].some(t=>t.name==='P10 ensemble'));
-  assert.ok(w.record[0][1].some(t=>t.name==='P90 ensemble'));
+  assert.ok(w.record[0][1].some(t=>t.name==='P10 · Sell signal'));
+  assert.ok(w.record[0][1].some(t=>t.name==='P90 · Buy signal'));
   assert.equal(w.record[0][2].uirevision,'fixture');
   assert.equal(w.record[0][2].title.text,'Selected side · Fixture game');
   assert.ok(w.record[0][2].xaxis.ticktext.every(t=>/AM|PM/.test(t)));
   await w.renderChart({...job,quantiles:[.5]});
-  assert.ok(!w.record[1][1].some(t=>/^P(10|90) ensemble$/.test(t.name)));
+  assert.ok(!w.record[1][1].some(t=>/^P(10|90) ·/.test(t.name)));
   d.window.close();
 });
 

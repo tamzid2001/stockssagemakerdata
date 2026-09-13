@@ -14494,6 +14494,12 @@
     if (ui.ensembleRunButton) { ui.ensembleRunButton.disabled = busy; ui.ensembleRunButton.textContent = busy ? "Forecast in progress…" : "Run forecast"; }
     if (ui.ensembleRefreshLatest) ui.ensembleRefreshLatest.disabled = busy;
     if (ui.ensembleRunAgain) ui.ensembleRunAgain.disabled = busy;
+    const statusButton = document.getElementById("ensemble-check-status");
+    if (statusButton) statusButton.hidden = !busy && ensembleUiState.lastJob?.status === "completed";
+    for (const id of ["ensemble-chart-focus", "ensemble-chart-refresh", "ensemble-other-side"]) {
+      const button = document.getElementById(id);
+      if (button) button.disabled = busy;
+    }
     for (const link of [ui.ensembleDownloadCsv, ui.ensembleDownloadJson, ui.ensembleCopyConfig]) if (link) link.hidden = busy;
   };
 
@@ -14525,6 +14531,43 @@
     const side = s.type === "prediction_market" ? `${s.outcome || "Selected outcome"} (${s.side || "selected side"})` : symbol;
     const title = s.type === "prediction_market" ? `${side} · ${symbol}` : side;
     return {symbol, side, title};
+  };
+
+  // Strategy signals are sampled once per COMPLETED minute, never from tick
+  // streams. Compare the same immutable forecast at consecutive timestamps.
+  const ensembleMinuteSignals = (job, now = Date.now()) => {
+    if (job.frequency !== "1min") return { available: false, reason: "Choose a one-minute forecast to see P90 buy / P10 sell signals.", events: [] };
+    const isMarket = job.source?.type === "prediction_market";
+    const replay = job.source?.analysis_mode === "historical_replay";
+    const cutoff = Date.parse(job.history?.at(-1)?.timestamp);
+    const published = replay ? cutoff : Date.parse(job.completed_at);
+    if (!Number.isFinite(published)) return { available: false, reason: "Waiting for the forecast publication timestamp.", events: [] };
+    const levels = new Map((job.predictions || []).map(row => [Date.parse(row.timestamp), row.quantiles]));
+    const quotes = new Map();
+    for (const row of job.observations || []) {
+      const time = Date.parse(row.timestamp), value = isMarket ? row.bid : row.target;
+      if (time % 60000 === 0 && time <= Math.floor(now / 60000) * 60000 && time > published && row.is_forward_filled !== true && typeof value === "number" && Number.isFinite(value)) quotes.set(time, value);
+    }
+    const events = [];
+    for (const [time, price] of [...quotes].sort((a,b)=>a[0]-b[0])) {
+      const before = quotes.get(time - 60000), previous = levels.get(time - 60000), current = levels.get(time);
+      if (before === undefined || !previous || !current) continue;
+      for (const [q, kind] of [["0.9", "buy"], ["0.1", "sell"]]) {
+        if (typeof current[q] !== "number" || typeof previous[q] !== "number") continue;
+        const crosses = kind === "buy" ? before < previous[q] && price >= current[q] : before > previous[q] && price <= current[q];
+        if (crosses) events.push({ timestamp: new Date(time).toISOString(), price, level: current[q], quantile: q, kind });
+      }
+    }
+    return { available: true, events, quoteCount: quotes.size, replay, basis: isMarket ? "selected-side closing bid" : "closing price" };
+  };
+
+  const renderEnsembleSignals = (job) => {
+    const host = document.getElementById("ensemble-crossing-signals");
+    if (!host) return;
+    const result = ensembleMinuteSignals(job);
+    if (!result.available) { host.textContent = result.reason; return; }
+    const latest = result.events.at(-1);
+    host.innerHTML = `<span class="ensemble-signal ensemble-signal-buy"><strong>P90 · Buy signal</strong> Cross upward</span><span class="ensemble-signal ensemble-signal-sell"><strong>P10 · Sell signal</strong> Cross downward</span><p>${latest ? `<strong>${latest.kind === "buy" ? "Buy" : "Sell"} crossing · ${escapeHtml(ensembleLocalTime(latest.timestamp))}</strong> · ${escapeHtml(Number(latest.price).toFixed(4))}` : result.quoteCount < 2 ? "Waiting for two consecutive completed one-minute quotes with bid data." : "No P90/P10 crossing detected in the available completed minutes."}</p><p>${result.replay ? "Historical replay — outcomes may already have been known. " : ""}Based on ${escapeHtml(result.basis)}, not stream ticks. Gaps are excluded. Strategy indicators are not orders, execution guarantees or validated win rates.</p>`;
   };
 
   const renderEnsembleLiveQuote = (job, now = Date.now()) => {
@@ -14752,6 +14795,7 @@
     // Never show the previous job's distribution or metrics under a new ID.
     if (ui.ensembleSummary) { ui.ensembleSummary.hidden = true; ui.ensembleSummary.replaceChildren(); }
     document.getElementById("ensemble-live-quote")?.replaceChildren();
+    document.getElementById("ensemble-crossing-signals")?.replaceChildren();
     if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = "";
     if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = "";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = true;
@@ -14782,7 +14826,7 @@
     const median = quantiles.slice().sort((left, right) => Math.abs(left - 0.5) - Math.abs(right - 0.5))[0];
     traces.push({ type: "scatter", mode: "lines", x: rows.map((row) => row.timestamp), y: quantileValues(median), name: `${ensembleQuantileLabel(median)} ensemble`, line: { width: 2.5, color: "#4361ee" } });
     for (const [level, color] of [[0.1, isDarkMode() ? "#fbbf24" : "#a16207"], [0.9, isDarkMode() ? "#c4b5fd" : "#7c3aed"]]) {
-      if (quantiles.includes(level) && level !== median) traces.push({ type: "scatter", mode: "lines", x: rows.map(row => row.timestamp), y: quantileValues(level), name: `${ensembleQuantileLabel(level)} ensemble`, line: { width: 1.8, dash: "dash", color } });
+      if (quantiles.includes(level) && level !== median) traces.push({ type: "scatter", mode: "lines", x: rows.map(row => row.timestamp), y: quantileValues(level), name: `${ensembleQuantileLabel(level)} · ${level === 0.9 ? "Buy" : "Sell"} signal`, line: { width: 1.8, dash: "dash", color } });
     }
     const source = job.source || {};
     const inputHistory = job.history || [];
@@ -14790,6 +14834,12 @@
     const observed = job.observations || [];
     if (observed.length) traces.push({type:"scatter",mode:"lines+markers",x:observed.map(r=>r.timestamp),y:observed.map(r=>r.target),name:source.analysis_mode === "historical_replay" ? "Actual prices after input cutoff" : "Observed after forecast",line:{width:2,color:isDarkMode()?"#5eead4":"#0f766e"},connectgaps:false});
     const dark = isDarkMode();
+    const signals = ensembleMinuteSignals(job).events;
+    for (const kind of ["buy", "sell"]) {
+      const points = signals.filter(s => s.kind === kind);
+      if (points.length) traces.push({ type: "scatter", mode: "markers", x: points.map(s=>s.timestamp), y: points.map(s=>s.price), name: `${kind === "buy" ? "P90 Buy" : "P10 Sell"} crossing`, marker: { size: 11, symbol: kind === "buy" ? "triangle-up" : "triangle-down", color: kind === "buy" ? (dark ? "#6ee7b7" : "#087f5b") : (dark ? "#fda4af" : "#b42318"), line: {width:1,color:dark ? "#111827" : "#ffffff"} } });
+    }
+    renderEnsembleSignals(job);
     // Epoch positions stay absolute (including DST folds); only labels localize.
     traces.forEach(trace => { trace.customdata = trace.x.map(value => ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
     const tickIndices = [...new Set(Array.from({ length: Math.min(6, rows.length) }, (_, i) => Math.round(i * (rows.length - 1) / Math.max(1, Math.min(6, rows.length) - 1))))];
@@ -14817,7 +14867,8 @@
     const generation = ++ensembleUiState.observationGeneration;
     ensembleUiState.refreshObservations = null;
     const refreshButton = document.getElementById("ensemble-chart-refresh");
-    if (refreshButton) { refreshButton.disabled = false; refreshButton.hidden = !["ticker","prediction_market"].includes(job.source?.type); refreshButton.textContent = "Refresh quotes"; }
+    const label = refreshButton?.querySelector("span") || refreshButton;
+    if (refreshButton) { refreshButton.disabled = false; refreshButton.hidden = !["ticker","prediction_market"].includes(job.source?.type); label.textContent = "Refresh quotes"; }
     if (!["ticker","prediction_market"].includes(job.source?.type)) return;
     let inFlight = false, stopped = false;
     const current = () => generation === ensembleUiState.observationGeneration && ensembleUiState.forecastId === job.forecast_id;
@@ -14828,7 +14879,7 @@
         // Browser background throttling must never permanently kill the loop.
         if (ensembleUiState.busy || document.hidden || !ui.ensembleForecastResults?.getClientRects().length) return;
         inFlight = true;
-        if (refreshButton) { refreshButton.disabled = true; refreshButton.textContent = "Updating quotes…"; refreshButton.setAttribute("aria-busy", "true"); }
+        if (refreshButton) { refreshButton.disabled = true; label.textContent = "Updating quotes…"; refreshButton.setAttribute("aria-busy", "true"); }
           const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`, { headers: { "Cache-Control": "no-cache" } });
           if (!current() || ensembleUiState.busy) return;
           job.observations = response.data.rows || [];
@@ -14854,7 +14905,7 @@
       } finally {
         inFlight = false;
         if (current()) {
-          if (refreshButton) { refreshButton.disabled = false; refreshButton.textContent = "Refresh quotes"; refreshButton.removeAttribute("aria-busy"); }
+          if (refreshButton) { refreshButton.disabled = false; label.textContent = "Refresh quotes"; refreshButton.removeAttribute("aria-busy"); }
           if (!stopped) ensembleUiState.observationTimer = window.setTimeout(update,60000);
         }
       }
@@ -14868,6 +14919,8 @@
     if (!Array.isArray(job.history)) job = (await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}`)).data;
     setEnsembleBusy(false);
     ensembleUiState.lastJob = job;
+    const statusButton = document.getElementById("ensemble-check-status");
+    if (statusButton) statusButton.hidden = true;
     const otherSide = document.getElementById("ensemble-other-side");
     if (otherSide) otherSide.hidden = job.source?.type !== "prediction_market";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = false;
@@ -15085,6 +15138,9 @@
   const bindEnsembleForecastUi = () => {
     if (!ui.ensembleForecastSettings || ui.ensembleForecastSettings.dataset.bound === "1") return;
     ui.ensembleForecastSettings.dataset.bound = "1";
+    const exportMenu = document.querySelector(".ensemble-toolbar-menu");
+    exportMenu?.addEventListener("keydown", event => { if (event.key === "Escape") { exportMenu.open = false; exportMenu.querySelector("summary")?.focus(); } });
+    document.addEventListener("click", event => { if (exportMenu?.open && !exportMenu.contains(event.target)) exportMenu.open = false; });
     syncEnsembleSourceFields();
     ui.ensembleSourceType?.addEventListener("change", syncEnsembleSourceFields);
     document.getElementById("ensemble-check-status")?.addEventListener("click", () => { if (ensembleUiState.forecastId) pollEnsembleForecast(ensembleUiState.forecastId); });

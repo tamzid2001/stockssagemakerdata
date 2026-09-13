@@ -259,26 +259,36 @@
                         <section id="ensemble-forecast-results" class="ensemble-results" aria-labelledby="ensemble-results-title" hidden>
                           <div class="forecast-section-heading"><div><div class="eyebrow">Final ensemble</div><h3 id="ensemble-results-title">Probabilistic forecast</h3></div><span id="ensemble-result-state" class="status-pill">Queued</span></div>
                           <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
-                          <button id="ensemble-check-status" class="task-chip" type="button">Check job status</button>
-                          <nav class="request-bulk-toolbar" aria-label="Saved forecast navigation"><button id="ensemble-request-previous" class="task-chip" type="button">Previous request</button><button id="ensemble-request-next" class="task-chip" type="button">Next request</button><button id="ensemble-other-side" class="task-chip" type="button" hidden>Forecast other moneyline</button></nav>
-                          <div class="request-bulk-toolbar" aria-label="Chart controls">
-                            <button id="ensemble-chart-refresh" class="task-chip" type="button" aria-describedby="ensemble-observation-status">Refresh quotes</button>
-                            <button id="ensemble-chart-focus" class="task-chip" type="button">Latest 60 minutes + forecast</button>
+                          <div class="ensemble-chart-toolbar" role="group" aria-label="Forecast chart actions">
+                            <div class="ensemble-toolbar-group" role="group" aria-label="Chart and data">
+                              <button id="ensemble-chart-refresh" class="task-chip" type="button" aria-describedby="ensemble-observation-status" title="Fetch completed quotes without running models"><i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh quotes</span></button>
+                              <button id="ensemble-chart-focus" class="task-chip" type="button" title="Zoom only; no data fetch or new forecast"><i class="iconoir-expand" aria-hidden="true"></i><span>Latest 60 minutes + forecast</span></button>
+                              <button id="ensemble-refresh-latest" class="task-chip" type="button" title="Download fresh history and create a new forecast; the saved forecast is preserved"><i class="iconoir-play" aria-hidden="true"></i><span>Refresh data &amp; forecast</span></button>
+                              <button id="ensemble-check-status" class="task-chip" type="button" title="Retry checking the current job; does not start another forecast"><i class="iconoir-clock" aria-hidden="true"></i><span>Check job status</span></button>
+                            </div>
+                            <nav class="ensemble-toolbar-group" aria-label="Saved forecast navigation">
+                              <button id="ensemble-request-previous" class="task-chip" type="button"><i class="iconoir-arrow-left" aria-hidden="true"></i><span>Previous request</span></button>
+                              <button id="ensemble-request-next" class="task-chip" type="button"><span>Next request</span><i class="iconoir-arrow-right" aria-hidden="true"></i></button>
+                              <button id="ensemble-other-side" class="task-chip" type="button" hidden><i class="iconoir-refresh-double" aria-hidden="true"></i><span>Forecast other moneyline</span></button>
+                            </nav>
+                            <details class="ensemble-toolbar-menu">
+                              <summary class="task-chip"><i class="iconoir-download" aria-hidden="true"></i><span>Share &amp; export</span><i class="iconoir-nav-arrow-down" aria-hidden="true"></i></summary>
+                              <div class="ensemble-toolbar-menu-items" role="group" aria-label="Share and export forecast">
+                                <button id="ensemble-share-link" class="task-chip" type="button" title="Recipients must have workspace access"><i class="iconoir-link" aria-hidden="true"></i><span>Copy workspace share link</span></button>
+                                <a id="ensemble-download-csv" class="task-chip" href="#"><i class="iconoir-download" aria-hidden="true"></i><span>Download CSV</span></a>
+                                <a id="ensemble-download-json" class="task-chip" href="#"><i class="iconoir-download" aria-hidden="true"></i><span>Download JSON</span></a>
+                                <button id="ensemble-copy-config" class="task-chip" type="button"><i class="iconoir-code" aria-hidden="true"></i><span>Copy API request</span></button>
+                                <button id="ensemble-run-again" class="task-chip" type="button" title="Run the original immutable data and configuration again; does not fetch fresh history"><i class="iconoir-clock" aria-hidden="true"></i><span>Reproduce saved configuration</span></button>
+                              </div>
+                            </details>
                           </div>
+                          <section id="ensemble-crossing-signals" class="ensemble-crossing-signals" aria-label="One-minute strategy signals" aria-live="polite"></section>
                           <div id="ensemble-forecast-chart" class="chart ensemble-chart" aria-label="Final ensemble forecast chart"></div>
                           <section id="ensemble-live-quote" class="ensemble-live-quote" aria-label="Latest selected-side quote" aria-live="polite"></section>
                           <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>
                           <div id="ensemble-observation-status" class="small muted" role="status"></div>
                           <div id="ensemble-observed-metrics" class="small muted" role="status"></div>
                           <div id="ensemble-result-table" class="table-wrap"></div>
-                          <div class="ensemble-result-actions">
-                            <button id="ensemble-share-link" class="task-chip" type="button">Copy workspace share link</button>
-                            <button id="ensemble-refresh-latest" class="task-chip" type="button">Refresh latest data &amp; forecast</button>
-                            <a id="ensemble-download-csv" class="cta secondary small" href="#">Download CSV</a>
-                            <a id="ensemble-download-json" class="cta secondary small" href="#">Download JSON</a>
-                            <button id="ensemble-copy-config" class="task-chip" type="button">Copy API request</button>
-                            <button id="ensemble-run-again" class="task-chip" type="button">Reproduce saved configuration</button>
-                          </div>
                         </section>
                       </div>
                     </section>

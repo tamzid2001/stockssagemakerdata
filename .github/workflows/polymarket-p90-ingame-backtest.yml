@@ -1,0 +1,106 @@
+name: Sports P90 Buy P10 Sell Historical Backtest
+run-name: ${{ inputs.provider }} P90 minute quotes · ${{ inputs.horizon }}m · ${{ inputs.campaign_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Independent provider campaign, never mixed with another source
+        type: choice
+        options: [polymarket_us, kalshi]
+        default: polymarket_us
+      horizon:
+        description: Refresh interval; in-game history preferred, pregame fallback disclosed
+        type: choice
+        options: ['15', '30']
+        default: '30'
+      campaign_id:
+        description: new, or the existing p90 campaign ID for recovery
+        type: string
+        default: new
+      code_ref:
+        description: main for new work; original 40-character SHA for continuation
+        type: string
+        default: main
+      continuous:
+        description: Resume automatically until historical discovery is exhausted
+        type: boolean
+        default: false
+      duration_minutes:
+        description: Five minutes verifies recovery; normal successors use 330
+        type: choice
+        options: ['5', '330']
+        default: '330'
+      smoke_mode:
+        type: choice
+        options: [mock, real]
+        default: mock
+        description: Mocks do not access providers, cloud persistence, or model weights
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: sports-p90-ingame-${{ inputs.provider }}-${{ inputs.horizon }}
+  cancel-in-progress: false
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Validate safe identifiers
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+          CAMPAIGN: ${{ inputs.campaign_id }}
+        run: |
+          [[ "$CODE_REF" == main || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$CAMPAIGN" == new || "$CAMPAIGN" =~ ^p90-[a-f0-9]{24}$ ]] || exit 1
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.code_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Record immutable code
+        run: echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Mock validation
+        if: inputs.smoke_mode == 'mock'
+        run: |
+          python -m pip install pytest numpy pandas httpx pandas-market-calendars cryptography firebase-admin pyyaml
+          python -m pytest -q market_research/tests/test_recovery_switch.py market_research/tests/test_recovery_replay.py market_research/tests/test_recovery_cloud.py
+      - name: Locked CPU inference environment
+        if: inputs.smoke_mode == 'real'
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Replay into durable encrypted game shards
+        id: campaign
+        if: inputs.smoke_mode == 'real'
+        env:
+          CAMPAIGN: ${{ inputs.campaign_id }}
+          HORIZON: ${{ inputs.horizon }}
+          PROVIDER: ${{ inputs.provider }}
+          CONTINUOUS: ${{ inputs.continuous }}
+          DURATION: ${{ inputs.duration_minutes }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        run: |
+          args=(--campaign-id "$CAMPAIGN" --provider "$PROVIDER" --horizon "$HORIZON" --duration-minutes "$DURATION")
+          if [[ "$CONTINUOUS" == true ]]; then args+=(--continuous); fi
+          python -m market_research.recovery_campaign "${args[@]}"
+      - name: Checkpoint-fenced successor
+        if: success() && inputs.smoke_mode == 'real' && inputs.continuous && steps.campaign.outputs.resume_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          CAMPAIGN: ${{ steps.campaign.outputs.campaign_id }}
+        run: python -m market_research.recovery_watchdog --campaign-id "$CAMPAIGN"
+      - name: Failure disclosure
+        if: failure()
+        run: echo 'Campaign failed. Recover the same private campaign; do not substitute a fresh campaign or claim full coverage.' >> "$GITHUB_STEP_SUMMARY"

@@ -7,7 +7,7 @@ const source = fs.readFileSync(path.resolve(__dirname,'../../public/app.js'),'ut
 const start = source.slice(source.indexOf('  const startEnsembleObservations ='),source.indexOf('  const renderCompletedEnsemble ='));
 
 function setup() {
-  const dom = new JSDOM('<button id="ensemble-chart-refresh">Refresh quotes</button>',{runScripts:'outside-only',pretendToBeVisual:true});
+  const dom = new JSDOM('<button id="ensemble-chart-refresh"><i aria-hidden="true"></i><span>Refresh quotes</span></button>',{runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window, timers=new Map();let sequence=0,calls=0;
   w.setTimeout=(fn,ms)=>{timers.set(++sequence,{fn,ms});return sequence;};
   w.clearTimeout=id=>timers.delete(id);
@@ -36,6 +36,7 @@ test('tab return immediately refreshes overlay without a page reload',async()=>{
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(s.calls(),1);assert.equal(s.job.observations.length,1);
   assert.equal(s.w.document.getElementById('ensemble-chart-refresh').disabled,false);
+  assert.ok(s.w.document.querySelector('#ensemble-chart-refresh i'));
   s.dom.window.close();
 });
 
@@ -67,7 +68,7 @@ test('concurrent refresh deduplicates and old response cannot overwrite next job
 test('chart refresh is distinct from compute and source/SSR controls are synchronized',()=>{
   for(const directory of ['pages','functions_ssr/templates']){
     const html=fs.readFileSync(path.resolve(__dirname,'../..',directory,'forecasting.html'),'utf8');
-    assert.match(html,/id="ensemble-chart-refresh"[^>]+>Refresh quotes/);
+    assert.match(html,/id="ensemble-chart-refresh"[^>]+><i[^>]+><\/i><span>Refresh quotes/);
   }
   assert.match(source,/ensemble-chart-refresh[^\n]*addEventListener\("click"[^\n]*refreshObservations/);
 });

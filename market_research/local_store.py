@@ -18,8 +18,9 @@ from .engine import digest
 class LocalStore:
     storage_name = "encrypted_github_artifact"
 
-    def __init__(self, session, holder, directory=None):
+    def __init__(self, session, holder, directory=None, capacity_bytes=20 * 1024 * 1024):
         self.session, self.holder = session, holder
+        self.capacity_bytes = capacity_bytes
         self.directory = Path(
             directory or os.environ.get("QUANTURA_RESEARCH_DIR", ".research-output")
         )
@@ -40,7 +41,7 @@ class LocalStore:
     @property
     def at_capacity(self):
         # Leave space under the artifact's 25 MiB upload cap for reports/manifests.
-        return self.path.stat().st_size >= 20 * 1024 * 1024
+        return self.path.stat().st_size >= self.capacity_bytes
 
     def _get(self, kind, identifier):
         with self.lock:

@@ -109,7 +109,7 @@ jobs:
           npx --yes firebase-tools@15.7.0 emulators:exec \
             --only firestore \
             --project quantura-forecast-integration \
-            "node --test functions_explore/dist/quanturaForecastRoutes.integration.test.js && cd .. && python -m pytest -q market_research/tests/test_store_integration.py"
+            "node --test functions_explore/dist/quanturaForecastRoutes.integration.test.js && cd .. && python -m pytest -q market_research/tests/test_store_integration.py market_research/tests/test_recovery_cloud.py"
 
       - name: Syntax check frontend and SSR entrypoints
         run: |

@@ -907,7 +907,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     // No heavy inference and no changes to immutable predictions/input snapshot.
     if (Date.now() - cutoff > 7 * 86400_000) availability = "live_overlay_window_expired";
     else if (source.type === "prediction_market") {
-      const result = await predictionForecastHistory(source.provider as "kalshi" | "polymarket_us", text(source.symbol), text(source.contract_id), frequency, { allowResolved: true, since: cutoff, minimumRows: 0 });
+      const result = await predictionForecastHistory(source.provider as "kalshi" | "polymarket_us", text(source.symbol), text(source.contract_id), frequency, { allowResolved: true, since: cutoff, minimumRows: 0, includeQuotes: true });
       rows = result.rows;
     } else if (source.type === "ticker") {
       try {

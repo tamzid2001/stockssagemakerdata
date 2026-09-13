@@ -12,10 +12,16 @@ def export(directory):
     store=LocalStore("export","export",directory)
     try:
         versions={c.get("version") for c in store.values("configuration") if c}
+        if "in_game_p90_switch_v1" in versions:
+            from .recovery_switch import export as export_recovery
+            export_recovery(store)
         if not versions.intersection({VERSION,"kalshi_btc_first2_next13_v1"}):
             return
         from .quantile_paths import export as export_paths
         export_paths(store,int(time.time()))
+        if 'kalshi_btc_first2_next13_v1' in versions:
+            from .btc_signals import export as export_signals
+            export_signals(store, int(time.time()))
         fields=["timestamp","sequence","game_id","contract_id","kind","level","price",
             "added_quantity","quantity","average_cost","cost_basis","exit","fees","net_pnl","details_json"]
         with (store.directory/"p1_orders_and_fills.csv.gz").open("wb") as raw, gzip.GzipFile(fileobj=raw,mode="wb",mtime=0) as gz:

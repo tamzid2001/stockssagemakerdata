@@ -9289,7 +9289,6 @@ html .toast[data-variant="warn"] {
 }
 
 .ensemble-weight-summary,
-.ensemble-result-actions,
 .ensemble-preset-row {
   display: flex;
   align-items: end;
@@ -9366,6 +9365,25 @@ html .toast[data-variant="warn"] {
 }
 
 .ensemble-chart { min-height: 380px; margin-top: 14px; }
+.ensemble-chart-toolbar { display: flex; flex-wrap: wrap; align-items: start; gap: 6px 12px; margin-block: 10px; min-width: 0; }
+.ensemble-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ensemble-chart-toolbar .task-chip { display: inline-flex; align-items: center; justify-content: start; gap: 6px; min-height: 34px; width: auto; max-width: 100%; padding: 6px 9px; margin: 0; border-radius: 8px; font-size: 12px; line-height: 1.35; white-space: normal; text-align: start; color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
+.ensemble-chart-toolbar [hidden] { display: none; }
+.ensemble-chart-toolbar .task-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ensemble-chart-toolbar .task-chip:hover { border-color: var(--accent); }
+.ensemble-chart-toolbar .task-chip:disabled { opacity: .5; cursor: not-allowed; }
+.ensemble-chart-toolbar i { flex: 0 0 auto; font-size: 16px; }
+.ensemble-toolbar-menu { position: relative; max-width: 100%; }
+.ensemble-toolbar-menu > summary { cursor: pointer; list-style: none; }
+.ensemble-toolbar-menu > summary::-webkit-details-marker { display: none; }
+.ensemble-toolbar-menu-items { display: grid; gap: 4px; margin-top: 5px; padding: 6px; width: max-content; max-width: min(300px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.ensemble-toolbar-menu-items .task-chip { width: 100%; border-color: transparent; }
+.ensemble-crossing-signals { padding-block: 6px; font-size: 12px; color: var(--ink-2); }
+.ensemble-crossing-signals:empty { display: none; }
+.ensemble-crossing-signals p { margin: 5px 0; }
+.ensemble-signal { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 5px 8px; border-radius: 6px; margin: 2px 6px 2px 0; border: 1px solid currentColor; }
+.ensemble-signal-buy { color: var(--success); background: var(--success-surface); }
+.ensemble-signal-sell { color: var(--destructive); background: var(--destructive-surface); }
 .ensemble-results table td:not(:first-child),
 .ensemble-results table th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
 .ensemble-results #ensemble-result-table th:first-child { min-width: 150px; }
@@ -9393,7 +9411,9 @@ html .toast[data-variant="warn"] {
   .forecast-date-line { display: grid; gap: 5px; }
   .ensemble-forecast-body { padding: 12px; }
   .ensemble-model-grid { grid-template-columns: 1fr; }
-  .ensemble-result-actions > * { width: 100%; justify-content: center; text-align: center; }
+  .ensemble-results { padding: 10px; }
+  .ensemble-chart-toolbar .task-chip { min-height: 44px; }
+  .ensemble-toolbar-menu-items { position: static; margin-top: 5px; width: auto; max-width: 100%; box-shadow: none; }
   .ensemble-chart { min-height: 300px; }
 }
 
