@@ -92,6 +92,7 @@ jobs:
         run: |
           echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
           echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/p1-paper-output" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

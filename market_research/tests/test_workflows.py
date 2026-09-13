@@ -102,3 +102,8 @@ def test_p1_paper_and_hourly_screeners_share_models_but_isolate_books_and_provid
     for name in ["p1_worker.py","p1_oco.py","hourly_screener.py"]:
         source=(ROOT / "market_research" / name).read_text()
         assert not re.search(r"\bplace_order\b",source) and "POLYMARKET_SECRET_KEY" not in source
+def test_live_p1_has_explicit_artifact_directory():
+    from pathlib import Path
+    workflow=Path('.github/workflows/polymarket-live-paper.yml').read_text()
+    assert 'QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/p1-paper-output' in workflow
+    assert 'ABSOLUTE_RESEARCH_DIRECTORY_REQUIRED' in Path('market_research/node/run.mjs').read_text()

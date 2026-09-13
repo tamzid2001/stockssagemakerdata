@@ -38,7 +38,7 @@ def process_game(store,provider,pair,as_of,horizon,max_origins,deadline,forecast
         book=store.load(key).get("state") or {}
         if decision<=book.get("completed_decision",0):continue
         if attempted>=max_origins or time.monotonic()>=deadline or store.at_capacity:break
-        if decision<book.get("last_timestamp",0):
+        if decision<book.get("last_timestamp",0) and book.get("pending_pair",{}).get("decision")!=decision:
             book.update(completed_decision=decision,skipped_busy_origins=book.get("skipped_busy_origins",0)+1)
             store.save(key,book,None,[],metadata)
             continue

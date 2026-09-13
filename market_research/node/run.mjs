@@ -12,6 +12,7 @@ const paper = inputs[0] === '--paper-p1';
 if (paper) inputs.shift();
 const p1Replay = !paper && inputs.includes('--strategy') && inputs[inputs.indexOf('--strategy') + 1] === 'p1_oco';
 const root = process.env.QUANTURA_RESEARCH_DIR;
+if (!root || !path.isAbsolute(root)) throw new Error('ABSOLUTE_RESEARCH_DIRECTORY_REQUIRED');
 const retained = [];
 let sequence = 0;
 let publishing;
