@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizeEnsembleConfiguration,
+  normalizeEnsemblePreset,
   normalizeRequestedQuantiles,
   publicEnsembleJob,
   publicModelCapabilities,
@@ -96,6 +97,16 @@ test("last N observations is strict and applied after cutoff, excludes filled ro
   assert.equal(result.observed_rows,81);
   assert.equal(result.gap_count,29);
   assert.equal(forecastObservationWindow(rows.slice(0,5),60000,cutoff,2,60).rows.length,5);
+});
+
+test("saved presets preserve bounded history controls, not resource data or authority", () => {
+  const request = {source:{type:"prediction_market",limit:45,history_phase:"in_game",history_lookback_minutes:120,contract_id:"fixture-private-id"},history_lag_minutes:15,models:{prophet:{enabled:true,weight:1}}};
+  const saved = normalizeEnsemblePreset(request, "research");
+  assert.deepEqual(saved.history_controls,{limit:45,history_phase:"in_game",history_lookback_minutes:120,history_lag_minutes:15});
+  assert.equal(saved.source,undefined);
+  assert.equal(saved.workspace_id,undefined);
+  for(const limit of [0,1,501,NaN,"45"]) assert.throws(()=>normalizeEnsemblePreset({...request,source:{...request.source,limit}},"research"));
+  assert.throws(()=>normalizeEnsemblePreset({...request,history_lag_minutes:-1},"research"));
 });
 
 test("open Kalshi is not a live game without an official start; props are not moneylines", () => {

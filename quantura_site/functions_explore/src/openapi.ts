@@ -524,8 +524,8 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
         },
         post: {
           tags: ["Ensemble Forecasts"], summary: "Save an ensemble preset", operationId: "createEnsembleForecastPreset", "x-quantura-scope": "forecasts:write",
-          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["name", "configuration"], properties: { name: { type: "string", maxLength: 100 }, workspace_id: { type: "string" }, configuration: { $ref: "#/components/schemas/EnsembleConfiguration" } } } } } },
-          responses: { "201": { description: "Preset created." }, ...commonErrors },
+          requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["name", "configuration"], properties: { name: { type: "string", maxLength: 100 }, workspace_id: { type: "string" }, configuration: { $ref: "#/components/schemas/EnsemblePresetConfiguration" } } } } } },
+          responses: { "201": { description: "Preset created. Returned configuration.history_controls retains validated limit, history phase, lookback and cutoff. Dataset rows and resource identifiers are not stored in presets." }, ...commonErrors },
         },
       },
       "/ensemble-forecast-presets/{preset_id}": {
@@ -651,6 +651,13 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
               },
             },
           },
+        },
+        EnsemblePresetConfiguration: {
+          description: "Pass a forecast configuration to save reusable model and history settings. Optional source contributes only history controls; saving a preset never starts inference or stores source data.",
+          allOf: [{$ref:"#/components/schemas/EnsembleConfiguration"}, {type:"object",properties:{
+            source: {$ref:"#/components/schemas/EnsembleForecastRequest/allOf/1/properties/source"},
+            history_lag_minutes: {type:"integer",minimum:0,maximum:129600,default:0}
+          }}]
         },
         EnsembleForecastRequest: {
           unevaluatedProperties: false,
