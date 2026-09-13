@@ -107,3 +107,15 @@ def test_live_p1_has_explicit_artifact_directory():
     workflow=Path('.github/workflows/polymarket-live-paper.yml').read_text()
     assert 'QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/p1-paper-output' in workflow
     assert 'ABSOLUTE_RESEARCH_DIRECTORY_REQUIRED' in Path('market_research/node/run.mjs').read_text()
+
+
+def test_checkpoint_download_resolves_original_run_not_current_run():
+    from pathlib import Path
+    import yaml
+    for filename in ('polymarket-live-paper.yml','historical-p10-replay.yml','kalshi-btc-paper.yml'):
+        workflow=yaml.safe_load((Path('.github/workflows')/filename).read_text())
+        steps=next(iter(workflow['jobs'].values()))['steps']
+        resolver=next(s for s in steps if s.get('id')=='checkpoint_source')
+        assert 'getArtifact' in resolver['with']['script'] and 'data.expired' in resolver['with']['script']
+        download=next(s for s in steps if s.get('uses','').startswith('actions/download-artifact'))
+        assert download['with']['run-id']=='${{ steps.checkpoint_source.outputs.run_id }}'

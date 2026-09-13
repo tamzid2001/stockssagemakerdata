@@ -83,11 +83,25 @@ jobs:
         run: |
           python -m pip install --no-cache-dir --require-hashes --requirement market_research/requirements.lock
           npm ci --prefix market_research/node --ignore-scripts
+      - name: Resolve checkpoint source run
+        id: checkpoint_source
+        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        uses: actions/github-script@v8
+        env:
+          RESTORE_ID: ${{ inputs.resume_artifact_id }}
+        with:
+          script: |
+            const id=Number(process.env.RESTORE_ID);
+            if(!Number.isSafeInteger(id)||id<=0) throw new Error('INVALID_ARTIFACT_ID');
+            const {data}=await github.rest.actions.getArtifact({...context.repo,artifact_id:id});
+            if(data.expired || !data.name.startsWith('btc-paper-checkpoint-') || !data.workflow_run?.id) throw new Error('VERIFIED_BTC_CHECKPOINT_REQUIRED');
+            core.setOutput('run_id',String(data.workflow_run.id));
       - name: Download prior encrypted checkpoint
         if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
         uses: actions/download-artifact@v8
         with:
           artifact-ids: ${{ inputs.resume_artifact_id }}
+          run-id: ${{ steps.checkpoint_source.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/btc-restore
           merge-multiple: true
