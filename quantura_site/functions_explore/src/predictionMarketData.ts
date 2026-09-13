@@ -1322,7 +1322,7 @@ export function forecastObservationLimit(value: unknown, maximum = 500): number 
   return value;
 }
 
-export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; limit?: number; selection?: HistorySelection } = {}) {
+export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; limit?: number; selection?: HistorySelection; includeQuotes?: boolean } = {}) {
   const limit = forecastObservationLimit(options.limit);
   if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
   const contracts = await resolveMarketIdentifier(source, symbol, "market");
@@ -1337,11 +1337,17 @@ export async function predictionForecastHistory(source: PredictionMarketSource, 
   const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", ...selection });
   // Forecast one consistent selected-side quote target. A Kalshi minute may
   // have a real book close but no trade; do not discard it or mix trade/ask.
-  const observations = dataset.rows.map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(Date.parse(String(row.timestamp)) + interval).toISOString() });
+  const observations: Array<Record<string, unknown>> = dataset.rows.map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(Date.parse(String(row.timestamp)) + interval).toISOString() });
   const { rows, observed_rows, gap_count } = forecastObservationWindow(observations, interval, now, options.minimumRows ?? 2, limit);
   const quality = quoteHistoryQuality(rows, Date.parse(contract.eventStart || ""));
   if ((options.minimumRows ?? 2) > 0 && quality.forecast_blocked) throw new PredictionMarketDataError("history_flat_window", "The selected side is unchanged throughout this input window or for at least two recent hours. Forecast skipped: select a different phase/lookback or wait for a new price. Original quotes remain downloadable.", 422);
-  return { rows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows, quality, selection,
+  const quoteByTime = new Map(observations.map(row => [String(row.timestamp), row]));
+  const outputRows = options.includeQuotes ? rows.map(row => {
+    const quote = quoteByTime.get(row.timestamp);
+    const bid = finite(quote?.bid), ask = finite(quote?.ask);
+    return bid !== null && ask !== null && 0 <= bid && bid <= ask && ask <= 1 ? { ...row, bid, ask } : row;
+  }) : rows;
+  return { rows: outputRows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows, quality, selection,
     warnings: [`Using ${rows.length} observed bars of up to ${limit} (${observed_rows} available in the fetched range).`,
       `History: ${quality.pregame_observations ?? "unknown"} pregame and ${quality.in_game_observations ?? "unknown"} in-game bars; ${quality.price_changes} price changes.`,
       ...(quality.longest_unchanged_minutes >= 60 ? [`Provider quotes include an unchanged stretch of ${Math.round(quality.longest_unchanged_minutes)} minutes. Repeated display quotes are not individual trades.`] : []),

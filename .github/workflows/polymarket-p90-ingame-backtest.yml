@@ -1,10 +1,15 @@
-name: Polymarket In-Game P90 Switch Backtest
-run-name: Polymarket P90 in-game · ${{ inputs.horizon }}m · ${{ inputs.campaign_id }}
+name: Sports P90 Buy P10 Sell Historical Backtest
+run-name: ${{ inputs.provider }} P90 minute quotes · ${{ inputs.horizon }}m · ${{ inputs.campaign_id }}
 on:
   workflow_dispatch:
     inputs:
+      provider:
+        description: Independent provider campaign, never mixed with another source
+        type: choice
+        options: [polymarket_us, kalshi]
+        default: polymarket_us
       horizon:
-        description: Forecast/refresh minutes after 32 genuine in-game observations
+        description: Refresh interval; in-game history preferred, pregame fallback disclosed
         type: choice
         options: ['15', '30']
         default: '30'
@@ -34,7 +39,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: polymarket-p90-ingame-${{ inputs.horizon }}
+  group: sports-p90-ingame-${{ inputs.provider }}-${{ inputs.horizon }}
   cancel-in-progress: false
 jobs:
   replay:
@@ -76,6 +81,7 @@ jobs:
         env:
           CAMPAIGN: ${{ inputs.campaign_id }}
           HORIZON: ${{ inputs.horizon }}
+          PROVIDER: ${{ inputs.provider }}
           CONTINUOUS: ${{ inputs.continuous }}
           DURATION: ${{ inputs.duration_minutes }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -85,7 +91,7 @@ jobs:
           TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: |
-          args=(--campaign-id "$CAMPAIGN" --horizon "$HORIZON" --duration-minutes "$DURATION")
+          args=(--campaign-id "$CAMPAIGN" --provider "$PROVIDER" --horizon "$HORIZON" --duration-minutes "$DURATION")
           if [[ "$CONTINUOUS" == true ]]; then args+=(--continuous); fi
           python -m market_research.recovery_campaign "${args[@]}"
       - name: Checkpoint-fenced successor

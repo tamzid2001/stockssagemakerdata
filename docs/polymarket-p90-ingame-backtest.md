@@ -1,24 +1,31 @@
-# In-game P90 entry / P10 reversal research
+# Polymarket and Kalshi P90 buy / P10 sell research
 
 This is an independent paper strategy, not the earlier buy-below-P1 experiment.
 No exchange orders, wallet access or exchange trading credentials are used.
 
 ## Frozen rules
 
-* Download genuine **in-game only** observations. Reject missing/conflicting
-  game-start timestamps. Start after 32 elapsed minutes AND 32 observed bars on
-  every side. Use up to 500 observations; do not synthesize missing minutes.
+* Use completed **one-minute quotes**, not webhooks or intra-minute crossings.
+  Reject missing/conflicting game-start timestamps. Start after 32 elapsed
+  game minutes. At each origin, use in-game history if at least 32 genuine bars
+  are then available on that side. Otherwise supplement with pregame history,
+  recording `history_phase=pregame_fallback`. Still require 32 total observations.
+  Use up to 500 past observations; never fill gaps or use future availability to
+  select a history window. The fallback cohort is distinguishable in each archive.
 * Forecast every 15 or 30 minutes with the five approved adapters and equal
   requested weights. A failed member excludes the entire origin. Tail weights
   still exclude Toto/TimesFM where they cannot supply the requested quantile.
-* First entry: observed bid crosses from at/below P90 to strictly above P90
-  within a published forecast. A below-P1/P10 precondition is **not** required.
-* Start with one share. Only one position per game. Ignore other P90 signals
-  while holding the selected side. Hold across forecast horizons.
+* First entry: a completed minute's observed bid reaches P90 or higher within
+  a published forecast. A below-P1/P10 precondition is **not** required.
+* Start flat until that signal, then hold only one position per game. Switch
+  to the paired opposite side if it reaches P90; otherwise hold across horizons.
 * When the held side's bid reaches or falls below the current published P10,
   sell it and buy the opposite side of the **same binary contract**, immediately
   after the simulated exit. The opposite does not need its own P90 signal.
-* Each P10 exit multiplies quantity by 2.5, capped at 100. The sequence is
+* After each exit, multiply the next quantity by 2.5 while the game's cumulative
+  realized net P&L (including assumed fees) is negative, capped at 100. Reset to
+  one only at cumulative breakeven or better, not on an isolated winning trade.
+  The sequence is
   1, 2.5, 6.25, 15.625, 39.0625, 97.65625, 100. Sizing is per game, not global.
 * Soccer can contain six YES/NO sides. Opposite means paired YES/NO, not an
   arbitrary alternative outcome. Simultaneous first-entry signals are excluded
@@ -50,7 +57,8 @@ new P90-entry strategy. Historical performance does not guarantee future results
 ## Durable campaign execution
 
 Workflow: `.github/workflows/polymarket-p90-ingame-backtest.yml`.
-Run two independent jobs with `horizon=15` and `horizon=30`, `smoke_mode=real`,
+Run independent provider/horizon jobs with `provider=polymarket_us|kalshi`,
+`horizon=15|30`, `smoke_mode=real`,
 `campaign_id=new`, `code_ref=main`, `continuous=true`.
 
 Each GitHub-hosted CPU job runs for at most 330 inference minutes, then dispatches
@@ -94,3 +102,18 @@ when separating production service accounts.
 
 Tests run without model downloads. Real runs must verify archive uploads,
 Firestore fencing, actual model participation, and successful continuation.
+
+## Kalshi BTC first-two-minute experiment
+
+`kalshi-btc-paper.yml` retains exactly two saved forecasts per 15-minute market:
+one YES and one NO, based on the first two completed minute bars, forecasting
+the next 13 minutes. Toto is excluded because it needs 32 observations. Other
+failed models are disclosed, never counted as participants. This is not a
+five-model or validated short-context accuracy claim.
+
+`btc_signal_report.json` independently scores P90 buy / P10 sell-and-reverse
+and opposite-P90 switches using completed closing bid/ask quotes. It records
+W/L, sizes, chronological trades, net returns and unresolved marks. The older
+below-P1/P10-to-P90/P99 path report remains separate, not rewritten. Normal
+forecast UI crossing markers only identify observed consecutive-minute crossings;
+they are not an order engine or a promise to capture every intra-minute touch.

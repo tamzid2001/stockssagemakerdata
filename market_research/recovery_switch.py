@@ -51,7 +51,8 @@ def statistics(trades):
             "open_entry_notional": sum(t["entry_price"] * t["quantity"] for t in opened)}
 
 
-def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_shares=100, fee_rate=.01):
+def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_shares=100, fee_rate=.01,
+             switch_on_other_p90=False, p90_touch=False):
     if not all(math.isfinite(v) for v in (multiplier, max_shares, fee_rate)) or not (
             1 <= multiplier <= 10 and 1 <= max_shares <= 10000 and 0 <= fee_rate <= .1):
         raise ValueError("INVALID_RECOVERY_CONFIGURATION")
@@ -69,7 +70,7 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
         games[game].append(pair)
     tape = defaultdict(dict)
     for q in observations:
-        if q.get("observed") and q["timestamp"] <= as_of and 0 <= q["bid"] <= q["ask"] <= 1:
+        if q.get("observed") and q["timestamp"] % 60 == 0 and q["timestamp"] <= as_of and 0 <= q["bid"] <= q["ask"] <= 1:
             tape[q["contract_id"]][q["timestamp"]] = q
     trades, signals, per_game, pending_orders = [], [], {}, []
     for game, pairs in sorted(games.items()):
@@ -96,11 +97,12 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                 value["gross_pnl"] = (bid - value["entry_price"]) * value["quantity"]
                 value["fees"] = fee_rate * (bid + value["entry_price"]) * value["quantity"]
                 value["net_pnl"] = value["gross_pnl"] - value["fees"]
-                if reason == "p10_exit_and_opposite":
+                value['game_realized_net_pnl'] = sum(t['net_pnl'] for t in ledger if t.get('status') == 'closed')
+                if value['game_realized_net_pnl'] < -1e-12:
                     next_size = min(size * multiplier, max_shares)
                     increases += next_size > size
                     size = next_size
-                elif value["net_pnl"] > 1e-12:
+                else:
                     size = 1.
                 value["next_quantity"] = size
                 position = None
@@ -141,17 +143,18 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                     if not q or not levels:
                         continue
                     before = memory.get(s)
-                    if before and t - before["timestamp"] > 120:
+                    if before and t - before["timestamp"] != 60:
                         before = None
                     previous_quote_at = before["timestamp"] if before else None
-                    crossed = bool(before and before["bid"] <= before["high"] and q["bid"] > levels[high])
+                    crossed = (q["bid"] >= levels[high] if p90_touch else
+                               bool(before and before["bid"] <= before["high"] and q["bid"] > levels[high]))
                     if crossed:
                         recoveries.append({"target_side": s, "signal_at": t, "previous_quote_at": previous_quote_at,
                                            "signal_p90": levels[high], "signal_bid": q["bid"],
                                            "forecast_id": f["forecast_id"], "reason": "p90_entry"})
                         signals.append({"game_id": game, "variant": variant, "timestamp": t,
                                         "contract_id": s, "previous_quote_at": previous_quote_at, "forecast_id": f["forecast_id"],
-                                        "previous_bid": before["bid"], "previous_p90": before["high"],
+                                        "previous_bid": before["bid"] if before else None, "previous_p90": before["high"] if before else None,
                                         "signal_bid": q["bid"], "signal_p90": levels[high]})
                         signals_count += 1
                     memory[s] = {"timestamp": t, "bid": q["bid"], "high": levels[high]}
@@ -175,6 +178,10 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                             raise ValueError("UNIQUE_OPPOSITE_BINARY_SIDE_REQUIRED")
                         pending = {"signal_at": t, "reason": "p10_exit_and_opposite", "target_side": mates[0],
                                    "trigger_contract_id": s, "exit_signal_p10": levels["0.1"], "forecast_id": f["forecast_id"]}
+                    elif other and switch_on_other_p90:
+                        candidate = active_by_side[other['target_side']]
+                        if candidate['market_context']['market_id'] == f['market_context']['market_id']:
+                            pending = {**other, 'reason': 'opposite_p90_switch'}
             if position:
                 r = resolutions.get(position["contract_id"], {})
                 if r.get("resolution_status") == "resolved" and r.get("settled_at", as_of + 1) <= as_of and r["settled_at"] > position["entry_at"] and r.get("selected_side_payout") in (0, 1):
@@ -202,8 +209,10 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
             "per_game": per_game, "trades": sorted(trades, key=lambda t: (t["entry_at"], t["game_id"], t["variant"])),
             "signals": signals, "pending_orders": pending_orders, "model_participation": model_participation(forecasts),
             "configuration": {"base_shares": 1, "loss_multiplier": multiplier, "max_shares": max_shares,
-                "sizing": "multiply_after_each_p10_exit_within_same_game", "fee_rate_assumption": fee_rate,
-                "fixed_price_stop": None, "horizon_exit": False, "execution": "next_genuine_bid_ask_within_120_seconds"}}
+                "sizing": "multiply_next_trade_until_cumulative_game_net_pnl_recovers", "fee_rate_assumption": fee_rate,
+                "fixed_price_stop": None, "horizon_exit": False, "execution": "next_genuine_bid_ask_within_120_seconds",
+                "quote_basis": "completed_one_minute_bid_ask", "switch_on_other_p90": switch_on_other_p90,
+                "p90_trigger": "at_or_above" if p90_touch else "cross_from_at_or_below_to_above"}}
 
 
 def from_store(store):
@@ -212,7 +221,7 @@ def from_store(store):
     outcomes = {r["contract_id"]: r for r in store.values("checkpoints") if isinstance(r, dict) and r.get("resolution_status")}
     result = simulate(store.values("forecasts"), store.values("observations"), outcomes,
                       as_of=coverage.get("as_of", 0), multiplier=configuration["loss_multiplier"],
-                      max_shares=configuration["max_shares"])
+                      max_shares=configuration["max_shares"], switch_on_other_p90=True, p90_touch=True)
     return {**result, "coverage": coverage, "forecast_count": len(store.values("forecasts")),
             "failures": [r for r in store.values("checkpoints") if isinstance(r, dict) and r.get("status") == "failed"]}
 
@@ -229,11 +238,11 @@ def export(store):
     with gzip.open(store.directory / "recovery_forecast_quantiles.csv.gz", "wt", newline="") as out:
         writer = csv.writer(out)
         writer.writerow(["forecast_id", "game_id", "contract_id", "side", "symbol", "game_start",
-                         "input_cutoff", "available_at", "history_count", "timestamp", *[f"p{int(q*100):02d}" for q in QUANTILES]])
+                         "input_cutoff", "available_at", "history_count", "history_phase", "timestamp", *[f"p{int(q*100):02d}" for q in QUANTILES]])
         for f in sorted(store.values("forecasts"), key=lambda r: (r["origin"], r["forecast_id"])):
             c = f["market_context"]
             for row in f["rows"]:
                 writer.writerow([f["forecast_id"], c["event_id"], c["contract_id"], c["side"], c.get("symbol"),
-                                 f["game_start"], f["origin"], f["available_at"], f["history_count"], row["timestamp"],
+                                 f["game_start"], f["origin"], f["available_at"], f["history_count"], f.get("history_phase"), row["timestamp"],
                                  *[row["quantiles"][str(q)] for q in QUANTILES]])
     return result

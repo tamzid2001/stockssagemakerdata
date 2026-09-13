@@ -12,7 +12,7 @@ from .artifact import key_bytes, restore, snapshot_package
 from .engine import digest, stamp
 from .local_store import LocalStore
 from .p1_worker import MODELS, game_groups
-from .provider import QuanturaProvider
+from .provider import QuanturaProvider, KalshiProvider
 from .recovery_cloud import Campaign, MAX_GAME_ARCHIVE, decode_catalog, encode_catalog, validate_campaign
 from .recovery_replay import process_game
 from .recovery_switch import VERSION, from_store
@@ -71,10 +71,12 @@ def run(args):
     sha = os.environ["QUANTURA_CODE_SHA"]
     if not re.fullmatch(r"[a-f0-9]{40}", sha):
         raise ValueError("PINNED_CODE_REQUIRED")
-    config = {"version": VERSION, "horizon": args.horizon, "roll_minutes": args.horizon,
-              "history_phase": "in_game", "minimum_elapsed_minutes": 32, "minimum_history": 32,
+    config = {"version": VERSION, "provider": args.provider, "horizon": args.horizon, "roll_minutes": args.horizon,
+              "history_phase": "in_game_with_point_in_time_pregame_fallback", "minimum_elapsed_minutes": 32, "minimum_history": 32,
+              "quote_basis": "completed_one_minute_bid_ask",
               "maximum_history": 500, "models": list(MODELS), "base_shares": 1,
               "loss_multiplier": 2.5, "max_shares": 100, "fee_rate_assumption": .01,
+              "reset_policy": "cumulative_game_net_recovery",
               "code_sha": sha, "paper_only": True, "continuous": args.continuous}
     identifier = ("p90-" + digest([config, os.environ.get("GITHUB_RUN_ID", time.time_ns())])[:24]
                   if args.campaign_id == "new" else validate_campaign(args.campaign_id))
@@ -85,7 +87,7 @@ def run(args):
     state.setdefault("as_of", int(time.time())); state.setdefault("page_cursor", "0"); state.setdefault("page_index", 0)
     cloud.update({"campaign_kind": VERSION, "status": "running", "as_of": state["as_of"],
                   "page_cursor": state["page_cursor"], "page_index": state["page_index"], "current_run_id": os.environ.get("GITHUB_RUN_ID")})
-    provider = QuanturaProvider()
+    provider = KalshiProvider() if args.provider == 'kalshi' else QuanturaProvider()
     deadline = time.monotonic() + args.duration_minutes * 60
     complete = False
     try:
@@ -98,7 +100,7 @@ def run(args):
                     cloud.download(state["catalog"], file)
                     catalog = decode_catalog(file)
             else:
-                contracts, coverage = provider.discover("historical", 10, str(state["page_cursor"]))
+                contracts, coverage = provider.discover("historical", 1 if args.provider == 'kalshi' else 10, str(state["page_cursor"]))
                 # Campaign time is frozen. Newly finished games are not added retrospectively.
                 contracts = [c for c in contracts if c.get("eventStart") and stamp(c["eventStart"]) < state["as_of"]]
                 catalog = {"contracts": contracts, "coverage": coverage}
@@ -176,6 +178,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--horizon", type=int, choices=[15, 30], required=True)
+    parser.add_argument("--provider", choices=['polymarket_us', 'kalshi'], default='polymarket_us')
     parser.add_argument("--campaign-id", default="new")
     parser.add_argument("--duration-minutes", type=int, default=330)
     parser.add_argument("--continuous", action="store_true")

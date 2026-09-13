@@ -1,4 +1,4 @@
-"""In-game-only replay on the existing provider, ensemble and artifact worker."""
+"""Completed-minute replay, preferring in-game history with disclosed fallback."""
 from dataclasses import asdict
 import math
 import time
@@ -18,25 +18,29 @@ def process_game(store, provider, pair, as_of, horizon, max_origins, deadline, f
     if len(starts) != 1 or any(not s.get("eventStart") for s in pair):
         raise ValueError("AUTHORITATIVE_GAME_START_REQUIRED")
     start = starts.pop()
-    data = {}
+    data, history = {}, {}
     for side in pair:
-        _, end = historical_range(side, as_of)
+        history_start, end = historical_range(side, as_of)
+        history_start = min(history_start, start - 500 * 60)
         if side.get("resolutionTime"):
             end = min(end, stamp(side["resolutionTime"]))
-        raw = store.archived_history(side, start, end)
+        raw = store.archived_history(side, history_start, end)
         if raw is None:
-            raw = provider.history(side, start, end, history_phase="in_game")
-            # Independently enforce the source boundary, before minute bucketing.
-            raw = [r for r in raw if start <= stamp(r["timestamp"]) < end]
-            store.archive_history(side, start, end, raw)
-        data[side["contractId"]] = [q for q in normalize_quotes(raw, end) if q.observed and start < q.timestamp <= end]
+            raw = provider.history(side, history_start, end, history_phase="both")
+            raw = [r for r in raw if history_start <= stamp(r["timestamp"]) < end]
+            store.archive_history(side, history_start, end, raw)
+        # Boundary filtering precedes minute aggregation: a pregame tick cannot
+        # masquerade as an in-game observation merely by rounding its timestamp.
+        history[side["contractId"]] = normalize_quotes(raw, end)
+        in_game = [r for r in raw if stamp(r["timestamp"]) >= start]
+        data[side["contractId"]] = [q for q in normalize_quotes(in_game, end) if q.observed and start < q.timestamp <= end]
     counts = {s: len(rows) for s, rows in data.items()}
-    if any(n < 32 for n in counts.values()):
+    if any(n == 0 for n in counts.values()):
         return {"status": "insufficient_in_game_history", "complete": True, "observations": counts}
     common = sorted(set.intersection(*({q.timestamp for q in rows} for rows in data.values())))
     if not common:
         return {"status": "unaligned_in_game_history", "complete": True, "observations": counts}
-    first = max(start + 32 * 60, max(rows[31].timestamp for rows in data.values()))
+    first = max(start + 32 * 60, max(rows[0].timestamp for rows in data.values()))
     first = (first + 59) // 60 * 60
     end = min(rows[-1].timestamp for rows in data.values())
     decisions = list(range(first, end, horizon * 60))
@@ -64,7 +68,12 @@ def process_game(store, provider, pair, as_of, horizon, max_origins, deadline, f
             if not prior or decision - prior[-1] > 120:
                 raise ValueError("STALE_ALIGNED_HISTORY")
             origin = prior[-1]
-            windows = {side: history_window(rows, origin, minimum=32) for side, rows in data.items()}
+            windows, phases = {}, {}
+            for side, rows in data.items():
+                past = [q for q in rows if q.timestamp <= origin]
+                phases[side] = "in_game" if len(past) >= 32 else "pregame_fallback"
+                selected = rows if phases[side] == "in_game" else history[side]
+                windows[side] = history_window(selected, origin, minimum=32)
             started = time.monotonic()
             forecasts = []
             for side in pair:
@@ -75,7 +84,9 @@ def process_game(store, provider, pair, as_of, horizon, max_origins, deadline, f
                 validate_forecast(f, origin, horizon)
                 annotate_forecast(f, side, decision, origin, 0)
                 f.update(strategy=VERSION, game_start=start, expected_side_count=len(pair),
-                         history_phase="in_game", history_count=len(window),
+                         history_phase=phases[side["contractId"]], history_count=len(window),
+                         in_game_history_count=sum(q.timestamp > start for q in window),
+                         quote_basis="completed_one_minute_bid_ask",
                          input_snapshot=[asdict(q) for q in window])
                 forecasts.append(f)
             latency = time.monotonic() - started
@@ -106,4 +117,5 @@ def process_game(store, provider, pair, as_of, horizon, max_origins, deadline, f
     return {"status": "processed", "complete": complete, "observations": counts,
             "first_decision": first, "total_origins": len(decisions),
             "published_origins": sum(bool(r and r["status"] == "published") for r in records),
-            "failed_origins": sum(bool(r and r["status"] == "failed") for r in records)}
+            "failed_origins": sum(bool(r and r["status"] == "failed") for r in records),
+            "pregame_fallback_forecasts": sum(f.get("history_phase") == "pregame_fallback" for f in store.values("forecasts"))}

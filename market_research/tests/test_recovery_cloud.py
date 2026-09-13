@@ -65,9 +65,19 @@ def test_durable_workflow_has_no_handoff_count_limit_or_model_cache_artifacts():
 @pytest.mark.skipif(not os.environ.get("FIRESTORE_EMULATOR_HOST"), reason="Firestore emulator required")
 def test_game_manifest_is_fenced_idempotent_and_contains_no_forecasts():
     import uuid
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
     from market_research.store import Store
     cloud = Campaign.__new__(Campaign)
-    cloud.lease = Store("recovery-test-"+uuid.uuid4().hex, "test")
+    # Test-only, isolated emulator client: CI must never require or discover
+    # production ADC credentials for an emulator integration test.
+    cloud.lease = Store.__new__(Store)
+    cloud.lease.db = firestore.Client(project='quantura-forecast-integration', credentials=AnonymousCredentials())
+    cloud.lease.fs = firestore
+    cloud.lease.session = 'recovery-test-'+uuid.uuid4().hex
+    cloud.lease.holder = 'test'
+    cloud.lease.fence = None
+    cloud.lease.ref = cloud.lease.db.collection('market_research_sessions').document(cloud.lease.session)
     cloud.lease.claim({"version": VERSION})
     row = {**statistics([]), "recovery_signals": 0, "multiplier_increases": 0}
     record = {"game_id": "g", "archive": {"object": "encrypted", "sha256": "a"*64},

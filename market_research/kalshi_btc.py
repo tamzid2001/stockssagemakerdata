@@ -216,12 +216,16 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
 
 def report(store, coverage, failures):
     paths = from_store(store, int(time.time()))
+    from .btc_signals import from_store as signal_report
+    signals = signal_report(store, int(time.time()))
     records = [r for r in store.values("checkpoints") if isinstance(r, dict) and r.get("market")]
     result = {"version": VERSION, "paper_only": True, "coverage": coverage,
               "market_status_counts": {s: sum(r["status"] == s for r in records) for s in sorted({r["status"] for r in records})},
               "forecast_count": len(store.values("forecasts")), "failures": failures,
               "model_participation": paths["model_participation"],
               "experiments": paths["summary"], "generated_at": int(time.time()),
+              "p90_buy_p10_sell": {"version": signals['version'], "summary": signals['summary'],
+                                   "per_market": signals['per_game'], "configuration": signals['configuration']},
               "model_policy": "First two genuine observations; Toto excluded by minimum context. Actual participants/effective per-quantile weights persisted. Two-point forecasts are unvalidated research.",
               "execution": "Read-only bid/ask paper simulation; 1% entry/exit notional fee assumption, not a verified exchange fee schedule or executable liquidity."}
     store.report(digest(result), result)

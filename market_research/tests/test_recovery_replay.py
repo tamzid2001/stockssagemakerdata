@@ -20,7 +20,7 @@ def pair():
 
 class Provider:
     def history(self, contract, start, end, history_phase="both"):
-        assert start == 3600 and history_phase == "in_game"
+        assert start < 3600 and history_phase == "both"
         return [{"timestamp": iso(t), "long_price": .4+(t%120)/1000, "short_price": .6-(t%120)/1000,
                  "selected_position": contract["side"]} for t in range(1200, 7200, 60)]
 
@@ -87,7 +87,7 @@ def test_model_failure_never_publishes_single_side(tmp_path):
     store.db.close()
 
 
-def test_missing_start_or_31_in_game_bars_do_not_use_pregame(tmp_path):
+def test_missing_start_rejected_and_pregame_fallback_is_point_in_time(tmp_path):
     import pytest
     store = setup_store(tmp_path)
     sides = pair(); sides[0]["eventStart"] = None
@@ -95,7 +95,25 @@ def test_missing_start_or_31_in_game_bars_do_not_use_pregame(tmp_path):
         process_game(store, Provider(), sides, 10000, 15, 1, time.monotonic()+60, forecast)
     class Short(Provider):
         def history(self, *args, **kwargs):
-            return super().history(*args, **kwargs)[:71]  # 40 pregame + only 31 in-game.
-    result = process_game(store, Short(), pair(), 10000, 15, 1, time.monotonic()+60, forecast)
-    assert result["status"] == "insufficient_in_game_history" and not store.values("forecasts")
+            # Keep pregame; sparse in-game minutes still cannot be filled.
+            return [r for r in super().history(*args, **kwargs) if r['timestamp'] < iso(3600) or int(r['timestamp'][14:16]) % 2 == 0]
+    def fallback(window, *args):
+        assert len(window) >= 32 and any(q.timestamp <= 3600 for q in window)
+        assert all(q.timestamp <= window[-1].timestamp for q in window)
+        origin = window[-1].timestamp
+        return {'forecast_id': str(window[-1].ask), 'origin': origin, 'models': [{'id': m, 'status': 'completed'} for m in MODELS],
+                'rows': [{'timestamp': origin+i*60, 'quantiles': {str(q):q for q in QUANTILES}} for i in range(1, args[0]+1)]}
+    result = process_game(store, Short(), pair(), 10000, 15, 1, time.monotonic()+60, fallback)
+    assert result['pregame_fallback_forecasts'] == 2
+    assert all(f['history_phase'] == 'pregame_fallback' for f in store.values('forecasts'))
+    store.db.close()
+
+
+def test_no_history_fabricated_when_total_available_is_under_32(tmp_path):
+    class Short(Provider):
+        def history(self, *args, **kwargs):
+            return [r for r in super().history(*args, **kwargs) if r['timestamp'] >= iso(3600)][::3]
+    store = setup_store(tmp_path)
+    result = process_game(store, Short(), pair(), 10000, 15, 100, time.monotonic()+60, forecast)
+    assert result['failed_origins'] > 0 and not store.values('forecasts')
     store.db.close()

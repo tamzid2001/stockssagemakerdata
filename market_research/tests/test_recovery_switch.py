@@ -78,6 +78,31 @@ def test_sizing_is_per_game_and_strict_cross_not_touch():
     assert next(t for t in r["trades"] if t["game_id"] == "g")["signal_at"] == 300
 
 
+def test_tick_events_and_missing_minutes_cannot_create_crossings():
+    rows = [quote(180, .5), quote(241, .9), quote(300, .91), quote(360, .92)]
+    assert not simulate(forecasts(), rows, {}, as_of=360)['trades']
+
+
+def test_partial_profit_does_not_reset_until_cumulative_game_pnl_recovers():
+    fs = forecasts()
+    for f in fs:
+        for r in f['rows']:
+            if f['market_context']['contract_id'] == 'g-no' and r['timestamp'] >= 480:
+                r['quantiles']['0.1'] = .5
+            if f['market_context']['contract_id'] == 'g-yes' and r['timestamp'] >= 600:
+                r['quantiles']['0.1'] = .6
+    rows = [quote(180,.5),quote(240,.9),quote(300,.91),quote(360,.21,bid=.2),
+            quote(420,.11,bid=.1),quote(420,.2,side='no'),quote(480,.41,bid=.4,side='no'),
+            quote(540,.41,bid=.4,side='no'),quote(540,.2),quote(600,.51,bid=.5),
+            quote(660,.51,bid=.5),quote(660,.2,side='no')]
+    r = simulate(fs,rows,{},as_of=660)
+    assert [t['quantity'] for t in r['trades']] == [1,2.5,6.25,1]
+    partial = r['trades'][1]
+    assert partial['net_pnl'] > 0 and partial['game_realized_net_pnl'] < 0
+    assert partial['next_quantity'] == 6.25
+    assert r['trades'][2]['game_realized_net_pnl'] > 0
+
+
 def test_partial_pair_and_future_forecast_cannot_trade():
     rows = [quote(180, .5), quote(240, .9), quote(300, .91)]
     assert not simulate(forecasts()[:1], rows, {}, as_of=300)["trades"]
