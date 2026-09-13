@@ -15,7 +15,7 @@ import math
 from typing import Callable
 
 QUANTILES = (0.01, *tuple(i / 10 for i in range(1, 10)), 0.99)
-VERSION = "quantura_quote_research_v5"
+VERSION = "quantura_quote_research_v6"
 EXIT_LEVELS = (*tuple(str(i / 10) for i in range(2, 10)), "0.99")
 
 
@@ -181,6 +181,21 @@ def history_window(
     if len(window) < minimum:
         raise ValueError("insufficient_observed_minute_history")
     return window
+
+
+def history_quality(window: list[Quote]) -> dict:
+    """Retain real repeated quotes; do not infer trades or create variation."""
+    changes, run_start, longest = 0, 0, 0
+    for i in range(1, len(window)):
+        if abs(window[i].ask - window[i - 1].ask) > 1e-9:
+            changes += 1
+            run_start = i
+        longest = max(longest, window[i].timestamp - window[run_start].timestamp)
+    tail = (window[-1].timestamp - window[run_start].timestamp) / 60 if window else 0
+    return {"methodology_version": "event_history_v2", "observations": len(window),
+            "price_changes": changes, "longest_unchanged_minutes": longest / 60,
+            "trailing_unchanged_minutes": tail, "repeated_prices_preserved": True,
+            "forecast_blocked": len(window) >= 2 and (changes == 0 or (len(window) - run_start >= 30 and tail >= 120))}
 
 
 def rolling_origins(quotes: list[Quote], horizon: int):

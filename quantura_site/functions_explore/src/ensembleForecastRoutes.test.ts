@@ -42,7 +42,8 @@ test("minute cutoffs are strict, exclude the latest observations before choosing
   const cutoff = historyCutoffAt(30, now)!;
   assert.equal(new Date(cutoff).toISOString(), "2026-09-12T16:00:00.000Z");
   assert.equal(historyCutoffAt(0, now), undefined);
-  for (const v of [NaN, Infinity, -1, 1.5, 1441, "30", true, null]) assert.throws(() => historyCutoffAt(v, now));
+  assert.equal(historyCutoffAt(2 * 1440, now), Math.floor(now / 60000) * 60000 - 2 * 86400000);
+  for (const v of [NaN, Infinity, -1, 1.5, 129601, "30", true, null]) assert.throws(() => historyCutoffAt(v, now));
   const rows = Array.from({length:600}, (_,i) => ({timestamp:new Date(now-35_000-(599-i)*60_000).toISOString(),price:.4}));
   const selected = forecastObservationWindow(rows, 60_000, cutoff);
   assert.equal(selected.rows.length, 500);

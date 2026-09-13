@@ -29,6 +29,9 @@
   function whenVisible(element, run) {
     if (!element || !element.isConnected) return;
     const execute = () => Promise.resolve().then(run).catch(() => {
+      // Clear Plotly's retained graph state before replacing its DOM. Without
+      // purge, a retry can react against detached SVG nodes and fail again.
+      if (window.Plotly && element.classList.contains("js-plotly-plot")) window.Plotly.purge(element);
       element.removeAttribute("aria-busy");
       element.textContent = "Chart unavailable. Your data and downloads are unchanged. ";
       const retry = document.createElement("button");

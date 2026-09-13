@@ -45,7 +45,31 @@ In **Sports / Prediction Markets**, use **Download from a market link**, choose 
 
 ### Historical cutoff and chart controls
 
-**Data cutoff** defaults to latest data. Choose 15, 30, 60, or a custom number of minutes ago (1–1440) to exclude newer observations **before** selecting up to 500 genuine inputs. The API accepts top-level `history_lag_minutes`; it resolves the cutoff once to a stored UTC minute. For example, use `history_lag_minutes: 30` and `prediction_length: 60` with `1min` data. Forecast timestamps begin after the last actual input, so gaps can shorten the part extending past now.
+**Data cutoff** defaults to latest data. Choose minutes, hours, or days ago (up to 90 days) to exclude newer observations **before** selecting up to 500 inputs. The API accepts top-level `history_lag_minutes` (hours × 60 or days × 1440); it resolves the cutoff once to a stored UTC minute. For example, use `history_lag_minutes: 30` and `prediction_length: 60` with `1min` data. Forecast timestamps begin after the last actual input, so gaps can shorten the part extending past now.
+
+### Pregame, in-game and history lookback
+
+Prediction-market sources accept `history_phase: "both" | "pregame" | "in_game"` (default `both`) and `history_lookback_minutes` (0–129600, default 0). Zero uses up to 500 available observations; 60 restricts the input to the last hour, not 500 fabricated rows. For pregame, lookback ends at the earlier of game start and input cutoff. Game start is resolved from provider metadata, never trusted from client input. Unknown start times reject phase-specific requests.
+
+```json
+{
+  "type": "prediction_market",
+  "provider": "polymarket_us",
+  "symbol": "MARKET_SLUG_FROM_SEARCH",
+  "contract_id": "SIDE_ID_FROM_SEARCH",
+  "frequency": "1min",
+  "history_phase": "in_game",
+  "history_lookback_minutes": 60
+}
+```
+
+Polymarket pregame and in-game custom timestamp ranges are downloaded separately and joined by original timestamps. Repeated provider display quotes remain in downloads; they are not separate trades. Forecast creation returns `422 HISTORY_FLAT_WINDOW` if the entire selected window is unchanged or at least 30 final observations have the same price over two hours. Changing histories with earlier flat stretches remain usable with a warning. This is a data-quality guard, not proof of predictive skill.
+
+`source.history_quality` records input counts, pregame/in-game counts, price-change count, and longest/trailing unchanged duration. Existing immutable forecasts remain unchanged. The shared backtest and paper-worker inference path applies the same flat-window guard. New results must not be mixed silently with earlier corpus versions.
+
+Ticker sources accept `frequency: "1Day" | "1Hour" | "1Min"`, subject to provider availability. Intraday forecasts use frequency periods; daily NYSE forecasts can use trading sessions. Cutoff units and data frequency are independent.
+
+The existing historical export endpoint `/api/sports/prediction-markets/export` also accepts `history_phase` and `history_lookback_minutes`. Its legacy `pregameOnly` parameter remains supported when `history_phase` is absent. Original rows remain downloadable even when their flatness prevents new inference.
 
 These runs are labeled **Historical replay**: generated now, not predictions published before the already-known outcomes. The chart overlays available actual observations after the cutoff, then continues updating. Live metrics exclude observations known before the new forecast completed. Reproducing a saved forecast retains its original input snapshot; **Refresh latest data & forecast** intentionally returns to current data.
 

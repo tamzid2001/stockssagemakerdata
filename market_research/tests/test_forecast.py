@@ -66,7 +66,7 @@ def test_equal_weight_ensemble_and_short_history(monkeypatch):
 
     monkeypatch.setattr(forecast, "execute_job", execute)
     output = forecast.forecast_window(
-        [Quote(i * 60, 0.5, 0.48) for i in range(1, 51)], 30
+        [Quote(i * 60, 0.5 + i / 1000, 0.48) for i in range(1, 51)], 30
     )
     assert output["history_count"] == 50 and len(seen["input"]["rows"]) == 50
     assert output["input_snapshot"][-1]["timestamp"] == iso(3000)

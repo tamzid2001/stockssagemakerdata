@@ -1,5 +1,6 @@
 import { constants, createPrivateKey, sign } from "node:crypto";
 import { Router } from "express";
+import { historySelection, eventHistoryRange, quoteHistoryQuality, type HistorySelection } from "./eventHistory";
 import { parseMarketLink } from "./marketLink";
 import { KALSHI_API_BASE, kalshiPrice, kalshiCandlePrice, kalshiMilestoneStart } from "./kalshiProtocol";
 import {
@@ -118,6 +119,8 @@ export type PredictionMarketDataset = {
   target: PredictionMarketTarget;
   missing: MissingIntervalMode;
   pregameOnly: boolean;
+  history_phase?: "both" | "pregame" | "in_game";
+  history_lookback_minutes?: number;
   headers: string[];
   rows: Array<Record<string, Primitive>>;
   previewRows: Array<Record<string, Primitive>>;
@@ -706,10 +709,17 @@ function observation(
   };
 }
 
-async function polymarketHistory(contract: PredictionMarketContract, startMs: number, endMs: number): Promise<NormalizedPredictionObservation[]> {
-  let points: PolymarketPricePoint[];
+export async function polymarketHistory(contract: PredictionMarketContract, startMs: number, endMs: number): Promise<NormalizedPredictionObservation[]> {
+  const points: PolymarketPricePoint[] = [];
   try {
-    points = await fetchPolymarketPricePoints(cleanIdentifier(contract.providerSymbol, 220), startMs, endMs, 1);
+    // Custom ranges include stored pregame observations, unlike INTERVAL_LIVE.
+    // Fetch both phases explicitly, then deduplicate their boundary downstream.
+    const eventStart = Date.parse(contract.eventStart || "");
+    const boundaries = [startMs, ...(eventStart > startMs && eventStart < endMs ? [eventStart] : []), endMs];
+    for (let i = 1; i < boundaries.length; i++) {
+      try { points.push(...await fetchPolymarketPricePoints(cleanIdentifier(contract.providerSymbol, 220), boundaries[i - 1], boundaries[i], 1)); }
+      catch (error) { if (!(error instanceof PolymarketMlbError && error.status === 404)) throw error; }
+    }
   } catch (error) {
     if (error instanceof PolymarketMlbError) {
       throw new PredictionMarketDataError(
@@ -729,6 +739,7 @@ async function polymarketHistory(contract: PredictionMarketContract, startMs: nu
       lastTrade: null,
       raw: {
         provider_timestamp: point.timestamp,
+        history_phase: contract.eventStart ? (point.timestamp * 1000 < Date.parse(contract.eventStart) ? "pregame" : "in_game") : "unknown",
         long_price: point.longPrice,
         short_price: point.shortPrice,
         selected_position: contract.side,
@@ -902,7 +913,9 @@ export function resamplePredictionObservations(
   clean.forEach((row) => {
     const timestamp = Date.parse(row.timestamp);
     if (!Number.isFinite(timestamp)) return;
-    const bucketMs = Math.floor(timestamp / intervalMs) * intervalMs;
+    // Exchange candles are end-stamped. A 10:15 close belongs at 11:00 when
+    // aggregating hourly, never at 10:00 where its price was not yet known.
+    const bucketMs = row.raw.end_period_ts != null ? Math.ceil(timestamp / intervalMs) * intervalMs : Math.floor(timestamp / intervalMs) * intervalMs;
     const key = `${row.item_id}:${bucketMs}`;
     const previous = buckets.get(key);
     const volumeAccumulator = row.volume === null ? previous?.volumeAccumulator ?? null : (previous?.volumeAccumulator ?? 0) + row.volume;
@@ -1023,6 +1036,7 @@ export function buildPredictionMarketDataset(
     target: PredictionMarketTarget;
     missing: MissingIntervalMode;
     pregameOnly: boolean;
+    historyPhase?: "both" | "pregame" | "in_game";
     features?: string[];
   }
 ): PredictionMarketDataset {
@@ -1036,10 +1050,11 @@ export function buildPredictionMarketDataset(
     if (!Number.isFinite(timestamp)) { invalidTimestampsRemoved += 1; return false; }
     if (timestamp > nowLimit) { futureRowsRemoved += 1; return false; }
     if (row.price !== null && normalizeProbability(row.price) === null) { invalidProbabilityRowsRemoved += 1; return false; }
-    if (options.pregameOnly) {
+    if (options.pregameOnly || options.historyPhase === "in_game") {
       const eventStart = row.event_start ? Date.parse(row.event_start) : NaN;
       if (!Number.isFinite(eventStart)) throw new PredictionMarketDataError("event_start_unavailable", "Pregame-only export requires an event start time for every selected contract.");
-      if (timestamp >= eventStart) { postStartRowsRemoved += 1; return false; }
+      const inGame = row.raw.end_period_ts != null ? timestamp > eventStart : timestamp >= eventStart;
+      if (options.pregameOnly ? inGame : !inGame) { postStartRowsRemoved += 1; return false; }
     }
     return true;
   });
@@ -1083,7 +1098,8 @@ export function buildPredictionMarketDataset(
     targetRange: { min: targets.length ? Math.min(...targets) : null, max: targets.length ? Math.max(...targets) : null },
     messages: [
       "Timestamps are normalized to UTC and ordered chronologically per contract.",
-      options.pregameOnly ? "Observations at or after event start were excluded." : "Full selected history is included.",
+      options.pregameOnly ? "Only observations before event start are included." : options.historyPhase === "in_game" ? "Only observed in-game history is included." : "Available pregame and in-game history are joined chronologically.",
+      "Repeated provider display quotes are preserved, not represented as separate trades. Missing history is not proof of an unchanged market.",
       options.missing === "forward_fill" ? "Missing fixed intervals were explicitly forward-filled after the first real observation." : options.missing === "leave" ? "Missing fixed intervals remain missing; no price was invented." : "Rows missing the selected target were dropped.",
       "Canvas target values use decimal probability units from 0.00 to 1.00.",
     ],
@@ -1095,6 +1111,7 @@ export function buildPredictionMarketDataset(
     target: options.target,
     missing: options.missing,
     pregameOnly: options.pregameOnly,
+    history_phase: options.historyPhase || (options.pregameOnly ? "pregame" : "both"),
     headers,
     rows,
     previewRows: rows.slice(0, 100),
@@ -1122,35 +1139,50 @@ export async function prepareDataset(body: JsonRecord): Promise<PredictionMarket
   const mode = exportMode(body.mode || "normalized");
   const target = targetField(body.target || "price");
   const missing = missingMode(body.missing || "leave");
-  const pregameOnly = body.pregameOnly !== false;
+  let selection: HistorySelection;
+  try { selection = historySelection(body, true); }
+  catch (error) { throw new PredictionMarketDataError((error as Error).message, "Choose pregame, in-game, or both and a lookback of 0–129600 minutes.", 422); }
+  const pregameOnly = selection.history_phase === "pregame";
   const contracts = asArray(body.contracts).map((item) => selectedContract(item, source));
   if (!contracts.length) throw new PredictionMarketDataError("no_contracts_selected", "Select at least one market contract.");
   if (contracts.length > MAX_SELECTED_CONTRACTS) throw new PredictionMarketDataError("too_many_contracts", `Select no more than ${MAX_SELECTED_CONTRACTS} contracts per export.`, 413);
   const { startMs, endMs } = timeRange(body);
   const allRows: NormalizedPredictionObservation[] = [];
   for (const suppliedContract of contracts) {
-    const contract = source === "kalshi" ? await resolveKalshiContract(suppliedContract) : suppliedContract;
+    const contract = source === "kalshi" ? await resolveKalshiContract(suppliedContract)
+      : (await resolveMarketIdentifier(source, suppliedContract.providerSymbol, "market")).find(c => c.contractId === suppliedContract.contractId);
+    if (!contract) throw new PredictionMarketDataError("contract_not_found", "Select a side belonging to this market.", 422);
     if (pregameOnly && !contract.eventStart) throw new PredictionMarketDataError("event_start_unavailable", "Pregame history requires a provider-confirmed event start. Choose full history for this contract.", 422);
-    const contractEnd = pregameOnly && contract.eventStart ? Math.min(endMs, Date.parse(contract.eventStart)) : endMs;
-    if (contractEnd <= startMs) continue;
+    let range;
+    try { range = eventHistoryRange(startMs, endMs, Date.parse(contract.eventStart || ""), selection); }
+    catch (_error) { throw new PredictionMarketDataError("event_start_unavailable", "This phase requires a provider-confirmed game start. Select both phases instead.", 422); }
+    const contractStart = range.start, contractEnd = range.end;
+    if (contractEnd <= contractStart) continue;
     const rows = source === "polymarket_us"
-      ? await polymarketHistory(contract, startMs, contractEnd)
+      ? await polymarketHistory(contract, contractStart, contractEnd)
       : selectedFrequency === "raw"
-      ? await kalshiTrades(contract, startMs, contractEnd)
-      : await kalshiCandles(contract, startMs, contractEnd, selectedFrequency);
-    allRows.push(...rows);
+      ? await kalshiTrades(contract, contractStart, contractEnd)
+      : await kalshiCandles(contract, contractStart, contractEnd, selectedFrequency);
+    // A candle ending exactly at the lookback start describes the preceding
+    // interval. Exclude it; a 60-minute lookback must not become 61 candles.
+    allRows.push(...rows.filter(row => {
+      const t = Date.parse(row.timestamp);
+      return t <= contractEnd && (row.raw.end_period_ts != null ? t > contractStart : t >= contractStart);
+    }));
     if (allRows.length > MAX_OUTPUT_ROWS * 2) throw new PredictionMarketDataError("dataset_too_large", "The provider returned too many observations. Narrow the range or selected contracts.", 413);
   }
   if (!allRows.length) throw new PredictionMarketDataError("no_data", "No historical observations are available for this selection and range.", 404);
-  return buildPredictionMarketDataset(allRows, {
+  const dataset = buildPredictionMarketDataset(allRows, {
     source,
     mode,
     frequency: selectedFrequency,
     target,
     missing,
     pregameOnly,
+    historyPhase: selection.history_phase,
     features: asArray(body.features).map((item) => text(item, 60)),
   });
+  return { ...dataset, ...selection };
 }
 
 export async function resolveKalshiContract(selected: PredictionMarketContract): Promise<PredictionMarketContract> {
@@ -1280,7 +1312,7 @@ export async function discoverForecastMarkets(source: PredictionMarketSource, qu
   try { return await pending; } finally { liveSearchPending.delete(key); }
 }
 
-export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number } = {}) {
+export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; selection?: HistorySelection } = {}) {
   if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
   const contracts = await resolveMarketIdentifier(source, symbol, "market");
   const contract = contracts.find(c => c.contractId === contractId);
@@ -1289,14 +1321,19 @@ export async function predictionForecastHistory(source: PredictionMarketSource, 
   const now = options.until ?? Date.now();
   if (!Number.isFinite(now) || now > Date.now()) throw new PredictionMarketDataError("input_cutoff_invalid", "Input cutoff must not be in the future.", 422);
   const interval = frequencyValue === "1min" ? 60_000 : frequencyValue === "1h" ? 3600_000 : 86400_000;
-  const start = Math.max(Date.parse(contract.availableFrom || "") || 0, options.since || now - Math.min(90 * 86400_000, 1500 * interval));
-  const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", pregameOnly: false });
+  const selection = options.selection || historySelection({});
+  const start = Math.max(Date.parse(contract.availableFrom || "") || 0, options.since || now - Math.min(90 * 86400_000, Math.max(7 * 86400_000, 1500 * interval)));
+  const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", ...selection });
   // Forecast one consistent selected-side quote target. A Kalshi minute may
   // have a real book close but no trade; do not discard it or mix trade/ask.
   const observations = dataset.rows.map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(Date.parse(String(row.timestamp)) + interval).toISOString() });
   const { rows, observed_rows, gap_count } = forecastObservationWindow(observations, interval, now, options.minimumRows ?? 2);
-  return { rows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows,
+  const quality = quoteHistoryQuality(rows, Date.parse(contract.eventStart || ""));
+  if ((options.minimumRows ?? 2) > 0 && quality.forecast_blocked) throw new PredictionMarketDataError("history_flat_window", "The selected side is unchanged throughout this input window or for at least two recent hours. Forecast skipped: select a different phase/lookback or wait for a new price. Original quotes remain downloadable.", 422);
+  return { rows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows, quality, selection,
     warnings: [`Using ${rows.length} observed bars of up to 500 (${observed_rows} available in the fetched range).`,
+      `History: ${quality.pregame_observations ?? "unknown"} pregame and ${quality.in_game_observations ?? "unknown"} in-game bars; ${quality.price_changes} price changes.`,
+      ...(quality.longest_unchanged_minutes >= 60 ? [`Provider quotes include an unchanged stretch of ${Math.round(quality.longest_unchanged_minutes)} minutes. Repeated display quotes are not individual trades.`] : []),
       source === "kalshi" ? "Target: selected-side candle closing ask; no trade is invented for minutes without transactions." : "Target: selected-side display quote, timestamped at the completed interval end; not an executed trade.",
       ...(gap_count ? [`${gap_count} gaps in observed history; no missing prices were invented. Foundation models treat observations as ordered steps; elapsed-time gaps can reduce reliability.`] : [])] };
 }
@@ -1304,6 +1341,7 @@ export async function predictionForecastHistory(source: PredictionMarketSource, 
 export function forecastObservationWindow(input: Array<Record<string, unknown>>, interval: number, now: number, minimumRows = 2) {
   const unique = new Map<number, number>();
   for (const row of input) {
+    if (row.is_forward_filled === true) continue;
     const timestamp = Date.parse(String(row.timestamp));
     const value = finite(row.price);
     if (Number.isFinite(timestamp) && timestamp <= now && value !== null && value >= 0 && value <= 1) unique.set(timestamp, value);
@@ -1580,6 +1618,8 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
         target: dataset.target,
         missing: dataset.missing,
         pregameOnly: dataset.pregameOnly,
+        history_phase: dataset.history_phase,
+        history_lookback_minutes: dataset.history_lookback_minutes,
         headers: dataset.headers,
         rowCount: dataset.rows.length,
         previewRows: dataset.previewRows,
@@ -1602,7 +1642,7 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
       if (format === "json") {
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}.json"`);
-        res.status(200).send(JSON.stringify({ metadata: { source: dataset.source, mode: dataset.mode, frequency: dataset.frequency, target: dataset.target, validation: dataset.validation }, rows: dataset.rows }, null, 2));
+        res.status(200).send(JSON.stringify({ metadata: { source: dataset.source, mode: dataset.mode, frequency: dataset.frequency, target: dataset.target, history_phase: dataset.history_phase, history_lookback_minutes: dataset.history_lookback_minutes, validation: dataset.validation }, rows: dataset.rows }, null, 2));
         return;
       }
       res.setHeader("Content-Type", "text/csv; charset=utf-8");

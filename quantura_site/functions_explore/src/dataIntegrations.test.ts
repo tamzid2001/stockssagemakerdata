@@ -10,10 +10,50 @@ import {
   normalizeProbability,
   predictionDatasetCsv,
   resamplePredictionObservations,
+  polymarketHistory,
   stableItemId,
   type NormalizedPredictionObservation,
   type PredictionMarketSource,
 } from "./predictionMarketData";
+import { historySelection, eventHistoryRange, quoteHistoryQuality } from "./eventHistory";
+
+test("event history phase and bounded lookback intersect before cutoff; unknown start fails closed", () => {
+  const start=Date.parse("2026-09-12T10:00Z"), event=start+4*3600000, end=event+2*3600000;
+  assert.deepEqual(eventHistoryRange(start,end,event,historySelection({history_phase:"both"})),{start,end});
+  assert.deepEqual(eventHistoryRange(start,end,event,historySelection({history_phase:"pregame",history_lookback_minutes:60})),{start:event-3600000,end:event});
+  assert.deepEqual(eventHistoryRange(start,end,event,historySelection({history_phase:"in_game",history_lookback_minutes:60})),{start:end-3600000,end});
+  assert.deepEqual(eventHistoryRange(start,event+30*60000,event,historySelection({history_phase:"in_game",history_lookback_minutes:60})),{start:event,end:event+30*60000});
+  assert.equal(historySelection({pregameOnly:true}).history_phase,"pregame");
+  assert.throws(()=>eventHistoryRange(start,end,NaN,historySelection({history_phase:"in_game"})),/event_start/);
+  for(const input of [{history_phase:"unknown"},{history_lookback_minutes:-1},{history_lookback_minutes:NaN},{history_lookback_minutes:"60"},{history_lookback_minutes:129601}]) assert.throws(()=>historySelection(input));
+});
+
+test("flat history is preserved but blocks inference; changing in-game data remains usable", () => {
+  const start=Date.parse("2026-09-12T10:00Z");
+  const rows=Array.from({length:500},(_,i)=>({timestamp:new Date(start+i*60000).toISOString(),target:.545}));
+  assert.equal(quoteHistoryQuality(rows).forecast_blocked,true);
+  const moving=rows.map((r,i)=>({...r,target:i>=450?.545+(i-450)/1000:r.target}));
+  const q=quoteHistoryQuality(moving,start+400*60000);
+  assert.equal(q.forecast_blocked,false);assert.equal(q.observations,500);assert.equal(q.price_changes,49);assert.equal(q.pregame_observations,401);
+  moving[0].target=.5;
+  const stale=moving.map((r,i)=>({...r,target:i>100?.55:r.target}));assert.equal(quoteHistoryQuality(stale).forecast_blocked,true);
+});
+
+test("Polymarket explicitly downloads pregame and in-game raw quotes without filling gaps", async () => {
+  const original=global.fetch;const start=Date.parse("2026-09-12T10:00Z"), event=start+3600000, end=event+3600000;const ranges:number[][]=[];
+  global.fetch=(async input=>{const u=new URL(String(input));const from=Number(u.searchParams.get("timestamp.startTimestamp")),to=Number(u.searchParams.get("timestamp.endTimestamp"));ranges.push([from,to]);
+    return Response.json({history:[{timestamp:from+15,longPrice:.45,shortPrice:.56},{timestamp:from+180,longPrice:.46,shortPrice:.55}]});}) as typeof fetch;
+  try {
+    const contract={source:"polymarket_us",providerSymbol:"fixture-game-phases",contractId:"short-id",side:"short",eventStart:new Date(event).toISOString()} as Parameters<typeof polymarketHistory>[0];
+    const rows=await polymarketHistory(contract,start,end);assert.deepEqual(ranges,[[start/1000,event/1000],[event/1000,end/1000]]);
+    assert.equal(rows.length,4);assert.deepEqual(rows.map(r=>r.price),[.56,.55,.56,.55]);assert.equal(rows[0].raw.history_phase,"pregame");assert.equal(rows[2].raw.history_phase,"in_game");assert.ok(rows.every(r=>!r.is_forward_filled));
+  } finally {global.fetch=original;}
+});
+
+test("Kalshi hourly aggregation does not move candle observations to an earlier timestamp", () => {
+  const row=predictionObservation("kalshi","fixture:yes","2026-08-20T10:15:00Z",{price:.55});row.raw.end_period_ts=Date.parse(row.timestamp)/1000;
+  const hourly=resamplePredictionObservations([row],"1h","leave");assert.equal(hourly[0].timestamp,"2026-08-20T11:00:00.000Z");
+});
 import { userFromRequest, validateAwsIntegration } from "./awsIntegration";
 
 function withAlpacaEnvironment(): void {

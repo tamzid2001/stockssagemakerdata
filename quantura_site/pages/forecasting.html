@@ -158,11 +158,14 @@
                               <input id="ensemble-ticker" name="ticker" placeholder="AAPL" autocomplete="off" />
                             </div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><span class="label">Selected team / side</span><strong id="ensemble-selected-market">Choose a market above</strong></div>
-                            <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-market-frequency">Observed bars</label><select id="ensemble-market-frequency" name="market_frequency"><option value="1min">Minute</option><option value="1h">Hourly</option><option value="1D">Daily</option></select><span class="small muted">Up to 500 real bars, including pregame history. Missing bars are never invented.</span></div>
+                            <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-market-frequency">Observed bars</label><select id="ensemble-market-frequency" name="market_frequency"><option value="1min">Minute</option><option value="1h">Hourly</option><option value="1D">Daily</option></select></div>
+                            <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-phase">Game history</label><select id="ensemble-history-phase" name="history_phase"><option value="both">Pregame + in-game</option><option value="in_game">In-game only</option><option value="pregame">Pregame only</option></select></div>
+                            <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-lookback">History window</label><div class="ensemble-duration-control"><input id="ensemble-history-lookback" name="history_lookback" type="number" min="0" max="129600" step="1" value="0" aria-label="History lookback amount" /><select id="ensemble-history-lookback-unit" name="history_lookback_unit" aria-label="History lookback unit"><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><small class="muted">0 = up to 500 available bars. Choose in-game + 60 minutes to use only the latest hour of play.</small></div>
                             <div class="field" data-ensemble-source="ticker">
                               <label class="label" for="ensemble-provider">Market-data provider</label>
                               <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
                             </div>
+                            <div class="field" data-ensemble-source="ticker"><label class="label" for="ensemble-ticker-frequency">Observed bars</label><select id="ensemble-ticker-frequency" name="ticker_frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">Minute</option></select></div>
                             <div class="field" data-ensemble-source="workspace_dataset" hidden>
                               <label class="label" for="ensemble-dataset-id">Workspace dataset ID</label>
                               <input id="ensemble-dataset-id" name="dataset_id" placeholder="Saved Forecast Foundry dataset ID" autocomplete="off" />
@@ -185,9 +188,8 @@
                             </div>
                             <div class="field">
                               <label class="label" for="ensemble-history-lag">Data cutoff</label>
-                              <select id="ensemble-history-lag" name="history_lag_minutes"><option value="0">Latest available</option><option value="15">15 minutes ago</option><option value="30">30 minutes ago</option><option value="60">60 minutes ago</option><option value="custom">Custom minutes ago</option></select>
-                              <input id="ensemble-history-lag-custom" type="number" min="1" max="1440" step="1" value="30" aria-label="Custom minutes before now" hidden disabled />
-                              <span class="small muted">Earlier cutoff: forecast from past data, then compare with observed prices.</span>
+                              <div class="ensemble-duration-control"><input id="ensemble-history-lag" name="history_lag_amount" type="number" min="0" max="129600" step="1" value="0" aria-label="Data cutoff amount" /><select id="ensemble-history-lag-unit" name="history_lag_unit" aria-label="Data cutoff unit"><option value="minutes">Minutes ago</option><option value="hours">Hours ago</option><option value="days" selected>Days ago</option></select></div>
+                              <span class="small muted">0 = latest. Earlier cutoff creates a historical replay, with later prices overlaid.</span>
                             </div>
                           </div>
 
@@ -245,7 +247,8 @@
                             <dt>Target transform</dt><dd>Auto uses logarithms for strictly positive values; None uses original values. Log requires positive inputs. Prediction-market probabilities use the service's bounded probability method automatically.</dd>
                             <dt>Model failure policy</dt><dd>Fail reproducibly stops if a selected model fails. Renormalize continues only if a surviving model supports every requested quantile, and reports the actual participating models and weights.</dd>
                             <dt>Dataset interval</dt><dd>Only needed for uploaded datasets. Detect reads timestamp spacing; choose an explicit interval for irregular data. Market data already has an interval selector, so no second setting is needed. Custom intervals use supported pandas frequency notation, such as 2h.</dd>
-                            <dt>Data cutoff</dt><dd>Choose how many minutes before now the input must end. For example: 30 minutes ago plus a 60-minute forecast shows the already-observed 30 minutes separately, then updates later actual prices. This is a replay generated now, not a forecast published 30 minutes ago.</dd>
+                            <dt>Data cutoff</dt><dd>Choose minutes, hours, or days before now. Zero means latest. A 30-minute cutoff plus a 60-minute forecast overlays already-observed outcomes separately. This is a replay generated now, not a forecast published earlier.</dd>
+                            <dt>Game history and lookback</dt><dd>Choose pregame, in-game, or both using the provider's recorded start. Set the history window to 60 minutes for only the last hour; zero uses up to 500 available bars. Missing prices are never filled. Unchanged provider quotes remain downloadable, but an entirely flat window or two-hour unchanged recent stretch blocks new inference.</dd>
                             <dt>Quantiles and weights</dt><dd>P10 and P90 mark lower and upper positions in the model's forecast distribution—not guaranteed price boundaries. Equal entered weights are normalized per quantile; Toto and TimesFM do not supply P1 or P99.</dd>
                           </dl>
                         </dialog>
@@ -474,7 +477,7 @@
                               <div class="field"><label class="label" for="pm-frequency">Frequency</label><select id="pm-frequency"><option value="raw">Raw observations / trades</option><option value="1m" selected>1 minute</option><option value="5m">5 minutes</option><option value="15m">15 minutes</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="1d">Daily</option><option value="final">Final observation</option></select></div>
                               <div class="field"><label class="label" for="pm-missing">Missing intervals</label><select id="pm-missing"><option value="leave" selected>Leave missing</option><option value="forward_fill">Forward fill after first observation</option><option value="drop">Drop rows missing target</option></select></div>
                             </div>
-                            <label class="switch-row"><input id="pm-pregame" type="checkbox" checked /><span><strong>Pregame only</strong><small>Exclude observations at or after the recorded event start to prevent training leakage.</small></span></label>
+                            <div class="field"><label class="label" for="pm-history-phase">Game history</label><select id="pm-history-phase"><option value="both">Pregame + in-game</option><option value="pregame">Pregame only</option><option value="in_game">In-game only</option></select><small class="muted">Actual provider quotes only. Repeated quotes are not individual trades.</small></div>
                           </div>
                         </section>
 
