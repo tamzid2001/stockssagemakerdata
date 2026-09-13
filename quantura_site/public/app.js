@@ -14448,6 +14448,13 @@
     return frequency;
   };
 
+  const ensembleDurationMinutes = (amount, unit) => {
+    const factor = { minutes: 1, hours: 60, days: 1440 }[unit];
+    const value = Number(amount);
+    if (!factor || !Number.isInteger(value) || value < 0 || value * factor > 129600) throw new Error("Choose a whole duration between 0 and 90 days.");
+    return value * factor;
+  };
+
   const ensembleTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const ensembleLocalTime = (timestamp, timeZone = ensembleTimeZone()) => new Intl.DateTimeFormat(undefined, {
     timeZone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZoneName: "short",
@@ -14466,7 +14473,7 @@
   const refreshedEnsembleRequest = (job) => {
     const source = job.source || {};
     let selected;
-    if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency };
+    if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency, history_phase: source.history_phase || "both", history_lookback_minutes: source.history_lookback_minutes || 0 };
     else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: 500 };
     else if (source.type === "workspace_dataset") selected = { type: source.type, dataset_id: source.dataset_id, timestamp_column: source.timestamp_column || "timestamp", target_column: source.target_column || "target", frequency: job.frequency, timezone: source.timezone || "UTC" };
     else throw new Error("This immutable inline series cannot refresh automatically. Submit an updated dataset.");
@@ -14652,7 +14659,19 @@
       field.hidden = field.dataset.ensembleSource !== type;
     });
     const horizon = document.getElementById("ensemble-horizon-mode");
-    if (horizon && type !== "ticker" && horizon.value === "trading_sessions") horizon.value = "frequency_periods";
+    const frequency = type === "ticker" ? document.getElementById("ensemble-ticker-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
+    const intraday = type !== "ticker" || frequency !== "1Day";
+    if (horizon) {
+      horizon.closest(".field").hidden = intraday;
+      if (intraday) horizon.value = "frequency_periods";
+      else if (horizon.value === "frequency_periods") horizon.value = "trading_sessions";
+    }
+    const unit = frequency === "1Day" || frequency === "1D" ? "days" : frequency === "1Hour" || frequency === "1h" ? "hours" : "minutes";
+    const lagUnit = document.getElementById("ensemble-history-lag-unit");
+    if (lagUnit && lagUnit.dataset.sourceContext !== `${type}:${frequency}`) {
+      lagUnit.value = unit;
+      lagUnit.dataset.sourceContext = `${type}:${frequency}`;
+    }
   };
 
   const buildEnsembleRequest = () => {
@@ -14663,7 +14682,7 @@
     const selection = window.QuanturaMarketSelection;
     if (sourceType === "prediction_market" && !selection?.contract_id) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
     const source = sourceType === "prediction_market"
-      ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min") }
+      ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")) }
       : sourceType === "workspace_dataset"
       ? {
           type: "workspace_dataset",
@@ -14679,7 +14698,7 @@
           provider: String(data.get("provider") || "auto"),
           field: "close",
           limit: 500,
-          frequency: "1Day",
+          frequency: String(data.get("ticker_frequency") || "1Day"),
         };
     if (sourceType === "workspace_dataset" && !source.dataset_id) throw new Error("Enter a workspace dataset ID.");
     if (sourceType === "ticker" && !source.symbol) throw new Error("Enter a ticker.");
@@ -14688,19 +14707,18 @@
     if (!enabled.length || !enabled.some((model) => Number.isFinite(model.weight) && model.weight > 0)) throw new Error("Enable at least one model with a positive weight.");
     if (enabled.some((model) => !Number.isFinite(model.weight) || model.weight < 0)) throw new Error("Model weights must be finite and nonnegative.");
     const contextRaw = String(data.get("context_length") || "").trim();
-    const lag = Number(data.get("history_lag_minutes") === "custom" ? document.getElementById("ensemble-history-lag-custom")?.value : data.get("history_lag_minutes") || 0);
-    if (!Number.isInteger(lag) || lag < 0 || lag > 1440) throw new Error("Data cutoff must be a whole number from 0 to 1440 minutes ago.");
+    const lag = ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes"));
     return {
       workspace_id: state.activeWorkspaceId || state.user?.uid || "",
       source,
       history_lag_minutes: lag,
       prediction_length: Number(data.get("prediction_length") || 30),
-      horizon_mode: sourceType === "prediction_market" ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
+      horizon_mode: sourceType === "prediction_market" || (sourceType === "ticker" && source.frequency !== "1Day") ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
       quantiles: getEnsembleQuantiles(),
       transform: sourceType === "prediction_market" ? "logit" : String(data.get("transform") || "auto"),
       context_length: contextRaw ? Number(contextRaw) : null,
-      frequency: sourceType === "prediction_market" ? source.frequency : sourceType === "workspace_dataset" ? source.frequency : "1D",
-      calendar: sourceType === "ticker" ? "NYSE" : "NONE",
+      frequency: sourceType === "ticker" ? ({"1Day":"1D","1Hour":"1h","1Min":"1min"})[source.frequency] : source.frequency,
+      calendar: sourceType === "ticker" && source.frequency === "1Day" ? "NYSE" : "NONE",
       model_failure_policy: String(data.get("model_failure_policy") || "fail"),
       models,
     };
@@ -14773,12 +14791,13 @@
     }
     const chartRange = ensembleUiState.chartWindow;
     const tickTimes = chartRange ? Array.from({length:6}, (_,i) => chartRange[0] + i*(chartRange[1]-chartRange[0])/5) : tickIndices.map(i => chartTimes[i]);
+    const intraday = /min|hour|^\d+h$/i.test(job.frequency || "");
     await Plotly.react(ui.ensembleForecastChart, traces, {
       font: { family: "Manrope, sans-serif", color: dark ? "rgba(246,244,238,.92)" : "#12182a" },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
       title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
       margin: { l: 62, r: 24, t: 58, b: 58 }, height: 440, hovermode: "closest", uirevision: job.forecast_id,
-      xaxis: { type: "date", ...(chartRange ? { range: chartRange, autorange: false } : {}), title: { text: `Time (${timeZone})` }, tickmode: "array", tickvals: tickTimes, ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,{timeZone,hour:'numeric',minute:'2-digit',hour12:true}).format(t)), tickformat: "%I:%M %p", hoverformat: "%I:%M %p", rangeslider: { visible: true, thickness: 0.12 } },
+      xaxis: { type: "date", ...(chartRange ? { range: chartRange, autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date" }, tickmode: "array", tickvals: tickTimes, ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: true, thickness: 0.12 } },
       yaxis: { title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target" } },
       legend: { orientation: "h", y: -0.25 },
       shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:Date.parse(inputHistory.at(-1).timestamp),x1:Date.parse(inputHistory.at(-1).timestamp),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
@@ -14834,6 +14853,8 @@
       model_failure_policy: job.model_failure_policy,
       models: job.models,
     };
+    // Public requests must not contain server-only provenance fields.
+    if (["ticker", "prediction_market", "workspace_dataset"].includes(job.source?.type)) ensembleUiState.lastRequest = { ...refreshedEnsembleRequest(job), history_lag_minutes: job.source?.history_lag_minutes || 0 };
     ui.ensembleForecastResults.hidden = false;
     const quantiles = Array.isArray(job?.quantiles) ? job.quantiles.map(Number) : [];
     const predictions = Array.isArray(job?.predictions) ? job.predictions : [];
@@ -14856,7 +14877,7 @@
     if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = `${base}?format=csv`;
     if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = `${base}?format=json`;
     const visibleWarnings = [...new Set([...(job.source?.warnings || []), ...(job.warnings || [])])].filter(warning => !/logit|epsilon|inverse-logit|transformed space/i.test(warning));
-    if (job.source?.analysis_mode === "historical_replay") visibleWarnings.unshift(`Historical replay: inputs cut off ${job.source.history_lag_minutes} minutes before request time (${ensembleLocalTime(job.source.requested_input_cutoff_at)}). Generated now, not published before the overlaid outcomes.`);
+    if (job.source?.analysis_mode === "historical_replay") visibleWarnings.unshift(`Historical replay: input cutoff ${ensembleLocalTime(job.source.requested_input_cutoff_at)}. Generated now, not published before the overlaid outcomes.`);
     setEnsembleStatus(`Forecast complete. ${visibleWarnings.join(" ")}`, "success");
     if (ui.ensembleSummary) {
       ui.ensembleSummary.hidden = false;
@@ -14960,6 +14981,19 @@
   const applyEnsemblePreset = (configuration) => {
     if (!configuration || !ui.ensembleForecastForm) return;
     const set = (id, value) => { const element = document.getElementById(id); if (element && value !== undefined && value !== null) element.value = String(value); };
+    if (configuration.source) {
+      set("ensemble-source-type", configuration.source.type);
+      set("ensemble-ticker", configuration.source.symbol);
+      set("ensemble-provider", configuration.source.provider);
+      if (configuration.source.type === "ticker") set("ensemble-ticker-frequency", configuration.source.frequency);
+      if (configuration.source.type === "prediction_market") set("ensemble-market-frequency", configuration.source.frequency);
+      set("ensemble-history-phase", configuration.source.history_phase || "both");
+      set("ensemble-history-lookback", configuration.source.history_lookback_minutes || 0);
+      set("ensemble-history-lookback-unit", "minutes");
+      syncEnsembleSourceFields();
+      set("ensemble-history-lag", configuration.history_lag_minutes || 0);
+      set("ensemble-history-lag-unit", "minutes");
+    }
     set("ensemble-prediction-length", configuration.prediction_length);
     set("ensemble-horizon-mode", configuration.horizon_mode);
     set("ensemble-context-length", configuration.context_length);
@@ -15040,24 +15074,34 @@
     document.getElementById("ensemble-settings-help-open")?.addEventListener("click", () => help?.showModal());
     document.getElementById("ensemble-settings-help-close")?.addEventListener("click", () => help?.close());
     help?.addEventListener("click", event => { if (event.target === help) { const rect = help.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) help.close(); } });
-    for (const [selectId, customId] of [["ensemble-history-lag", "ensemble-history-lag-custom"], ["ensemble-frequency", "ensemble-frequency-custom"]]) {
+    for (const [selectId, customId] of [["ensemble-frequency", "ensemble-frequency-custom"]]) {
       document.getElementById(selectId)?.addEventListener("change", event => {
         const custom = document.getElementById(customId);
         if (custom) { custom.hidden = event.target.value !== "custom"; custom.disabled = custom.hidden; custom.required = !custom.hidden; }
       });
     }
+    for (const id of ["ensemble-ticker-frequency", "ensemble-market-frequency"]) document.getElementById(id)?.addEventListener("change", () => syncEnsembleSourceFields());
     document.getElementById("ensemble-chart-focus")?.addEventListener("click", async () => {
       const job = ensembleUiState.lastJob;
       if (!job) return;
       const range = ensembleChartDefaultRange(job);
       const Plotly = await getPlotly();
       ensembleUiState.chartWindow = range;
-      if (Plotly && ui.ensembleForecastChart) await Plotly.relayout(ui.ensembleForecastChart, range ? {"xaxis.range":range,"xaxis.autorange":false} : {"xaxis.autorange":true});
+      if (Plotly && ui.ensembleForecastChart) { await renderEnsembleChart(job); await Plotly.relayout(ui.ensembleForecastChart, range ? {"xaxis.range":range,"xaxis.autorange":false} : {"xaxis.autorange":true}); }
     });
     window.addEventListener("quantura:market-selected", (event) => {
       if (event.detail?.intent !== "forecast") return;
       const row = event.detail.resource;
-      if (!row?.contract_id) return;
+      if (!row?.contract_id) {
+        if (row?.symbol) {
+          ui.ensembleSourceType.value = "ticker";
+          ui.ensembleTicker.value = row.symbol;
+          const provider = document.getElementById("ensemble-provider");
+          if (provider) provider.value = ["alpaca", "yahoo"].includes(row.source) ? row.source : "auto";
+          syncEnsembleSourceFields();
+        }
+        return;
+      }
       ui.ensembleSourceType.value = "prediction_market";
       const selected = document.getElementById("ensemble-selected-market");
       if (selected) selected.textContent = `${row.outcome} · ${row.contract.eventTitle || row.name} · ${row.source}`;

@@ -104,6 +104,7 @@ def main():
                     retained=store.load("p1-game:"+game).get("state")
                     if retained: books[game]=retained
                     failures.append({"market_id":game,"code":str(error) if str(error).isupper() else "PROVIDER_OR_MODEL_UNAVAILABLE"})
+                    print(json.dumps({"event":"p1_game_skipped",**failures[-1]}),flush=True)
             report={"configuration":configuration,"coverage":coverage,"levels":summary(books.values()),"failures":failures[-500:],"statistics_scope":"persisted_per_game_paper_books","limitations":["Quote-triggered simulated fills, not exchange executions or queue priority.","Six separate exit experiments; one side per game per experiment.","Missing quotes and inference latency can skip fills.","Unknown settlement and remaining positions are not counted as closed wins.","Sell limits above cost do not guarantee profit after fees."]}
             store.report(run_id+"-"+str(time.time_ns()),report)
             print(json.dumps({"event":"p1_paper_cycle","paper_only":True,**coverage,"levels":report["levels"]}),flush=True)

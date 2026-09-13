@@ -712,6 +712,16 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .ensemble-model-weight input { max-width: 80px; }
 .ensemble-model-fieldset, .ensemble-quantile-fieldset { padding: 8px 0; margin: 8px 0; }
 .ensemble-forecast-body { padding: 10px; }
+#ensemble-forecast-form > .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr)); align-items: start; gap: 8px !important; }
+#ensemble-forecast-form > .form-grid .field { gap: 4px; margin: 0; padding: 0; min-width: 0; }
+.ensemble-duration-control { display: grid; grid-template-columns: minmax(60px, .7fr) minmax(90px, 1fr); gap: 6px; }
+.ensemble-duration-control > * { min-width: 0; }
+@media (min-width: 769px) {
+  #ensemble-forecast-form > .form-grid input, #ensemble-forecast-form > .form-grid select { height: 36px; min-height: 36px; padding-block: 4px; }
+}
+@media (max-width: 768px) {
+  #ensemble-forecast-form > .form-grid input, #ensemble-forecast-form > .form-grid select { min-height: 44px; }
+}
 .panel[data-panel="forecast"] > .ensemble-forecast-shell { margin-top: 8px; }
 .market-timing { color: var(--success); }
 @media (max-width: 760px) {

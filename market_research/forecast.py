@@ -8,7 +8,7 @@ import numpy as np
 
 from ensemble_forecasting.worker import execute_job
 from ensemble_forecasting.capabilities import MODEL_REGISTRY, timesfm_availability
-from .engine import QUANTILES, Quote, digest, iso
+from .engine import QUANTILES, Quote, digest, iso, history_quality
 
 
 def default_research_models() -> tuple[str, ...]:
@@ -33,6 +33,9 @@ def forecast_window(
         raise ValueError("TWO_GENUINE_OBSERVATIONS_REQUIRED")
     if any(b.timestamp <= a.timestamp for a, b in zip(window, window[1:])):
         raise ValueError("NON_CHRONOLOGICAL_CONTEXT")
+    quality = history_quality(window)
+    if quality["forecast_blocked"]:
+        raise ValueError("HISTORY_FLAT_WINDOW")
     gaps = sum(b.timestamp - a.timestamp > 60 for a, b in zip(window, window[1:]))
     source = [
         {"timestamp": iso(q.timestamp), "target": q.ask, "observed": q.observed}
@@ -132,6 +135,7 @@ def forecast_window(
         "seed": seed,
         "input_snapshot": source,
         "model_versions": versions,
+        "history_quality": quality,
         "configuration": configuration,
         "transform": "logit_inverse_logit",
         "epsilon": 1e-6,

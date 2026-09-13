@@ -367,7 +367,7 @@
       radio.checked = true;
       selected.clear(); markets = contracts; total = contracts.length; page = 1;
       if (selectOne) selected.set(marketKey(contracts[0]), contracts[0]);
-      byId("pm-pregame").checked = false;
+      byId("pm-history-phase").value = "both";
       const end = new Date();
       byId("pm-history-end").value = localDateTime(end);
       byId("pm-history-start").value = localDateTime(new Date(end.getTime() - 7 * 86400000));
@@ -473,7 +473,7 @@
         }
         if (input.checked) {
           selected.set(key, contract);
-          const eventEnd = byId("pm-pregame").checked && contract.eventStart
+          const eventEnd = byId("pm-history-phase").value === "pregame" && contract.eventStart
             ? new Date(Math.min(Date.now(), Date.parse(contract.eventStart))) : new Date();
           if (Number.isFinite(eventEnd.getTime())) {
             byId("pm-history-end").value = localDateTime(eventEnd);
@@ -512,7 +512,7 @@
       if (!startValue || !endValue) throw new Error("Choose a valid historical start and end time.");
       return {
         source: source(), contracts: [...selected.values()], start: new Date(startValue).toISOString(), end: new Date(endValue).toISOString(),
-        frequency: byId("pm-frequency").value, pregameOnly: byId("pm-pregame").checked, missing: byId("pm-missing").value,
+        frequency: byId("pm-frequency").value, history_phase: byId("pm-history-phase").value, missing: byId("pm-missing").value,
         mode: mode(), target: byId("pm-target").value, features: [...form.querySelectorAll('input[name="pm-feature"]:checked')].map((input) => input.value),
       };
     }
@@ -576,7 +576,7 @@
       byId("pm-canvas-options").classList.toggle("hidden", mode() !== "canvas");
       invalidatePreview();
     }));
-    [byId("pm-history-start"), byId("pm-history-end"), byId("pm-frequency"), byId("pm-missing"), byId("pm-pregame"), byId("pm-target"), ...form.querySelectorAll('input[name="pm-feature"]')]
+    [byId("pm-history-start"), byId("pm-history-end"), byId("pm-frequency"), byId("pm-missing"), byId("pm-history-phase"), byId("pm-target"), ...form.querySelectorAll('input[name="pm-feature"]')]
       .forEach((control) => control.addEventListener("change", invalidatePreview));
     byId("pm-find-markets").addEventListener("click", () => { page = 1; loadMarkets(); });
     byId("pm-search").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); page = 1; loadMarkets(); } });
