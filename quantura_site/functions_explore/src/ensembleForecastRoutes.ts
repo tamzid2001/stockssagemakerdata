@@ -368,6 +368,19 @@ export function historyCutoffAt(value: unknown, now = Date.now()): number | unde
   return Math.floor(now / 60_000) * 60_000 - value * 60_000;
 }
 
+export function normalizeEnsemblePreset(body: JsonRecord, plan: PlanKey): JsonRecord {
+  const configuration = normalizeEnsembleConfiguration(body, plan);
+  const source = plain(body.source);
+  // Presets remain resource-agnostic: retain history controls, never an
+  // uploaded dataset, an input array, credentials, or another workspace ID.
+  const historyControls: JsonRecord = { history_lag_minutes: body.history_lag_minutes ?? 0 };
+  if (source.type === "prediction_market" || source.type === "ticker") {
+    historyControls.limit = forecastObservationLimit(source.limit, source.type === "ticker" ? MAX_HISTORY_ROWS : 500);
+  }
+  if (source.type === "prediction_market") Object.assign(historyControls, historySelection(source));
+  return { ...configuration, history_controls: historyControls };
+}
+
 async function materializeSource(
   options: Options,
   principal: ApiPrincipal,
@@ -954,7 +967,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     requireWorkspacePermission(access, "forecast.create");
     const name = text(body.name, 100);
     if (!name) throw new Error("preset_name_required");
-    const configuration = normalizeEnsembleConfiguration(plain(body.configuration), access.plan);
+    const configuration = normalizeEnsemblePreset(plain(body.configuration), access.plan);
     const ref = options.db.collection(PRESETS).doc();
     const now = new Date().toISOString();
     await ref.create({ workspace_id: workspaceId, user_id: principal.userId, name, configuration, created_at: now, updated_at: now });

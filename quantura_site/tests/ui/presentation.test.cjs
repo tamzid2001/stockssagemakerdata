@@ -191,6 +191,18 @@ test('refresh retains last N observations and phase filters; old forecasts defau
   d.window.close();
 });
 
+test('loading a saved preset restores history controls without switching the selected resource', () => {
+  const d=dom(page('forecasting.html')),w=d.window;
+  w.eval(`const ui={ensembleForecastForm:document.getElementById('ensemble-forecast-form')};
+    const ensembleQuantileKey=String,updateEnsembleWeightsAndSupport=()=>{};
+    const applyEnsemblePreset=${source('app.js').split('  const applyEnsemblePreset =')[1].split('  const downloadEnsembleResult =')[0]}
+    window.applyPreset=applyEnsemblePreset;`);
+  w.document.getElementById('ensemble-ticker').value='PLTR';
+  w.applyPreset({history_controls:{limit:45,history_phase:'in_game',history_lookback_minutes:120,history_lag_minutes:15}});
+  for(const [id,value] of [['ensemble-history-limit','45'],['ensemble-history-phase','in_game'],['ensemble-history-lookback','120'],['ensemble-history-lag','15'],['ensemble-history-lag-unit','minutes'],['ensemble-ticker','PLTR']]) assert.equal(w.document.getElementById(id).value,value);
+  d.window.close();
+});
+
 test('forecast chart focuses recent hour plus future and includes explicitly requested P10/P90 lines', async () => {
   const d=dom(page('forecasting.html')); const w=d.window;
   w.eval('const ensembleChartDefaultRange =' + source('app.js').split('  const ensembleChartDefaultRange =')[1].split('  const ensembleDatasetFrequency =')[0] + '\nwindow.range=ensembleChartDefaultRange;');

@@ -15001,6 +15001,15 @@
       set("ensemble-history-lag", configuration.history_lag_minutes || 0);
       set("ensemble-history-lag-unit", "minutes");
     }
+    if (configuration.history_controls) {
+      const controls = configuration.history_controls;
+      set("ensemble-history-limit", controls.limit);
+      set("ensemble-history-phase", controls.history_phase);
+      set("ensemble-history-lookback", controls.history_lookback_minutes);
+      set("ensemble-history-lookback-unit", "minutes");
+      set("ensemble-history-lag", controls.history_lag_minutes);
+      set("ensemble-history-lag-unit", "minutes");
+    }
     set("ensemble-prediction-length", configuration.prediction_length);
     set("ensemble-horizon-mode", configuration.horizon_mode);
     set("ensemble-context-length", configuration.context_length);
@@ -15114,7 +15123,7 @@
       if (selected) selected.textContent = `${row.outcome} · ${row.contract.eventTitle || row.name} · ${row.source}`;
       document.getElementById("ensemble-horizon-mode").value = "frequency_periods";
       syncEnsembleSourceFields();
-      setEnsembleStatus("Market selected. Run forecast to download up to 500 available historical observations from the provider; keeping this page open is not required.");
+      setEnsembleStatus("Market selected. Run forecast to download the selected history directly from the provider; keeping this page open is not required.");
     });
     refreshPrimaryForecast();
     ui.ensembleModelList?.addEventListener("input", updateEnsembleWeightsAndSupport);
