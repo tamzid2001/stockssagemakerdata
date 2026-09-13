@@ -15,7 +15,7 @@ import {
 import { AlpacaError } from "./alpacaClient";
 import { parseMarketLink } from "./marketLink";
 import { watchdogAuthorized, shouldRecoverScreener } from "./marketResearchWatchdog";
-import { forecastObservationWindow, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink, normalizePolymarketEvents } from "./predictionMarketData";
+import { forecastObservationWindow, forecastObservationLimit, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink, normalizePolymarketEvents } from "./predictionMarketData";
 
 test("research watchdog requires a dedicated bearer secret and never duplicates active screeners", () => {
   const secret="fixture-watchdog-secret-at-least-32-characters";
@@ -81,6 +81,21 @@ test("observed forecast window caps 500 bars, retains both endpoints, never fill
   assert.equal(forecastObservationWindow(gaps, 60_000, now).rows.length, 500);
   assert.equal(forecastObservationWindow(gaps, 60_000, now).gap_count, 1);
   assert.throws(() => forecastObservationWindow([{ timestamp: new Date(now).toISOString(), price: null }], 60_000, now), /two observed/);
+});
+
+test("last N observations is strict and applied after cutoff, excludes filled rows, keeps gaps", () => {
+  assert.equal(forecastObservationLimit(undefined), 500);
+  for (const value of [0, 1, -1, 501, 2.5, NaN, Infinity, "60", null, true]) assert.throws(() => forecastObservationLimit(value));
+  const cutoff = Date.parse("2026-09-13T12:00:00Z");
+  const rows = Array.from({length:100}, (_,i) => ({timestamp:new Date(cutoff+(i-80)*120000).toISOString(),price:.4+i/1000}));
+  rows.push({...rows[80], price:.9, is_forward_filled:true} as any);
+  const result = forecastObservationWindow(rows, 60000, cutoff, 2, 30);
+  assert.equal(result.rows.length,30);
+  assert.equal(result.rows.at(-1)?.timestamp,new Date(cutoff).toISOString());
+  assert.ok(Math.abs(result.rows.at(-1)!.target-.48)<1e-12);
+  assert.equal(result.observed_rows,81);
+  assert.equal(result.gap_count,29);
+  assert.equal(forecastObservationWindow(rows.slice(0,5),60000,cutoff,2,60).rows.length,5);
 });
 
 test("open Kalshi is not a live game without an official start; props are not moneylines", () => {

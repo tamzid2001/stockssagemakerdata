@@ -344,7 +344,9 @@ export function normalizePolymarketEvents(
         const fullTeamName = schoolName && teamName && !schoolName.toLowerCase().includes(teamName.toLowerCase()) && !teamName.toLowerCase().includes(schoolName.toLowerCase())
           ? `${schoolName} ${teamName}` : schoolName || teamName;
         const moneyline = /MONEYLINE|DRAWABLE_OUTCOME|_full_game_winner$/i.test(text(market.sportsMarketTypeV2 || market.sportsMarketType));
-        const outcome = text((moneyline ? fullTeamName : "") || side.description || fullTeamName || (position === "long" ? "Long" : "Short"), 180);
+        const drawable = text(market.sportsMarketTypeV2 || market.sportsMarketType) === "SPORTS_MARKET_TYPE_DRAWABLE_OUTCOME";
+        const affirmative = fullTeamName || marketTitle;
+        const outcome = text(drawable ? (position === "long" ? affirmative : `Not ${affirmative}`) : (moneyline ? fullTeamName : "") || side.description || fullTeamName || (position === "long" ? "Long" : "Short"), 180);
         if (!contractId || !outcome) return;
         const sidePrice = normalizeProbability(asRecord(side.quote)?.value ?? side.price);
         rows.push({
@@ -1312,7 +1314,16 @@ export async function discoverForecastMarkets(source: PredictionMarketSource, qu
   try { return await pending; } finally { liveSearchPending.delete(key); }
 }
 
-export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; selection?: HistorySelection } = {}) {
+export function forecastObservationLimit(value: unknown, maximum = 500): number {
+  if (value === undefined) return 500;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 2 || value > maximum) {
+    throw new PredictionMarketDataError("history_limit_invalid", `Choose between 2 and ${maximum} historical observations. Individual models may require more history.`, 422);
+  }
+  return value;
+}
+
+export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; limit?: number; selection?: HistorySelection } = {}) {
+  const limit = forecastObservationLimit(options.limit);
   if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
   const contracts = await resolveMarketIdentifier(source, symbol, "market");
   const contract = contracts.find(c => c.contractId === contractId);
@@ -1327,18 +1338,19 @@ export async function predictionForecastHistory(source: PredictionMarketSource, 
   // Forecast one consistent selected-side quote target. A Kalshi minute may
   // have a real book close but no trade; do not discard it or mix trade/ask.
   const observations = dataset.rows.map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(Date.parse(String(row.timestamp)) + interval).toISOString() });
-  const { rows, observed_rows, gap_count } = forecastObservationWindow(observations, interval, now, options.minimumRows ?? 2);
+  const { rows, observed_rows, gap_count } = forecastObservationWindow(observations, interval, now, options.minimumRows ?? 2, limit);
   const quality = quoteHistoryQuality(rows, Date.parse(contract.eventStart || ""));
   if ((options.minimumRows ?? 2) > 0 && quality.forecast_blocked) throw new PredictionMarketDataError("history_flat_window", "The selected side is unchanged throughout this input window or for at least two recent hours. Forecast skipped: select a different phase/lookback or wait for a new price. Original quotes remain downloadable.", 422);
   return { rows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows, quality, selection,
-    warnings: [`Using ${rows.length} observed bars of up to 500 (${observed_rows} available in the fetched range).`,
+    warnings: [`Using ${rows.length} observed bars of up to ${limit} (${observed_rows} available in the fetched range).`,
       `History: ${quality.pregame_observations ?? "unknown"} pregame and ${quality.in_game_observations ?? "unknown"} in-game bars; ${quality.price_changes} price changes.`,
       ...(quality.longest_unchanged_minutes >= 60 ? [`Provider quotes include an unchanged stretch of ${Math.round(quality.longest_unchanged_minutes)} minutes. Repeated display quotes are not individual trades.`] : []),
       source === "kalshi" ? "Target: selected-side candle closing ask; no trade is invented for minutes without transactions." : "Target: selected-side display quote, timestamped at the completed interval end; not an executed trade.",
       ...(gap_count ? [`${gap_count} gaps in observed history; no missing prices were invented. Foundation models treat observations as ordered steps; elapsed-time gaps can reduce reliability.`] : [])] };
 }
 
-export function forecastObservationWindow(input: Array<Record<string, unknown>>, interval: number, now: number, minimumRows = 2) {
+export function forecastObservationWindow(input: Array<Record<string, unknown>>, interval: number, now: number, minimumRows = 2, limit = 500) {
+  forecastObservationLimit(limit);
   const unique = new Map<number, number>();
   for (const row of input) {
     if (row.is_forward_filled === true) continue;
@@ -1347,7 +1359,7 @@ export function forecastObservationWindow(input: Array<Record<string, unknown>>,
     if (Number.isFinite(timestamp) && timestamp <= now && value !== null && value >= 0 && value <= 1) unique.set(timestamp, value);
   }
   const observed = [...unique].sort((a, b) => a[0] - b[0]).map(([timestamp, target]) => ({ timestamp: new Date(timestamp).toISOString(), target }));
-  const rows = observed.slice(-500);
+  const rows = observed.slice(-limit);
   if (rows.length < minimumRows) throw new PredictionMarketDataError("history_minimum_rows_required", "This side needs at least two observed bars. The provider has not returned enough prices in the requested range.", 422);
   const gap_count = rows.slice(1).filter((row, i) => Date.parse(row.timestamp) - Date.parse(rows[i].timestamp) > interval).length;
   return { rows, observed_rows: observed.length, gap_count };
@@ -1566,7 +1578,7 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
         const league = asRecord(asRecord(event.primaryTag)?.league);
         const category = { id: text(league?.slug || "sports"), label: text(league?.name || "Sports"), sport: text(asRecord(event.eventState)?.type || "Sports"), providerId: "" };
         return normalizePolymarketEvents({ events: [event] }, category).filter(c =>
-          (c.marketType === "SPORTS_MARKET_TYPE_MONEYLINE" || /(?:^moneyline$|_full_game_(?:moneyline|winner)$)/i.test(c.marketType || "")) &&
+          isMoneyline(c) &&
           (mode !== "live" || c.live === true));
       });
       res.setHeader("Cache-Control", "public, max-age=30");

@@ -14473,8 +14473,8 @@
   const refreshedEnsembleRequest = (job) => {
     const source = job.source || {};
     let selected;
-    if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency, history_phase: source.history_phase || "both", history_lookback_minutes: source.history_lookback_minutes || 0 };
-    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: 500 };
+    if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency, history_phase: source.history_phase || "both", history_lookback_minutes: source.history_lookback_minutes || 0, limit: source.limit ?? 500 };
+    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500 };
     else if (source.type === "workspace_dataset") selected = { type: source.type, dataset_id: source.dataset_id, timestamp_column: source.timestamp_column || "timestamp", target_column: source.target_column || "target", frequency: job.frequency, timezone: source.timezone || "UTC" };
     else throw new Error("This immutable inline series cannot refresh automatically. Submit an updated dataset.");
     return { workspace_id: job.workspace_id, source: selected, prediction_length: job.prediction_length, horizon_mode: job.horizon_mode, quantiles: job.quantiles,
@@ -14658,6 +14658,10 @@
     document.querySelectorAll("[data-ensemble-source]").forEach((field) => {
       field.hidden = field.dataset.ensembleSource !== type;
     });
+    document.querySelectorAll("[data-ensemble-history-count]").forEach(field => {
+      field.hidden = type === "workspace_dataset";
+      field.querySelector("input").disabled = field.hidden;
+    });
     const horizon = document.getElementById("ensemble-horizon-mode");
     const frequency = type === "ticker" ? document.getElementById("ensemble-ticker-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
     const intraday = type !== "ticker" || frequency !== "1Day";
@@ -14679,10 +14683,12 @@
     if (!form) throw new Error("The ensemble form is unavailable.");
     const data = new FormData(form);
     const sourceType = String(data.get("source_type") || "ticker");
+    const historyLimit = Number(data.get("history_limit") ?? 500);
+    if (sourceType !== "workspace_dataset" && (!Number.isInteger(historyLimit) || historyLimit < 2 || historyLimit > 500)) throw new Error("Choose 2–500 historical observations. Model minimums still apply.");
     const selection = window.QuanturaMarketSelection;
     if (sourceType === "prediction_market" && !selection?.contract_id) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
     const source = sourceType === "prediction_market"
-      ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")) }
+      ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")), limit: historyLimit }
       : sourceType === "workspace_dataset"
       ? {
           type: "workspace_dataset",
@@ -14697,7 +14703,7 @@
           symbol: normalizeTicker(data.get("ticker") || ui.forecastTicker?.value || state.tickerContext.ticker || ""),
           provider: String(data.get("provider") || "auto"),
           field: "close",
-          limit: 500,
+          limit: historyLimit,
           frequency: String(data.get("ticker_frequency") || "1Day"),
         };
     if (sourceType === "workspace_dataset" && !source.dataset_id) throw new Error("Enter a workspace dataset ID.");
@@ -14988,6 +14994,7 @@
       if (configuration.source.type === "ticker") set("ensemble-ticker-frequency", configuration.source.frequency);
       if (configuration.source.type === "prediction_market") set("ensemble-market-frequency", configuration.source.frequency);
       set("ensemble-history-phase", configuration.source.history_phase || "both");
+      set("ensemble-history-limit", configuration.source.limit ?? 500);
       set("ensemble-history-lookback", configuration.source.history_lookback_minutes || 0);
       set("ensemble-history-lookback-unit", "minutes");
       syncEnsembleSourceFields();
