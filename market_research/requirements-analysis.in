@@ -1,0 +1,6 @@
+# Reporting only; no torch, foundation models or inference downloads.
+firebase-admin==7.5.0
+cryptography==50.0.1
+numpy==2.2.6
+pandas==2.2.3
+httpx==0.28.1

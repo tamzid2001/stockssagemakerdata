@@ -15,6 +15,7 @@ from .quantile_paths import model_participation
 
 VERSION = "in_game_p90_switch_v1"
 VARIANTS = (("p90_cross_p10_opposite", "0.9"),)
+EXIT_FRACTIONS = (.01, .05, .10, .20, .30, .40, .50, .60, .70, .80, .90, 1.0)
 
 
 def statistics(trades):
@@ -52,10 +53,18 @@ def statistics(trades):
 
 
 def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_shares=100, fee_rate=.01,
-             switch_on_other_p90=False, p90_touch=False):
+             switch_on_other_p90=False, p90_touch=False, exit_policy=None):
     if not all(math.isfinite(v) for v in (multiplier, max_shares, fee_rate)) or not (
             1 <= multiplier <= 10 and 1 <= max_shares <= 10000 and 0 <= fee_rate <= .1):
         raise ValueError("INVALID_RECOVERY_CONFIGURATION")
+    if exit_policy is not None and (not isinstance(exit_policy, dict)
+            or set(exit_policy) != {"kind", "fraction"}
+            or exit_policy["kind"] not in ("take_profit", "trailing_stop")
+            or type(exit_policy["fraction"]) not in (int, float)
+            or exit_policy["fraction"] not in EXIT_FRACTIONS):
+        raise ValueError("INVALID_EXIT_COMPARISON_POLICY")
+    variants = VARIANTS if exit_policy is None else (
+        (f"p90_{exit_policy['kind']}_{round(exit_policy['fraction'] * 100):02d}pct", "0.9"),)
     groups = defaultdict(list)
     for f in forecasts:
         if f.get("strategy") == VERSION and f["available_at"] <= as_of:
@@ -83,13 +92,14 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
         end = min(as_of, market_end)
         times = sorted({t for s in sides for t in tape[s] if game_start < t <= as_of and t < market_end})
         curves = {f["forecast_id"]: {r["timestamp"]: r["quantiles"] for r in f["rows"]} for p in pairs for f in p}
-        for variant, high in VARIANTS:
+        for variant, high in variants:
             size, position, pending, active, pair_index = 1., None, None, None, 0
             memory, ledger = {}, []
+            fresh_cross_required = False
             increases = ambiguous = expired = signals_count = 0
 
             def close(t, bid, reason):
-                nonlocal position, size, increases
+                nonlocal position, size, increases, fresh_cross_required
                 value = position
                 value.update(status="closed", exit_at=t, exit_price=bid, exit_reason=reason)
                 if pending and reason != "authoritative_settlement":
@@ -105,6 +115,8 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                 else:
                     size = 1.
                 value["next_quantity"] = size
+                if reason in ("take_profit", "trailing_stop"):
+                    fresh_cross_required = True
                 position = None
 
             for t in times:
@@ -129,8 +141,25 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                                     "signal_p90": pending.get("signal_p90"), "signal_bid": pending.get("signal_bid"),
                                     "signal_forecast_id": pending["forecast_id"], "entry_at": t,
                                     "entry_price": quotes[target]["ask"], "quantity": size, "status": "open"}
+                                if exit_policy:
+                                    position["peak_completed_minute_bid"] = quotes[target]["bid"]
                                 ledger.append(position)
+                                fresh_cross_required = False
                             pending = None
+                # Percentage exits remain active through gaps between forecast
+                # windows. Only real completed-minute bids update the peak;
+                # candle highs, stream ticks and future settlement never do.
+                if exit_policy and position and not pending and position["contract_id"] in quotes:
+                    bid = quotes[position["contract_id"]]["bid"]
+                    position["peak_completed_minute_bid"] = max(position["peak_completed_minute_bid"], bid)
+                    kind, fraction = exit_policy["kind"], exit_policy["fraction"]
+                    level = (position["entry_price"] * (1 + fraction) if kind == "take_profit"
+                             else position["peak_completed_minute_bid"] * (1 - fraction))
+                    hit = bid >= level if kind == "take_profit" else bid <= level
+                    if hit and t > position["entry_at"]:
+                        pending = {"signal_at": t, "target_side": None, "reason": kind,
+                                   "forecast_id": position["signal_forecast_id"], "exit_threshold": level}
+                        position["exit_signal_threshold"] = level
                 while pair_index < len(pairs) and pairs[pair_index][0]["available_at"] < t:
                     active = pairs[pair_index]; pair_index += 1
                     memory = {}  # A revised curve cannot manufacture a crossing.
@@ -146,7 +175,7 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                     if before and t - before["timestamp"] != 60:
                         before = None
                     previous_quote_at = before["timestamp"] if before else None
-                    crossed = (q["bid"] >= levels[high] if p90_touch else
+                    crossed = (q["bid"] >= levels[high] if p90_touch and not fresh_cross_required else
                                bool(before and before["bid"] <= before["high"] and q["bid"] > levels[high]))
                     if crossed:
                         recoveries.append({"target_side": s, "signal_at": t, "previous_quote_at": previous_quote_at,
@@ -201,7 +230,7 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
             per_game.setdefault(game, {})[variant] = {**statistics(ledger), "recovery_signals": signals_count,
                 "ambiguous_signals_excluded": ambiguous, "expired_pending_orders": expired,
                 "multiplier_increases": increases, "next_quantity": size}
-    summary = {variant: statistics([t for t in trades if t["variant"] == variant]) for variant, _ in VARIANTS}
+    summary = {variant: statistics([t for t in trades if t["variant"] == variant]) for variant, _ in variants}
     for variant, s in summary.items():
         s.update({key: sum(g[variant][key] for g in per_game.values()) for key in
                   ("recovery_signals", "ambiguous_signals_excluded", "expired_pending_orders", "multiplier_increases")})
@@ -212,7 +241,12 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                 "sizing": "multiply_next_trade_until_cumulative_game_net_pnl_recovers", "fee_rate_assumption": fee_rate,
                 "fixed_price_stop": None, "horizon_exit": False, "execution": "next_genuine_bid_ask_within_120_seconds",
                 "quote_basis": "completed_one_minute_bid_ask", "switch_on_other_p90": switch_on_other_p90,
-                "p90_trigger": "at_or_above" if p90_touch else "cross_from_at_or_below_to_above"}}
+                "p90_trigger": "at_or_above" if p90_touch else "cross_from_at_or_below_to_above",
+                **({"exit_policy": exit_policy, "percentage_basis": "relative_price_not_probability_points",
+                    "percentage_exit_action": "flat_until_fresh_p90_cross",
+                    "exit_priority": "pending_order_then_percentage_exit_then_p10_then_opposite_p90",
+                    "take_profit_target_above_one": "unreachable_not_clamped",
+                    "trailing_peak": "completed_minute_bid_since_fill"} if exit_policy else {})}}
 
 
 def from_store(store):
