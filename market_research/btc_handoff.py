@@ -6,6 +6,12 @@ from .handoff import api
 WORKFLOW = "kalshi-btc-paper.yml"
 
 
+def latest_checkpoint(artifacts):
+    # Artifact IDs are identifiers, not a reliable creation-time ordering.
+    from .engine import stamp
+    return max(artifacts, key=lambda a: (stamp(a['created_at']), int(a['id'])))
+
+
 def main():
     if os.environ.get("KALSHI_BTC_PAPER_ENABLED") != "true":
         print("BTC paper continuation disabled.")
@@ -22,7 +28,7 @@ def main():
             artifacts = api(f"/actions/runs/{run['id']}/artifacts?per_page=100")["artifacts"]
             verified = [a for a in artifacts if not a["expired"] and re.match(r"btc-paper-checkpoint-[a-f0-9]{40}-", a["name"])]
             if verified:
-                chosen = max(verified, key=lambda a: a["id"])
+                chosen = latest_checkpoint(verified)
                 checkpoint = str(chosen["id"])
                 code = re.match(r"btc-paper-checkpoint-([a-f0-9]{40})-", chosen["name"])[1]
                 break

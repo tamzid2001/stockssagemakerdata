@@ -1,0 +1,70 @@
+name: P90 Take-Profit and Trailing-Stop Paper Comparison
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '4,34 * * * *'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: p90-exit-comparison
+  cancel-in-progress: false
+jobs:
+  compare:
+    if: github.event_name == 'workflow_dispatch' || vars.P90_EXIT_COMPARISON_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Small analysis-only environment, no model downloads
+        run: python -m pip install --require-hashes -r market_research/requirements-analysis.lock
+      - name: Fetch latest verified paper checkpoints from this repository only
+        uses: actions/github-script@v8
+        env:
+          CHECKPOINT_DIR: ${{ runner.temp }}/exit-checkpoints
+        with:
+          script: |
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            await fs.mkdir(process.env.CHECKPOINT_DIR, {recursive:true,mode:0o700});
+            const selected = new Set();
+            for (const workflow_id of ['kalshi-btc-paper.yml','polymarket-live-paper.yml']) {
+              const {data} = await github.rest.actions.listWorkflowRuns({...context.repo, workflow_id, per_page:50});
+              for (const run of data.workflow_runs) {
+                if (run.head_branch !== 'main') continue;
+                const title = run.display_title;
+                let kind, slot;
+                if (workflow_id === 'kalshi-btc-paper.yml') {
+                  kind = title.startsWith('Kalshi BTC paper · live') ? 'btc_live' : title.startsWith('Kalshi BTC paper · historical') ? 'btc_historical' : null;
+                  slot = kind;
+                } else {
+                  const h = title.match(/^polymarket_us paper · p1_oco · lag 0m · horizon (5|15|30)m$/);
+                  if (h) {kind = 'polymarket_live'; slot = `${kind}_${h[1]}`;}
+                }
+                if (!kind || selected.has(slot)) continue;
+                const artifacts = (await github.rest.actions.listWorkflowRunArtifacts({...context.repo,run_id:run.id,per_page:100})).data.artifacts;
+                const prefix = kind.startsWith('btc') ? /^btc-paper-checkpoint-[a-f0-9]{40}-/ : /^p1-paper-checkpoint-[a-f0-9]{40}-/;
+                const artifact = artifacts.filter(a=>!a.expired && prefix.test(a.name) && a.size_in_bytes < 27*1024*1024).sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id)[0];
+                if (!artifact) continue;
+                const downloaded = await github.rest.actions.downloadArtifact({...context.repo,artifact_id:artifact.id,archive_format:'zip'});
+                const bytes = Buffer.from(downloaded.data);
+                if (bytes.length > 27*1024*1024) throw new Error('CHECKPOINT_DOWNLOAD_TOO_LARGE');
+                const folder = path.join(process.env.CHECKPOINT_DIR,slot);
+                await fs.mkdir(folder,{mode:0o700});
+                await fs.writeFile(path.join(folder,'checkpoint.zip'),bytes,{mode:0o600});
+                await fs.writeFile(path.join(folder,'source.json'),JSON.stringify({kind,run_id:String(run.id),artifact_id:String(artifact.id),as_of:Math.floor(Date.parse(artifact.created_at)/1000),source_code_sha:artifact.name.match(/[a-f0-9]{40}/)[0]}),{mode:0o600});
+                selected.add(slot);
+                core.info(`Selected ${slot}: run ${run.id}, artifact ${artifact.id}. No source data logged.`);
+              }
+            }
+      - name: Compare all 25 variants and checkpoint private reports
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          QUANTURA_CODE_SHA: ${{ github.sha }}
+        run: python -m market_research.exit_observer --checkpoint-directory "$RUNNER_TEMP/exit-checkpoints"

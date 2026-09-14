@@ -12,7 +12,7 @@ from .recovery_switch import VERSION as REPLAY_VERSION, simulate
 VERSION = "btc_first2_next13_p90_p10_switch_v1"
 
 
-def from_store(store, as_of):
+def simulation_inputs(store):
     records = {r['market']['ticker']: r for r in store.values('checkpoints')
                if isinstance(r, dict) and r.get('market') and r.get('available_at')}
     forecasts = []
@@ -36,7 +36,12 @@ def from_store(store, as_of):
             continue
         resolutions[r['contract_id']] = {**r, 'settled_at': stamp(records[ticker]['market']['close_time']),
                                          'selected_side_payout': int(r['selected_side_won'])}
-    report = simulate(forecasts, store.values('observations'), resolutions, as_of=as_of,
+    return forecasts, store.values('observations'), resolutions
+
+
+def from_store(store, as_of):
+    forecasts, observations, resolutions = simulation_inputs(store)
+    report = simulate(forecasts, observations, resolutions, as_of=as_of,
                       switch_on_other_p90=True, p90_touch=True)
     # The BTC strategy is separately versioned even though it shares execution.
     report.update(version=VERSION, input_forecast_count=len(forecasts), forecast_count=len(forecasts),
