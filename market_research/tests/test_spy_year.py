@@ -111,6 +111,7 @@ def test_52_week_summary_does_not_hide_missing_results_or_tuning_cohort():
     r=spy_year.yearly_summary([result(10),result(-20),result(5,True)],52)
     assert not r['complete']
     assert r['all_weeks']['next_session_morning/both_legs']['complete_weeks']==3
+    assert not r['all_weeks']['next_session_morning/both_legs']['ranking_valid_for_full_sample']
     assert r['additional_weeks']['next_session_morning/both_legs']['complete_weeks']==2
     assert r['previously_tested_weeks']['next_session_morning/both_legs']['complete_weeks']==1
     assert summarize([])['next_session_morning/both_legs']['ranking_valid_for_full_sample'] is False

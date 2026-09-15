@@ -159,6 +159,9 @@ def yearly_summary(results,planned):
             'additional_weeks':summarize([r for r in ordered if not r.get('seed_forecast_reused')]),
             'previously_tested_weeks':summarize([r for r in ordered if r.get('seed_forecast_reused')]),
             'average_quantile_touch_rates':summarize_touches(ordered),'chronology':{}}
+    for cohort in ('all_weeks','additional_weeks','previously_tested_weeks'):
+        for value in report[cohort].values():
+            value['ranking_valid_for_full_sample'] &= report['complete']
     for scenario in report['all_weeks']:
         equity=peak=drawdown=0.;winning=losing=longest_win=longest_loss=0;chronology=[]
         for r in ordered:

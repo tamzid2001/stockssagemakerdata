@@ -138,6 +138,7 @@ are also included per event to make reversal/recovery paths inspectable.
             zone = '0.9' if b['close'] >= q['0.9'] else '0.1' if b['close'] <= q['0.1'] else None
             if zone and zone != prior_zone:
                 following = [r for r in observed if r['timestamp'] >= b['timestamp']]
+                expected_remaining = sum(t >= b['timestamp'] for t in expected)
                 tail = '0.99' if zone == '0.9' else '0.01'
                 upper = zone == '0.9'
                 sign = 1 if upper else -1
@@ -158,6 +159,8 @@ are also included per event to make reversal/recovery paths inspectable.
                     'close_minus_average_usd': b['close'] - avg[zone],
                     'continuation_tail': tail, 'targets': targets,
                     'subsequent_minutes': len(following), 'right_censored': not following,
+                    'expected_subsequent_minutes': expected_remaining,
+                    'missing_subsequent_minutes': expected_remaining - len(following),
                     'high_after_signal': high, 'low_after_signal': low,
                     'continuation_move_pct': sign * ((high if upper else low) / b['close'] - 1) * 100 if following else None,
                     'largest_adverse_move_pct': max(0., -sign * ((low if upper else high) / b['close'] - 1)) * 100 if following else None,
