@@ -6,7 +6,7 @@ credentials or order endpoints are available to these workers.
 
 ## Forecast methodology
 
-Default models: Prophet, Toto 2.0 4M, Granite PatchTST-FM-r2 (CPU), Chronos-2.
+Default model families: Prophet, Toto 2.0, Granite PatchTST-FM-r2 (CPU), Chronos-2. New runs use the approved checkpoint registry; inspect the persisted model provenance for the actual checkpoint used by a historical run. Short-context BTC minute studies exclude Toto.
 Each selected model receives raw weight 1. For each requested quantile, successful
 capable models receive equal normalized weights. At least two models must succeed;
 a lone Prophet result is not reported as an ensemble. Model failures are recorded.

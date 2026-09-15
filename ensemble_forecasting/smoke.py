@@ -57,14 +57,14 @@ def run_five_model_smoke() -> dict[str, object]:
     start = datetime(2026, 1, 1, tzinfo=timezone.utc)
     result = execute_job({
         "request": {
-            "prediction_length": 2, "horizon_mode": "frequency_periods",
+            "prediction_length": 30, "horizon_mode": "frequency_periods",
             "frequency": "1min", "quantiles": [.01, .1, .25, .5, .75, .9, .99],
-            "transform": "log", "context_length": 64, "failure_policy": "fail",
+            "transform": "log", "context_length": 500, "failure_policy": "fail",
             "models": {model: {"enabled": True, "weight": 1} for model in APPROVED_MODELS},
         },
         "input": {"frequency": "1min", "rows": [
             {"timestamp": (start + timedelta(minutes=i)).isoformat(), "target": 100 + .1 * i + np.sin(i / 4)}
-            for i in range(96)
+            for i in range(500)
         ]},
         "runtime_mode": "production",
     })

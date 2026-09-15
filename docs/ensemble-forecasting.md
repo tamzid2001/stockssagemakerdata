@@ -28,7 +28,7 @@ GitHub Actions is the configured dispatch backend until a persistent Quantura in
 | Stable ID | Model/checkpoint | Quantile behavior | Default device |
 | --- | --- | --- | --- |
 | `prophet` | Meta Prophet | Requested quantiles from one posterior predictive sample distribution | CPU |
-| `toto` | `Datadog/Toto-2.0-313m` | Native P10–P90 in 0.10 steps; interpolation only inside that interval; at least 32 genuine observations | Auto |
+| `toto` | `Datadog/Toto-2.0-2.5B` | Native P10–P90 in 0.10 steps; interpolation only inside that interval; at least 32 genuine observations | Auto |
 | `granite` | `ibm-granite/granite-timeseries-patchtst-fm-r2` | Requested quantiles | CPU |
 | `chronos` | `amazon/chronos-2` | Requested quantiles after verifying the loaded checkpoint's trained range | Auto |
 | `timesfm` | `google/timesfm-3.0-pytorch` | Native P10–P90 in 0.10 steps; interpolation only inside that interval | CUDA with CPU OOM fallback |
