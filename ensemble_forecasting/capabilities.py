@@ -88,6 +88,7 @@ def public_capabilities(runtime_mode: str = "production") -> dict[str, Any]:
                 "id": model_id,
                 "name": value["name"],
                 "checkpoint": value.get("checkpoint"),
+                "checkpoint_revision": value.get("checkpointRevision"),
                 "available": available,
                 "unavailable_reason": unavailable_reason,
                 "evaluation_only": evaluation_only,

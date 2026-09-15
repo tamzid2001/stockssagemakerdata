@@ -17,7 +17,7 @@ on:
         description: "Mock is safe for routine CI; real loads approved checkpoints"
         required: true
         type: choice
-        options: [mock, real]
+        options: [mock, real, toto]
         default: mock
   schedule:
     - cron: "17 10 * * 1"
@@ -56,12 +56,12 @@ jobs:
       # Persistent self-hosted workers can retain their local HF_HOME directory.
 
       - name: Install mock-smoke dependencies
-        if: ${{ inputs.smoke_mode != 'real' }}
+        if: ${{ inputs.smoke_mode != 'real' && inputs.smoke_mode != 'toto' }}
         run: python -m pip install --disable-pip-version-check numpy pandas pandas-market-calendars httpx pytest
 
       - name: Install locked production inference environment
-        if: ${{ inputs.smoke_mode == 'real' }}
-        run: python -m pip install --disable-pip-version-check --requirement requirements-ensemble-forecast.lock
+        if: ${{ inputs.smoke_mode == 'real' || inputs.smoke_mode == 'toto' }}
+        run: python -m pip install --no-cache-dir --disable-pip-version-check --requirement requirements-ensemble-forecast.lock
 
       - name: Validate mock engine and workflow contract
         if: ${{ inputs.forecast_job_id == '' }}
@@ -89,9 +89,17 @@ jobs:
           print("Hugging Face authentication validated; gated-file check applies only to commercially enabled TimesFM.")
           PY
 
-      - name: Run real five-model smoke when licensed (otherwise Toto 4M)
+      - name: Run real five-model smoke when licensed (otherwise Toto 313M)
         if: ${{ inputs.smoke_mode == 'real' && inputs.forecast_job_id == '' }}
         run: python -m ensemble_forecasting.smoke
+
+      - name: Verify production Toto 313M on CPU with genuine context lengths
+        if: ${{ inputs.smoke_mode == 'toto' && inputs.forecast_job_id == '' }}
+        timeout-minutes: 40
+        env:
+          CUDA_VISIBLE_DEVICES: ''
+          QUANTURA_REAL_TOTO_SMOKE: '1'
+        run: python -m pytest -q -s market_research/tests/test_real_toto.py
 
       - name: Validate worker secrets for claimed jobs
         if: ${{ inputs.forecast_job_id != '' }}

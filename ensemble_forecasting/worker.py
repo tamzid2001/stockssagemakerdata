@@ -91,6 +91,7 @@ def execute_job(
     progress = progress or (lambda _payload: None)
     request_payload = dict(job.get("request") or {})
     request_payload["model_checkpoints"] = dict(job.get("model_checkpoints") or {})
+    request_payload["model_revisions"] = dict(job.get("model_revisions") or {})
     request_payload["runtime_mode"] = str(job.get("runtime_mode") or request_payload.get("runtime_mode") or "production")
     request_payload["max_quantiles"] = int(MODEL_REGISTRY["maxRequestedQuantiles"])
     request = ForecastRequest.from_dict(request_payload)
@@ -168,6 +169,7 @@ def execute_job(
                 {
                     "model": model_id,
                     "checkpoint": forecast.checkpoint,
+                    "checkpoint_revision": forecast.checkpoint_revision,
                     "status": "completed",
                     "duration_seconds": forecast.duration_seconds,
                     "device": forecast.device,
@@ -206,6 +208,7 @@ def execute_job(
                 {
                     "id": row["model"],
                     "checkpoint": row.get("checkpoint"),
+                    "checkpoint_revision": row.get("checkpoint_revision"),
                     "status": row["status"],
                     "device": row.get("device"),
                     "duration_seconds": row.get("duration_seconds"),
