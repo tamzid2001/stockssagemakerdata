@@ -4,6 +4,43 @@ This is a separately versioned experiment, not a live exchange-order system or
 a replacement for saved `kalshi_btc_first2_next13_v1` results. Never combine the
 two cohorts when reporting strategy performance.
 
+## First-P90 doubling averaging-down ladder
+
+`btc_first_p90_hold_10c_doubling_ladder_v1` adds a separate paper variant to both
+the 1→14 and 2→13 cohorts. Existing entries, P10-switch strategies and historical
+hold results are not replaced. The minute reporter exposes bounded totals; the
+scheduled comparison observer archives full immutable order/lot/market ledgers
+encrypted in the private research bucket, not as price arrays in Firestore.
+
+Latch the first unambiguous completed-minute P90 side. Reuse the existing initial
+one-contract ask-minus-one-cent post-only candidate entry. After that entry
+has a candidate fill, post fixed limits every 10 cents below its fill price,
+ending at 10 cents. A 70c fill gives 60/50/40/30/20/10c levels. A 69c fill gives
+59/49/39/29/19/10c: the final step may be smaller to include the floor exactly.
+The anchor is the candidate fill, not the numerical P90 forecast threshold.
+
+Size is one contract initially, then 2, 4, 8, 16, 32, 64, etc. **Total filled
+plus resting quantity is capped at 100 contracts per market**, not 100 per rung.
+The first capped rung can be partial (normally 37 instead of 64 after 63 are
+committed); lower rungs beyond the cap are not submitted. Marketable rungs at
+activation are explicitly skipped, never represented as post-only orders.
+Do not refill a rung or multiply size across markets. Keep only the chosen side
+and hold every filled lot to official, already-confirmed settlement. No P10 exit.
+
+Limits must be posted before the evidence quote. Only a strict ask trade-through
+on a subsequent consecutive completed minute is a candidate fill; touching a
+limit or revisiting the original fill minute does not qualify. Cancel the
+remaining simulated ladder on a data gap and flag possible missing fills as
+unknown. Unfilled orders expire at market close. Receipt-timed live observations
+must arrive within 30 seconds; historical backfills cannot invent ladder fills.
+
+Compare against **the same initial candidate entries without averaging**, with
+separate 1%-of-entry-notional and zero-fee assumptions. Count each settled market
+once for win rate, and disclose contracts, exposure, average entry cost, open
+positions and drawdown separately. Averaging cannot alter a side's settlement
+outcome; it can increase both gains and losses. Neither minute quotes nor this
+simulation prove market depth, maker fills, actual fees or a live trading edge.
+
 ## Forecast origin and model policy
 
 For each binary `KXBTC15M` market of exactly 900 seconds, use only the genuine

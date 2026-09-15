@@ -259,6 +259,11 @@ def report(store, coverage, failures):
         result.update(model_policy='Exactly one first-minute observation; Granite, Chronos-2 and TimesFM; strict all-three success. Unvalidated research.',
                       execution='Post-only minus-one-cent limit candidate-fill proxy; not actual orders. Zero-fee sensitivity; all unfilled orders recorded.',
                       history_minutes=1,horizon_minutes=14)
+    from .btc_ladder import compare as ladder_compare, compact_report
+    from .btc_signals import simulation_inputs
+    forecasts, observations, resolutions = simulation_inputs(store)
+    result['p90_average_down_ladder'] = compact_report(
+        ladder_compare(forecasts, observations, resolutions, as_of=result['generated_at']))
     store.report(digest(result), result)
     print(json.dumps({"event": "btc_paper_report", **result}), flush=True)
     return result

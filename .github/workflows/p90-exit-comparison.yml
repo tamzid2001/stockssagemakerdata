@@ -63,7 +63,7 @@ jobs:
                 core.info(`Selected ${slot}: run ${run.id}, artifact ${artifact.id}. No source data logged.`);
               }
             }
-      - name: Compare all 25 variants and checkpoint private reports
+      - name: Compare exits and BTC averaging ladders with private checkpoints
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
