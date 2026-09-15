@@ -8,6 +8,8 @@ import path from 'node:path';
 
 const artifact = new DefaultArtifactClient();
 const inputs = process.argv.slice(2);
+const quoteTape = inputs[0] === '--btc-quotes';
+if (quoteTape) inputs.shift();
 const btc = inputs[0] === '--paper-btc';
 if (btc) inputs.shift();
 const paper = inputs[0] === '--paper-p1';
@@ -31,7 +33,7 @@ async function checkpoint() {
   const file = path.join(temporary, 'research.qra.enc');
   try {
     await command(['-m', 'market_research.artifact', 'checkpoint', '--source', root, '--output', file]);
-    const prefix = btc ? `btc-paper-checkpoint-${process.env.QUANTURA_CODE_SHA}` : paper ? `p1-paper-checkpoint-${process.env.QUANTURA_CODE_SHA}` : 'replay-checkpoint';
+    const prefix = quoteTape ? `btc-quote-tape-${process.env.QUANTURA_CODE_SHA}` : btc ? `btc-paper-checkpoint-${process.env.QUANTURA_CODE_SHA}` : paper ? `p1-paper-checkpoint-${process.env.QUANTURA_CODE_SHA}` : 'replay-checkpoint';
     const name = `${prefix}-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}-${++sequence}`;
     const uploaded = await artifact.uploadArtifact(name, [file], temporary, { retentionDays: 3, compressionLevel: 0 });
     if (!uploaded.id) throw new Error('CHECKPOINT_UPLOAD_FAILED');
@@ -46,12 +48,12 @@ function publish() {
   if (!publishing) publishing = checkpoint().finally(() => { publishing = undefined; });
   return publishing;
 }
-const timer = setInterval(() => publish().catch(() => console.error('CHECKPOINT_UPLOAD_FAILED; local checkpoint retained')), paper || btc ? 5 * 60 * 1000 : 45 * 60 * 1000);
+const timer = setInterval(() => publish().catch(() => console.error('CHECKPOINT_UPLOAD_FAILED; local checkpoint retained')), quoteTape ? 60 * 1000 : paper || btc ? 5 * 60 * 1000 : 45 * 60 * 1000);
 const firstCheckpoint = setTimeout(() => publish().catch(() => console.error('INITIAL_CHECKPOINT_UPLOAD_FAILED')), 60 * 1000);
 let failure;
 try {
   await command(['-m', 'market_research.artifact', 'check-key']);
-  await command(['-m', btc ? 'market_research.kalshi_btc' : paper ? 'market_research.p1_worker' : p1Replay ? 'market_research.p1_historical' : 'market_research.historical', ...inputs]);
+  await command(['-m', quoteTape ? 'market_research.btc_quote_tape' : btc ? 'market_research.kalshi_btc' : paper ? 'market_research.p1_worker' : p1Replay ? 'market_research.p1_historical' : 'market_research.historical', ...inputs]);
 }
 catch (error) { failure = error; }
 finally {

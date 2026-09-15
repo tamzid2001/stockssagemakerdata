@@ -1,0 +1,9 @@
+# No model downloads needed to capture the genuine exchange tape.
+numpy==2.2.6
+pandas==2.3.3
+pandas-market-calendars==5.4.0
+httpx==0.28.1
+cryptography==50.0.1
+firebase-admin==7.5.0
+websockets==15.0.1
+pytest==8.4.2
