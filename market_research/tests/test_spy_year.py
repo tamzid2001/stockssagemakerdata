@@ -77,12 +77,14 @@ def test_seed_forecast_reused_and_permanent_option_gaps_are_explicit(monkeypatch
     w,bars,grid,f,d=week_case();store=Memory()
     monkeypatch.setattr(spy_year,'diagnose',lambda *_:d)
     monkeypatch.setattr(spy_year,'forecast_week',lambda *_:pytest.fail('Must reuse archived forecast'))
-    monkeypatch.setattr(spy_year,'fetch',lambda *_args,**_kwargs:None)
+    requests=[]
+    monkeypatch.setattr(spy_year,'fetch',lambda _c,_route,request,**_kwargs:(requests.append(request) or None))
     result=spy_year.process_week(w,bars,[],grid,{w['origin']:f},store,None)
     assert result['result']['seed_forecast_reused']
     assert len(result['result']['errors'])==2
     assert result['result']['scenarios']=={}
     assert store.get('stage','week-00-forecast')==f
+    assert all(r['limit']==50000 for r in requests)  # 5000 falls back to 2000 in shared API.
 
 
 def test_seed_inputs_cannot_be_rewritten(monkeypatch):

@@ -209,12 +209,14 @@ def process_week(w,bars,minute_rows,grid,seed,store,client):
         contracts[leg]={'symbol':symbol,'strike':strike,'average_target':week['average_quantiles'][q]}
         data=store.get('stage',key+'-'+leg)
         if data is None:
-            request={'source':'alpaca','contractSymbol':symbol,'timeframe':'1Min','limit':5000,
+            # Use a supported shared-API limit. An arbitrary 5000 is silently
+            # normalized to 2000 there and could discard early weekly prices.
+            request={'source':'alpaca','contractSymbol':symbol,'timeframe':'1Min','limit':50000,
                      'start':w['origin'],'end':iso(pd.Timestamp(w['week_end'])-pd.Timedelta(minutes=1))}
             data=fetch(client,'market-data/options/history',request,post=True)
             if data is None:
                 errors.append({'contract':symbol,'code':'HISTORICAL_CONTRACT_UNAVAILABLE'});continue
-            if data.get('contractSymbol')!=symbol or len(data['rows'])>=5000:
+            if data.get('contractSymbol')!=symbol or len(data['rows'])>=50000:
                 raise ValueError('INVALID_YEAR_OPTION_PATH')
             prices_by_minute(data);store.put('stage',key+'-'+leg,data)
         legs[leg]=data
