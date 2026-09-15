@@ -173,15 +173,22 @@ def excursions(signal, bars, predictions, week_end):
             'direction_profitable_at_week_end': following[-1]['close'] > close if upper else following[-1]['close'] < close}
 
 
-def simulate(bars, forecasts, *, cost_bps=0.):
-    """Long P90 / short P10 at next scheduled hourly open; hold between signals.
+def simulate(bars, forecasts, *, cost_bps=0., contrarian=False, trailing_fraction=None, minute_bars=None):
+    """Default long P90 / short P10; opt-in reversed signals and close trails.
 
     No same-candle high/low order fill assumptions. Crossing means entry into the
     time-aligned >=P90 or <=P10 region; the first eligible bar may already qualify.
     Terminal liquidation is explicitly a research end-of-sample assumption.
+    Minute execution uses the SAME hourly signals, with minute-close trailing
+    triggers filled at the next scheduled minute open. It is not a tick stop.
     """
     if not math.isfinite(cost_bps) or not 0 <= cost_bps <= 100:
         raise ValueError('INVALID_COST')
+    if type(contrarian) is not bool:
+        raise ValueError('INVALID_SIGNAL_DIRECTION')
+    if trailing_fraction is not None and (type(trailing_fraction) not in (int,float) or
+            not math.isfinite(trailing_fraction) or not 0 < trailing_fraction < 1):
+        raise ValueError('INVALID_TRAILING_FRACTION')
     predictions, week_ends, grid = {}, {}, {}
     for forecast in forecasts:
         for row in forecast['predictions']:
@@ -191,13 +198,40 @@ def simulate(bars, forecasts, *, cost_bps=0.):
             week_ends[row['timestamp']] = forecast['week_end']
         for bin_ in forecast['future_grid']:
             grid[bin_['timestamp']] = bin_
-    bars = sorted([b for b in bars if b['timestamp'] in predictions], key=lambda b: b['timestamp'])
+    hourly_bars = sorted([b for b in bars if b['timestamp'] in predictions], key=lambda b: b['timestamp'])
+    if minute_bars is not None:
+        minute_grid = {}
+        for bin_ in grid.values():
+            for start in pd.date_range(bin_['start'], pd.Timestamp(bin_['timestamp'])-pd.Timedelta(minutes=1), freq='1min'):
+                end = iso(start+pd.Timedelta(minutes=1))
+                minute_grid[end] = {'start': iso(start), 'timestamp': end}
+        grid = minute_grid
+        bars = []
+        seen = set()
+        for row in minute_bars:
+            end = iso(pd.Timestamp(row['timestamp'])+pd.Timedelta(minutes=1))
+            if end not in grid:
+                continue
+            if end in seen or any(not math.isfinite(row[k]) or row[k] <= 0 for k in ('open','high','low','close')):
+                raise ValueError('INVALID_MINUTE_TAPE')
+            seen.add(end)
+            bars.append({**row, 'start': iso(pd.Timestamp(row['timestamp'])), 'timestamp': end})
+        bars.sort(key=lambda b:b['timestamp'])
+        # Signals must still be based on the same genuine hourly-close dataset.
+        closing = {b['timestamp']: b['close'] for b in bars}
+        if any(closing.get(b['timestamp']) != b['close'] for b in hourly_bars):
+            raise ValueError('MINUTE_HOURLY_CLOSE_MISMATCH')
+    else:
+        bars = hourly_bars
     expected = sorted(grid)
+    next_bar = dict(zip(expected, expected[1:]))
     if not bars:
         raise ValueError('NO_EVALUATION_BARS')
     trades, signals, equity, position, pending = [], [], [], None, None
     realized, peak, drawdown, prior_zone = 0., 0., 0., None
     skipped = 0
+    wait_fresh = False
+    trailing_decisions = []
 
     def finish(price, timestamp, reason):
         nonlocal position, realized
@@ -213,32 +247,56 @@ def simulate(bars, forecasts, *, cost_bps=0.):
     for b in bars:
         if pending:
             if b['timestamp'] == pending['execute_bar']:
-                if position and position['side'] != pending['side']:
+                if position and pending.get('reason') == 'trailing_stop':
+                    position['trailing_exit_signal'] = {k:v for k,v in pending.items() if k != 'execute_bar'}
+                    finish(b['open'], b['start'], 'trailing_stop')
+                elif position and position['side'] != pending['side']:
                     finish(b['open'], b['start'], 'opposite_quantile_signal')
-                if not position:
+                if not position and pending['side'] is not None:
                     position = {'side': pending['side'], 'entry_time': b['start'], 'entry_price': b['open'],
                                 'signal_time': pending['timestamp'], 'quantity': 1}
+                    if trailing_fraction is not None:
+                        position['favorable_close_watermark'] = b['open']
             else:
                 skipped += 1
             pending = None
-        q = predictions[b['timestamp']]['quantiles']
-        if not q['0.1'] <= q['0.5'] <= q['0.9']:
-            raise ValueError('CROSSING_QUANTILES')
-        if q['0.1'] == q['0.9']:
-            zone = None  # Degenerate, simultaneously long and short: no order.
-        else:
-            zone = 'long' if b['close'] >= q['0.9'] else 'short' if b['close'] <= q['0.1'] else None
-        if zone and zone != prior_zone:
+        q = predictions.get(b['timestamp'], {}).get('quantiles')
+        zone = None
+        if q:
+            if not q['0.1'] <= q['0.5'] <= q['0.9']:
+                raise ValueError('CROSSING_QUANTILES')
+            if q['0.1'] != q['0.9']:
+                zone = 'long' if b['close'] >= q['0.9'] else 'short' if b['close'] <= q['0.1'] else None
+            if contrarian and zone:
+                zone = 'short' if zone == 'long' else 'long'
+        fresh = zone and zone != prior_zone
+        if fresh:
             signal = {'timestamp': b['timestamp'], 'side': zone, 'close': b['close'],
-                      'threshold': q['0.9'] if zone == 'long' else q['0.1'],
+                      'threshold': q['0.9'] if (zone == 'long') != contrarian else q['0.1'],
                       'week_end': week_ends[b['timestamp']]}
             signal['excursion'] = excursions(signal, bars, predictions, signal['week_end'])
             signals.append(signal)
-        if zone and (not position or position['side'] != zone):
-            index = expected.index(b['timestamp'])
-            if index+1 < len(expected):
-                pending = {'side': zone, 'timestamp': b['timestamp'], 'execute_bar': expected[index+1]}
-        prior_zone = zone
+        if zone and (not position or position['side'] != zone) and (not wait_fresh or fresh):
+            if b['timestamp'] in next_bar:
+                pending = {'side': zone, 'timestamp': b['timestamp'], 'execute_bar': next_bar[b['timestamp']]}
+                wait_fresh = False
+        if q:
+            prior_zone = zone
+        # Opposite hourly signal has priority over a simultaneous trailing exit.
+        # Watermarks use completed closes only, never an unknowable OHLC path.
+        if position and trailing_fraction is not None:
+            long = position['side'] == 'long'
+            old = position['favorable_close_watermark']
+            watermark = max(old,b['close']) if long else min(old,b['close'])
+            position['favorable_close_watermark'] = watermark
+            stop = watermark*(1-trailing_fraction if long else 1+trailing_fraction)
+            hit = b['close'] <= stop if long else b['close'] >= stop
+            if hit and pending is None and b['timestamp'] in next_bar:
+                pending = {'side': None, 'timestamp': b['timestamp'], 'execute_bar': next_bar[b['timestamp']],
+                           'reason': 'trailing_stop', 'stop_level': stop, 'watermark': watermark,
+                           'signal_close': b['close'], 'fraction': trailing_fraction}
+                trailing_decisions.append(dict(pending))
+                wait_fresh = True
         value = realized
         if position:
             value += (1 if position['side']=='long' else -1)*(b['close']-position['entry_price'])
@@ -262,7 +320,18 @@ def simulate(bars, forecasts, *, cost_bps=0.):
         closed = [t for t in trades if t['side'] == side]
         summary[side] = {'trades': len(closed), 'wins': sum(t['net_pnl']>0 for t in closed),
                          'losses': sum(t['net_pnl']<0 for t in closed), 'pnl_usd': sum(t['net_pnl'] for t in closed)}
-    return {'summary': summary, 'trades': trades, 'signals': signals, 'equity': equity}
+    if contrarian or trailing_fraction is not None or minute_bars is not None:
+        summary['observation_marked_max_drawdown_usd'] = drawdown
+        if minute_bars is not None:
+            summary.pop('hourly_marked_max_drawdown_usd')
+        summary['monitoring_frequency'] = 'completed_minute_close' if minute_bars is not None else 'completed_hourly_close'
+        summary['trailing_exits'] = sum(t['exit_reason']=='trailing_stop' for t in trades)
+        summary['contrarian'] = contrarian
+        summary['trailing_fraction'] = trailing_fraction
+    result = {'summary': summary, 'trades': trades, 'signals': signals, 'equity': equity}
+    if trailing_fraction is not None:
+        result['trailing_decisions'] = trailing_decisions
+    return result
 
 
 def metrics(bars, forecasts):
