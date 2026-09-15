@@ -142,6 +142,7 @@ export function publicModelCapabilities(plan: PlanKey = "free"): JsonRecord {
       id,
       name: source.name,
       checkpoint: source.checkpoint,
+      checkpoint_revision: source.checkpointRevision || null,
       available: licensed && planAllowsModel(plan, id),
       runtime_available: licensed,
       plan_available: planAllowsModel(plan, id),
@@ -451,10 +452,19 @@ function requestHash(workspaceId: string, sourceHash: string, configuration: Jso
   return crypto.createHash("sha256").update(JSON.stringify({ workspaceId, sourceHash, configuration, registry: modelRegistry.schemaVersion })).digest("hex");
 }
 
-function approvedModelCheckpoints(configuration: NormalizedConfiguration): Record<ModelId, string | null> {
+export function approvedModelCheckpoints(configuration: NormalizedConfiguration): Record<ModelId, string | null> {
   return Object.fromEntries(APPROVED_MODELS
     .filter((modelId) => configuration.models[modelId].enabled && configuration.models[modelId].weight > 0)
     .map((modelId) => [modelId, (modelRegistry.models as Record<string, any>)[modelId].checkpoint || null])) as Record<ModelId, string | null>;
+}
+
+export function approvedModelRevisions(configuration: NormalizedConfiguration): Partial<Record<ModelId, string>> {
+  return Object.fromEntries(APPROVED_MODELS
+    .filter((modelId) => configuration.models[modelId].enabled && configuration.models[modelId].weight > 0)
+    .flatMap((modelId) => {
+      const revision = (modelRegistry.models as Record<string, any>)[modelId].checkpointRevision;
+      return revision ? [[modelId, revision]] : [];
+    }));
 }
 
 async function persistInputChunks(ref: FirebaseFirestore.DocumentReference, rows: Array<{ timestamp: string; target: number }>): Promise<void> {
@@ -534,6 +544,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     model_failure_policy: plain(data.request).failure_policy,
     models: plain(data.request).models,
     model_checkpoints: data.model_checkpoints,
+    model_revisions: data.model_revisions || {},
     requested_weights: data.requested_weights,
     effective_central_weights: data.effective_central_weights,
     progress: data.progress || null,
@@ -766,6 +777,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       source: materialized.source,
       dataset_hash: sourceHash,
       model_checkpoints: approvedModelCheckpoints(configuration),
+      model_revisions: approvedModelRevisions(configuration),
       input_row_count: materialized.rows.length,
       input_timestamp_column: "timestamp",
       input_target_column: "target",
@@ -837,6 +849,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       request_hash: original.request_hash,
       registry_version: original.registry_version,
       model_checkpoints: Object.keys(checkpoints).length ? checkpoints : approvedModelCheckpoints(configuration),
+      model_revisions: plain(original.model_revisions),
       runtime_mode: runtimeMode(),
       status: "queued",
       progress: { completed_models: 0, total_models: Object.values(configuration.models).filter((model) => model.enabled && model.weight > 0).length, current_model: null },
@@ -1012,6 +1025,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       source: job.source,
       dataset_hash: job.dataset_hash,
       model_checkpoints: job.model_checkpoints,
+      model_revisions: job.model_revisions || {},
       registry_version: job.registry_version,
       runtime_mode: job.runtime_mode,
       maximum_history_rows: MAX_HISTORY_ROWS,

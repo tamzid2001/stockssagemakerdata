@@ -12,6 +12,15 @@ from .base import ForecastAdapter, ModelExecutionError, cleanup_memory, device_n
 NATIVE_LEVELS = tuple(round(value / 10, 1) for value in range(1, 10))
 
 
+def toto_checkpoint(request: ForecastRequest) -> tuple[str, str | None]:
+    registry = MODEL_REGISTRY["models"]["toto"]
+    checkpoint = request.model_checkpoints.get("toto") or registry["checkpoint"]
+    # Legacy jobs must not receive the new checkpoint's unrelated revision.
+    revision = request.model_revisions.get("toto") or (
+        registry.get("checkpointRevision") if checkpoint == registry["checkpoint"] else None)
+    return checkpoint, revision
+
+
 def aligned_toto_context(values: np.ndarray, patch_size: int) -> tuple[np.ndarray, np.ndarray]:
     """Left-pad unobserved slots, preserving the final entirely observed patch.
 
@@ -41,8 +50,9 @@ class TotoAdapter(ForecastAdapter):
         device = device_name("auto")
         model = None
         try:
-            checkpoint = request.model_checkpoints.get("toto") or MODEL_REGISTRY["models"]["toto"]["checkpoint"]
-            model = Toto2Model.from_pretrained(checkpoint, token=hf_token()).to(device).eval()
+            checkpoint, revision = toto_checkpoint(request)
+            model = Toto2Model.from_pretrained(checkpoint, token=hf_token(), **(
+                {"revision": revision} if revision else {})).to(device).eval()
             context_length = min(
                 request.context_length or 512,
                 int(MODEL_REGISTRY["models"]["toto"]["maxContextLength"]),
@@ -74,6 +84,7 @@ class TotoAdapter(ForecastAdapter):
             result = ModelForecast(
                 model_id="toto",
                 checkpoint=checkpoint,
+                checkpoint_revision=revision,
                 prediction_length=request.prediction_length,
                 requested_quantiles=request.quantiles,
                 available_quantiles=available,

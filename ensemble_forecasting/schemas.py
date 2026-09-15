@@ -34,6 +34,7 @@ class ForecastRequest:
     context_length: int | None
     models: Mapping[ModelId, ModelSelection]
     model_checkpoints: Mapping[ModelId, str | None] = field(default_factory=dict)
+    model_revisions: Mapping[ModelId, str] = field(default_factory=dict)
     failure_policy: FailurePolicy = "fail"
     frequency: str = "1D"
     calendar: str = "NYSE"
@@ -67,6 +68,9 @@ class ForecastRequest:
             for model_id in APPROVED_MODELS
             if model_id in checkpoint_payload
         }
+        revisions = payload.get("model_revisions") or {}
+        if not isinstance(revisions, Mapping) or set(revisions) - set(APPROVED_MODELS):
+            raise ValueError("model_revisions is invalid")
         request = cls(
             prediction_length=int(payload.get("prediction_length", 30)),
             horizon_mode=str(payload.get("horizon_mode", "trading_sessions")),  # type: ignore[arg-type]
@@ -75,6 +79,7 @@ class ForecastRequest:
             context_length=None if context in (None, "") else int(context),
             models=models,
             model_checkpoints=model_checkpoints,
+            model_revisions=dict(revisions),
             failure_policy=str(payload.get("failure_policy", "fail")),  # type: ignore[arg-type]
             frequency=str(payload.get("frequency", "1D")),
             calendar=str(payload.get("calendar", "NYSE")),
@@ -102,6 +107,9 @@ class ForecastRequest:
         for model_id, checkpoint in self.model_checkpoints.items():
             if model_id not in APPROVED_MODELS or checkpoint is not None and (not checkpoint or len(checkpoint) > 240):
                 raise ValueError("model_checkpoints is invalid")
+        for revision in self.model_revisions.values():
+            if not isinstance(revision, str) or len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
+                raise ValueError("model_revisions requires immutable commit SHAs")
         enabled = {name: value for name, value in self.models.items() if value.enabled}
         if not enabled:
             raise ValueError("at least one model must be enabled")
@@ -131,6 +139,7 @@ class ModelForecast:
     quantile_provenance: dict[str, str]
     device: str
     duration_seconds: float
+    checkpoint_revision: str | None = None
     warnings: list[str] = field(default_factory=list)
     package_versions: dict[str, str] = field(default_factory=dict)
 
