@@ -48,7 +48,9 @@ def test_real_toto_cpu_patch_alignment(count, horizon):
             "horizon_mode": "frequency_periods",
             "frequency": "1min",
             "calendar": "NONE",
-            "context_length": count,
+            # Requested context must meet the API minimum. The adapter still
+            # uses only the actual count, including exactly 32 genuine rows.
+            "context_length": max(40, count),
             "transform": "none",
         }
     )

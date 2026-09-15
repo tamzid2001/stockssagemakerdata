@@ -8,18 +8,21 @@ from ensemble_forecasting.capabilities import public_capabilities
 from ensemble_forecasting.tests.test_engine import request, series_rows
 from ensemble_forecasting import worker
 
-REVISION = "a7bab288f5e95f8606f8306f86659357e1c001ef"
+REVISION = "51a2812bbe449437c01b79c0e425ed578f335f5b"
 
 
-def test_new_default_is_pinned_313m_but_saved_4m_remains_4m():
-    assert toto_checkpoint(request()) == ("Datadog/Toto-2.0-313m", REVISION)
+def test_new_default_is_pinned_but_saved_checkpoints_remain_unchanged():
+    assert toto_checkpoint(request()) == ("Datadog/Toto-2.0-2.5B", REVISION)
     assert toto_checkpoint(request(model_checkpoints={"toto":"Datadog/Toto-2.0-4m"})) == ("Datadog/Toto-2.0-4m", None)
     old_revision="8306a9801cf98c0f5ffe4b2dcc8f496e616d84d9"
     assert toto_checkpoint(request(model_checkpoints={"toto":"Datadog/Toto-2.0-4m"},
                                    model_revisions={"toto":old_revision})) == ("Datadog/Toto-2.0-4m", old_revision)
     model=next(m for m in public_capabilities()['models'] if m['id']=='toto')
-    assert model['name']=='Toto 2.0 313M' and model['checkpoint_revision']==REVISION
+    assert model['name']=='Toto 2.0 2.5B' and model['checkpoint_revision']==REVISION
     assert model['minimum_observed_context']==32
+    previous_revision='a7bab288f5e95f8606f8306f86659357e1c001ef'
+    assert toto_checkpoint(request(model_checkpoints={'toto':'Datadog/Toto-2.0-313m'},
+                                   model_revisions={'toto':previous_revision})) == ('Datadog/Toto-2.0-313m', previous_revision)
 
 
 @pytest.mark.parametrize('value',[{'toto':'main'},{'toto':'../secret'}, {'other':REVISION}, ['invalid']])

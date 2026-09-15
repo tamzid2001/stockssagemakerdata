@@ -95,9 +95,9 @@ jobs:
           print("Hugging Face authentication validated; gated-file check applies only to commercially enabled TimesFM.")
           PY
 
-      - name: Run real five-model smoke when licensed (otherwise Toto 313M)
+      - name: Run real five-model smoke when licensed (otherwise production Toto)
         if: ${{ inputs.smoke_mode == 'real' && inputs.forecast_job_id == '' }}
-        run: python -m ensemble_forecasting.smoke
+        run: /usr/bin/time -v python -m ensemble_forecasting.smoke
 
       - name: Verify Toto CPU capacity with genuine context lengths
         if: ${{ inputs.smoke_mode == 'toto' && inputs.forecast_job_id == '' }}

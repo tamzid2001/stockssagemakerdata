@@ -20,19 +20,22 @@ import { parseMarketLink } from "./marketLink";
 import { watchdogAuthorized, shouldRecoverScreener } from "./marketResearchWatchdog";
 import { forecastObservationWindow, forecastObservationLimit, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink, normalizePolymarketEvents } from "./predictionMarketData";
 
-test("website Toto is revision-pinned 313M and user input cannot override model identity", () => {
+test("website Toto is revision-pinned and user input cannot override model identity", () => {
   const config=normalizeEnsembleConfiguration({models:{prophet:{enabled:false,weight:0},toto:{enabled:true,weight:1}},quantiles:[.1,.5,.9]},'research');
-  const revision='a7bab288f5e95f8606f8306f86659357e1c001ef';
-  assert.deepEqual(approvedModelCheckpoints(config),{toto:'Datadog/Toto-2.0-313m'});
+  const revision='51a2812bbe449437c01b79c0e425ed578f335f5b';
+  assert.deepEqual(approvedModelCheckpoints(config),{toto:'Datadog/Toto-2.0-2.5B'});
   assert.deepEqual(approvedModelRevisions(config),{toto:revision});
   const model=(publicModelCapabilities('research').models as any[]).find(m=>m.id==='toto');
-  assert.equal(model.name,'Toto 2.0 313M');
+  assert.equal(model.name,'Toto 2.0 2.5B');
   assert.equal(model.checkpoint_revision,revision);
   assert.equal(model.minimum_observed_context,32);
   assert.throws(()=>normalizeEnsembleConfiguration({models:{toto:{enabled:true,weight:1}},quantiles:[.5],model_revisions:{toto:revision}},'research'),/configuration_field_unsupported/);
   const legacy=publicEnsembleJob('old',{request:{},model_checkpoints:{toto:'Datadog/Toto-2.0-4m'}});
   assert.deepEqual(legacy.model_checkpoints,{toto:'Datadog/Toto-2.0-4m'});
   assert.deepEqual(legacy.model_revisions,{});
+  const previous=publicEnsembleJob('previous',{request:{},model_checkpoints:{toto:'Datadog/Toto-2.0-313m'},model_revisions:{toto:'a7bab288f5e95f8606f8306f86659357e1c001ef'}});
+  assert.deepEqual(previous.model_checkpoints,{toto:'Datadog/Toto-2.0-313m'});
+  assert.deepEqual(previous.model_revisions,{toto:'a7bab288f5e95f8606f8306f86659357e1c001ef'});
 });
 
 test("research watchdog requires a dedicated bearer secret and never duplicates active screeners", () => {
