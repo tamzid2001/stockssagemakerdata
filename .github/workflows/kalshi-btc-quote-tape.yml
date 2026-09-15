@@ -1,0 +1,75 @@
+name: Kalshi BTC Exchange Quote Tape
+run-name: BTC genuine exchange quote collection · ${{ inputs.mode }} · ${{ inputs.duration_minutes }} minutes
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [mock, collect]
+        default: mock
+        description: Tests only, or authenticated read-only exchange quote collection (no forecasts/orders)
+      duration_minutes:
+        type: choice
+        options: ['30', '60', '120']
+        default: '60'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: kalshi-btc-exchange-quote-tape-${{ inputs.mode }}
+  cancel-in-progress: false
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install locked quote collector (no foundation models)
+        run: |
+          python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-quotes.lock
+          npm ci --prefix market_research/node --ignore-scripts
+      - name: Verify sequence, timestamp, signing and genuine first-N quote behavior
+        run: python -m pytest -q market_research/tests/test_btc_quote_tape.py
+      - name: Record isolated versioned artifact directory
+        run: |
+          echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/btc-exchange-quotes" >> "$GITHUB_ENV"
+      - name: Check read-only collection credentials without exposing values
+        if: inputs.mode == 'collect'
+        env:
+          KALSHI_PROD_API_KEY: ${{ secrets.KALSHI_PROD_API_KEY }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: |
+          python -m market_research.artifact check-key
+          python -c 'from market_research.btc_quote_tape import auth_headers; auth_headers(); print("Kalshi signer configured; stream access still requires verification")'
+      - name: Capture quote-by-quote; encrypted private checkpoints each minute
+        if: inputs.mode == 'collect'
+        uses: actions/github-script@v8
+        env:
+          KALSHI_PROD_API_KEY: ${{ secrets.KALSHI_PROD_API_KEY }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          QUANTURA_CLOUD_PAPER_CHECKPOINTS: 'true'
+          DURATION: ${{ inputs.duration_minutes }}
+        with:
+          script: |
+            if(!['30','60','120'].includes(process.env.DURATION)) throw new Error('INVALID_QUOTE_CAPTURE_DURATION');
+            const {spawn}=require('node:child_process');
+            await new Promise((resolve,reject)=>{
+              const child=spawn(process.execPath,['market_research/node/run.mjs','--btc-quotes','--duration-minutes',process.env.DURATION],{stdio:'inherit'});
+              child.on('error',reject);
+              child.on('exit',code=>code===0?resolve():reject(new Error('QUOTE_CAPTURE_INCOMPLETE; inspect coverage, no forecast or trading claim.')));
+            });
+      - name: Honest collection status
+        if: always()
+        run: echo 'Quote collection only, not a completed five-model backtest. Actual exchange BBO changes retain millisecond timestamps and sequence; quiet seconds add no samples. First32/60/90/120 windows require pre-open subscription and contiguous book updates. Full histories use encrypted private storage, with optional small GitHub checkpoint pointers. No exchange orders are sent.' >> "$GITHUB_STEP_SUMMARY"
