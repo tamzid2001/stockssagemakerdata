@@ -1,0 +1,152 @@
+name: SPY Year Weekly Targets and Reversal Research
+run-name: SPY 52-week targets and reversal · through ${{ inputs.end_friday }} · ${{ inputs.smoke_mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      end_friday:
+        description: Last completed nominal Friday YYYY-MM-DD
+        type: string
+        required: true
+      seed_artifact_id:
+        description: Original encrypted spy-hourly artifact for a new study; zero on resume
+        type: number
+        default: 0
+      resume_campaign:
+        description: Existing private spy-year campaign ID; blank creates study
+        type: string
+        default: ''
+      code_ref:
+        description: main for new study; original full commit SHA for resume
+        type: string
+        default: main
+      smoke_mode:
+        type: choice
+        options: [mock, real]
+        default: mock
+      max_new_weeks:
+        type: choice
+        options: ['1', '13', '52']
+        default: '52'
+      continuous:
+        description: Continue unfinished study on same immutable code/config
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: spy-year-${{ inputs.end_friday }}
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Validate bounded identifiers
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+          END_FRIDAY: ${{ inputs.end_friday }}
+          SEED_ID: ${{ inputs.seed_artifact_id }}
+          RESUME_ID: ${{ inputs.resume_campaign }}
+        run: |
+          [[ "$CODE_REF" == main || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$END_FRIDAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || exit 1
+          [[ "$SEED_ID" =~ ^[0-9]+$ ]] || exit 1
+          [[ -z "$RESUME_ID" || "$RESUME_ID" =~ ^p90-[a-f0-9]{24}$ ]] || exit 1
+          [[ -z "$RESUME_ID" || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.code_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Record immutable analysis revision
+        run: echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Install mock-only analysis dependencies
+        if: inputs.smoke_mode == 'mock'
+        run: python -m pip install pytest==8.4.2 numpy==2.5.2 pandas==2.3.3 pandas-market-calendars==5.4.0 httpx==0.28.1 cryptography==50.0.1 pyyaml==6.0.3
+      - name: Install locked CPU five-model environment
+        if: inputs.smoke_mode == 'real'
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Validate calendar, frozen inputs, target exits and resume behavior
+        run: python -m pytest -q market_research/tests/test_spy_weekly.py market_research/tests/test_spy_exit_sweep.py market_research/tests/test_spy_option_targets.py market_research/tests/test_spy_year.py market_research/tests/test_spy_touches.py
+      - name: Resolve original artifact from this repository
+        id: source
+        if: inputs.smoke_mode == 'real' && inputs.resume_campaign == ''
+        uses: actions/github-script@v8
+        env:
+          SEED_ID: ${{ inputs.seed_artifact_id }}
+        with:
+          script: |
+            const id=Number(process.env.SEED_ID);
+            if(!Number.isSafeInteger(id)||id<=0) throw new Error('ORIGINAL_SPY_ARTIFACT_REQUIRED');
+            const {data}=await github.rest.actions.getArtifact({...context.repo,artifact_id:id});
+            if(data.expired||!data.name.startsWith('spy-hourly-')||!data.workflow_run?.id) throw new Error('VERIFIED_SPY_SOURCE_REQUIRED');
+            core.setOutput('run_id',String(data.workflow_run.id));
+      - name: Download encrypted original study
+        if: inputs.smoke_mode == 'real' && inputs.resume_campaign == ''
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ inputs.seed_artifact_id }}
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/spy-seed
+          merge-multiple: true
+      - name: Authenticate original archive locally
+        if: inputs.smoke_mode == 'real' && inputs.resume_campaign == ''
+        env:
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.artifact decrypt --source "$RUNNER_TEMP/spy-seed/spy-study.qra.enc" --output "$RUNNER_TEMP/spy-seed/study.zip"
+      - name: Run checkpointed annual research
+        id: study
+        if: inputs.smoke_mode == 'real'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+          END_FRIDAY: ${{ inputs.end_friday }}
+          RESUME_ID: ${{ inputs.resume_campaign }}
+          MAX_WEEKS: ${{ inputs.max_new_weeks }}
+        run: |
+          [[ "$MAX_WEEKS" == 1 || "$MAX_WEEKS" == 13 || "$MAX_WEEKS" == 52 ]] || exit 1
+          args=(--end-friday "$END_FRIDAY" --weeks 52 --max-new-weeks "$MAX_WEEKS" --budget-minutes 270 --output "$RUNNER_TEMP/spy-year")
+          if [[ -n "$RESUME_ID" ]]; then args+=(--resume-campaign "$RESUME_ID"); else args+=(--seed-archive "$RUNNER_TEMP/spy-seed/study.zip"); fi
+          python -m market_research.spy_year "${args[@]}"
+      - name: Upload small encrypted summary only
+        id: summary_artifact
+        if: always() && inputs.smoke_mode == 'real'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: spy-year-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/spy-year/*.qrc.enc
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 0
+      - name: Disclose optional GitHub artifact failure
+        if: steps.summary_artifact.outcome == 'failure'
+        run: |
+          echo 'GitHub summary upload failed. This is not loss of research data: every stage and the final summary are authenticated-encrypted in the private research bucket. Use the logged campaign ID for retrieval.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Continue only a checkpointed unfinished study
+        if: success() && inputs.smoke_mode == 'real' && inputs.continuous && steps.study.outputs.complete == 'false'
+        uses: actions/github-script@v8
+        env:
+          CAMPAIGN_ID: ${{ steps.study.outputs.campaign_id }}
+          END_FRIDAY: ${{ inputs.end_friday }}
+          MAX_WEEKS: ${{ inputs.max_new_weeks }}
+        with:
+          script: |
+            if(!/^p90-[a-f0-9]{24}$/.test(process.env.CAMPAIGN_ID)||!/^[a-f0-9]{40}$/.test(process.env.QUANTURA_CODE_SHA)) throw new Error('VERIFIED_YEAR_CHECKPOINT_REQUIRED');
+            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id:'spy-year-study.yml',ref:'main',inputs:{end_friday:process.env.END_FRIDAY,seed_artifact_id:'0',resume_campaign:process.env.CAMPAIGN_ID,code_ref:process.env.QUANTURA_CODE_SHA,smoke_mode:'real',max_new_weeks:process.env.MAX_WEEKS,continuous:'true'}});
+      - name: Failure disclosure
+        if: failure()
+        run: echo 'Annual study stopped, not complete. Source chunks, forecasts and completed weeks remain encrypted in the private research bucket. Resume the logged campaign using its original code SHA; no live orders were sent.' >> "$GITHUB_STEP_SUMMARY"

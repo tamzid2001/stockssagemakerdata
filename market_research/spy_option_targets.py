@@ -120,7 +120,7 @@ def summarize(results):
                 'timed_exit_legs':sum(s['timed_exit_legs'] for s in completed),
                 'profitable_legs':sum(t['net_pnl_proxy_before_costs']>0 for s in completed for t in s['legs']),
                 'losing_legs':sum(t['net_pnl_proxy_before_costs']<0 for s in completed for t in s['legs']),
-                'ranking_valid_for_full_sample':len(completed)==len(results)}
+                'ranking_valid_for_full_sample':bool(results) and len(completed)==len(results)}
     return summaries
 
 

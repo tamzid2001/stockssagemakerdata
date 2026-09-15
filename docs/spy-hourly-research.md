@@ -145,3 +145,94 @@ and aggregate pair P&L are retained privately. The options bid/ask and execution
 limitations above still apply: this is a price-bar approximation, not a record
 of maker/taker fills or an investment recommendation. A $0.65 per contract per
 fill sensitivity is labeled separately from before-cost results.
+
+## Annual checkpointed study
+
+The separate **SPY Year Weekly Targets and Reversal Research** workflow extends
+the same frozen methodology to 52 completed weeks. For `end_friday=2026-09-11`,
+the evaluation sessions run September 15, 2025–September 11, 2026, anchored at
+the September 12, 2025 close. Every forecast uses 500 completed past exchange
+hours; all five existing adapters must succeed. No orders are placed.
+
+Unlike the original four-week runner, this explicitly moves a holiday Friday
+anchor/expiry to the last exchange session that week. Early closes and daylight
+saving time use the NYSE calendar, not fixed UTC offsets. Source data is fetched
+in disjoint, bounded 28-calendar-day chunks to avoid an annual request hitting
+the provider row cap. Missing prices are never forward-filled.
+
+The original four forecasts and overlapping input snapshots remain unchanged.
+Training hashes and forecast grids must match before reuse. The original four
+weeks and 48 additional retrospective weeks are reported separately. Additional
+weeks are not proof of a prospective out-of-sample model evaluation: pretrained
+model data cutoffs remain unaudited, and the exit rules were selected after
+looking at the shorter study.
+
+### Weekly average-band touch table
+
+For every week, report the arithmetic average of every generated quantile:
+P1, P10, P25, P50, P75, P90, P99. Each average is fixed before evaluating prices.
+The table distinguishes:
+
+- Observed one-minute ranges containing the exact average level.
+- Distinct touch episodes, resetting across missing minutes/session gaps.
+- Consecutive-minute close crossings, upward versus downward.
+- Gaps past a level, separately from observed range touches.
+- First/last touch timestamp and observed/expected minute coverage.
+
+Annual touch rates use weeks with observations as their disclosed denominator,
+with a separate rate for full-coverage weeks. Missing observations do not prove
+a level was never touched. Even a range intersection is an OHLC touch proxy,
+not a verified trade, resting order fill, or profitable options exit.
+
+### Direction reversal and outer-band excursions
+
+Compare both rules on identical data and execution assumptions:
+
+- Momentum: buy/long P90, sell/short P10.
+- Reverse: sell/short P90, buy/long P10.
+
+Run each with time-aligned hourly thresholds and, separately, frozen weekly
+average thresholds. Detect completed-hour signal regions; execute the next
+scheduled hourly open. Positions carry across weekly forecast refreshes and
+reverse only at the opposite signal, with explicit end-of-study liquidation.
+There is one share, no recovery multiplier, no assumed exact-band fill, and
+0/1/5 basis points per fill cost sensitivity. These share results are distinct
+from the one-call/one-put option study and do not include short-borrow costs.
+
+For each P90/P10 region entry, measure the subsequent minute-price path strictly
+after the signal close until that week's end. P90 continuation is compared
+with P99; P10 continuation with P1. Both outer levels are also stored per event
+to inspect opposite-direction recoveries. Report remaining gap, fraction of
+initial gap closed, overshoot, maximum reversal, first reach, and missing/end
+coverage. Frozen signal tails, averaged tails, and moving tails are separate.
+A first bar already beyond a threshold is labeled, not called a confirmed
+crossing. Overlapping excursions are not independent trades or probabilities.
+
+### Durability and execution
+
+Use the existing research secrets: `FIREBASE_SERVICE_ACCOUNT_JSON`,
+`QUANTURA_RESEARCH_ARTIFACT_KEY`, `HF_TOKEN`; the TimesFM access/commercial
+environment flags must already authorize production use. No new secret type.
+
+The workflow has mock-only tests and a real CPU mode. Supply the verified
+original `spy-hourly-…` artifact ID for a new run. The seed is then preserved
+in the private research bucket, independent of GitHub retention. Resume using
+the logged `p90-…` campaign ID and its **original full code SHA**, never a newer
+mutable default. GitHub dispatch uses the `main` workflow definition (GitHub
+requires a branch/tag ref); its checkout still uses the original full SHA in
+`code_ref`, and the checkpoint refuses any different analysis revision.
+
+Each source chunk, model forecast, option path, completed week, and progress
+report is immutable and authenticated-encrypted in the existing private bucket.
+Firestore stores only bounded configuration/hash/object-generation pointers,
+not source prices or forecast arrays. Only the small encrypted summary goes to
+GitHub Actions with three-day retention; model caches/weights are not uploaded.
+The final report is also saved privately before that upload. A GitHub storage
+quota failure is explicitly disclosed but cannot discard results or block a
+checkpointed continuation; GitHub is a convenience copy, not the only backup.
+
+`continuous=true` hands an unfinished checkpointed study to another bounded
+run after the 270-minute computation budget (330-minute job timeout). Provider
+or model failures stop clearly; rerun the original campaign after diagnosing
+the error. An unfinished/empty run cannot be labeled a complete annual result.
+This workflow changes neither public forecasting nor any live/paper bot.
