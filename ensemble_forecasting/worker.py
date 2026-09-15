@@ -83,9 +83,10 @@ def execute_job(
     progress: Callable[[Mapping[str, Any]], None] | None = None,
     mock: bool = False,
     minimum_history_rows: int = 40,
+    single_point_research: bool = False,
 ) -> dict[str, Any]:
     # Trusted Python caller option, deliberately not a client request field.
-    if type(minimum_history_rows) is not int or not 2 <= minimum_history_rows <= 10_000:
+    if type(single_point_research) is not bool or type(minimum_history_rows) is not int or not (1 if single_point_research else 2) <= minimum_history_rows <= 10_000:
         raise ValueError("invalid minimum history rows")
     progress = progress or (lambda _payload: None)
     request_payload = dict(job.get("request") or {})
@@ -93,6 +94,11 @@ def execute_job(
     request_payload["runtime_mode"] = str(job.get("runtime_mode") or request_payload.get("runtime_mode") or "production")
     request_payload["max_quantiles"] = int(MODEL_REGISTRY["maxRequestedQuantiles"])
     request = ForecastRequest.from_dict(request_payload)
+    if single_point_research and (minimum_history_rows != 1 or job.get('source') or
+            request.prediction_length != 14 or request.frequency != '1min' or
+            request.failure_policy != 'fail' or
+            {m for m, s in request.models.items() if s.enabled} != {'granite', 'chronos', 'timesfm'}):
+        raise ValueError('SINGLE_POINT_RESEARCH_CONFIGURATION_REQUIRED')
     validate_request_capabilities(request)
     source = dict(job.get("input") or {})
     # The authenticated API verifies provider identity, side and real bars before
@@ -104,6 +110,8 @@ def execute_job(
     rows = source.get("rows")
     if not isinstance(rows, list):
         raise ValueError("worker input rows are missing")
+    if single_point_research and len(rows) != 1:
+        raise ValueError('EXACTLY_ONE_REAL_OBSERVATION_REQUIRED')
     series = prepare_series(
         rows,
         timestamp_column=str(source.get("timestamp_column") or "timestamp"),

@@ -42,6 +42,7 @@ jobs:
                 if (workflow_id === 'kalshi-btc-paper.yml') {
                   kind = title.startsWith('Kalshi BTC paper · live') ? 'btc_live' : title.startsWith('Kalshi BTC paper · historical') ? 'btc_historical' : null;
                   slot = kind;
+                  if (kind && title.includes('first 1m')) slot += '_first1_next14';
                 } else {
                   const h = title.match(/^polymarket_us paper · p1_oco · lag 0m · horizon (5|15|30)m$/);
                   if (h) {kind = 'polymarket_live'; slot = `${kind}_${h[1]}`;}

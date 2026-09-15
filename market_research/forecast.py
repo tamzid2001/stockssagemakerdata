@@ -21,6 +21,7 @@ def forecast_window(
     horizon: int,
     models: tuple[str, ...] | None = None,
     quantiles: tuple[float, ...] = QUANTILES,
+    *, single_point_research: bool = False,
 ) -> dict:
     models = default_research_models() if models is None else models
     if (
@@ -29,7 +30,9 @@ def forecast_window(
         or set(models) - set(MODEL_REGISTRY["models"])
     ):
         raise ValueError("unsupported_models")
-    if len(window) < 2 or any(not q.observed for q in window):
+    if single_point_research and (len(window) != 1 or horizon != 14 or set(models) != {'granite','chronos','timesfm'}):
+        raise ValueError('SINGLE_POINT_RESEARCH_CONFIGURATION_REQUIRED')
+    if len(window) < (1 if single_point_research else 2) or any(not q.observed for q in window):
         raise ValueError("TWO_GENUINE_OBSERVATIONS_REQUIRED")
     if any(b.timestamp <= a.timestamp for a, b in zip(window, window[1:])):
         raise ValueError("NON_CHRONOLOGICAL_CONTEXT")
@@ -61,7 +64,7 @@ def forecast_window(
         "calendar": "NONE",
         "transform": "none",
         "context_length": 500,
-        "failure_policy": "renormalize",
+        "failure_policy": "fail" if single_point_research else "renormalize",
         "quantiles": list(quantiles),
         "models": {m: {"enabled": True, "weight": 1} for m in models},
     }
@@ -74,7 +77,8 @@ def forecast_window(
             "input": {"rows": logits, "frequency": "1min"},
             "runtime_mode": "production",
         },
-        minimum_history_rows=2,
+        minimum_history_rows=1 if single_point_research else 2,
+        **({'single_point_research': True} if single_point_research else {}),
         progress=lambda progress: logging.getLogger("quantura.research").warning(
             "ensemble_progress model=%s completed=%s total=%s observed_rows=%s",
             progress.get("current_model"),

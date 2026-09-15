@@ -15,11 +15,11 @@ def export(directory):
         if "in_game_p90_switch_v1" in versions:
             from .recovery_switch import export as export_recovery
             export_recovery(store)
-        if not versions.intersection({VERSION,"kalshi_btc_first2_next13_v1"}):
+        if not versions.intersection({VERSION,"kalshi_btc_first2_next13_v1","kalshi_btc_first1_next14_v1"}):
             return
         from .quantile_paths import export as export_paths
         export_paths(store,int(time.time()))
-        if 'kalshi_btc_first2_next13_v1' in versions:
+        if versions.intersection({'kalshi_btc_first2_next13_v1','kalshi_btc_first1_next14_v1'}):
             from .btc_signals import export as export_signals
             export_signals(store, int(time.time()))
         fields=["timestamp","sequence","game_id","contract_id","kind","level","price",

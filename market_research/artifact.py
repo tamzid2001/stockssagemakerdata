@@ -43,7 +43,9 @@ def package(directory, destination, max_bytes=MAX_ARTIFACT_BYTES):
                       "p1_orders_and_fills.csv.gz", "p1_forecast_quantiles.csv.gz", "p1_summary.json", "p1_path_outcomes.json",
                       "quantile_path_report.json", "quantile_path_trades.csv.gz", "btc_forecast_quantiles.csv.gz", "btc_signal_report.json"}
         or p.name in {"recovery_summary.json", "recovery_trades.csv.gz", "recovery_signals.csv.gz", "recovery_forecast_quantiles.csv.gz"}
-        or p.name in {"exit_comparison_trades.csv.gz", "exit_comparison_summary.csv", "signal_target_paths.csv.gz"}
+        or p.name in {"exit_comparison_trades.csv.gz", "exit_comparison_summary.csv", "signal_target_paths.csv.gz", "btc_minute_policy_trades.csv.gz"}
+        or p.name in {'btc_limit_orders.csv.gz', 'btc_limit_trades.csv.gz'}
+        or p.name in {'btc_hold_orders.csv.gz', 'btc_hold_trades.csv.gz'}
         or (p.name.startswith("report-") and p.suffix == ".json")
     )
     if not files or any(p.is_symlink() or not p.is_file() for p in files):
@@ -140,7 +142,11 @@ def main():
     elif args.operation == "package":
         print(json.dumps(package(args.source, args.output)))
     elif args.operation == "checkpoint":
-        snapshot_package(args.source, args.output)
+        from .cloud_checkpoint import enabled, snapshot
+        if enabled():
+            snapshot(args.source,args.output)
+        else:
+            snapshot_package(args.source, args.output)
     elif args.operation in {"restore", "restore-backtest"}:
         restore(args.source, args.output, preserve_results=args.operation == "restore-backtest")
         print("Authenticated checkpoint restored to runner-local storage.")
@@ -179,6 +185,12 @@ def snapshot_package(directory, destination, max_bytes=MAX_ARTIFACT_BYTES):
 
 def restore(source, directory, preserve_results=False, max_bytes=MAX_ARTIFACT_BYTES, max_database_bytes=32 * 1024 * 1024):
     import sqlite3
+
+    with Path(source).open('rb') as handle:
+        cloud_pointer=handle.read(4)==b'QCP1'
+    if cloud_pointer:
+        from .cloud_checkpoint import restore_pointer
+        return restore_pointer(source,directory,preserve_results)
 
     root = Path(directory)
     root.mkdir(parents=True, exist_ok=True, mode=0o700)

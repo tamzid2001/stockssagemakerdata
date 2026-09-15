@@ -67,7 +67,7 @@ def main():
                 artifacts = api(f"/actions/runs/{run['id']}/artifacts?per_page=100")["artifacts"]
                 matches = [a for a in artifacts if a['name'].startswith('p1-paper-checkpoint-') and not a['expired']]
                 if matches:
-                    artifact = max(matches,key=lambda a:a['id'])
+                    artifact = max(matches,key=lambda a:(a['created_at'],a['id']))
                     checkpoint = str(artifact['id'])
                     match = re.match(r'p1-paper-checkpoint-([a-f0-9]{40})-',artifact['name'])
                     code = match[1] if match else None

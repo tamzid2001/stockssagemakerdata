@@ -21,6 +21,7 @@ from .p1_oco import QUANTILES
 from .quantile_paths import from_store
 
 VERSION = "kalshi_btc_first2_next13_v1"
+ONE_MINUTE_VERSION = 'kalshi_btc_first1_next14_v1'
 SERIES = "KXBTC15M"
 API = "https://external-api.kalshi.com/trade-api/v2"
 
@@ -124,12 +125,23 @@ def two_minute_window(quotes, opened):
     return [by_time[opened + 60], by_time[opened + 120]]
 
 
+def first_minute_window(quotes, opened):
+    matches = [q for q in quotes if q.observed and q.timestamp == opened + 60]
+    if len(matches) != 1:
+        raise ValueError('EXACT_FIRST_COMPLETED_MINUTE_REQUIRED')
+    return matches
+
+
 def short_context_models():
     return tuple(m for m in default_research_models()
                  if MODEL_REGISTRY["models"][m].get("minimumObservedContext", 2) <= 2)
 
 
-def process_market(store, provider, market, now, historical=False, forecaster=forecast_window):
+def process_market(store, provider, market, now, historical=False, forecaster=forecast_window, history_minutes=2):
+    if history_minutes not in (1, 2):
+        raise ValueError('INVALID_BTC_HISTORY_MINUTES')
+    version = ONE_MINUTE_VERSION if history_minutes == 1 else VERSION
+    horizon = 15 - history_minutes
     if not provider.valid_market(market):
         raise ValueError("INVALID_BTC_15M_MARKET")
     ticker = market["ticker"]
@@ -137,52 +149,57 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
     saved = store._get("checkpoints", "btc:" + ticker) or {"market": market, "status": "waiting"}
     if saved["status"] in {"missed_start", "failed", "missing_first_minutes"}:
         return saved
-    if now < opened + 120:
+    origin = opened + history_minutes * 60
+    if now < origin:
         store.checkpoint("btc:" + ticker, saved)
         return saved
-    if saved["status"] == "waiting" and not historical and now > opened + 180:
-        saved.update(status="missed_start", reason="WORKER_NOT_READY_WITHIN_THIRD_MINUTE")
+    if saved["status"] == "waiting" and not historical and now > origin + 60:
+        saved.update(status="missed_start", reason="WORKER_NOT_READY_WITHIN_ORIGIN_WINDOW")
         store.checkpoint("btc:" + ticker, saved)
         return saved
     raw = provider.candles(market, now)
     quotes = provider.quotes(raw, market, now)
     if saved["status"] == "waiting":
         try:
-            windows = {s: two_minute_window(q, opened) for s, q in quotes.items()}
+            window_builder = first_minute_window if history_minutes == 1 else two_minute_window
+            windows = {s: window_builder(q, opened) for s, q in quotes.items()}
         except ValueError:
-            if historical or now >= opened + 180:
-                saved.update(status="missing_first_minutes", reason="FIRST_TWO_COMPLETED_MINUTES_REQUIRED")
+            if historical or now >= origin + 60:
+                saved.update(status="missing_first_minutes", reason="EXACT_FIRST_COMPLETED_MINUTE_REQUIRED" if history_minutes == 1 else "FIRST_TWO_COMPLETED_MINUTES_REQUIRED")
             store.checkpoint("btc:" + ticker, saved)
             return saved
-        models = short_context_models()
+        models = ('granite', 'chronos', 'timesfm') if history_minutes == 1 else short_context_models()
         if len(models) < 2:
             raise RuntimeError("INSUFFICIENT_SHORT_CONTEXT_MODELS")
         # Claim before inference: a crash never reruns an origin as if the
         # delayed forecast were available earlier. Failed/in-flight rows explicit.
-        saved.update(status="inference_started", requested_models=list(models), origin=opened + 120)
+        saved.update(status="inference_started", requested_models=list(models), origin=origin)
         store.checkpoint("btc:" + ticker, saved)
         started = time.monotonic()
         pair = []
         try:
             for side in ("yes", "no"):
-                f = forecaster(windows[side], 13, models, QUANTILES)
-                validate_forecast(f, opened + 120, 13)
+                options = {'single_point_research': True} if history_minutes == 1 else {}
+                f = forecaster(windows[side], horizon, models, QUANTILES, **options)
+                validate_forecast(f, origin, horizon)
                 f["market_context"] = {"event_id": market["event_ticker"], "market_id": ticker,
                                        "contract_id": ticker + ":" + side, "side": side,
                                        "outcome": "BTC up" if side == "yes" else "BTC not up", "provider": "kalshi"}
-                f.update(history_count=2, strategy=VERSION, input_snapshot=[asdict(q) for q in windows[side]],
+                f.update(history_count=history_minutes, strategy=version, input_snapshot=[asdict(q) for q in windows[side]],
+                         execution_code_sha=os.environ.get('QUANTURA_CODE_SHA','local'),
                          expected_side_count=2,
-                         short_context_exclusions=["toto: requires 32 genuine observations"],
-                         inference_started_at=now, requested_horizon_minutes=13)
+                         short_context_exclusions=["toto: requires 32 genuine observations"] +
+                             (["prophet: requires at least two observations"] if history_minutes == 1 else []),
+                         inference_started_at=now, requested_horizon_minutes=horizon)
                 # Same underlying input for different contracts must not collide.
-                f["forecast_id"] = digest([f["forecast_id"], ticker, side, VERSION])
+                f["forecast_id"] = digest([f["forecast_id"], ticker, side, version])
                 pair.append(f)
         except Exception as error:
             saved.update(status="failed", error_type=type(error).__name__)
             store.checkpoint("btc:" + ticker, saved)
             raise
         duration = time.monotonic() - started
-        available = opened + 120 + max(1, int(duration) + 1) if historical else max(int(time.time()), now)
+        available = origin + max(1, int(duration) + 1) if historical else max(int(time.time()), now)
         # Atomically publish BOTH sides, then observe quotes. No partial-pair bias.
         with store.lock, store.db:
             for f in pair:
@@ -199,18 +216,27 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
         saved.update(status="failed", reason="INFERENCE_INTERRUPTED_BEFORE_PUBLICATION")
         store.checkpoint("btc:" + ticker, saved)
     if saved["status"] in {"published", "observing", "complete"}:
+        received_at = int(time.time())
         with store.lock, store.db:
             for side, rows in quotes.items():
                 for q in rows:
                     if q.timestamp > saved["available_at"]:
-                        record = {"game_id": market["event_ticker"], "contract_id": ticker + ":" + side, **asdict(q)}
+                        record = {"game_id": market["event_ticker"], "contract_id": ticker + ":" + side,
+                                  **asdict(q), "received_at": received_at,
+                                  "collection_mode": "historical" if historical else "live"}
                         store._put("observations", digest([ticker, side, q.timestamp]), record, True)
             saved.update(status="complete" if now >= end else "observing", observed_at=now,
                          observation_counts={s: len(q) for s, q in quotes.items()})
             store._put("checkpoints", "btc:" + ticker, saved)
         if now >= end:
             for side in ("yes", "no"):
-                store.checkpoint("resolution:" + ticker + ":" + side, provider.resolution(market, side))
+                key = "resolution:" + ticker + ":" + side
+                result = provider.resolution(market, side)
+                prior = store._get("checkpoints", key) or {}
+                if result.get('resolution_status') == 'resolved':
+                    same = prior.get('resolution_status') == 'resolved' and prior.get('selected_side_won') == result.get('selected_side_won')
+                    result['first_confirmed_at'] = (prior.get('first_confirmed_at', prior.get('checked_at')) if same else None) or result.get('checked_at', int(time.time()))
+                store.checkpoint(key, result)
     return saved
 
 
@@ -218,8 +244,9 @@ def report(store, coverage, failures):
     paths = from_store(store, int(time.time()))
     from .btc_signals import from_store as signal_report
     signals = signal_report(store, int(time.time()))
+    single = any(c.get('version') == ONE_MINUTE_VERSION for c in store.values('configuration'))
     records = [r for r in store.values("checkpoints") if isinstance(r, dict) and r.get("market")]
-    result = {"version": VERSION, "paper_only": True, "coverage": coverage,
+    result = {"version": ONE_MINUTE_VERSION if single else VERSION, "paper_only": True, "coverage": coverage,
               "market_status_counts": {s: sum(r["status"] == s for r in records) for s in sorted({r["status"] for r in records})},
               "forecast_count": len(store.values("forecasts")), "failures": failures,
               "model_participation": paths["model_participation"],
@@ -228,6 +255,10 @@ def report(store, coverage, failures):
                                    "per_market": signals['per_game'], "configuration": signals['configuration']},
               "model_policy": "First two genuine observations; Toto excluded by minimum context. Actual participants/effective per-quantile weights persisted. Two-point forecasts are unvalidated research.",
               "execution": "Read-only bid/ask paper simulation; 1% entry/exit notional fee assumption, not a verified exchange fee schedule or executable liquidity."}
+    if single:
+        result.update(model_policy='Exactly one first-minute observation; Granite, Chronos-2 and TimesFM; strict all-three success. Unvalidated research.',
+                      execution='Post-only minus-one-cent limit candidate-fill proxy; not actual orders. Zero-fee sensitivity; all unfilled orders recorded.',
+                      history_minutes=1,horizon_minutes=14)
     store.report(digest(result), result)
     print(json.dumps({"event": "btc_paper_report", **result}), flush=True)
     return result
@@ -238,15 +269,23 @@ def main():
     parser.add_argument("--mode", choices=["live", "historical"], default="live")
     parser.add_argument("--duration-minutes", type=int, default=345)
     parser.add_argument("--max-markets", type=int, default=10)
+    parser.add_argument('--history-minutes', type=int, choices=(1, 2), default=2)
     args = parser.parse_args()
     if not 1 <= args.duration_minutes <= 345 or not 1 <= args.max_markets <= 100:
         parser.error("INVALID_WORKER_LIMITS")
-    configuration = {"version": VERSION, "mode": args.mode, "code_sha": os.environ.get("QUANTURA_CODE_SHA", "local"),
-                     "history_minutes": 2, "horizon_minutes": 13, "paper_only": True}
-    store = LocalStore("btc-" + digest(configuration)[:20], os.environ.get("GITHUB_RUN_ID", "local"))
-    if store.values("configuration") and configuration not in store.values("configuration"):
-        raise RuntimeError("RESTORE_ORIGINAL_CODE_AND_CONFIGURATION")
+    configuration = {"version": ONE_MINUTE_VERSION if args.history_minutes == 1 else VERSION,
+                     "mode": args.mode, "code_sha": os.environ.get("QUANTURA_CODE_SHA", "local"),
+                     "history_minutes": args.history_minutes, "horizon_minutes": 15-args.history_minutes, "paper_only": True}
+    from .cloud_checkpoint import enabled, compatible_configuration, MAX_DATABASE_BYTES
+    store = LocalStore("btc-" + digest(configuration)[:20], os.environ.get("GITHUB_RUN_ID", "local"),
+                       capacity_bytes=MAX_DATABASE_BYTES if enabled() else 20*1024*1024)
+    configuration=compatible_configuration(store.values('configuration'),configuration)
+    store.session='btc-'+digest(configuration)[:20]
     store.claim(configuration)
+    if configuration['code_sha']!=os.environ.get('QUANTURA_CODE_SHA','local'):
+        store.checkpoint('storage-migration:'+os.environ['QUANTURA_CODE_SHA'],
+            {'origin_code_sha':configuration['code_sha'],'execution_code_sha':os.environ['QUANTURA_CODE_SHA'],
+             'at':int(time.time()),'reason':'private_cloud_checkpoint_storage; original records preserved'})
     provider = KalshiBTCProvider()
     failures, coverage = [], {}
     budget = min(args.duration_minutes * 60, max(0, float(os.environ.get("QUANTURA_JOB_STARTED_AT", time.time())) + 350 * 60 - time.time()))
@@ -268,7 +307,7 @@ def main():
                 if time.monotonic() >= deadline or store.at_capacity:
                     break
                 try:
-                    process_market(store, provider, m, int(time.time()), args.mode == "historical")
+                    process_market(store, provider, m, int(time.time()), args.mode == "historical", history_minutes=args.history_minutes)
                 except (RuntimeError, ValueError, OSError) as error:
                     failure = {"ticker": m["ticker"], "error_type": type(error).__name__, "at": int(time.time())}
                     store.checkpoint("failure:" + digest(failure), failure)

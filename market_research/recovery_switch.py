@@ -14,6 +14,7 @@ from .engine import digest
 from .quantile_paths import model_participation
 
 VERSION = "in_game_p90_switch_v1"
+BTC_MINUTE_POLICY = "btc_p90_or_opposite_p10_hold_switch_v1"
 VARIANTS = (("p90_cross_p10_opposite", "0.9"),)
 EXIT_FRACTIONS = (.01, .05, .10, .20, .30, .40, .50, .60, .70, .80, .90, 1.0)
 
@@ -53,7 +54,10 @@ def statistics(trades):
 
 
 def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_shares=100, fee_rate=.01,
-             switch_on_other_p90=False, p90_touch=False, exit_policy=None):
+             switch_on_other_p90=False, p90_touch=False, exit_policy=None, btc_minute_policy=False):
+    if type(btc_minute_policy) is not bool or (btc_minute_policy and
+            (exit_policy is not None or not switch_on_other_p90 or not p90_touch or max_shares > 100)):
+        raise ValueError("INVALID_BTC_MINUTE_POLICY")
     if not all(math.isfinite(v) for v in (multiplier, max_shares, fee_rate)) or not (
             1 <= multiplier <= 10 and 1 <= max_shares <= 10000 and 0 <= fee_rate <= .1):
         raise ValueError("INVALID_RECOVERY_CONFIGURATION")
@@ -65,6 +69,8 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
         raise ValueError("INVALID_EXIT_COMPARISON_POLICY")
     variants = VARIANTS if exit_policy is None else (
         (f"p90_{exit_policy['kind']}_{round(exit_policy['fraction'] * 100):02d}pct", "0.9"),)
+    if btc_minute_policy:
+        variants = ((BTC_MINUTE_POLICY, "0.9"),)
     groups = defaultdict(list)
     for f in forecasts:
         if f.get("strategy") == VERSION and f["available_at"] <= as_of:
@@ -75,6 +81,9 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
         if len(pair) != pair[0]["expected_side_count"] or len({f["market_context"]["contract_id"] for f in pair}) != len(pair):
             continue
         if len({f["available_at"] for f in pair}) != 1:
+            continue
+        if btc_minute_policy and (len(pair) != 2 or
+                len({f['market_context']['market_id'] for f in pair}) != 1):
             continue
         games[game].append(pair)
     tape = defaultdict(dict)
@@ -96,7 +105,7 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
             size, position, pending, active, pair_index = 1., None, None, None, 0
             memory, ledger = {}, []
             fresh_cross_required = False
-            increases = ambiguous = expired = signals_count = 0
+            increases = ambiguous = expired = signals_count = low_signals_count = 0
 
             def close(t, bid, reason):
                 nonlocal position, size, increases, fresh_cross_required
@@ -105,11 +114,15 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                 if pending and reason != "authoritative_settlement":
                     value.update(exit_signal_at=pending["signal_at"], exit_signal_p10=pending.get("exit_signal_p10"))
                 value["gross_pnl"] = (bid - value["entry_price"]) * value["quantity"]
-                value["fees"] = fee_rate * (bid + value["entry_price"]) * value["quantity"]
+                # The legacy benchmark is immutable. The new policy does not
+                # treat settlement payout as an exchange sell-order execution.
+                exit_fee_base = 0 if btc_minute_policy and reason == 'authoritative_settlement' else bid
+                value["fees"] = fee_rate * (exit_fee_base + value["entry_price"]) * value["quantity"]
                 value["net_pnl"] = value["gross_pnl"] - value["fees"]
                 value['game_realized_net_pnl'] = sum(t['net_pnl'] for t in ledger if t.get('status') == 'closed')
                 if value['game_realized_net_pnl'] < -1e-12:
-                    next_size = min(size * multiplier, max_shares)
+                    escalate = not btc_minute_policy or reason == 'p10_exit_and_opposite'
+                    next_size = min(size * multiplier, max_shares) if escalate else size
                     increases += next_size > size
                     size = next_size
                 else:
@@ -134,7 +147,8 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                             if position:
                                 close(t, quotes[held]["bid"], pending["reason"])
                             if target:
-                                position = {"trade_id": digest([VERSION, game, variant, t, target]),
+                                position = {"trade_id": digest([VERSION, game, variant, fee_rate if btc_minute_policy else None, t, target])
+                                            if btc_minute_policy else digest([VERSION, game, variant, t, target]),
                                     "game_id": game, "variant": variant, "contract_id": target,
                                     "signal_at": pending["signal_at"], "previous_quote_at": pending.get("previous_quote_at"),
                                     "entry_reason": pending["reason"], "trigger_contract_id": pending.get("trigger_contract_id", target),
@@ -143,6 +157,8 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                                     "entry_price": quotes[target]["ask"], "quantity": size, "status": "open"}
                                 if exit_policy:
                                     position["peak_completed_minute_bid"] = quotes[target]["bid"]
+                                if btc_minute_policy:
+                                    position['signal_p10'] = pending.get('signal_p10', pending.get('exit_signal_p10'))
                                 ledger.append(position)
                                 fresh_cross_required = False
                             pending = None
@@ -166,6 +182,7 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                 if not active:
                     continue
                 recoveries = []
+                low_entries = []
                 active_by_side = {f["market_context"]["contract_id"]: f for f in active}
                 for s, f in active_by_side.items():
                     q, levels = quotes.get(s), curves[f["forecast_id"]].get(t)
@@ -187,8 +204,22 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                                         "signal_bid": q["bid"], "signal_p90": levels[high]})
                         signals_count += 1
                     memory[s] = {"timestamp": t, "bid": q["bid"], "high": levels[high]}
+                    if btc_minute_policy and not position and q['bid'] <= levels['0.1']:
+                        mates = [side for side, candidate in active_by_side.items() if side != s
+                                 and candidate['market_context']['market_id'] == f['market_context']['market_id']]
+                        if len(mates) == 1:
+                            low_entries.append({'target_side': mates[0], 'signal_at': t,
+                                'trigger_contract_id': s, 'forecast_id': f['forecast_id'],
+                                'reason': 'opposite_p10_entry', 'signal_bid': q['bid'],
+                                'signal_p90': None, 'signal_p10': levels['0.1']})
+                            low_signals_count += 1
                 if pending:
                     continue
+                if btc_minute_policy and not position:
+                    # P90 and the paired P10 may agree on one side. Conflicting
+                    # sides are explicitly skipped, never chosen by settlement.
+                    choices = {r['target_side']: r for r in low_entries + recoveries}
+                    recoveries = list(choices.values())
                 if len(recoveries) > 1:
                     ambiguous += 1  # Never choose the side using future results.
                     recoveries = []
@@ -229,12 +260,15 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
             trades.extend(ledger)
             per_game.setdefault(game, {})[variant] = {**statistics(ledger), "recovery_signals": signals_count,
                 "ambiguous_signals_excluded": ambiguous, "expired_pending_orders": expired,
-                "multiplier_increases": increases, "next_quantity": size}
+                "multiplier_increases": increases, "next_quantity": size,
+                **({'opposite_p10_entry_signals': low_signals_count} if btc_minute_policy else {})}
     summary = {variant: statistics([t for t in trades if t["variant"] == variant]) for variant, _ in variants}
     for variant, s in summary.items():
         s.update({key: sum(g[variant][key] for g in per_game.values()) for key in
                   ("recovery_signals", "ambiguous_signals_excluded", "expired_pending_orders", "multiplier_increases")})
-    return {"version": VERSION, "as_of": as_of, "paper_only": True, "summary": summary,
+        if btc_minute_policy:
+            s['opposite_p10_entry_signals'] = sum(g[variant]['opposite_p10_entry_signals'] for g in per_game.values())
+    return {"version": BTC_MINUTE_POLICY if btc_minute_policy else VERSION, "as_of": as_of, "paper_only": True, "summary": summary,
             "per_game": per_game, "trades": sorted(trades, key=lambda t: (t["entry_at"], t["game_id"], t["variant"])),
             "signals": signals, "pending_orders": pending_orders, "model_participation": model_participation(forecasts),
             "configuration": {"base_shares": 1, "loss_multiplier": multiplier, "max_shares": max_shares,
@@ -242,6 +276,11 @@ def simulate(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max
                 "fixed_price_stop": None, "horizon_exit": False, "execution": "next_genuine_bid_ask_within_120_seconds",
                 "quote_basis": "completed_one_minute_bid_ask", "switch_on_other_p90": switch_on_other_p90,
                 "p90_trigger": "at_or_above" if p90_touch else "cross_from_at_or_below_to_above",
+                **({'flat_entry': 'P90_touch_or_opposite_P10_touch; conflicting_sides_skipped',
+                    'sizing': 'multiply_after_held_P10_exit_only_while_game_net_pnl_negative; otherwise retain; reset_on_cumulative_recovery',
+                    'settlement_fee_rate': 0, 'exit_priority': 'first_observed_minute; held_P10_wins_same_minute_tie',
+                    'maker_fills_verified': False, 'execution_warning': 'Quote benchmark, not resting-order fills or a maker fee claim.'}
+                   if btc_minute_policy else {}),
                 **({"exit_policy": exit_policy, "percentage_basis": "relative_price_not_probability_points",
                     "percentage_exit_action": "flat_until_fresh_p90_cross",
                     "exit_priority": "pending_order_then_percentage_exit_then_p10_then_opposite_p90",

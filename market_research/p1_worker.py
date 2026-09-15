@@ -140,6 +140,7 @@ def process_game(store, provider, pair, heartbeat, *, now=None, forecaster=forec
                 validate_forecast(f,origin,horizon)
                 annotate_forecast(f,side,now,origin,0)
                 f.update(available_at=int(time.time()),strategy=VERSION,mode="prospective_paper",
+                    execution_code_sha=os.environ.get('QUANTURA_CODE_SHA','local'),
                     expected_side_count=len(pair),paper_publication_required=True,
                     history_count=len(windows[side["contractId"]]),
                     input_snapshot=[asdict(q) for q in windows[side["contractId"]]])
@@ -214,11 +215,17 @@ def main():
         "fee_rate":.01,"entry_cadence_seconds":60,"quantile_target":"terminal_forecast_horizon",
         "code_sha":os.environ.get("QUANTURA_CODE_SHA","local")}
     run_id=os.environ.get("GITHUB_RUN_ID",str(time.time_ns()))+"-"+os.environ.get("GITHUB_RUN_ATTEMPT","1")
-    store=LocalStore("polymarket-p1-"+digest(configuration)[:20],run_id)
+    from .cloud_checkpoint import enabled, compatible_configuration, MAX_DATABASE_BYTES
+    store=LocalStore("polymarket-p1-"+digest(configuration)[:20],run_id,
+                     capacity_bytes=MAX_DATABASE_BYTES if enabled() else 20*1024*1024)
     existing=store.values("configuration")
-    if existing and configuration not in existing:
-        raise RuntimeError("RESTORE_ORIGINAL_CODE_AND_CONFIGURATION")
+    configuration=compatible_configuration(existing,configuration)
+    store.session='polymarket-p1-'+digest(configuration)[:20]
     store.claim(configuration)
+    if configuration['code_sha']!=os.environ.get('QUANTURA_CODE_SHA','local'):
+        store.checkpoint('storage-migration:'+os.environ['QUANTURA_CODE_SHA'],
+            {'origin_code_sha':configuration['code_sha'],'execution_code_sha':os.environ['QUANTURA_CODE_SHA'],
+             'at':int(time.time()),'reason':'private_cloud_checkpoint_storage; original records preserved'})
     heartbeat=Heartbeat(store); heartbeat.thread.start()
     observer=MinuteObserver(store,args.quantity,args.max_quantity);observer.thread.start()
     provider=QuanturaProvider()

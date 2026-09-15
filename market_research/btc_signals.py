@@ -8,6 +8,7 @@ import json
 
 from .engine import stamp
 from .recovery_switch import VERSION as REPLAY_VERSION, simulate
+from .quantile_paths import model_participation
 
 VERSION = "btc_first2_next13_p90_p10_switch_v1"
 
@@ -17,7 +18,7 @@ def simulation_inputs(store):
                if isinstance(r, dict) and r.get('market') and r.get('available_at')}
     forecasts = []
     for saved in store.values('forecasts'):
-        if saved.get('strategy') != 'kalshi_btc_first2_next13_v1':
+        if saved.get('strategy') not in ('kalshi_btc_first2_next13_v1', 'kalshi_btc_first1_next14_v1'):
             continue
         f = deepcopy(saved)
         ticker = f['market_context']['market_id']
@@ -43,12 +44,22 @@ def from_store(store, as_of):
     forecasts, observations, resolutions = simulation_inputs(store)
     report = simulate(forecasts, observations, resolutions, as_of=as_of,
                       switch_on_other_p90=True, p90_touch=True)
+    one = any(c.get('version') == 'kalshi_btc_first1_next14_v1' for c in store.values('configuration'))
     # The BTC strategy is separately versioned even though it shares execution.
     report.update(version=VERSION, input_forecast_count=len(forecasts), forecast_count=len(forecasts),
                   description='First two completed minutes → 13-minute forecast. Buy on P90 touch or higher; hold one side; reverse on held P10 or opposite P90. No fixed stop. Multiply next size 2.5x while cumulative game net P&L is negative, capped at 100; reset to one on cumulative recovery.',
                   horizon_minutes=13, history_minutes=2,
                   signal_labels={'p90': 'Buy signal', 'p10': 'Sell signal'},
                   validation='Two observations are not evidence of forecasting reliability. Quote fills assume no depth or queue constraints; not live exchange trades.')
+    if one:
+        from .btc_limits import simulate as limits
+        report = limits(forecasts, observations, resolutions, as_of=as_of)
+        # Existing report/export envelope; the new version explicitly identifies
+        # candidate maker fills and includes all unfilled/repriced orders.
+        report['summary'] = {report['version']: report['summary']}
+        report.update(forecast_count=len(forecasts), input_forecast_count=len(forecasts),
+                      history_minutes=1, horizon_minutes=14,
+                      model_participation=model_participation(forecasts))
     return report
 
 

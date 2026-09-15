@@ -1,8 +1,13 @@
-name: Kalshi BTC First Two Minutes Quantile Paper Research
-run-name: Kalshi BTC paper · ${{ inputs.mode }} · first 2m → next 13m
+name: Kalshi BTC Minute-Origin Quantile Paper Research
+run-name: Kalshi BTC paper · ${{ inputs.mode }} · first ${{ inputs.history_minutes || '2' }}m → next ${{ inputs.history_minutes == '1' && '14' || '13' }}m
 on:
   workflow_dispatch:
     inputs:
+      history_minutes:
+        type: choice
+        options: ['1', '2']
+        default: '1'
+        description: New first 1m → 14m three-model limits or preserved first 2m → 13m baseline
       mode:
         type: choice
         options: [live, historical]
@@ -39,7 +44,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: kalshi-btc-first2-paper-${{ inputs.mode }}
+  group: kalshi-btc-first${{ inputs.history_minutes || '2' }}-paper-${{ inputs.mode }}
   cancel-in-progress: false
 jobs:
   paper:
@@ -109,12 +114,15 @@ jobs:
         if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
         env:
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: python -m market_research.artifact restore-backtest --source "$RUNNER_TEMP/btc-restore/research.qra.enc" --output "$QUANTURA_RESEARCH_DIR"
       - name: Read-only paper worker with five-minute encrypted checkpoints
         id: worker
         if: inputs.smoke_mode == 'real'
         uses: actions/github-script@v8
         env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_CLOUD_PAPER_CHECKPOINTS: 'true'
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
@@ -123,13 +131,15 @@ jobs:
           PAPER_MODE: ${{ inputs.mode }}
           PAPER_DURATION: ${{ inputs.duration_minutes }}
           PAPER_MAX: ${{ inputs.max_markets }}
+          PAPER_HISTORY_MINUTES: ${{ inputs.history_minutes || '2' }}
         with:
           script: |
             const {spawn}=require('node:child_process');
             const env=process.env;
-            if(!['live','historical'].includes(env.PAPER_MODE) || !['30','60','345'].includes(env.PAPER_DURATION) || !['2','10','50','100'].includes(env.PAPER_MAX)) throw new Error('INVALID_BTC_INPUTS');
+            if(!['live','historical'].includes(env.PAPER_MODE) || !['30','60','345'].includes(env.PAPER_DURATION) || !['2','10','50','100'].includes(env.PAPER_MAX) || !['1','2'].includes(env.PAPER_HISTORY_MINUTES)) throw new Error('INVALID_BTC_INPUTS');
             await new Promise((resolve,reject)=>{
               const args=['market_research/node/run.mjs','--paper-btc','--mode',env.PAPER_MODE,'--duration-minutes',env.PAPER_DURATION,'--max-markets',env.PAPER_MAX];
+              if (env.PAPER_HISTORY_MINUTES === '1') args.push('--history-minutes','1');
               const child=spawn(process.execPath,args,{stdio:'inherit'});
               child.on('error',reject);
               child.on('exit',code=>code===0?resolve():reject(new Error('BTC research failed; recover latest verified checkpoint.')));
@@ -141,6 +151,7 @@ jobs:
           KALSHI_BTC_PAPER_ENABLED: ${{ vars.KALSHI_BTC_PAPER_ENABLED || 'false' }}
           PAPER_CHECKPOINT: ${{ steps.worker.outputs.checkpoint_artifact_id }}
           PAPER_CODE_REF: ${{ steps.worker.outputs.checkpoint_code_sha }}
+          PAPER_HISTORY_MINUTES: ${{ inputs.history_minutes || '2' }}
         run: python -m market_research.btc_handoff
       - name: Explicit failure disclosure
         if: failure()
