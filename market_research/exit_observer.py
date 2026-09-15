@@ -47,6 +47,10 @@ def compare_archive(source, metadata, cloud, record_id, maximum=MAX_GAME_ARCHIVE
                   "summary": result["summary"], "game_count": result["game_count"],
                   "signal_target_study": result["signal_target_study"]["summary"],
                   "forecast_count": result["forecast_count"], "updated_at": time.time()}
+        if result.get('btc_minute_policy'):
+            record['btc_minute_policy'] = {name: report['summary']
+                for name, report in result['btc_minute_policy']['scenarios'].items()}
+            record['btc_limit_proxy'] = result['btc_minute_policy']['post_only_limit_proxy']['summary']
         if len(json.dumps(record)) > 900000:
             raise ValueError("COMPARISON_METADATA_TOO_LARGE")
         @cloud.lease.fs.transactional

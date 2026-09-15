@@ -17,8 +17,11 @@ def main():
         print("BTC paper continuation disabled.")
         return
     current = os.environ.get("GITHUB_RUN_ID")
+    history = os.environ.get('PAPER_HISTORY_MINUTES', '2')
+    if history not in ('1', '2'):
+        raise ValueError('INVALID_BTC_HISTORY_MINUTES')
     runs = api(f"/actions/workflows/{WORKFLOW}/runs?per_page=100")["workflow_runs"]
-    live = [r for r in runs if r.get("head_branch") == "main" and r.get("display_title", "").startswith("Kalshi BTC paper · live")]
+    live = [r for r in runs if r.get("head_branch") == "main" and r.get("display_title", "").startswith(f"Kalshi BTC paper · live · first {history}m")]
     if any(str(r["id"]) != current and r["status"] != "completed" for r in live):
         print("BTC live paper worker already active or queued.")
         return
@@ -39,7 +42,7 @@ def main():
         raise ValueError("VERIFIED_BTC_CHECKPOINT_REQUIRED")
     api(f"/actions/workflows/{WORKFLOW}/dispatches", {"ref": "main", "inputs": {
         "mode": "live", "smoke_mode": "real", "duration_minutes": "345", "max_markets": "10",
-        "continuous": "true", "resume_artifact_id": str(checkpoint), "code_ref": code}})
+        "continuous": "true", "resume_artifact_id": str(checkpoint), "code_ref": code, "history_minutes": history}})
     print("Checkpoint-pinned BTC paper successor dispatched.")
 
 

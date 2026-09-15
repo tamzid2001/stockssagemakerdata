@@ -10,7 +10,7 @@ from collections import Counter
 
 from .recovery_switch import EXIT_FRACTIONS, simulate
 
-VERSION = "p90_percentage_exit_sweep_v1"
+VERSION = "p90_percentage_exit_sweep_v2_btc_minute_policy"
 
 
 def compare(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_shares=100, fee_rate=.01):
@@ -54,7 +54,7 @@ def compare(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_
 
 def inputs_from_store(store, as_of=None):
     versions = {c.get("version") for c in store.values("configuration") if c}
-    if "kalshi_btc_first2_next13_v1" in versions:
+    if versions & {'kalshi_btc_first2_next13_v1', 'kalshi_btc_first1_next14_v1'}:
         from .btc_signals import simulation_inputs
         forecasts, observations, resolutions = simulation_inputs(store)
         return forecasts, observations, resolutions, as_of
@@ -86,12 +86,27 @@ def from_store(store, as_of=None):
         raise ValueError("COMPARISON_AS_OF_REQUIRED")
     result = compare(forecasts, observations, resolutions, as_of=cutoff)
     result["source_configuration"] = store.values("configuration")
+    if any(c.get('version') in ('kalshi_btc_first2_next13_v1', 'kalshi_btc_first1_next14_v1') for c in result['source_configuration']):
+        from .btc_minute_policy import compare as btc_compare
+        result['btc_minute_policy'] = btc_compare(forecasts, observations, resolutions, as_of=cutoff)
     return result
 
 
 def export(result, directory):
     with (directory / "report-exit-comparison.json").open("x") as out:
         json.dump(result, out, allow_nan=False, indent=2)
+    if result.get('btc_minute_policy'):
+        with gzip.open(directory / 'btc_minute_policy_trades.csv.gz', 'wt', newline='') as out:
+            rows = [{**trade, 'fee_scenario': name} for name, report in result['btc_minute_policy']['scenarios'].items()
+                    for trade in report['trades']]
+            writer = csv.DictWriter(out, fieldnames=sorted({key for row in rows for key in row}) or ['trade_id'])
+            writer.writeheader(); writer.writerows(rows)
+        proxy = result['btc_minute_policy']['post_only_limit_proxy']
+        for name in ('orders', 'trades'):
+            rows = proxy[name]
+            with gzip.open(directory / f'btc_limit_{name}.csv.gz', 'wt', newline='') as out:
+                writer = csv.DictWriter(out, fieldnames=sorted({key for row in rows for key in row}) or ['id'])
+                writer.writeheader(); writer.writerows(rows)
     with gzip.open(directory / "exit_comparison_trades.csv.gz", "wt", newline="") as out:
         rows = result["trades"]
         writer = csv.DictWriter(out, fieldnames=sorted({k for row in rows for k in row}) or ["trade_id"])

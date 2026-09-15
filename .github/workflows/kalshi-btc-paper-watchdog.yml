@@ -25,4 +25,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           KALSHI_BTC_PAPER_ENABLED: ${{ vars.KALSHI_BTC_PAPER_ENABLED }}
+          PAPER_HISTORY_MINUTES: ${{ vars.KALSHI_BTC_HISTORY_MINUTES || '2' }}
         run: python -m market_research.btc_handoff
