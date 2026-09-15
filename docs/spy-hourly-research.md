@@ -26,8 +26,8 @@ no third-party redistribution right is implied.
 
 ## Trading rule
 
-- Hourly close >= its time-aligned P90: long one share.
-- Hourly close <= its time-aligned P10: short one share.
+- Hourly close ≥ its time-aligned P90: long one share.
+- Hourly close ≤ its time-aligned P10: short one share.
 - Reverse at the **next scheduled bar's open**, not the already observed signal
   price. Missing execution bars do not receive a later invented fill.
 - Otherwise hold, including overnight and across weekly forecast refreshes.

@@ -63,8 +63,8 @@ real historical smoke, then live. The existing 2→13 mode remains available via
 `history_minutes=2` and its original checkpoint/code. Never restore a 2→13
 checkpoint into the 1→14 configuration.
 
-`KALSHI_BTC_HISTORY_MINUTES=1` selects the new lineage for the watchdog once a
-verified first-minute checkpoint exists. Five-minute AES-GCM encrypted SQLite
+The watchdog independently checks both history-minute cohorts once their
+verified checkpoints exist. Five-minute AES-GCM encrypted SQLite
 snapshots use the existing artifact mechanism; newest two per run, 3-day retention.
 Production paper checkpoints now upload full authenticated-encrypted snapshots
 to the existing private research bucket, with only a small AES-GCM authenticated
@@ -89,7 +89,8 @@ accuracy. Return = net P&L / closed entry notional, not bankroll ROI. Open marke
 P&L, coverage, missed starts, failed models and unfilled orders must accompany
 results. Return rankings on a reused tape are exploratory, in-sample comparisons;
 selecting the highest result among many variants increases selection bias.
-# First-P90 hold monitoring across 13- and 14-minute cohorts
+
+## First-P90 hold monitoring across 13- and 14-minute cohorts
 
 The comparison observer now keeps the first-P90/hold-to-official-settlement
 experiment separately for first-two-minutes → 13 minutes and first-one-minute
