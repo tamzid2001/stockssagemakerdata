@@ -10,7 +10,7 @@ from collections import Counter
 
 from .recovery_switch import EXIT_FRACTIONS, simulate
 
-VERSION = "p90_percentage_exit_sweep_v3_btc_hold_tracking"
+VERSION = "p90_percentage_exit_sweep_v4_btc_doubling_ladder"
 
 
 def compare(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_shares=100, fee_rate=.01):
@@ -91,6 +91,8 @@ def from_store(store, as_of=None):
         result['btc_minute_policy'] = btc_compare(forecasts, observations, resolutions, as_of=cutoff)
         from .btc_hold_tracking import compare as hold_compare
         result['btc_hold_tracking'] = hold_compare(forecasts, observations, resolutions, as_of=cutoff)
+        from .btc_ladder import compare as ladder_compare
+        result['btc_average_down_ladder'] = ladder_compare(forecasts, observations, resolutions, as_of=cutoff)
     return result
 
 

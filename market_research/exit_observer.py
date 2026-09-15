@@ -56,6 +56,9 @@ def compare_archive(source, metadata, cloud, record_id, maximum=MAX_GAME_ARCHIVE
             record['btc_hold_tracking'] = {key: holding[key] for key in ('version', 'history_minutes', 'horizon_minutes', 'coverage', 'live_readiness')}
             record['btc_hold_tracking']['scenarios'] = {execution: {policy: scenario['summary']
                 for policy, scenario in policies.items()} for execution, policies in holding['scenarios'].items()}
+        if result.get('btc_average_down_ladder'):
+            from .btc_ladder import compact_report
+            record['btc_average_down_ladder'] = compact_report(result['btc_average_down_ladder'])
         if len(json.dumps(record)) > 900000:
             raise ValueError("COMPARISON_METADATA_TOO_LARGE")
         @cloud.lease.fs.transactional

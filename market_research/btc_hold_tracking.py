@@ -93,6 +93,15 @@ def first_signals(forecasts, observations, as_of):
     return signals,ambiguous
 
 
+def prospective_observations(observations, as_of):
+    """Shared receipt-timed minute tape; never promote backfills to live evidence."""
+    return [q for q in observations if q.get('collection_mode')=='live' and q.get('observed')
+            and type(q.get('received_at')) is int and type(q.get('timestamp')) is int and q['timestamp']%60==0
+            and all(type(q.get(k)) in (int,float) and math.isfinite(q[k]) for k in ('bid','ask'))
+            and 0<=q['bid']<=q['ask']<=1
+            and q['timestamp']<=q['received_at']<=min(as_of,q['timestamp']+MAX_RECEIPT_DELAY_SECONDS)]
+
+
 def compare(forecasts, observations, resolutions, *, as_of):
     origins=defaultdict(set)
     for f in forecasts: origins[f['market_context']['market_id']].add(f['origin'])
@@ -102,11 +111,7 @@ def compare(forecasts, observations, resolutions, *, as_of):
     history=next(iter(lengths),None)
     benchmark=hold(forecasts,observations,resolutions,as_of=as_of)
     confirmed={s:r.get('first_confirmed_at',r.get('checked_at')) for s,r in resolutions.items()}
-    timely=[q for q in observations if q.get('collection_mode')=='live' and q.get('observed')
-            and type(q.get('received_at')) is int and type(q.get('timestamp')) is int and q['timestamp']%60==0
-            and all(type(q.get(k)) in (int,float) and math.isfinite(q[k]) for k in ('bid','ask'))
-            and 0<=q['bid']<=q['ask']<=1
-            and q['timestamp']<=q['received_at']<=min(as_of,q['timestamp']+MAX_RECEIPT_DELAY_SECONDS)]
+    timely=prospective_observations(observations,as_of)
     # Historical/backfilled quotes never appear in the prospective subset.
     signals,ambiguous=first_signals(forecasts,timely,as_of)
     by_quote={(q['contract_id'],q['timestamp']):q for q in timely}
