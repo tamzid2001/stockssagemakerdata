@@ -134,7 +134,8 @@ jobs:
           compression-level: 0
       - name: Disclose optional GitHub artifact failure
         if: steps.summary_artifact.outcome == 'failure'
-        run: echo 'GitHub summary upload failed. This is not loss of research data: every stage and the final summary are authenticated-encrypted in the private research bucket. Use the logged campaign ID for retrieval.' >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo 'GitHub summary upload failed. This is not loss of research data: every stage and the final summary are authenticated-encrypted in the private research bucket. Use the logged campaign ID for retrieval.' >> "$GITHUB_STEP_SUMMARY"
       - name: Continue only a checkpointed unfinished study
         if: success() && inputs.smoke_mode == 'real' && inputs.continuous && steps.study.outputs.complete == 'false'
         uses: actions/github-script@v8
