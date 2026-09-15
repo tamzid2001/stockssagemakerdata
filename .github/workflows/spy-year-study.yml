@@ -146,7 +146,7 @@ jobs:
         with:
           script: |
             if(!/^p90-[a-f0-9]{24}$/.test(process.env.CAMPAIGN_ID)||!/^[a-f0-9]{40}$/.test(process.env.QUANTURA_CODE_SHA)) throw new Error('VERIFIED_YEAR_CHECKPOINT_REQUIRED');
-            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id:'spy-year-study.yml',ref:process.env.QUANTURA_CODE_SHA,inputs:{end_friday:process.env.END_FRIDAY,seed_artifact_id:'0',resume_campaign:process.env.CAMPAIGN_ID,code_ref:process.env.QUANTURA_CODE_SHA,smoke_mode:'real',max_new_weeks:process.env.MAX_WEEKS,continuous:'true'}});
+            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id:'spy-year-study.yml',ref:'main',inputs:{end_friday:process.env.END_FRIDAY,seed_artifact_id:'0',resume_campaign:process.env.CAMPAIGN_ID,code_ref:process.env.QUANTURA_CODE_SHA,smoke_mode:'real',max_new_weeks:process.env.MAX_WEEKS,continuous:'true'}});
       - name: Failure disclosure
         if: failure()
         run: echo 'Annual study stopped, not complete. Source chunks, forecasts and completed weeks remain encrypted in the private research bucket. Resume the logged campaign using its original code SHA; no live orders were sent.' >> "$GITHUB_STEP_SUMMARY"

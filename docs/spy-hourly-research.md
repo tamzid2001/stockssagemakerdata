@@ -218,7 +218,9 @@ The workflow has mock-only tests and a real CPU mode. Supply the verified
 original `spy-hourly-…` artifact ID for a new run. The seed is then preserved
 in the private research bucket, independent of GitHub retention. Resume using
 the logged `p90-…` campaign ID and its **original full code SHA**, never a newer
-mutable default. Both dispatch and execution remain pinned across handoffs.
+mutable default. GitHub dispatch uses the `main` workflow definition (GitHub
+requires a branch/tag ref); its checkout still uses the original full SHA in
+`code_ref`, and the checkpoint refuses any different analysis revision.
 
 Each source chunk, model forecast, option path, completed week, and progress
 report is immutable and authenticated-encrypted in the existing private bucket.
