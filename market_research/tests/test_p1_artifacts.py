@@ -62,7 +62,7 @@ def test_side_groups_require_complete_soccer_set():
     assert not game_groups(rows[:-1])
 
 
-def test_live_p1_is_local_only_and_always_checkpoints():
+def test_live_p1_executes_locally_and_cloud_checkpoints_preserve_books():
     from pathlib import Path
     import yaml
     root=Path(__file__).resolve().parents[2]
@@ -72,7 +72,8 @@ def test_live_p1_is_local_only_and_always_checkpoints():
     assert 'arm_minute(book,quotes,timestamp' in code
     workflow=yaml.safe_load((root/".github/workflows/polymarket-live-paper.yml").read_text())
     p1=next(s for s in workflow["jobs"]["monitor"]["steps"] if s.get("id")=="p1_worker")
-    assert "FIREBASE_SERVICE_ACCOUNT_JSON" not in p1["env"]
+    assert p1['env']['QUANTURA_CLOUD_PAPER_CHECKPOINTS']=='true'
+    assert 'FIREBASE_SERVICE_ACCOUNT_JSON' in p1['env']
     assert 'QUANTURA_RESEARCH_ARTIFACT_KEY' in p1["env"]
     script=(root/"market_research/node/run.mjs").read_text()
     assert 'paper || btc ? 5 * 60 * 1000' in script and 'await publish();' in script

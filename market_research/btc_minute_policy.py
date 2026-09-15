@@ -12,6 +12,7 @@ from .recovery_switch import simulate, BTC_MINUTE_POLICY
 
 def compare(forecasts, observations, resolutions, *, as_of):
     from .btc_limits import simulate as limits
+    from .btc_hold import compare as hold
     scenarios = {}
     for name, fee in (('one_percent_notional_assumption', .01), ('zero_fee_sensitivity_only', 0.)):
         report = simulate(forecasts, observations, resolutions, as_of=as_of,
@@ -25,6 +26,7 @@ def compare(forecasts, observations, resolutions, *, as_of):
         scenarios[name] = report
     return {'version': BTC_MINUTE_POLICY, 'paper_only': True, 'as_of': as_of,
             'post_only_limit_proxy': limits(forecasts, observations, resolutions, as_of=as_of),
+            'hold_first_p90_to_settlement': hold(forecasts, observations, resolutions, as_of=as_of),
             'scenarios': scenarios,
             'limitations': [
                 'No maker-fill claim: post-only execution requires order/trade data not present in this minute-quote tape.',

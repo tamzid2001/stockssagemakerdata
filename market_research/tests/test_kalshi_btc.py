@@ -89,7 +89,7 @@ def test_workflow_cpu_safe_ids_checkpoint_timeout_and_no_exchange_credentials():
     assert data['jobs']['paper']['runs-on']=='ubuntu-latest'
     assert data['jobs']['paper']['timeout-minutes']==360
     assert 'QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/btc-paper-output' in raw
-    assert 'FIREBASE_SERVICE_ACCOUNT' not in raw and 'KALSHI_PRIVATE_KEY' not in raw
+    assert 'QUANTURA_CLOUD_PAPER_CHECKPOINTS' in raw and 'KALSHI_PRIVATE_KEY' not in raw
     assert 'restore-backtest' in raw and 'persist-credentials: false' in raw
     assert '--paper-btc' in raw and 'resume_artifact_id' in raw
 

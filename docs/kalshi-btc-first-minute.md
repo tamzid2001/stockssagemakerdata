@@ -66,6 +66,14 @@ checkpoint into the 1→14 configuration.
 `KALSHI_BTC_HISTORY_MINUTES=1` selects the new lineage for the watchdog once a
 verified first-minute checkpoint exists. Five-minute AES-GCM encrypted SQLite
 snapshots use the existing artifact mechanism; newest two per run, 3-day retention.
+Production paper checkpoints now upload full authenticated-encrypted snapshots
+to the existing private research bucket, with only a small AES-GCM authenticated
+recovery reference in GitHub. The wrapper restores the exact object generation
+and verifies checksum and SQLite integrity before starting. Existing embedded
+SQLite artifacts remain readable. No historical records or positions are reset.
+The local safety limit is 512 MiB, cloud object limit 1 GiB; this is not unlimited
+retention. Immutable cloud snapshots require monitored storage lifecycle planning
+and normal storage charges. Source research records remain outside Firestore.
 GitHub-hosted CPU workers retain the 345-minute handoff budget; no GPU or uptime
 guarantee is claimed. Keep the previous lineage's archives for audit.
 
@@ -81,3 +89,38 @@ accuracy. Return = net P&L / closed entry notional, not bankroll ROI. Open marke
 P&L, coverage, missed starts, failed models and unfilled orders must accompany
 results. Return rankings on a reused tape are exploratory, in-sample comparisons;
 selecting the highest result among many variants increases selection bias.
+# First-P90 hold monitoring across 13- and 14-minute cohorts
+
+The comparison observer now keeps the first-P90/hold-to-official-settlement
+experiment separately for first-two-minutes → 13 minutes and first-one-minute
+→ 14 minutes. The watchdog checks both independently and will not silently
+start a fresh lineage when a verified recovery checkpoint is missing.
+
+Each cohort reports three sizing policies: one contract; 2.5x after a loss,
+reset after a win; and 2.5x after a loss until the cumulative recovery cycle is
+nonnegative. All are capped at 100. Only an outcome whose confirmation was
+received strictly before the next entry can change that entry's size.
+Legacy fractional sizing remains a benchmark. New execution-oriented scenarios
+round down to whole contracts (1, 2, 5, 12, 30, 75, 100); fractional contract
+eligibility is not assumed.
+
+There are three separate execution datasets, never pooled:
+
+- The preserved quote benchmark, for continuity with earlier reports.
+- Prospectively collected completed-minute quotes received within 30 seconds;
+  late/backfilled or previously untimestamped observations are excluded.
+- Post-only candidate entries: ask minus one cent, refreshed each minute on
+  the first selected side only, and held to official settlement if filled.
+  Strict later quote trade-through is a candidate, **not verified maker
+  execution**. Mere touches, missing minutes, and unfilled orders are reported.
+
+The order ledger is unit-size candidate evidence, with sizing as a separate
+analytical overlay. Actual exchange acceptance, queued size, liquidity,
+market-specific fees/tick rules, and fills remain unverified. The existing 1%
+entry-notional fee is disclosed as a sensitivity assumption, not a maker-fee
+claim. This does not enable real trading or establish readiness for live funds.
+
+New observations record collection time and mode without rewriting old records.
+Official settlement records retain first-confirmed time. Encrypted artifacts
+include the full analysis and separate hold trade/order CSVs. Firestore holds
+small summary/pointer metadata, not quote histories or forecast arrays.

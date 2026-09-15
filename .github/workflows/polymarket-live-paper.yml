@@ -135,12 +135,15 @@ jobs:
         if: inputs.smoke_mode == 'real' && inputs.strategy == 'p1_oco' && inputs.resume_artifact_id != 0
         env:
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: python -m market_research.artifact restore-backtest --source "$RUNNER_TEMP/paper-restore/research.qra.enc" --output "$QUANTURA_RESEARCH_DIR"
       - name: P1 minute accumulation with five-minute encrypted checkpoints
         id: p1_worker
         if: inputs.smoke_mode == 'real' && inputs.strategy == 'p1_oco'
         uses: actions/github-script@v8
         env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_CLOUD_PAPER_CHECKPOINTS: 'true'
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HOME: ${{ runner.temp }}/quantura-hf
           RUN_ONCE: ${{ inputs.run_once }}

@@ -186,6 +186,7 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
                                        "contract_id": ticker + ":" + side, "side": side,
                                        "outcome": "BTC up" if side == "yes" else "BTC not up", "provider": "kalshi"}
                 f.update(history_count=history_minutes, strategy=version, input_snapshot=[asdict(q) for q in windows[side]],
+                         execution_code_sha=os.environ.get('QUANTURA_CODE_SHA','local'),
                          expected_side_count=2,
                          short_context_exclusions=["toto: requires 32 genuine observations"] +
                              (["prophet: requires at least two observations"] if history_minutes == 1 else []),
@@ -215,18 +216,27 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
         saved.update(status="failed", reason="INFERENCE_INTERRUPTED_BEFORE_PUBLICATION")
         store.checkpoint("btc:" + ticker, saved)
     if saved["status"] in {"published", "observing", "complete"}:
+        received_at = int(time.time())
         with store.lock, store.db:
             for side, rows in quotes.items():
                 for q in rows:
                     if q.timestamp > saved["available_at"]:
-                        record = {"game_id": market["event_ticker"], "contract_id": ticker + ":" + side, **asdict(q)}
+                        record = {"game_id": market["event_ticker"], "contract_id": ticker + ":" + side,
+                                  **asdict(q), "received_at": received_at,
+                                  "collection_mode": "historical" if historical else "live"}
                         store._put("observations", digest([ticker, side, q.timestamp]), record, True)
             saved.update(status="complete" if now >= end else "observing", observed_at=now,
                          observation_counts={s: len(q) for s, q in quotes.items()})
             store._put("checkpoints", "btc:" + ticker, saved)
         if now >= end:
             for side in ("yes", "no"):
-                store.checkpoint("resolution:" + ticker + ":" + side, provider.resolution(market, side))
+                key = "resolution:" + ticker + ":" + side
+                result = provider.resolution(market, side)
+                prior = store._get("checkpoints", key) or {}
+                if result.get('resolution_status') == 'resolved':
+                    same = prior.get('resolution_status') == 'resolved' and prior.get('selected_side_won') == result.get('selected_side_won')
+                    result['first_confirmed_at'] = (prior.get('first_confirmed_at', prior.get('checked_at')) if same else None) or result.get('checked_at', int(time.time()))
+                store.checkpoint(key, result)
     return saved
 
 
@@ -266,10 +276,16 @@ def main():
     configuration = {"version": ONE_MINUTE_VERSION if args.history_minutes == 1 else VERSION,
                      "mode": args.mode, "code_sha": os.environ.get("QUANTURA_CODE_SHA", "local"),
                      "history_minutes": args.history_minutes, "horizon_minutes": 15-args.history_minutes, "paper_only": True}
-    store = LocalStore("btc-" + digest(configuration)[:20], os.environ.get("GITHUB_RUN_ID", "local"))
-    if store.values("configuration") and configuration not in store.values("configuration"):
-        raise RuntimeError("RESTORE_ORIGINAL_CODE_AND_CONFIGURATION")
+    from .cloud_checkpoint import enabled, compatible_configuration, MAX_DATABASE_BYTES
+    store = LocalStore("btc-" + digest(configuration)[:20], os.environ.get("GITHUB_RUN_ID", "local"),
+                       capacity_bytes=MAX_DATABASE_BYTES if enabled() else 20*1024*1024)
+    configuration=compatible_configuration(store.values('configuration'),configuration)
+    store.session='btc-'+digest(configuration)[:20]
     store.claim(configuration)
+    if configuration['code_sha']!=os.environ.get('QUANTURA_CODE_SHA','local'):
+        store.checkpoint('storage-migration:'+os.environ['QUANTURA_CODE_SHA'],
+            {'origin_code_sha':configuration['code_sha'],'execution_code_sha':os.environ['QUANTURA_CODE_SHA'],
+             'at':int(time.time()),'reason':'private_cloud_checkpoint_storage; original records preserved'})
     provider = KalshiBTCProvider()
     failures, coverage = [], {}
     budget = min(args.duration_minutes * 60, max(0, float(os.environ.get("QUANTURA_JOB_STARTED_AT", time.time())) + 350 * 60 - time.time()))

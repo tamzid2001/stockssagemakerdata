@@ -10,7 +10,7 @@ from collections import Counter
 
 from .recovery_switch import EXIT_FRACTIONS, simulate
 
-VERSION = "p90_percentage_exit_sweep_v2_btc_minute_policy"
+VERSION = "p90_percentage_exit_sweep_v3_btc_hold_tracking"
 
 
 def compare(forecasts, observations, resolutions, *, as_of, multiplier=2.5, max_shares=100, fee_rate=.01):
@@ -89,12 +89,23 @@ def from_store(store, as_of=None):
     if any(c.get('version') in ('kalshi_btc_first2_next13_v1', 'kalshi_btc_first1_next14_v1') for c in result['source_configuration']):
         from .btc_minute_policy import compare as btc_compare
         result['btc_minute_policy'] = btc_compare(forecasts, observations, resolutions, as_of=cutoff)
+        from .btc_hold_tracking import compare as hold_compare
+        result['btc_hold_tracking'] = hold_compare(forecasts, observations, resolutions, as_of=cutoff)
     return result
 
 
 def export(result, directory):
     with (directory / "report-exit-comparison.json").open("x") as out:
         json.dump(result, out, allow_nan=False, indent=2)
+    if result.get('btc_hold_tracking'):
+        report = result['btc_hold_tracking']
+        rows = [{**trade, 'execution_scenario': execution, 'sizing_policy': policy}
+                for execution, policies in report['scenarios'].items()
+                for policy, scenario in policies.items() for trade in scenario['trades']]
+        for name, data in (('trades', rows), ('orders', report['orders'])):
+            with gzip.open(directory / f'btc_hold_{name}.csv.gz', 'wt', newline='') as out:
+                writer = csv.DictWriter(out, fieldnames=sorted({key for row in data for key in row}) or ['id'])
+                writer.writeheader(); writer.writerows(data)
     if result.get('btc_minute_policy'):
         with gzip.open(directory / 'btc_minute_policy_trades.csv.gz', 'wt', newline='') as out:
             rows = [{**trade, 'fee_scenario': name} for name, report in result['btc_minute_policy']['scenarios'].items()
