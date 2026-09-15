@@ -1,0 +1,82 @@
+name: SPY Weekly Hourly Ensemble Research
+run-name: SPY five-model hourly · ${{ inputs.weeks }} completed weeks through ${{ inputs.end_friday }}
+on:
+  workflow_dispatch:
+    inputs:
+      end_friday:
+        description: Last completed Friday YYYY-MM-DD (exchange holiday rejected)
+        type: string
+        required: true
+      weeks:
+        description: Bounded retrospective weeks; not live trading
+        type: choice
+        options: ['1', '4']
+        default: '4'
+      smoke_mode:
+        description: Mock runs tests only; real requires all five licensed models
+        type: choice
+        options: [mock, real]
+        default: mock
+permissions:
+  contents: read
+concurrency:
+  group: spy-hourly-study-${{ inputs.end_friday }}-${{ inputs.weeks }}
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate bounded research inputs
+        env:
+          END_FRIDAY: ${{ inputs.end_friday }}
+          WEEKS: ${{ inputs.weeks }}
+        run: |
+          [[ "$END_FRIDAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || exit 1
+          [[ "$WEEKS" == 1 || "$WEEKS" == 4 ]] || exit 1
+      - name: Install analysis test dependencies
+        if: inputs.smoke_mode == 'mock'
+        run: python -m pip install pytest==8.4.2 numpy==2.5.2 pandas==2.3.3 pandas-market-calendars==5.4.0 httpx==0.28.1
+      - name: Install locked five-model CPU environment
+        if: inputs.smoke_mode == 'real'
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Verify hourly calendar and trading rules
+        run: python -m pytest -q market_research/tests/test_spy_weekly.py
+      - name: Run real research with immutable weekly checkpoints
+        if: inputs.smoke_mode == 'real'
+        env:
+          END_FRIDAY: ${{ inputs.end_friday }}
+          WEEKS: ${{ inputs.weeks }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        run: python -m market_research.spy_weekly --output "$RUNNER_TEMP/spy-study" --end-friday "$END_FRIDAY" --weeks "$WEEKS"
+      - name: Encrypt partial or completed study, never raw provider data
+        if: always() && inputs.smoke_mode == 'real'
+        env:
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: |
+          if [[ -d "$RUNNER_TEMP/spy-study" ]]; then
+            python -m market_research.artifact package --source "$RUNNER_TEMP/spy-study" --output "$RUNNER_TEMP/spy-study.qra.enc"
+          fi
+      - name: Upload encrypted, bounded research archive
+        if: always() && inputs.smoke_mode == 'real'
+        uses: actions/upload-artifact@v7
+        with:
+          name: spy-hourly-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/spy-study.qra.enc
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
