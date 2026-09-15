@@ -225,6 +225,9 @@ report is immutable and authenticated-encrypted in the existing private bucket.
 Firestore stores only bounded configuration/hash/object-generation pointers,
 not source prices or forecast arrays. Only the small encrypted summary goes to
 GitHub Actions with three-day retention; model caches/weights are not uploaded.
+The final report is also saved privately before that upload. A GitHub storage
+quota failure is explicitly disclosed but cannot discard results or block a
+checkpointed continuation; GitHub is a convenience copy, not the only backup.
 
 `continuous=true` hands an unfinished checkpointed study to another bounded
 run after the 270-minute computation budget (330-minute job timeout). Provider

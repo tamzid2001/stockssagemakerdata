@@ -122,7 +122,9 @@ jobs:
           if [[ -n "$RESUME_ID" ]]; then args+=(--resume-campaign "$RESUME_ID"); else args+=(--seed-archive "$RUNNER_TEMP/spy-seed/study.zip"); fi
           python -m market_research.spy_year "${args[@]}"
       - name: Upload small encrypted summary only
+        id: summary_artifact
         if: always() && inputs.smoke_mode == 'real'
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: spy-year-summary-${{ github.run_id }}-${{ github.run_attempt }}
@@ -130,6 +132,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
           compression-level: 0
+      - name: Disclose optional GitHub artifact failure
+        if: steps.summary_artifact.outcome == 'failure'
+        run: echo 'GitHub summary upload failed. This is not loss of research data: every stage and the final summary are authenticated-encrypted in the private research bucket. Use the logged campaign ID for retrieval.' >> "$GITHUB_STEP_SUMMARY"
       - name: Continue only a checkpointed unfinished study
         if: success() && inputs.smoke_mode == 'real' && inputs.continuous && steps.study.outputs.complete == 'false'
         uses: actions/github-script@v8

@@ -125,6 +125,7 @@ def test_workflow_is_private_pinned_and_carries_no_raw_dataset_inputs():
     upload=next(s for s in steps if s.get('uses','').startswith('actions/upload-artifact'))
     assert upload['with']['path'].endswith('*.qrc.enc')
     assert upload['with']['retention-days']==3
+    assert upload['continue-on-error'] is True  # Durable private store is primary.
     handoff=next(s for s in steps if s.get('name')=='Continue only a checkpointed unfinished study')
     assert "steps.study.outputs.complete == 'false'" in handoff['if']
     assert 'ref:process.env.QUANTURA_CODE_SHA' in handoff['with']['script']

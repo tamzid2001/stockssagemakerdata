@@ -343,6 +343,12 @@ def run(seed_archive,end_friday,output,*,weeks=52,budget_minutes=270,max_new_wee
             'Excursions use future observations only as descriptive outcomes, never entry decisions; overlapping crossings are not independent samples.',
             'Share strategies use hourly-close signals, next scheduled hourly open, positions carried across weekly updates and final liquidation. Short borrow, dividends, margin and fills are unverified.']}
     from .spy_weekly import save
+    final_key=f'final-{len(completed):02d}'
+    previous_report=store.get('report',final_key)
+    if previous_report is not None:
+        report=previous_report
+    else:
+        store.put('report',final_key,report)
     save(output/f'report-spy-year-{len(completed):02d}.json',report)
     # Keep this small summary as a GitHub artifact; encrypted raw data remains in bucket.
     encode_catalog(report,output/f'spy-year-{len(completed):02d}.qrc.enc')
