@@ -88,7 +88,8 @@ class Book:
         if kind not in ('orderbook_snapshot','orderbook_delta'):return []
         if payload.get('market_ticker')!=self.market['ticker']:raise ValueError('BOOK_MARKET_MISMATCH')
         seq,sid=message.get('seq'),message.get('sid')
-        if type(seq) is not int or type(sid) is not int:raise ValueError('BOOK_SEQUENCE_REQUIRED')
+        if type(seq) is not int or type(sid) is not int or min(seq,sid)<1:
+            raise ValueError('BOOK_SEQUENCE_REQUIRED')
         if self.seq is not None:
             if seq<=self.seq:
                 self.continuity_lost=True
@@ -116,7 +117,7 @@ class Book:
         if self.snapshot_received_ms is None:raise ValueError('BOOK_SNAPSHOT_REQUIRED')
         timestamp=payload.get('ts_ms')
         if type(timestamp) is not int:raise ValueError('EXCHANGE_MILLISECOND_TIMESTAMP_REQUIRED')
-        if timestamp>received_ms+1000 or (self.last_exchange_ms is not None and timestamp<self.last_exchange_ms):
+        if timestamp>received_ms or (self.last_exchange_ms is not None and timestamp<self.last_exchange_ms):
             self.continuity_lost=True
             raise ValueError('NONCAUSAL_EXCHANGE_TIMESTAMP')
         side=payload.get('side')
@@ -239,7 +240,9 @@ def main():
     args=parser.parse_args()
     auth_headers()  # credential validation before touching data or connecting
     store=LocalStore('btc-exchange-quotes',os.getenv('GITHUB_RUN_ID','local'),capacity_bytes=256*1024*1024)
-    store.claim({'version':VERSION,'counts':list(COUNTS),'paper_only':True,'orders_enabled':False})
+    store.claim({'version':VERSION,'counts':list(COUNTS),'paper_only':True,'orders_enabled':False,
+                 'code_sha':os.getenv('QUANTURA_CODE_SHA','local'),
+                 'run_id':os.getenv('GITHUB_RUN_ID','local')})
     try:asyncio.run(collect(store,args.duration_minutes))
     finally:store.release()
     count=store.db.execute("SELECT count(*) FROM records WHERE kind='quote_windows'").fetchone()[0]
