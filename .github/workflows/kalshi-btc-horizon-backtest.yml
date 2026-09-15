@@ -1,0 +1,136 @@
+name: Kalshi BTC Four-Model Horizon Backtest
+run-name: BTC first-P90 hold · first ${{ inputs.history_minutes }} minutes · cutoff ${{ inputs.as_of }}
+on:
+  workflow_dispatch:
+    inputs:
+      history_minutes:
+        description: all tests first 3–12 completed minutes, forecasting remaining 12–3 minutes
+        type: choice
+        options: ['all', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+        default: all
+      as_of:
+        description: Fixed past UNIX-seconds market-close cutoff, reused by every horizon and continuation
+        type: string
+        required: true
+      max_markets:
+        type: choice
+        options: ['1', '10', '50', '100']
+        default: '50'
+      code_ref:
+        description: main starts a study; original full commit SHA resumes immutable checkpoints
+        type: string
+        default: main
+      smoke_mode:
+        type: choice
+        options: [mock, real]
+        default: mock
+      continuous:
+        description: Continue unfinished bounded historical cohort on the same code and configuration
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: write
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      history: ${{ steps.prepare.outputs.history }}
+      code_sha: ${{ steps.prepare.outputs.code_sha }}
+    steps:
+      - name: Validate identifiers and resolve one immutable revision for every arm
+        id: prepare
+        uses: actions/github-script@v8
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+          AS_OF: ${{ inputs.as_of }}
+          HISTORY: ${{ inputs.history_minutes }}
+          SMOKE: ${{ inputs.smoke_mode }}
+        with:
+          script: |
+            const {CODE_REF:ref,AS_OF:asOf,HISTORY:history}=process.env;
+            if(!(ref==='main'||/^[a-f0-9]{40}$/.test(ref))||!/^\d{10}$/.test(asOf)||Number(asOf)>Date.now()/1000) throw new Error('INVALID_IMMUTABLE_STUDY_INPUTS');
+            const all=['3','4','5','6','7','8','9','10','11','12'];
+            if(history!=='all'&&!all.includes(history)) throw new Error('INVALID_HISTORY');
+            const {data}=await github.rest.repos.getCommit({...context.repo,ref});
+            core.setOutput('code_sha',data.sha);
+            core.setOutput('history',JSON.stringify(process.env.SMOKE==='mock'?['3']:history==='all'?all:[history]));
+  research:
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        history: ${{ fromJSON(needs.matrix.outputs.history) }}
+    concurrency:
+      group: btc-horizon-${{ inputs.as_of }}-first${{ matrix.history }}
+      cancel-in-progress: false
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.matrix.outputs.code_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Record immutable numerical revision
+        run: echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Install mock-only dependencies
+        if: inputs.smoke_mode == 'mock'
+        run: python -m pip install pytest==8.4.2 numpy==2.5.2 pandas==2.3.3 pandas-market-calendars==5.4.0 httpx==0.28.1 cryptography==50.0.1 pyyaml==6.0.3
+      - name: Install locked CPU model environment
+        if: inputs.smoke_mode == 'real'
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Validate all ten horizons and causal hold simulations without model downloads
+        run: python -m pytest -q market_research/tests/test_btc_horizons.py market_research/tests/test_btc_hold_tracking.py
+      - name: Run four-model checkpointed historical research
+        id: study
+        if: inputs.smoke_mode == 'real'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+          HISTORY: ${{ matrix.history }}
+          AS_OF: ${{ inputs.as_of }}
+          MAX_MARKETS: ${{ inputs.max_markets }}
+        run: |
+          [[ "$HISTORY" =~ ^([3-9]|1[0-2])$ && "$AS_OF" =~ ^[0-9]{10}$ ]] || exit 1
+          [[ "$MAX_MARKETS" == 1 || "$MAX_MARKETS" == 10 || "$MAX_MARKETS" == 50 || "$MAX_MARKETS" == 100 ]] || exit 1
+          python -m market_research.btc_horizons --history-minutes "$HISTORY" --as-of "$AS_OF" --max-markets "$MAX_MARKETS" --budget-minutes 270 --output "$RUNNER_TEMP/btc-horizon-summary"
+      - name: Optional small encrypted summary artifact
+        id: artifact
+        if: always() && inputs.smoke_mode == 'real'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: btc-horizon-${{ matrix.history }}-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/btc-horizon-summary/*.qrc.enc
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 0
+      - name: Continue only this unfinished horizon from durable checkpoints
+        if: success() && inputs.smoke_mode == 'real' && inputs.continuous && steps.study.outputs.complete == 'false'
+        uses: actions/github-script@v8
+        env:
+          CAMPAIGN: ${{ steps.study.outputs.campaign_id }}
+          HISTORY: ${{ matrix.history }}
+          AS_OF: ${{ inputs.as_of }}
+          MAX_MARKETS: ${{ inputs.max_markets }}
+        with:
+          script: |
+            if(!/^p90-[a-f0-9]{24}$/.test(process.env.CAMPAIGN)||!/^[a-f0-9]{40}$/.test(process.env.QUANTURA_CODE_SHA)) throw new Error('VERIFIED_CHECKPOINT_REQUIRED');
+            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id:'kalshi-btc-horizon-backtest.yml',ref:'main',inputs:{history_minutes:process.env.HISTORY,as_of:process.env.AS_OF,max_markets:process.env.MAX_MARKETS,code_ref:process.env.QUANTURA_CODE_SHA,smoke_mode:'real',continuous:'true'}});
+      - name: Disclose failed or partial research honestly
+        if: failure() || steps.artifact.outcome == 'failure'
+        run: echo 'This horizon is not verified complete. Immutable source, individual-side forecasts and completed-market checkpoints remain in the private encrypted research bucket. GitHub summary storage is optional. Resume with identical cutoff, history, market bound and code SHA. No exchange orders are sent.' >> "$GITHUB_STEP_SUMMARY"

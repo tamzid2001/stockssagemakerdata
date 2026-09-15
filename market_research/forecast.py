@@ -21,9 +21,13 @@ def forecast_window(
     horizon: int,
     models: tuple[str, ...] | None = None,
     quantiles: tuple[float, ...] = QUANTILES,
-    *, single_point_research: bool = False,
+    *, single_point_research: bool = False, failure_policy: str | None = None,
 ) -> dict:
     models = default_research_models() if models is None else models
+    if failure_policy not in (None, 'fail', 'renormalize'):
+        raise ValueError('INVALID_RESEARCH_FAILURE_POLICY')
+    if single_point_research and failure_policy == 'renormalize':
+        raise ValueError('SINGLE_POINT_REQUIRES_STRICT_MODELS')
     if (
         not models
         or len(set(models)) != len(models)
@@ -64,7 +68,7 @@ def forecast_window(
         "calendar": "NONE",
         "transform": "none",
         "context_length": 500,
-        "failure_policy": "fail" if single_point_research else "renormalize",
+        "failure_policy": "fail" if single_point_research else (failure_policy or "renormalize"),
         "quantiles": list(quantiles),
         "models": {m: {"enabled": True, "weight": 1} for m in models},
     }
@@ -89,6 +93,10 @@ def forecast_window(
     )
     if sum(m["status"] == "completed" for m in result["models"]) < 2:
         raise RuntimeError("INSUFFICIENT_ENSEMBLE_MEMBERS")
+    if configuration['failure_policy'] == 'fail' and (
+        len(result['models']) != len(models) or any(m['status'] != 'completed' for m in result['models'])
+    ):
+        raise RuntimeError('STRICT_RESEARCH_ENSEMBLE_INCOMPLETE')
     rows = []
     for row in result["predictions"]:
         values = {}
