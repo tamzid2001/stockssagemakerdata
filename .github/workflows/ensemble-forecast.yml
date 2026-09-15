@@ -19,6 +19,12 @@ on:
         type: choice
         options: [mock, real, toto]
         default: mock
+      toto_checkpoint:
+        description: "Toto smoke only: approved candidate; never overrides a customer job"
+        required: false
+        type: choice
+        options: [production, 2.5B, 1B]
+        default: production
   schedule:
     - cron: "17 10 * * 1"
 
@@ -93,13 +99,17 @@ jobs:
         if: ${{ inputs.smoke_mode == 'real' && inputs.forecast_job_id == '' }}
         run: python -m ensemble_forecasting.smoke
 
-      - name: Verify production Toto 313M on CPU with genuine context lengths
+      - name: Verify Toto CPU capacity with genuine context lengths
         if: ${{ inputs.smoke_mode == 'toto' && inputs.forecast_job_id == '' }}
         timeout-minutes: 40
         env:
           CUDA_VISIBLE_DEVICES: ''
           QUANTURA_REAL_TOTO_SMOKE: '1'
-        run: python -m pytest -q -s market_research/tests/test_real_toto.py
+          QUANTURA_TOTO_SMOKE_CHECKPOINT: ${{ inputs.toto_checkpoint || 'production' }}
+        run: |
+          free -m
+          df -h .
+          /usr/bin/time -v python -m pytest -q -s market_research/tests/test_real_toto.py
 
       - name: Validate worker secrets for claimed jobs
         if: ${{ inputs.forecast_job_id != '' }}
