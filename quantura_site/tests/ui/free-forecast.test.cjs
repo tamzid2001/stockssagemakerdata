@@ -18,6 +18,22 @@ test('first-row signal matches the first prediction timestamp regardless of work
   job.observations[0].is_forward_filled=true;assert.equal(helper.firstRowSignal(job,now).status,'waiting');
   job.observations[0]={timestamp:'2026-09-16T10:06:00Z',target:.1};assert.equal(helper.firstRowSignal(job,now).status,'waiting');
 });
+test('first-row signal supports daily session closes and never substitutes intraday quotes',()=>{
+  const job={frequency:'1D',source:{type:'ticker',exchange_timezone:'America/New_York'},completed_at:'2026-09-14T18:00Z',predictions:[{timestamp:'2026-09-15T00:00:00Z',quantiles:{'0.1':100,'0.9':110}}],observations:[{timestamp:'2026-09-15T13:31:00Z',target:90,interval:'1min'}]};
+  const now=Date.parse('2026-09-17T12:00Z');
+  let result=helper.firstRowSignal(job,now);assert.equal(result.status,'waiting');assert.match(result.reason,/completed day closing value/);assert.doesNotMatch(result.reason,/Requires a one-minute/);
+  job.observations.push({timestamp:'2026-09-15T04:00:00Z',session_date:'2026-09-15',target:111,interval:'1D'});
+  result=helper.firstRowSignal(job,now);assert.equal(result.signal,'sell');assert.equal(result.price,111);assert.match(result.timing,/predicted day/);
+  job.observations[1].session_date='2026-09-16';assert.equal(helper.firstRowSignal(job,now).status,'waiting');
+});
+test('hourly and arbitrary interval signals require the matching completed forecast row',()=>{
+  for(const frequency of ['1h','15min','1D']){
+    const job={frequency,source:{type:'series'},predictions:[{timestamp:'2026-09-15T14:30:00Z',quantiles:{'0.1':100,'0.9':110}}],observations:[{timestamp:'2026-09-15T14:30:00Z',target:90,interval:'1min'},{timestamp:'2026-09-15T14:30:00Z',target:105,interval:frequency,is_complete:false}]};
+    const now=Date.parse('2026-09-17T12:00Z');assert.equal(helper.firstRowSignal(job,now).status,'waiting');
+    job.observations[1].is_complete=true;assert.equal(helper.firstRowSignal(job,now).signal,'none');
+    job.observations[1].target=99;assert.equal(helper.firstRowSignal(job,now).signal,'buy');
+  }
+});
 test('cutoff checks the current clock, not the page-load time, including timezone conversion',()=>{
   const script=`const h=require(${JSON.stringify(path.join(root,'public/forecast-controls.js'))});const assert=require('node:assert/strict');const input='2026-09-16T10:15';assert.throws(()=>h.cutoffInstant(input,Date.parse('2026-09-16T12:48Z')),/future/);assert.equal(h.cutoffInstant(input,Date.parse('2026-09-16T14:16Z')),'2026-09-16T14:15:00.000Z');`;
   execFileSync(process.execPath,['-e',script],{env:{...process.env,TZ:'America/New_York'}});

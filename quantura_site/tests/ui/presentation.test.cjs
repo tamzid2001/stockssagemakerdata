@@ -118,6 +118,55 @@ test('market selector does not render late responses over a newer query', async 
   assert.match(w.document.getElementById('market-search-status').textContent,/^0 results/);d.window.close();
 });
 
+test('stock forecast/history selection closes the overlay and keeps the selected symbol/provider', async()=>{
+  const d=dom(page('forecasting.html')),w=d.window;const panels=[];
+  w.__quanturaSetPanel=panel=>panels.push(panel);w.HTMLElement.prototype.scrollIntoView=()=>{};
+  w.fetch=async()=>({ok:true,json:async()=>({count:1,groups:{alpaca:[{resource_id:'stock:PLTR',symbol:'PLTR',name:'Palantir',source:'alpaca',asset_class:'equity',forecast_available:true}]}})});
+  w.eval(source('market-search.js'));
+  const form=w.document.getElementById('market-search-form'),q=w.document.getElementById('market-search-query'),results=w.document.getElementById('market-search-results');
+  for(const action of ['forecast','history']){
+    q.value='PLTR';form.dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();assert.equal(results.hidden,false);
+    const button=results.querySelector(`[data-market-action="${action}"]`);
+    button.dispatchEvent(new w.Event('pointerdown',{bubbles:true}));assert.equal(results.hidden,false,'inside pointerdown must not swallow selection');
+    button.click();assert.equal(results.hidden,true);
+    assert.equal(w.document.getElementById(action==='forecast'?'ensemble-ticker':'alpaca-symbol').value,'PLTR');
+    assert.equal(w.document.getElementById(action==='forecast'?'ensemble-provider':'market-history-source').value,'alpaca');
+  }
+  assert.deepEqual(panels,['forecast','news']);d.window.close();
+});
+
+test('outside pointer/click, keyboard focus and Escape dismiss search without swallowing forecast controls', async()=>{
+  const d=dom(page('forecasting.html')),w=d.window;
+  w.fetch=async()=>({ok:true,json:async()=>({count:0,groups:{}})});w.eval(source('market-search.js'));
+  const form=w.document.getElementById('market-search-form'),q=w.document.getElementById('market-search-query'),results=w.document.getElementById('market-search-results');
+  const outside=w.document.getElementById('ensemble-ticker');let clicks=0;outside.addEventListener('click',()=>clicks++);
+  for(const type of ['pointerdown','click','focusin']){
+    q.value='PLTR';form.dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();assert.equal(results.hidden,false);
+    outside.dispatchEvent(new w.Event(type,{bubbles:true,cancelable:true}));assert.equal(results.hidden,true);
+  }
+  assert.equal(clicks,1);
+  form.dispatchEvent(new w.Event('submit'));await tick();
+  w.document.getElementById('market-search-source').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  assert.equal(results.hidden,true);assert.equal(w.document.activeElement,q);
+  d.window.close();
+});
+
+test('dismissal cancels debounce and prevents late success/error responses from reopening the overlay', async()=>{
+  for(const reject of [false,true]){
+    const d=dom(page('forecasting.html')),w=d.window;let resolve,calls=0;
+    w.fetch=()=>{calls++;return new Promise(r=>resolve=r)};w.eval(source('market-search.js'));
+    const q=w.document.getElementById('market-search-query'),form=w.document.getElementById('market-search-form'),results=w.document.getElementById('market-search-results');
+    q.value='PLTR';form.dispatchEvent(new w.Event('submit'));
+    w.document.body.dispatchEvent(new w.Event('pointerdown',{bubbles:true}));
+    resolve({ok:!reject,json:async()=>({count:999,groups:{},message:'late error'})});await tick();
+    assert.equal(results.hidden,true);assert.equal(results.hasAttribute('aria-busy'),false);
+    q.dispatchEvent(new w.Event('input'));
+    q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+    await new Promise(r=>setTimeout(r,350));assert.equal(calls,1);
+    d.window.close();
+  }
+});
+
 test('live moneylines browse without a search term and select the exact side for forecasts or downloads', async () => {
   const d=dom(page('forecasting.html')); const w=d.window; let request; const selections=[];
   w.__quanturaSetPanel=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};

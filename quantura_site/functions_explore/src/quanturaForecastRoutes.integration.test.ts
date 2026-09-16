@@ -7,10 +7,31 @@ import type { Server } from "node:http";
 import { registerQuanturaForecastRoutes } from "./quanturaForecastRoutes";
 import { hashForecastApiKey, normalizeForecastDraft } from "./quanturaForecasts";
 import { quanturaExploreApi } from "./index";
+import { scanRequestPage, selectRequestPage } from "./requestPagination";
 import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
 import { generatePlatformApiKey, hashPlatformApiKey, workspaceMembershipId } from "./apiAccess";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+test("request history Firestore cursors reach older entries, survive deletion, and isolate users", {skip: !emulatorAvailable}, async()=>{
+  const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`request-pages-${Date.now()}`);
+  const db=firebaseApp.firestore(), user=`requests_${Date.now()}`, other=`${user}_other`;
+  const ref=db.collection("users").doc(user).collection("requests");
+  const batch=db.batch();
+  for(let i=0;i<123;i++) batch.set(ref.doc(`r${String(i).padStart(3,'0')}`),{updatedAt:admin.firestore.Timestamp.fromMillis(1000),deleted:i<3});
+  batch.set(db.collection("users").doc(other).collection("requests").doc("private"),{updatedAt:admin.firestore.Timestamp.fromMillis(2000)});
+  await batch.commit();
+  try {
+    let cursor: string | null=null;const seen:string[]=[];
+    do {
+      const scan=await scanRequestPage(db,user,cursor || undefined,40);
+      const page=selectRequestPage(scan.docs.map(d=>({id:d.id,data:d.data()})),user,40,scan.more,doc=>doc.data.deleted?null:doc.id);
+      seen.push(...page.items);cursor=page.next_cursor;
+      if(seen.length===40){await ref.doc(page.items.at(-1)!).delete();await assert.rejects(()=>scanRequestPage(db,other,cursor,40),/invalid_request_cursor/);}
+    } while(cursor);
+    assert.equal(seen.length,120);assert.equal(new Set(seen).size,120);assert.ok(!seen.includes('private'));
+  } finally {await firebaseApp.delete();}
+});
 
 test("guest forecast save transfers only with expiring cookie proof and revokes the former workspace", {skip:!emulatorAvailable}, async()=>{
   const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`guest-save-${Date.now()}`);

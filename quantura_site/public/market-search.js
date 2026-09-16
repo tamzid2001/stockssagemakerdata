@@ -13,6 +13,7 @@
   let mode = "open";
   const resources = new Map();
   const cache = new Map();
+  const workspace = form.closest(".market-search-workspace") || form.parentElement;
   queryInput.setAttribute("aria-controls", "market-search-results");
   queryInput.setAttribute("aria-describedby", "market-search-status");
   queryInput.maxLength = 2048;
@@ -22,6 +23,28 @@
   })[character]);
   const titleCase = (value) => String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   const providerLabel = (value) => ({ alpaca: "Alpaca", yahoo: "Yahoo Finance", polymarket_us: "Polymarket US", kalshi: "Kalshi" })[value] || value;
+
+  function closeResults() {
+    clearTimeout(timer);
+    timer = undefined;
+    controller?.abort();
+    controller = undefined;
+    ++requestSequence;
+    results.hidden = true;
+    results.removeAttribute("aria-busy");
+  }
+  // Do not prevent the outside interaction: it must still reach the forecast
+  // controls. Capture pointer events for mouse/touch and clicks for AT users.
+  const dismissOutside = event => { if (!workspace.contains(event.target)) closeResults(); };
+  document.addEventListener("pointerdown", dismissOutside, true);
+  document.addEventListener("click", dismissOutside, true);
+  document.addEventListener("focusin", dismissOutside);
+  workspace.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    closeResults();
+    queryInput.focus();
+  });
 
   function setPanel(panel) {
     if (typeof window.__quanturaSetPanel === "function") window.__quanturaSetPanel(panel);
@@ -115,10 +138,8 @@
       const first = results.querySelector("[data-market-action]");
       if (first) { event.preventDefault(); first.focus(); }
     }
-    if (event.key === "Escape") { results.hidden = true; controller?.abort(); ++requestSequence; clearTimeout(timer); results.removeAttribute("aria-busy"); }
   });
   results.addEventListener("keydown", event => {
-    if (event.key === "Escape") { results.hidden = true; queryInput.focus(); return; }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     const buttons = [...results.querySelectorAll("[data-market-action]")];
     const index = buttons.indexOf(document.activeElement);
@@ -133,6 +154,9 @@
     const button = event.target.closest("[data-market-action]");
     if (!button) return;
     const action = button.dataset.marketAction;
+    // Close for every resource/action, not only prediction-market selections.
+    // Do this before panel changes or focus transitions can start another task.
+    closeResults();
     if (action === "prediction-forecast" || action === "prediction-download") {
       const row = resources.get(button.closest("[data-market-resource]")?.dataset.marketResource);
       if (!row?.contract) return;
@@ -141,7 +165,6 @@
       setPanel(download ? "sports-autopilot" : "forecast");
       window.dispatchEvent(new CustomEvent("quantura:market-selected", { detail: { resource: row, intent: download ? "download" : "forecast" } }));
       status.textContent = `Selected ${row.outcome} · ${row.contract.eventTitle || row.name} · ${providerLabel(row.source)}.`;
-      results.hidden = true;
       document.getElementById(download ? "prediction-market-hub" : "ensemble-forecast-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -158,6 +181,7 @@
       const sourceType = document.getElementById("ensemble-source-type");
       if (sourceType) { sourceType.value = "ticker"; sourceType.dispatchEvent(new Event("change", { bubbles: true })); }
       setPanel("forecast");
+      (document.getElementById("ensemble-source-type") || ticker)?.focus({ preventScroll: true });
       (document.getElementById("ensemble-forecast-form") || document.getElementById("forecast-form"))?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -167,6 +191,7 @@
       if (historySymbol) historySymbol.value = symbol;
       if (historySource) historySource.value = source === "alpaca" ? "alpaca" : "yahoo";
       setPanel("news");
+      historySymbol?.focus({ preventScroll: true });
       document.getElementById("alpaca-history-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
