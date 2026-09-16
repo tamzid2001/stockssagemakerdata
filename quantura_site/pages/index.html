@@ -81,10 +81,10 @@
           },
           {
             "@type": "Question",
-            "name": "What is the difference between Free and paid plans?",
+            "name": "Is Quantura free?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Free access covers core research workflows. Paid plans add higher analysis limits, advanced exports, collaboration seats, and additional forecasting capabilities described on the Pricing page."
+              "text": "Quantura is free with fair-use limits. Guests can forecast and download results. Create an account to save requests and organize private workspaces. Provider availability and licensing still apply; AWS infrastructure is billed separately by AWS."
             }
           },
           {
@@ -140,14 +140,7 @@
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/forecasts" data-analytics="nav_forecasts"><i class="iconoir-brain-research" aria-hidden="true"></i><span>Forecasts</span></a>
-          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
-          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact</span></a>
-        </nav>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Forecast</a><a href="/screener">Screener</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
           <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button" data-analytics="nav_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
@@ -168,7 +161,7 @@
 	            </p>
 	            <div class="hero-actions">
 	              <a class="cta" href="/forecasting" data-analytics="hero_cta_primary"><span>Start researching</span><i class="iconoir-arrow-right" aria-hidden="true"></i></a>
-	              <a class="cta secondary" href="/pricing" data-analytics="hero_cta_secondary"><span>Explore plans</span></a>
+
 	            </div>
                 <ul class="hero-proof" aria-label="Research capabilities">
                   <li><strong>Quantiles</strong><span>Make uncertainty visible</span></li>
@@ -364,7 +357,7 @@
             </div>
             <div class="hero-actions" style="margin-top: 22px;">
               <a class="cta" href="/forecasting" data-analytics="home_terminal_open"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open forecasting studio</span></a>
-              <a class="cta secondary" href="/pricing" data-analytics="home_pricing_open"><i class="iconoir-wallet" aria-hidden="true"></i><span>View plans</span></a>
+
             </div>
           </div>
 
@@ -412,7 +405,7 @@
           </p>
           <div class="hero-actions" style="margin-top: 16px;">
             <a class="cta" href="/forecasting" data-analytics="glance_cta_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
-            <a class="cta secondary" href="/pricing" data-analytics="glance_cta_pricing"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
+
           </div>
         </div>
       </section>
@@ -575,9 +568,9 @@
               </p>
             </details>
             <details class="faq-item">
-              <summary><i class="iconoir-wallet" aria-hidden="true"></i><span>What is included in Free vs paid plans?</span></summary>
+              <summary><i class="iconoir-wallet" aria-hidden="true"></i><span>Is Quantura free?</span></summary>
               <p class="small faq-answer">
-                Free supports limited evaluation. Pro expands the complete individual workflow, Quant adds programmatic research and backtests, and Research adds collaboration and larger operational limits.
+                Yes. Forecast and download without a paid plan. Create an account to save your requests and organize private workspaces. Fair-use limits, provider availability and data licensing still apply. Connected AWS infrastructure is billed separately by AWS.
               </p>
             </details>
             <details class="faq-item">
@@ -601,10 +594,9 @@
               </p>
             </details>
             <details class="faq-item">
-              <summary><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Do alerts and notifications run in real time?</span></summary>
+              <summary><i class="iconoir-graph-up" aria-hidden="true"></i><span>Can I refresh the forecast with newer data?</span></summary>
               <p class="small faq-answer">
-                Prediction-boundary alerts run on a schedule and notify only when the latest eligible market price actually crosses
-                a date-aware P10, P50, or P90 boundary. Browser and email delivery depend on user settings and provider availability.
+                Yes. Refresh quotes updates the observed-price overlay. Refresh latest data &amp; forecast creates a new forecast from a fresh input snapshot. Notification settings are archived from the current product.
               </p>
             </details>
             <details class="faq-item">
@@ -648,83 +640,19 @@
 
       <section class="section">
         <div class="container callout">
-          <span class="badge" style="background: rgba(255,255,255,0.1); color: #f8fafc;">Forecast Foundry</span>
+          <span class="badge">Quantura Forecast</span>
           <h2>Need a forecast workflow you can run right now?</h2>
           <p>
-            Launch Forecast Foundry to prepare a ticker dataset, run Quantura's forecasting workflow,
-            review quantile outputs, and publish the result into your workspace without leaving the product.
+            Select a market or upload your own time series, choose your forecast horizon,
+            and explore the final ensemble. Sign in only when you want to save your request to a profile.
           </p>
           <div class="hero-actions">
-            <a class="cta" href="/autopilot" data-analytics="callout_cta">Open Forecast Foundry</a>
-            <a class="cta secondary" href="/autopilot" data-analytics="callout_secondary">Open in terminal</a>
+            <a class="cta" href="/forecasting">Run a forecast</a>
           </div>
         </div>
       </section>
 
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>One plan system for every research stage</h2>
-            <p class="small">Start with deterministic forecasts, then scale into programmatic research, backtests, data APIs, and teams.</p>
-          </div>
-          <div class="pricing-grid">
-            <div class="price-card">
-              <span class="badge">Free</span>
-              <h3 style="margin-top: 12px;">Quantura Free</h3>
-              <div class="price">$0</div>
-              <p class="small">Evaluate the core forecast, quantile, indicator, historical-data, and screener workflow.</p>
-              <div class="feature-list">
-                <div class="feature"><span></span>Limited Q Forecast and P1/P25/P50/P75/P99 views</div>
-                <div class="feature"><span></span>Basic indicators and limited Screener</div>
-                <div class="feature"><span></span>Limited downloads, uploads, saves, and alerts</div>
-              </div>
-            </div>
-            <div class="price-card">
-              <span class="badge" style="background: #e1f4f0; color: #146a5d;">Most popular</span>
-              <h3 style="margin-top: 12px;">Quantura Pro</h3>
-              <div class="price">$39/mo</div>
-              <p class="small">For active individual researchers using the full forecasting and market-data workflow.</p>
-              <div class="feature-list">
-                <div class="feature"><span></span>Full Quantura Forecast, indicators, options, and Screener</div>
-                <div class="feature"><span></span>Prediction CSV and sports-market data workflows</div>
-                <div class="feature"><span></span>SageMaker-ready exports and optional GPT analysis</div>
-              </div>
-            </div>
-            <div class="price-card">
-              <span class="badge" style="background: #fef1cc; color: #6d4c00;">Programmatic</span>
-              <h3 style="margin-top: 12px;">Quantura Quant</h3>
-              <div class="price">$99/mo</div>
-              <p class="small">For quantitative researchers using ensemble forecasts, backtests, bulk exports, and APIs.</p>
-              <div class="feature-list">
-                <div class="feature"><span></span>Chronos-2, ensemble forecasts, and walk-forward evaluation</div>
-                <div class="feature"><span></span>Backtesting, bulk scans, API access, and scheduled jobs</div>
-                <div class="feature"><span></span>Higher forecast, alert, and dataset limits</div>
-              </div>
-            </div>
-            <div class="price-card">
-              <span class="badge" style="background: #e7e9ff; color: #28337f;">Teams</span>
-              <h3 style="margin-top: 12px;">Quantura Research</h3>
-              <div class="price">$249/mo</div>
-              <p class="small">For research teams needing collaboration, larger datasets, automation, and auditability.</p>
-              <div class="feature-list">
-                <div class="feature"><span></span>Highest normal API, scan, export, and backtest limits</div>
-                <div class="feature"><span></span>Workspace collaboration and team controls</div>
-                <div class="feature"><span></span>Priority processing and support</div>
-              </div>
-            </div>
-          </div>
-          <div class="hero-actions" style="margin-top: 22px;">
-            <a class="cta" href="/pricing" data-analytics="home_pricing_full"><i class="iconoir-wallet" aria-hidden="true"></i><span>Compare full plan details</span></a>
-            <a class="cta secondary" href="/forecasting" data-analytics="home_pricing_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open forecasting terminal</span></a>
-          </div>
-          <div class="callout" style="margin-top: 24px;">
-            <div class="eyebrow">Enterprise Data Licensing</div>
-            <h3>Custom delivery for licensed forecast and derived datasets</h3>
-            <p>Versioned archives, bulk/API delivery, service accounts, institutional integrations, and custom retention—subject to documented source provenance and redistribution rights.</p>
-            <a class="cta secondary" href="/contact">Contact Sales</a>
-          </div>
-        </div>
-      </section>
+      <section class="section free-access-note"><div class="container"><h2>Free to explore. Yours to save.</h2><p>Forecast markets, explore the Screener and download supported data without a paid plan. Create an account to save your requests and organize private workspaces. Fair-use limits and provider availability apply.</p><a class="cta" href="/forecasting">Run a forecast</a><p class="small muted">Bring-your-own AWS infrastructure is billed separately by AWS. Third-party data licensing restrictions still apply.</p></div></section>
     </main>
 
     <footer class="footer">
@@ -770,7 +698,7 @@
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
-          <div><a href="/pricing">Pricing</a></div>
+          <div></div>
           <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">

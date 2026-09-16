@@ -14,7 +14,16 @@ export type PlanEntitlement = {
   features: string[];
 };
 
-export const PLAN_ENTITLEMENTS = config.plans as Record<PlanKey, PlanEntitlement>;
+// Historical billing identifiers stay intact. Product access is now free;
+// subscriptions and Stripe invoices are deliberately not rewritten here.
+const allFeatures = config.plans.free.features;
+export const PLAN_ENTITLEMENTS = Object.fromEntries(Object.entries(config.plans).map(([key, plan]) => [key, {
+  ...plan, monthlyCents: 0, annualCents: 0, features: allFeatures,
+  forecastComputePerDay: Math.max(config.plans.free.forecastComputePerDay, plan.forecastComputePerDay),
+  bulkExportsPerMonth: Math.max(config.plans.free.bulkExportsPerMonth, plan.bulkExportsPerMonth),
+  backtestsPerMonth: Math.max(config.plans.free.backtestsPerMonth, plan.backtestsPerMonth),
+  collaboratorSeats: Math.max(config.plans.free.collaboratorSeats, plan.collaboratorSeats),
+}])) as Record<PlanKey, PlanEntitlement>;
 export const PLAN_ENTITLEMENTS_SCHEMA_VERSION = config.schemaVersion;
 
 export function normalizePlan(value: unknown): PlanKey {
@@ -31,6 +40,7 @@ export function planHasFeature(plan: unknown, feature: string): boolean {
 export function publicPlanEntitlements(): Record<string, unknown> {
   return {
     schemaVersion: PLAN_ENTITLEMENTS_SCHEMA_VERSION,
-    plans: PLAN_ENTITLEMENTS,
+    access_model: "free_with_fair_use_limits",
+    plans: { free: { ...PLAN_ENTITLEMENTS.free, label: "Free" } },
   };
 }

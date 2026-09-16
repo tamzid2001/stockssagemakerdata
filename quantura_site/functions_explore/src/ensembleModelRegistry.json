@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2026-09-15-toto-2.5b",
+  "schemaVersion": "2026-09-16-toto-variants",
   "defaultQuantiles": [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99],
   "maxRequestedQuantiles": 21,
   "models": {
@@ -17,6 +17,14 @@
       "name": "Toto 2.0 2.5B",
       "checkpoint": "Datadog/Toto-2.0-2.5B",
       "checkpointRevision": "51a2812bbe449437c01b79c0e425ed578f335f5b",
+      "defaultVariant": "2.5b",
+      "variants": [
+        { "id": "4m", "name": "4M · smallest", "checkpoint": "Datadog/Toto-2.0-4m", "checkpointRevision": "8306a9801cf98c0f5ffe4b2dcc8f496e616d84d9" },
+        { "id": "22m", "name": "22M", "checkpoint": "Datadog/Toto-2.0-22m", "checkpointRevision": "685e4ae3e2be8d8998025e53dd98e7fdcb296a89" },
+        { "id": "313m", "name": "313M", "checkpoint": "Datadog/Toto-2.0-313m", "checkpointRevision": "a7bab288f5e95f8606f8306f86659357e1c001ef" },
+        { "id": "1b", "name": "1B", "checkpoint": "Datadog/Toto-2.0-1B", "checkpointRevision": "1604e1a5242884fb9848f88c4ced14f4dc62d9d3" },
+        { "id": "2.5b", "name": "2.5B · largest", "checkpoint": "Datadog/Toto-2.0-2.5B", "checkpointRevision": "51a2812bbe449437c01b79c0e425ed578f335f5b" }
+      ],
       "minimumObservedContext": 32,
       "defaultWeight": 0.2,
       "quantileSupport": {

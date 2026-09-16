@@ -12,7 +12,7 @@ test('homepage uses supplied responsive brand assets, removes dock and labels mo
   assert.doesNotMatch(html, /class="home-bottom-nav|id="home-bottom-nav|data-unsplash-gallery/);
   assert.match(html, /quantura-product-concept-640\.webp/);
   assert.match(html, /example values, not live market data/);
-  assert.match(app, /<span>Q Forecast<\/span>/);
+  assert.match(app, /<span>Forecast<\/span>/);
   assert.match(app, /headerAuth\.innerHTML = accountAuthed[\s\S]{0,160}<span>Dashboard<\/span>[\s\S]{0,100}<span>Sign in<\/span>/);
   assert.match(app, /DOMContentLoaded.*init/);
   assert.doesNotMatch(read('public/styles.css'), /a\[href="\/forecasting"\][^{]*\{\s*display: none/);
@@ -65,7 +65,7 @@ test('Contentsquare requires consent, excludes private pages and obeys global pr
   }
 });
 
-test('support dialog requires sign in, safely renders text, filters URLs and clears conversation', async () => {
+test('support dialog accepts verified guest sessions, safely renders text, filters URLs and clears conversation', async () => {
   const d=new JSDOM('<button id="help">Help</button>',{url:'https://quantura.studio/',runScripts:'outside-only'});
   const w=d.window; w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
   w.HTMLDialogElement.prototype.close=function(){this.open=false;this.onclose?.();};
@@ -76,8 +76,8 @@ test('support dialog requires sign in, safely renders text, filters URLs and cle
   w.eval(read('public/support-chat.js')); w.QuanturaSupport.open(w.document.getElementById('help'));
   const form=w.document.querySelector('form'),input=w.document.querySelector('textarea');
   input.value='Where are CSVs?'; form.dispatchEvent(new w.Event('submit',{cancelable:true})); await tick();
-  assert.equal(calls,0); assert.match(w.document.querySelector('[role=status]').textContent,/Sign in/);
-  currentUser={isAnonymous:false,getIdToken:async()=> 'session-fixture'};
+  assert.equal(calls,0); assert.match(w.document.querySelector('[role=status]').textContent,/guest session/);
+  currentUser={isAnonymous:true,getIdToken:async()=> 'session-fixture'};
   form.dispatchEvent(new w.Event('submit',{cancelable:true})); await tick();
   assert.equal(calls,1); assert.equal(w.document.scripts.length,0);
   assert.equal(w.document.querySelectorAll('a[href="https://evil.example"]').length,0);

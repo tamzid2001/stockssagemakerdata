@@ -1,6 +1,9 @@
 /** One event-history policy for forecasts and dataset exports; never fabricate bars. */
 export type HistoryPhase = "both" | "pregame" | "in_game";
 export type HistorySelection = { history_phase: HistoryPhase; history_lookback_minutes: number };
+export function automaticSportsHistoryPhase(eventStart: number, asOf: number): HistoryPhase {
+  return Number.isFinite(eventStart) && asOf >= eventStart + 32 * 60_000 ? "in_game" : "both";
+}
 
 export function historySelection(input: Record<string, unknown>, legacyPregameDefault = false): HistorySelection {
   const phase = input.history_phase ?? (input.pregameOnly === true || (input.pregameOnly === undefined && legacyPregameDefault) ? "pregame" : "both");

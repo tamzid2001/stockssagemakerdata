@@ -147,13 +147,14 @@ test('primary form builds prediction-market minute and single-model requests wit
     const ensembleQuantileKey=v=>String(Number(v));const normalizeTicker=v=>String(v).trim().toUpperCase();
     const ensembleDurationMinutes = ${source('app.js').split('  const ensembleDurationMinutes =')[1].split('  const ensembleTimeZone =')[0]}
     ${source('app.js').split('  const getEnsembleSelections =')[1].split('  const renderEnsembleProgress =')[0].replace(/^/, 'const getEnsembleSelections =')}
-    window.build=buildEnsembleRequest;`);
+    window.build=()=>{syncEnsembleSourceFields();return buildEnsembleRequest();};`);
   const request=w.build();assert.equal(request.source.type,'prediction_market');assert.equal(request.source.contract_id,'KXGAME-TEAM:yes');
   assert.equal(request.frequency,'1min');assert.equal(request.horizon_mode,'frequency_periods');assert.equal(request.calendar,'NONE');assert.equal(request.transform,'logit');
   assert.deepEqual(JSON.parse(JSON.stringify(request.models)),{prophet:{enabled:true,weight:1}});
   w.document.getElementById('ensemble-source-type').value='ticker';w.document.getElementById('ensemble-ticker').value='MSFT';
   const stock=w.build();assert.equal(stock.source.symbol,'MSFT');assert.equal(stock.source.limit,500);assert.equal(stock.source.start,undefined);
   w.document.getElementById('ensemble-history-lag').value='30';
+  w.document.getElementById('ensemble-cutoff-mode').value='relative';
   w.document.getElementById('ensemble-history-lag-unit').value='minutes';
   assert.equal(w.build().history_lag_minutes,30);
   w.document.getElementById('ensemble-history-lag').value='2';
@@ -338,7 +339,7 @@ test('forecast summary averages columns and qualifies terminal quantile probabil
 test('queued forecast clears the preceding distribution and shows downloaded input count', () => {
   const d=dom(page('forecasting.html')); const w=d.window;
   w.ui={}; for(const [key,id] of Object.entries({ensembleForecastResults:'ensemble-forecast-results',ensembleResultState:'ensemble-result-state',ensembleResultMeta:'ensemble-result-meta',ensembleSummary:'ensemble-forecast-summary',ensembleObservedMetrics:'ensemble-observed-metrics',ensembleObservationStatus:'ensemble-observation-status',ensembleForecastChart:'ensemble-forecast-chart',ensembleResultTable:'ensemble-result-table'})) w.ui[key]=w.document.getElementById(id);
-  w.ensembleUiState={}; w.setEnsembleBusy=()=>{};w.setEnsembleStatus=()=>{};w.titleCaseLabel=s=>s;w.escapeHtml=s=>String(s);
+  w.ensembleUiState={}; w.hasFullAccount=()=>false; w.setEnsembleBusy=()=>{};w.setEnsembleStatus=()=>{};w.titleCaseLabel=s=>s;w.escapeHtml=s=>String(s);
   w.ui.ensembleSummary.innerHTML='<p>Previous forecast</p>';
   w.ui.ensembleObservedMetrics.textContent='Old metrics';
   w.eval('const renderEnsembleProgress ='+source('app.js').split('  const renderEnsembleProgress =')[1].split('  const renderEnsembleChart =')[0]+'\nwindow.renderProgress=renderEnsembleProgress;');
@@ -365,7 +366,7 @@ test('market selection configures the primary ensemble, including dataset-to-tic
   assert.equal(changes,1);assert.equal(panel,'forecast');d.window.close();
 });
 
-test('primary forecast loads capabilities on authenticated activation without automatically running compute', async () => {
+test('primary forecast loads free guest capabilities without automatically running compute or loading private presets', async () => {
   const d=dom(page('forecasting.html')); const w=d.window;const document=w.document;
   const client=source('app.js');
   const implementation=client.slice(client.indexOf('  const refreshPrimaryForecast ='),client.indexOf('  const loadEnsemblePresets ='));
@@ -374,9 +375,10 @@ test('primary forecast loads capabilities on authenticated activation without au
   w.ui={ensembleForecastSettings:document.getElementById('ensemble-forecast-settings'),ensembleModelList:document.getElementById('ensemble-model-list'),ensembleTicker:document.getElementById('ensemble-ticker')};
   w.setEnsembleStatus=()=>{};w.normalizeTicker=s=>s;w.getQueryParam=()=>'';
   w.loadEnsembleCapabilities=async()=>{capabilities++;};w.loadEnsemblePresets=async()=>{presets++;};
+  w.ensureSessionUser=async()=>({uid:'guest',isAnonymous:!signedIn});
   w.eval(implementation+'\nwindow.refreshTestForecast=refreshPrimaryForecast;');
-  await w.refreshTestForecast();assert.equal(capabilities,0);assert.match(w.ui.ensembleModelList.textContent,/Sign in/);
-  signedIn=true;await w.refreshTestForecast();assert.equal(capabilities,1);assert.equal(presets,1);assert.equal(w.ui.ensembleTicker.value,'TEST');
-  document.querySelector('[data-panel="forecast"]').classList.add('hidden');await w.refreshTestForecast();assert.equal(capabilities,1);
+  await w.refreshTestForecast();assert.equal(capabilities,1);assert.equal(presets,0);
+  signedIn=true;await w.refreshTestForecast();assert.equal(capabilities,2);assert.equal(presets,1);assert.equal(w.ui.ensembleTicker.value,'TEST');
+  document.querySelector('[data-panel="forecast"]').classList.add('hidden');await w.refreshTestForecast();assert.equal(capabilities,2);
   assert.doesNotMatch(implementation,/method: "POST"|pollEnsembleForecast/);d.window.close();
 });

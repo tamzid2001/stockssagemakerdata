@@ -5,7 +5,21 @@ description: "Configure five approved time-series models, custom quantiles, and 
 
 # Quantura Forecast
 
-The default **Q Forecast** workspace at `/forecasting` uses this asynchronous ensemble service. Configure the models and click **Run forecast** once; progress, final quantiles, and CSV/JSON downloads appear in the same panel. Model configuration is visible without expanding a second forecast section. Previously saved legacy forecasts remain readable; their compatibility endpoints are unchanged.
+The default **Q Forecast** workspace at `/forecasting` uses this asynchronous ensemble service. Configure the models and click **Run forecast** once; progress, final quantiles, and CSV/JSON downloads appear in the same panel. Models and custom quantiles are in Advanced settings; there is one Run forecast button. Previously saved legacy forecasts remain readable; their compatibility endpoints are unchanged.
+
+## Free website, local-time controls and CSV uploads
+
+Guests can run available models and download their results, subject to fair-use limits and provider availability. Sign in to save to My Requests. The website prepares a single-use, 15-minute HttpOnly ownership cookie before sign-in so a guest forecast can also be saved to an existing account. API keys and collaborator resources still require account authentication, token scopes and current workspace permissions. Existing billing records are not deleted.
+
+Choose **Calendar date and time** for Data cutoff or Forecast until. Times are displayed in your device timezone and sent as explicit UTC instants in `history_cutoff_at` and `prediction_end_at`. A cutoff is within the previous 90 days. Alternatively choose a duration or offset in days, hours or minutes. The backend converts the end time to complete future periods after the last input observation; daily NYSE requests use actual exchange sessions within the calendar window. Quotas and model horizon limits apply.
+
+Choose **Upload your own CSV** to parse a CSV of at most 2 MB / 10,000 rows. Select the timestamp and numeric target columns and observed interval. At least 40 unique valid rows are required for this upload workflow. ISO dates are UTC dates; minute-resolution local date-times use your device timezone; timestamps with seconds need an explicit offset. The upload is sent through the existing immutable inline-series API, not a new public file URL. Missing dates or values fail validation, and duplicate timestamps deterministically retain the last supplied value.
+
+Advanced settings offers approved, revision-pinned `toto_variant` values `4m`, `22m`, `313m`, `1b`, `2.5b`, from smallest to largest. Default remains `2.5b`. Arbitrary checkpoint IDs are rejected. Larger models require more memory/startup time; TimesFM's separate access and commercial-license checks still apply.
+
+## First-row minute signal
+
+The website compares the **first completed one-minute observation after forecast publication** with the **first predicted row's** frozen P10/P90 levels. These timestamps can differ and both are displayed. Below P10 is a BUY signal for the selected side; above P90 is a SELL signal for that side; otherwise no signal. Equality is not a signal. Missing observations remain pending, never replaced by a later quote or forward-filled price. Historical replay comparisons are labeled separately. Signals are research annotations, not orders, fills or verified strategy returns.
 
 Quantura's ensemble supports these stable model identifiers:
 
@@ -53,7 +67,7 @@ In **Sports / Prediction Markets**, use **Download from a market link**, choose 
 
 Saved presets return these reusable settings under `configuration.history_controls` (`limit`, `history_phase`, `history_lookback_minutes`, and `history_lag_minutes` where applicable). Loading a preset restores these controls without changing the selected market or granting dataset access. Presets do not store historical rows or source-resource identifiers.
 
-Prediction-market sources accept `history_phase: "both" | "pregame" | "in_game"` (default `both`) and `history_lookback_minutes` (0–129600, default 0). Zero imposes no additional time restriction; 60 restricts input to the last hour, not 500 fabricated rows. `source.limit` applies afterward. For pregame, lookback ends at the earlier of game start and input cutoff. Game start is resolved from provider metadata, never trusted from client input. Unknown start times reject phase-specific requests.
+Prediction-market sources accept `history_phase: "auto" | "both" | "pregame" | "in_game"`. The website defaults to `auto`: use pregame plus in-game until 32 elapsed minutes after provider-confirmed game start, then in-game only. Auto is evaluated at the input cutoff for point-in-time requests; missing start metadata keeps auto on both. Existing API clients omitting the field retain `both`. They also accept `history_lookback_minutes` (0–129600, default 0). Zero imposes no additional time restriction; 60 restricts input to the last hour, not 500 fabricated rows. `source.limit` applies afterward. For pregame, lookback ends at the earlier of game start and input cutoff. Game start is resolved from provider metadata, never trusted from client input. Unknown start times reject phase-specific requests.
 
 ```json
 {

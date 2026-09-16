@@ -1,6 +1,6 @@
 import { constants, createPrivateKey, sign } from "node:crypto";
 import { Router } from "express";
-import { historySelection, eventHistoryRange, quoteHistoryQuality, type HistorySelection } from "./eventHistory";
+import { historySelection, eventHistoryRange, quoteHistoryQuality, automaticSportsHistoryPhase, type HistorySelection } from "./eventHistory";
 import { parseMarketLink } from "./marketLink";
 import { KALSHI_API_BASE, kalshiPrice, kalshiCandlePrice, kalshiMilestoneStart } from "./kalshiProtocol";
 import {
@@ -1322,7 +1322,7 @@ export function forecastObservationLimit(value: unknown, maximum = 500): number 
   return value;
 }
 
-export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; limit?: number; selection?: HistorySelection; includeQuotes?: boolean } = {}) {
+export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; limit?: number; selection?: HistorySelection; automaticPhase?: boolean; includeQuotes?: boolean } = {}) {
   const limit = forecastObservationLimit(options.limit);
   if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
   const contracts = await resolveMarketIdentifier(source, symbol, "market");
@@ -1332,7 +1332,7 @@ export async function predictionForecastHistory(source: PredictionMarketSource, 
   const now = options.until ?? Date.now();
   if (!Number.isFinite(now) || now > Date.now()) throw new PredictionMarketDataError("input_cutoff_invalid", "Input cutoff must not be in the future.", 422);
   const interval = frequencyValue === "1min" ? 60_000 : frequencyValue === "1h" ? 3600_000 : 86400_000;
-  const selection = options.selection || historySelection({});
+  const selection = { ...(options.selection || historySelection({})), ...(options.automaticPhase ? {history_phase:automaticSportsHistoryPhase(Date.parse(contract.eventStart || ""),now)} : {}) };
   const start = Math.max(Date.parse(contract.availableFrom || "") || 0, options.since || now - Math.min(90 * 86400_000, Math.max(7 * 86400_000, 1500 * interval)));
   const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", ...selection });
   // Forecast one consistent selected-side quote target. A Kalshi minute may

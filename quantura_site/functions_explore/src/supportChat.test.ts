@@ -36,7 +36,7 @@ test("support quotas count per user across tokens and never persist message cont
 test("support HTTP path enforces auth, validates schema, calls Luna and safely handles upstream errors", async () => {
   const { db } = memoryDb(); let calls = 0; let fail = false;
   const app = express(); app.use(express.json());
-  const auth: any = { verifyIdToken: async (token: string) => token === "test-session" ? { uid: "user" } : null, getUser: async () => ({ disabled: false, providerData: [{ providerId: "password" }] }) };
+  const auth: any = { verifyIdToken: async (token: string) => token === "test-session" ? { uid: "user",firebase:{sign_in_provider:"anonymous"} } : null, getUser: async () => ({ disabled: false, providerData: [] }) };
   registerSupportChatRoutes(app, { db, auth, publicOrigin: "https://quantura.studio", complete: async messages => {
     calls++; assert.equal(messages[0].role, "system");
     if (fail) throw new Error("provider-private-diagnostic");

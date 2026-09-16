@@ -47,7 +47,7 @@
     <script defer src="/app.js?v=20260903b"></script>
     <script defer src="/data-integrations.js?v=20260824a"></script>
     <script defer src="/platform-api.js?v=20260831a"></script>
-  
+
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -60,18 +60,9 @@
           <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
           <span>QUANTURA</span>
         </a>
-        <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
-          <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
-          <a href="/shop" data-analytics="nav_shop"><i class="iconoir-shop" aria-hidden="true"></i><span>Shop</span></a>
-          <a href="/about" data-analytics="nav_about"><i class="iconoir-info-circle" aria-hidden="true"></i><span>About</span></a>
-          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
-        </nav>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
-          <a class="cta secondary icon-only" id="header-notifications" href="/account" data-analytics="nav_notifications" aria-label="Sign in to manage notifications" title="Notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i></a>
+
           <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
         </div>
@@ -85,7 +76,7 @@
 	          <div class="sidebar-card">
 	            <div class="small"><strong>Shortcuts</strong></div>
 	            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
-	            <a class="cta secondary small" href="/pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>View pricing plans</span></a>
+
 	            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
 	          </div>
 			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
@@ -94,7 +85,7 @@
 		            <a class="sidebar-link" href="/dashboard?panel=developer" data-panel-target="developer"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>Developer</span></a>
 		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
 		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
-		            <a class="sidebar-link" href="/notifications" data-panel-target="notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Notifications</span></a>
+
 		            <a class="sidebar-link" href="/account" data-panel-target="auth" id="dashboard-auth-link"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
 		          </nav>
 	        </aside>
@@ -288,88 +279,7 @@
         </div>
       </section>
 
-      <section class="section panel hidden" data-panel="notifications" id="notifications">
-        <div class="container">
-          <div class="section-title notification-page-heading">
-            <div class="eyebrow">Alerts &amp; account activity</div>
-            <h2>Notifications</h2>
-            <p>Choose what matters, connect this browser, and review your latest Quantura updates in one place.</p>
-          </div>
-          <div class="notification-center-grid">
-            <section class="results-panel notification-inbox" aria-labelledby="notification-inbox-title">
-              <div class="card-head notification-inbox-head">
-                <div>
-                  <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-mail"></i></span>
-                  <div>
-                    <div class="eyebrow">Your feed</div>
-                    <h3 id="notification-inbox-title">Notification inbox</h3>
-                  </div>
-                  <span class="pill" id="notifications-unread-count">Unread 0</span>
-                </div>
-                <button class="cta secondary small" id="notifications-mark-all" type="button">Mark all read</button>
-              </div>
-              <div class="notification-filter-bar" role="group" aria-label="Filter notifications">
-                <button class="task-chip active" type="button" data-notification-filter="all">All</button>
-                <button class="task-chip" type="button" data-notification-filter="unread">Unread</button>
-                <button class="task-chip" type="button" data-notification-filter="earnings">Earnings</button>
-                <button class="task-chip" type="button" data-notification-filter="daily">Daily</button>
-                <button class="task-chip" type="button" data-notification-filter="weekly">Weekly</button>
-              </div>
-              <div id="notifications-items" class="notification-log notification-inbox-list">
-                <div class="empty-state">Sign in to load your notification inbox.</div>
-              </div>
-            </section>
 
-            <aside class="notification-settings-stack" aria-label="Notification settings">
-              <section class="card notification-delivery-card" aria-labelledby="notification-delivery-title">
-                <div class="notification-card-heading">
-                  <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-bell-notification"></i></span>
-                  <div>
-                    <div class="eyebrow">This device</div>
-                    <h3 id="notification-delivery-title">Browser notifications</h3>
-                  </div>
-                </div>
-                <p class="small muted">Receive supported Quantura alerts without keeping this page open.</p>
-                <div class="notification-delivery-status" role="status" aria-live="polite">
-                  <span class="status-dot" aria-hidden="true"></span>
-                  <p class="small" id="notifications-status">Sign in to configure browser notifications.</p>
-                </div>
-                <span id="notifications-token" class="hidden" aria-hidden="true">No token registered yet.</span>
-                <div class="notification-delivery-actions">
-                  <button class="cta" id="notifications-enable" type="button"><i class="iconoir-bell" aria-hidden="true"></i><span>Enable notifications</span></button>
-                  <button class="cta secondary" id="notifications-send-test" type="button"><i class="iconoir-send-diagonal" aria-hidden="true"></i><span>Send test</span></button>
-                  <button class="notification-text-action" id="notifications-refresh" type="button"><i class="iconoir-refresh" aria-hidden="true"></i><span>Reconnect this device</span></button>
-                </div>
-              </section>
-
-              <section class="card notification-preferences-card" aria-labelledby="notification-preferences-title">
-                <div class="notification-card-heading">
-                  <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-settings"></i></span>
-                  <div>
-                    <div class="eyebrow">Preferences</div>
-                    <h3 id="notification-preferences-title">What you receive</h3>
-                  </div>
-                </div>
-                <p class="small muted">These choices apply across your signed-in Quantura account.</p>
-                <div id="notifications-preferences-host"></div>
-              </section>
-            </aside>
-          </div>
-
-          <section class="results-panel notification-activity-card" aria-labelledby="notification-activity-title">
-            <div class="card-head">
-              <div class="notification-card-heading">
-                <span class="notification-section-icon" aria-hidden="true"><i class="iconoir-activity"></i></span>
-                <div><div class="eyebrow">Diagnostics</div><h3 id="notification-activity-title">This-device activity</h3><p class="small muted">Recent connection and foreground delivery events for this browser session.</p></div>
-              </div>
-              <button class="cta secondary small" id="notifications-clear" type="button">Clear activity</button>
-            </div>
-              <div id="notifications-log" class="notification-log">
-                <div class="empty-state">No device activity yet.</div>
-              </div>
-          </section>
-        </div>
-      </section>
 
 	      <section class="section panel" data-panel="orders" id="dashboard">
 	        <div class="container">
@@ -551,7 +461,7 @@
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
-          <div><a href="/pricing">Pricing</a></div>
+          <div></div>
           <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">
