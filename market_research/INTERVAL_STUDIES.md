@@ -18,6 +18,9 @@ window forward. Flat observed windows are allowed without added variation.
 First minute: Granite PatchTST-FM, Chronos-2, TimesFM, equally weighted. Origins
 2–12 additionally include Prophet. Toto is excluded. All selected models must
 succeed; TimesFM's production access and commercial-license flags still apply.
+Equal raw weights are renormalized per quantile. TimesFM participates only within
+P10–P90; P1/P99 use Granite + Chronos at the one-minute origin and additionally
+Prophet at subsequent origins. Unsupported tails are never extrapolated.
 
 - **First P90:** first unambiguous completed-minute bid at/above that minute's
   forecast P90, then the following minute's ask, hold to official settlement.

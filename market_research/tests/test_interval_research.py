@@ -28,7 +28,8 @@ def model(window, horizon, models, quantiles, **kwargs):
     assert kwargs == ({'single_point_research':True,'failure_policy':'fail'} if len(window)==1 else {'failure_policy':'fail'})
     return {'origin':window[-1].timestamp,'forecast_id':'only-test','duration_seconds':.1,
         'models':[{'id':m,'status':'completed'} for m in models],
-        'weights':{str(q):{m:1/len(models) for m in models} for q in quantiles},'failures':[],
+        'weights':{str(q):{m:1/sum(study.model_supports_quantile(k,q) for k in models)
+                          for m in models if study.model_supports_quantile(m,q)} for q in quantiles},'failures':[],
         'rows':[{'timestamp':window[-1].timestamp+i*60, 'quantiles':{str(q):q for q in quantiles}}
                 for i in range(1,horizon+1)]}
 
@@ -58,6 +59,21 @@ def test_short_or_failed_ensemble_is_rejected():
     f['models'].pop()
     with pytest.raises(ValueError,match='STRICT_INTERVAL'):
         study.validate_pair_member(f,OPEN+60,14,study.models_for(1))
+
+
+@pytest.mark.parametrize('n',[1,2,12])
+def test_equal_weights_are_capability_specific_and_timesfm_never_fabricates_tails(n):
+    selected=study.models_for(n)
+    window=[Quote(OPEN+60*i,.5,.49) for i in range(1,n+1)]
+    f=model(window,15-n,selected,study.QUANTILES,failure_policy='fail',
+            **({'single_point_research':True} if n==1 else {}))
+    study.validate_pair_member(f,OPEN+n*60,15-n,selected)
+    assert 'timesfm' not in f['weights']['0.01']
+    assert f['weights']['0.1']['timesfm']==1/len(selected)
+    assert f['weights']['0.99']['granite']==1/(len(selected)-1)
+    f['weights']['0.99']['timesfm']=.1
+    with pytest.raises(ValueError,match='EQUAL_INTERVAL'):
+        study.validate_pair_member(f,OPEN+n*60,15-n,selected)
 
 
 def pair():
