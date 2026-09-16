@@ -192,10 +192,12 @@ def history_quality(window: list[Quote]) -> dict:
             run_start = i
         longest = max(longest, window[i].timestamp - window[run_start].timestamp)
     tail = (window[-1].timestamp - window[run_start].timestamp) / 60 if window else 0
-    return {"methodology_version": "event_history_v2", "observations": len(window),
+    return {"methodology_version": "event_history_v3", "observations": len(window),
             "price_changes": changes, "longest_unchanged_minutes": longest / 60,
             "trailing_unchanged_minutes": tail, "repeated_prices_preserved": True,
-            "forecast_blocked": len(window) >= 2 and (changes == 0 or (len(window) - run_start >= 30 and tail >= 120))}
+            "flat_window": len(window) >= 2 and changes == 0,
+            "low_information": len(window) >= 2 and (changes == 0 or (len(window) - run_start >= 30 and tail >= 120)),
+            "forecast_blocked": False}
 
 
 def rolling_origins(quotes: list[Quote], horizon: int):

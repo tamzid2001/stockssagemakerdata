@@ -67,13 +67,13 @@ Prediction-market sources accept `history_phase: "both" | "pregame" | "in_game"`
 }
 ```
 
-Polymarket pregame and in-game custom timestamp ranges are downloaded separately and joined by original timestamps. Repeated provider display quotes remain in downloads; they are not separate trades. Forecast creation returns `422 HISTORY_FLAT_WINDOW` if the entire selected window is unchanged or at least 30 final observations have the same price over two hours. Changing histories with earlier flat stretches remain usable with a warning. This is a data-quality guard, not proof of predictive skill.
+Polymarket pregame and in-game custom timestamp ranges are downloaded separately and joined by original timestamps. Genuine flat windows and long unchanged stretches are allowed for forecasting, with a low-information warning. Repeated display quotes are not separate trades. Missing values are not invented, and no artificial price variation is added. Successful inference is not proof of predictive skill.
 
-`source.history_quality` records input counts, pregame/in-game counts, price-change count, and longest/trailing unchanged duration. Existing immutable forecasts remain unchanged. The shared backtest and paper-worker inference path applies the same flat-window guard. New results must not be mixed silently with earlier corpus versions.
+`source.history_quality` records input counts, pregame/in-game counts, price-change count, longest/trailing unchanged duration, `flat_window` and `low_information`. The legacy `forecast_blocked` field remains false for flatness. Existing immutable forecasts remain unchanged. Website, backtests and paper workers permit genuine flat windows. New results must not be mixed silently with earlier corpus versions.
 
 Ticker sources accept `frequency: "1Day" | "1Hour" | "1Min"`, subject to provider availability. Intraday forecasts use frequency periods; daily NYSE forecasts can use trading sessions. Cutoff units and data frequency are independent.
 
-The existing historical export endpoint `/api/sports/prediction-markets/export` also accepts `history_phase` and `history_lookback_minutes`. Its legacy `pregameOnly` parameter remains supported when `history_phase` is absent. Original rows remain downloadable even when their flatness prevents new inference.
+The existing historical export endpoint `/api/sports/prediction-markets/export` also accepts `history_phase` and `history_lookback_minutes`. Its legacy `pregameOnly` parameter remains supported when `history_phase` is absent. Original rows remain downloadable, including unchanged prices.
 
 These runs are labeled **Historical replay**: generated now, not predictions published before the already-known outcomes. The chart overlays available actual observations after the cutoff, then continues updating. Live metrics exclude observations known before the new forecast completed. Reproducing a saved forecast retains its original input snapshot; **Refresh latest data & forecast** intentionally returns to current data.
 

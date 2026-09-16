@@ -64,7 +64,7 @@ def test_live_forecast_retry_keeps_input_and_never_backdates(store,monkeypatch):
     clock=[OPEN+125];monkeypatch.setattr(btc.time,'time',lambda:clock[0])
     calls=[]
     def forecast(window,horizon,models,quantiles,**options):
-        assert options=={'btc_two_point_research':True}
+        assert options=={}
         calls.append(window)
         if len(calls)==1:raise RuntimeError('transient')
         return {'forecast_id':str(len(calls)),'origin':OPEN+120,

@@ -26,9 +26,11 @@ export function quoteHistoryQuality(rows: Array<{ timestamp: string; target: num
   }
   const tailMinutes = rows.length ? (Date.parse(rows.at(-1)!.timestamp) - Date.parse(rows[runStart].timestamp)) / 60000 : 0;
   const pregame = Number.isFinite(eventStart) ? rows.filter(r => Date.parse(r.timestamp) <= eventStart).length : null;
-  return { methodology_version: "event_history_v2", observations: rows.length, price_changes: changes,
+  return { methodology_version: "event_history_v3", observations: rows.length, price_changes: changes,
     pregame_observations: pregame, in_game_observations: pregame === null ? null : rows.length - pregame,
     longest_unchanged_minutes: longest / 60000, trailing_unchanged_minutes: tailMinutes,
-    forecast_blocked: rows.length >= 2 && (changes === 0 || (rows.length - runStart >= 30 && tailMinutes >= 120)),
+    flat_window: rows.length >= 2 && changes === 0,
+    low_information: rows.length >= 2 && (changes === 0 || (rows.length - runStart >= 30 && tailMinutes >= 120)),
+    forecast_blocked: false,
     repeated_prices_preserved: true, synthetic_observations: 0 };
 }

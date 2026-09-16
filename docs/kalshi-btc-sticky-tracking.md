@@ -69,9 +69,9 @@ Only a complete YES/NO forecast pair is published. A retry cannot promise a
 forecast before close; failed/missed deadlines remain visible in the ledger.
 Toto remains excluded from these short-context experiments.
 
-The exact two-minute BTC research path permits two genuine unchanged consecutive
-quotes, with an explicit warning. It does not fabricate variation, pad history,
-or relax the stale/flat-history gate for the website or other research windows.
+Genuine unchanged windows are permitted on the website and in research, with an
+explicit low-information warning. They do not fabricate variation or pad history;
+minimum valid-row and non-synthetic-input requirements remain enforced.
 
 The existing encrypted checkpoint includes `btc_paired_minutes.csv.gz`,
 `btc_sticky_tracking.json.gz`, all minute/settlement records, and attempt history

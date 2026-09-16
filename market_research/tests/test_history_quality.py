@@ -4,12 +4,15 @@ from market_research.forecast import forecast_window
 from market_research.provider import QuanturaProvider
 
 
-def test_flat_quotes_are_preserved_but_inference_is_blocked_before_models(monkeypatch):
+def test_flat_quotes_are_preserved_and_inference_runs_without_artificial_variation(monkeypatch):
+    from ensemble_forecasting.worker import execute_job
     rows = [Quote(i * 60, .545, .54) for i in range(500)]
-    assert history_quality(rows)["forecast_blocked"]
-    monkeypatch.setattr("market_research.forecast.execute_job", lambda *a, **k: pytest.fail("No compute on flat history"))
-    with pytest.raises(ValueError, match="HISTORY_FLAT_WINDOW"):
-        forecast_window(rows, 30, ("prophet",))
+    assert history_quality(rows)['flat_window'] and not history_quality(rows)["forecast_blocked"]
+    monkeypatch.setattr('market_research.forecast.execute_job',lambda job,**kw:execute_job(job,mock=True,**kw))
+    result=forecast_window(rows,30,('prophet','granite','chronos'))
+    assert len(result['rows'])==30 and result['imputed_context_steps']==0
+    assert len({r['target'] for r in result['input_snapshot']})==1
+    assert any('LOW_INFORMATION_HISTORY' in w for w in result['warnings'])
     assert len(rows) == 500
 
 
@@ -20,7 +23,8 @@ def test_pregame_flat_stretch_does_not_discard_changing_ingame_quotes():
     assert result["longest_unchanged_minutes"] == 449
     assert result["price_changes"] == 50
     stale = [Quote(i * 60, .6 if i < 100 else .545, .5) for i in range(500)]
-    assert history_quality(stale)["forecast_blocked"]
+    assert not history_quality(stale)["forecast_blocked"]
+    assert history_quality(stale)['low_information']
 
 
 def test_research_uses_shared_phase_downloads_with_scope_aware_cache(monkeypatch):

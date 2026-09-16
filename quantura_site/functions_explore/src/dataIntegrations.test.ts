@@ -11,6 +11,7 @@ import {
   predictionDatasetCsv,
   resamplePredictionObservations,
   polymarketHistory,
+  predictionForecastHistory,
   stableItemId,
   type NormalizedPredictionObservation,
   type PredictionMarketSource,
@@ -28,15 +29,45 @@ test("event history phase and bounded lookback intersect before cutoff; unknown 
   for(const input of [{history_phase:["both"]},{history_phase:{toString:()=>"both"}},{history_phase:"unknown"},{history_lookback_minutes:-1},{history_lookback_minutes:NaN},{history_lookback_minutes:"60"},{history_lookback_minutes:129601}]) assert.throws(()=>historySelection(input));
 });
 
-test("flat history is preserved but blocks inference; changing in-game data remains usable", () => {
+test("genuine flat history is forecastable with advisory quality metadata, without invented variation", () => {
   const start=Date.parse("2026-09-12T10:00Z");
   const rows=Array.from({length:500},(_,i)=>({timestamp:new Date(start+i*60000).toISOString(),target:.545}));
-  assert.equal(quoteHistoryQuality(rows).forecast_blocked,true);
+  assert.equal(quoteHistoryQuality(rows).forecast_blocked,false);
+  assert.equal(quoteHistoryQuality(rows).flat_window,true);
+  assert.equal(quoteHistoryQuality(rows).low_information,true);
+  assert.equal(new Set(rows.map(r=>r.target)).size,1);
   const moving=rows.map((r,i)=>({...r,target:i>=450?.545+(i-450)/1000:r.target}));
   const q=quoteHistoryQuality(moving,start+400*60000);
   assert.equal(q.forecast_blocked,false);assert.equal(q.observations,500);assert.equal(q.price_changes,49);assert.equal(q.pregame_observations,401);
   moving[0].target=.5;
-  const stale=moving.map((r,i)=>({...r,target:i>100?.55:r.target}));assert.equal(quoteHistoryQuality(stale).forecast_blocked,true);
+  const stale=moving.map((r,i)=>({...r,target:i>100?.55:r.target}));assert.equal(quoteHistoryQuality(stale).forecast_blocked,false);
+  assert.equal(quoteHistoryQuality(stale).low_information,true);
+});
+
+test("website forecast-history service accepts 500 unchanged provider candles", async () => {
+  const original=global.fetch;
+  const end=Math.floor(Date.now()/60000)*60000-60000, start=end-501*60000;
+  const ticker="KXBTC15M-FLAT-FIXTURE";
+  global.fetch=(async input=>{
+    const url=new URL(String(input));
+    if(url.pathname.endsWith("/markets/candlesticks")) return Response.json({markets:[{market_ticker:ticker,
+      candlesticks:Array.from({length:500},(_,i)=>({end_period_ts:(end-(499-i)*60000)/1000,
+        price:{close_dollars:"0.545"},yes_bid:{close_dollars:"0.54"},yes_ask:{close_dollars:"0.545"}}))}]});
+    if(url.pathname.endsWith("/markets/"+ticker)) return Response.json({market:{ticker,event_ticker:"FLAT-EVENT",
+      market_type:"binary",status:"active",title:"Flat-window fixture",open_time:new Date(start).toISOString(),
+      close_time:new Date(end+3600000).toISOString(),yes_bid_dollars:"0.54",yes_ask_dollars:"0.545"}});
+    if(url.pathname.includes("/events/")) return Response.json({event:{event_ticker:"FLAT-EVENT",title:"Fixture",series_ticker:"KXBTC15M"}});
+    if(url.pathname.endsWith("/milestones")) return Response.json({milestones:[]});
+    throw new Error("Unexpected test provider route: "+url.pathname);
+  }) as typeof fetch;
+  try {
+    const result=await predictionForecastHistory("kalshi",ticker,ticker+":yes","1min",{since:start,until:end});
+    assert.equal(result.rows.length,500);
+    assert.equal(result.quality.forecast_blocked,false);
+    assert.equal(result.quality.flat_window,true);
+    assert.equal(new Set(result.rows.map(r=>r.target)).size,1);
+    assert.ok(result.warnings.some(w=>w.includes("Low-information history")));
+  } finally {global.fetch=original;}
 });
 
 test("Polymarket explicitly downloads pregame and in-game raw quotes without filling gaps", async () => {

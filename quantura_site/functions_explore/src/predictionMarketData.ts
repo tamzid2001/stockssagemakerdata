@@ -1340,7 +1340,6 @@ export async function predictionForecastHistory(source: PredictionMarketSource, 
   const observations: Array<Record<string, unknown>> = dataset.rows.map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(Date.parse(String(row.timestamp)) + interval).toISOString() });
   const { rows, observed_rows, gap_count } = forecastObservationWindow(observations, interval, now, options.minimumRows ?? 2, limit);
   const quality = quoteHistoryQuality(rows, Date.parse(contract.eventStart || ""));
-  if ((options.minimumRows ?? 2) > 0 && quality.forecast_blocked) throw new PredictionMarketDataError("history_flat_window", "The selected side is unchanged throughout this input window or for at least two recent hours. Forecast skipped: select a different phase/lookback or wait for a new price. Original quotes remain downloadable.", 422);
   const quoteByTime = new Map(observations.map(row => [String(row.timestamp), row]));
   const outputRows = options.includeQuotes ? rows.map(row => {
     const quote = quoteByTime.get(row.timestamp);
@@ -1349,6 +1348,7 @@ export async function predictionForecastHistory(source: PredictionMarketSource, 
   }) : rows;
   return { rows: outputRows, contract, frequency: frequencyValue, timezone: "UTC", observed_rows, quality, selection,
     warnings: [`Using ${rows.length} observed bars of up to ${limit} (${observed_rows} available in the fetched range).`,
+      ...(quality.low_information ? ["Low-information history: unchanged genuine quotes are allowed. Forecast reliability is unvalidated; no artificial price variation was added."] : []),
       `History: ${quality.pregame_observations ?? "unknown"} pregame and ${quality.in_game_observations ?? "unknown"} in-game bars; ${quality.price_changes} price changes.`,
       ...(quality.longest_unchanged_minutes >= 60 ? [`Provider quotes include an unchanged stretch of ${Math.round(quality.longest_unchanged_minutes)} minutes. Repeated display quotes are not individual trades.`] : []),
       source === "kalshi" ? "Target: selected-side candle closing ask; no trade is invented for minutes without transactions." : "Target: selected-side display quote, timestamped at the completed interval end; not an executed trade.",
