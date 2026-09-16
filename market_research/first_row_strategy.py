@@ -13,6 +13,41 @@ from .recovery_switch import statistics
 VERSION = 'first_row_p10_buy_p90_sell_v1'
 
 
+def game_groups(contracts):
+    """Keep provider identities; Kalshi events can contain 1–3 binary books.
+
+    A NO position remains the complement of its own market, not an inferred
+    different team. Legacy Polymarket pairing remains unchanged.
+    """
+    from .p1_worker import game_groups as polymarket_groups
+    result = polymarket_groups([c for c in contracts if c.get('source') != 'kalshi'])
+    events = defaultdict(dict)
+    invalid = set()
+    for c in contracts:
+        if c.get('source') != 'kalshi':
+            continue
+        event, ticker, side = c.get('eventId'), c.get('marketId'), c.get('side')
+        if (not event or not ticker or c.get('providerSymbol') != ticker or
+                side not in {'yes', 'no'} or c.get('contractId') != f'{ticker}:{side}' or
+                not ticker.startswith(event + '-')):
+            if event:
+                invalid.add(event)
+            continue
+        previous = events[event].get(c['contractId'])
+        if previous is not None and previous != c:
+            invalid.add(event)
+        events[event][c['contractId']] = c
+    for event, unique in events.items():
+        books = defaultdict(list)
+        for c in unique.values():
+            books[c['marketId']].append(c)
+        if event in invalid or not 1 <= len(books) <= 3:
+            continue
+        if all(len(p) == 2 and {c['side'] for c in p} == {'yes', 'no'} for p in books.values()):
+            result[event] = sorted(unique.values(), key=lambda c: c['contractId'])
+    return result
+
+
 def classify(ask, p10, p90):
     if not all(math.isfinite(v) and 0 <= v <= 1 for v in (ask, p10, p90)) or p10 > p90:
         raise ValueError('INVALID_FIRST_ROW_VALUES')

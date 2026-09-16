@@ -35,7 +35,7 @@ class KalshiBTCProvider:
 
     def get(self, path, params=None):
         series = re.escape(self.series_ticker)
-        if not re.fullmatch(rf"/(markets|historical/markets|historical/cutoff|series|series/{series}|markets/{series}-[A-Z0-9-]+|(?:historical|series/{series})/markets/{series}-[A-Z0-9-]+/candlesticks)", path):
+        if not re.fullmatch(rf"/(markets|historical/markets|historical/cutoff|series|series/{series}|(?:historical/)?markets/{series}-[A-Z0-9-]+|(?:historical|series/{series})/markets/{series}-[A-Z0-9-]+/candlesticks)", path):
             raise ValueError("UNAPPROVED_KALSHI_READ_ROUTE")
         url = API + path + ("?" + urllib.parse.urlencode(params) if params else "")
         for attempt in range(self.attempts):
