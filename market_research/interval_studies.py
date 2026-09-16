@@ -94,7 +94,7 @@ def settlement(market, retrieved):
     end = stamp(market['close_time'])
     raw = market.get('settlement_ts')
     try:
-        actual = int(raw) if type(raw) in (int, float) else stamp(raw)
+        actual = int(raw) if type(raw) in (int, float) else stamp(raw) if isinstance(raw, str) else 0
     except (TypeError, ValueError):
         actual = 0
     return {'market_id':market['ticker'], 'close_at':end, 'result':market['result'],

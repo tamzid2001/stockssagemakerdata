@@ -108,6 +108,23 @@ def test_unknown_fee_does_not_fabricate_returns_or_zero_win_rate():
         assert v['settlement_win_rate'] is None and not v['scenarios']
 
 
+def test_missing_official_settlement_time_uses_disclosed_floor():
+    r=study.settlement(MARKET, OPEN+1800)
+    assert r['first_confirmed_at']==OPEN+960
+    assert r['confirmation_clock']=='historical_official_or_assumed_60s_floor'
+    assert study.settlement({**MARKET,'result':None},OPEN+1800) is None
+
+
+def test_discovery_survives_gap_between_successive_markets(monkeypatch):
+    monkeypatch.setattr(markets.time,'time',lambda:OPEN+901)
+    class P:
+        def get(self,path,params=None):
+            if path=='/series':return {'series':[{'ticker':'KXETH15M','title':'ETH','category':'Crypto','frequency':'fifteen_min'}]}
+            return {'markets':[] if params.get('status')=='open' else [MARKET]}
+    found=markets.discover_series(P())
+    assert found['series'][0]['verification']=='recent_contract_within_hour'
+
+
 def test_dynamic_discovery_all_directional_series_not_coin_races():
     class P:
         def get(self,path,params=None):

@@ -51,9 +51,17 @@ def discover_series(provider=None, maximum=40):
         try:
             response=provider.get('/markets', {'series_ticker':s['ticker'], 'status':'open', 'limit':5})
             markets=[m for m in response.get('markets',[]) if p.valid_market(m)]
+            verification = 'open_contract'
+            if not markets:
+                # Around a 15-minute boundary the next open contract may not yet
+                # be indexed. A verified recent contract keeps its collector on.
+                cutoff = int(time.time())-3600
+                response = provider.get('/markets', {'series_ticker':s['ticker'], 'min_close_ts':cutoff, 'limit':5})
+                markets = [m for m in response.get('markets', []) if p.valid_market(m) and stamp(m['close_time']) >= cutoff]
+                verification = 'recent_contract_within_hour'
             if markets:
                 active.append({'ticker':s['ticker'],'title':s['title'],'category':s['category'],
-                               'verified_contract':markets[0]['ticker']})
+                               'verified_contract':markets[0]['ticker'],'verification':verification})
             else:
                 unavailable.append({'ticker':s['ticker'],'reason':'no_active_exact_15minute_binary_contract'})
         except (RuntimeError, ValueError, OSError) as error:
