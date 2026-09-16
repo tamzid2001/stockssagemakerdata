@@ -76,22 +76,31 @@
   function firstRowSignal(job, now = Date.now()) {
     const first = job.predictions?.[0];
     const timestamp = Date.parse(first?.timestamp);
-    if (job.frequency !== "1min" || !Number.isFinite(timestamp) || timestamp % 60000) return {status: "unavailable", reason: "Requires a one-minute forecast."};
+    if (!Number.isFinite(timestamp)) return {status: "unavailable", reason: "Waiting for the first prediction row."};
+    const dailyStock = job.source?.type === "ticker" && job.frequency === "1D";
+    const intervalLabel = job.frequency === "1D" ? "day" : job.frequency === "1h" ? "hour" : job.frequency === "1min" ? "minute" : "interval";
     const levels = first.quantiles || {}, lower = levels["0.1"], upper = levels["0.9"];
     if (![lower, upper].every(v => typeof v === "number" && Number.isFinite(v)) || lower > upper) return {status: "unavailable", reason: "Request both P10 and P90."};
     const published = Date.parse(job.completed_at);
     const replay = job.source?.analysis_mode === "historical_replay";
     // Match the first predicted interval after the immutable input cutoff.
     // Worker latency must not move the signal to a different market minute.
-    const quoteTimestamp = timestamp;
-    const observation = (job.observations || []).find(row => Date.parse(row.timestamp) === quoteTimestamp && row.is_forward_filled !== true && row.observed !== false);
+    const observation = (job.observations || []).find(row => {
+      if (row.is_forward_filled === true || row.observed === false || row.is_complete === false) return false;
+      if (row.interval && row.interval !== job.frequency) return false;
+      // Daily equity bars are labeled by exchange session, not UTC midnight.
+      // Never substitute a provisional minute quote for that day's close.
+      if (dailyStock) return row.interval === "1D" && stockChartTimestamp(row, job).slice(0, 10) === first.timestamp.slice(0, 10);
+      return Date.parse(row.timestamp) === timestamp;
+    });
+    const quoteTimestamp = observation ? Date.parse(observation.timestamp) : timestamp;
     // Use the same selected-side target/closing price as the history and chart,
     // not an ask from a different price series. This is not an execution fill.
     const price = observation?.target;
-    if (quoteTimestamp > now || typeof price !== "number" || !Number.isFinite(price)) return {status: "waiting", timestamp, reason: "Waiting for the completed one-minute quote matching the first prediction row, immediately after the downloaded history. Later quotes cannot replace it."};
+    if (quoteTimestamp > now || typeof price !== "number" || !Number.isFinite(price)) return {status: "waiting", timestamp, reason: `Waiting for the completed ${intervalLabel} closing value matching the first prediction row, immediately after the downloaded history. Later or shorter-interval quotes cannot replace it.`};
     const prospective = !replay && Number.isFinite(published) && published < timestamp;
     return {status: "observed", timestamp, quoteTimestamp, price, lower, upper, signal: price < lower ? "buy" : price > upper ? "sell" : "none", prospective,
-      timing: prospective ? "First predicted minute after downloaded history" : "First predicted minute after downloaded history · retrospective comparison, not a backdated live entry"};
+      timing: `First predicted ${intervalLabel} after downloaded history${prospective ? "" : " · retrospective comparison, not a backdated live entry"}`};
   }
   const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowSignal });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;

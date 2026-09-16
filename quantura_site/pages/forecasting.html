@@ -43,10 +43,10 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/forecast-controls.js?v=20260916b"></script>
+    <script defer src="/forecast-controls.js?v=20260916c"></script>
     <script defer src="/app.js?v=20260824a"></script>
     <script defer src="/data-integrations.js?v=20260908a"></script>
-    <script defer src="/market-search.js?v=20260908a"></script>
+    <script defer src="/market-search.js?v=20260916c"></script>
     <script defer src="/screener-panel-lazy.js?v=20260831a"></script>
 
     <script>
@@ -326,7 +326,7 @@
                       </section>
                     </div>
                     </section>
-                    <div class="card" data-my-requests-panel data-default-type="forecast">
+                    <div class="card" data-my-requests-panel>
                       <div class="card-head">
                         <h3>My Requests</h3>
                         <button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button>
@@ -335,15 +335,6 @@
                         <div class="field">
                           <label class="label">Search</label>
                           <input type="search" data-my-requests-search placeholder="Title, ticker, date" />
-                        </div>
-                        <div class="field">
-                          <label class="label">Type</label>
-                          <select data-my-requests-type>
-                            <option value="">All</option>
-                            <option value="forecast">Forecasting</option>
-                            <option value="screener">Screeners</option>
-                            <option value="indicator">Indicators</option>
-                          </select>
                         </div>
                       </div>
                       <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>

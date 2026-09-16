@@ -2348,6 +2348,8 @@
     myRequestsById: {},
     myRequestsLoading: false,
     myRequestsLoadedAt: 0,
+    myRequestsNextCursor: null,
+    myRequestsHasMore: false,
     myRequestsPanelState: {},
     sharedWorkspaces: [],
     workspacePermissions: [],
@@ -14853,7 +14855,7 @@
     }
     const dark = isDarkMode();
     const firstSignal = window.QuanturaForecastControls?.firstRowSignal(job);
-    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.quoteTimestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (retrospective)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
+    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.timestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (retrospective)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
     renderEnsembleSignals(job);
     // Epoch positions stay absolute (including DST folds); only labels localize.
     traces.forEach(trace => { trace.customdata ||= trace.x.map(value => job.frequency === "1D" && source.type === "ticker" ? value.slice(0,10) : ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
@@ -15586,11 +15588,13 @@
       published: panel?.querySelector?.("[data-my-requests-published]"),
       status: panel?.querySelector?.("[data-my-requests-status]"),
       list: panel?.querySelector?.("[data-my-requests-list]"),
+      pagination: panel?.querySelector?.("[data-my-requests-pagination]"),
     };
     const next = {
       search: String(current.search || controls.search?.value || "").trim(),
       type: normalizeMyRequestType(current.type || controls.type?.value || "") || defaultType || "",
       published: normalizeMyRequestPublishedFilter(current.published || controls.published?.value || "all"),
+      page: Math.max(0, Number(current.page) || 0),
     };
     state.myRequestsPanelState[key] = next;
     return { key, controls, filters: next };
@@ -15632,29 +15636,42 @@
     delete state.myRequestsById[id];
   };
 
-  const fetchMyRequestsList = async ({ force = false, notify = false } = {}) => {
+  const fetchMyRequestsList = async ({ force = false, notify = false, more = false } = {}) => {
     if (!hasSessionUser()) {
       state.myRequests = [];
       state.myRequestsById = {};
       state.myRequestsLoadedAt = 0;
+      state.myRequestsNextCursor = null;
+      state.myRequestsHasMore = false;
+      state.myRequestsPanelState = {};
       return [];
     }
     if (state.myRequestsLoading) return state.myRequests;
-    if (!force && state.myRequests.length && Date.now() - Number(state.myRequestsLoadedAt || 0) < 15000) {
+    if (more && !state.myRequestsHasMore) return state.myRequests;
+    if (!force && !more && state.myRequests.length && Date.now() - Number(state.myRequestsLoadedAt || 0) < 15000) {
       return state.myRequests;
     }
 
     state.myRequestsLoading = true;
+    renderMyRequestsPanels();
+    const userId = state.user.uid;
     try {
       const headers = await buildApiAuthHeaders();
-      const response = await fetch("/api/my-requests?limit=160", {
+      const query = new URLSearchParams({ limit: "40" });
+      if (more && state.myRequestsNextCursor) query.set("cursor", state.myRequestsNextCursor);
+      const response = await fetch(`/api/my-requests?${query}`, {
         method: "GET",
         headers,
         credentials: "same-origin",
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(String(payload?.error || "Unable to load requests.").trim());
-      state.myRequests = Array.isArray(payload?.items) ? payload.items : [];
+      if (state.user?.uid !== userId) return [];
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      state.myRequests = more ? [...new Map([...state.myRequests, ...items].map(item => [item.id, item])).values()] : items;
+      state.myRequestsNextCursor = payload.next_cursor || null;
+      state.myRequestsHasMore = Boolean(payload.has_more && state.myRequestsNextCursor);
+      if (!more) Object.values(state.myRequestsPanelState).forEach(filters => { filters.page = 0; });
       sortMyRequestsInState();
       state.myRequestsLoadedAt = Date.now();
       return state.myRequests;
@@ -15663,6 +15680,7 @@
       return state.myRequests;
     } finally {
       state.myRequestsLoading = false;
+      renderMyRequestsPanels();
     }
   };
 
@@ -15784,19 +15802,36 @@
       });
 
       if (!hasSessionUser()) {
+        if (controls.pagination) controls.pagination.hidden = true;
         controls.status.textContent = "Sign in to manage requests.";
         controls.list.innerHTML = `<div class="small muted">Sign in to load your requests.</div>`;
         return;
       }
       if (state.myRequestsLoading) {
+        controls.pagination?.querySelectorAll("button").forEach(button => { button.disabled = true; });
         controls.status.textContent = "Loading requests...";
         controls.list.innerHTML = `<div class="small muted">${skeletonHtml(3)}</div>`;
         return;
       }
-      controls.status.textContent = rows.length ? `${rows.length} request${rows.length === 1 ? "" : "s"}` : "";
+      const pageSize = 20;
+      filters.page = Math.min(filters.page, Math.max(0, Math.ceil(rows.length / pageSize) - 1));
+      const start = filters.page * pageSize;
+      const end = Math.min(start + pageSize, rows.length);
+      controls.status.textContent = rows.length ? `Showing ${start + 1}–${end} of ${rows.length}${state.myRequestsHasMore ? " loaded" : ""} requests${state.myRequestsHasMore ? " · Next loads older requests when needed." : ""}` : state.myRequestsHasMore ? "No matches in loaded requests. Next searches older requests." : "";
       controls.list.innerHTML = rows.length
-        ? renderMyRequestCards(rows.slice(0, 60))
+        ? renderMyRequestCards(rows.slice(start, end))
         : `<div class="small muted">No requests matched this filter.</div>`;
+      if (controls.pagination) {
+        controls.pagination.hidden = !rows.length && !state.myRequestsHasMore;
+        controls.pagination.querySelector("[data-requests-previous]").disabled = filters.page === 0;
+        controls.pagination.querySelector("[data-requests-next]").disabled = end >= rows.length && !state.myRequestsHasMore;
+        controls.pagination.querySelector("[data-requests-page]").textContent = `Page ${filters.page + 1}${state.myRequestsHasMore ? " · More history available" : ` of ${Math.max(1, Math.ceil(rows.length / pageSize))}`}`;
+        controls.pagination.dataset.cachedNext = String(end < rows.length);
+      }
+      const deleteSelected = panel.querySelector("[data-request-delete-selected]");
+      if (deleteSelected) deleteSelected.disabled = true;
+      const selectionStatus = panel.querySelector("[data-request-selection-status]");
+      if (selectionStatus) selectionStatus.textContent = "";
     });
   };
 
@@ -15806,6 +15841,24 @@
       if (!panel || panel.dataset.bound === "1") return;
       panel.dataset.bound = "1";
       const { controls, key, filters } = readMyRequestPanelState(panel, idx);
+      const pagination = document.createElement("nav");
+      pagination.className = "request-pagination";
+      pagination.hidden = true;
+      pagination.dataset.myRequestsPagination = "";
+      pagination.setAttribute("aria-label", "Request history pages");
+      pagination.innerHTML = '<button type="button" class="task-chip" data-requests-previous>Previous</button><span class="small muted" data-requests-page aria-live="polite"></span><button type="button" class="task-chip" data-requests-next>Next</button>';
+      controls?.list?.before(pagination);
+      pagination.querySelector("[data-requests-previous]").addEventListener("click", () => {
+        state.myRequestsPanelState[key].page = Math.max(0, state.myRequestsPanelState[key].page - 1);
+        renderMyRequestsPanels();
+      });
+      pagination.querySelector("[data-requests-next]").addEventListener("click", async () => {
+        if (state.myRequestsLoading) return;
+        const page = state.myRequestsPanelState[key].page;
+        if (pagination.dataset.cachedNext !== "true") await fetchMyRequestsList({ more: true, notify: true });
+        state.myRequestsPanelState[key].page = page + 1;
+        renderMyRequestsPanels();
+      });
       const toolbar = document.createElement("div");
       toolbar.className = "request-bulk-toolbar";
       toolbar.innerHTML = '<button type="button" class="task-chip" data-request-select-all>Select visible</button><button type="button" class="task-chip danger" data-request-delete-selected disabled>Delete selected</button><span class="small muted" data-request-selection-status></span>';
@@ -15830,6 +15883,7 @@
         state.myRequestsPanelState[key] = {
           ...state.myRequestsPanelState[key],
           search: String(controls.search.value || "").trim(),
+          page: 0,
         };
         renderMyRequestsPanels();
       });
@@ -15837,6 +15891,7 @@
         state.myRequestsPanelState[key] = {
           ...state.myRequestsPanelState[key],
           type: normalizeMyRequestType(controls.type.value || "") || "",
+          page: 0,
         };
         renderMyRequestsPanels();
       });
@@ -15844,6 +15899,7 @@
         state.myRequestsPanelState[key] = {
           ...state.myRequestsPanelState[key],
           published: normalizeMyRequestPublishedFilter(controls.published.value || "all"),
+          page: 0,
         };
         renderMyRequestsPanels();
       });

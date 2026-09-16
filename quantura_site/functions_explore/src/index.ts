@@ -53,6 +53,7 @@ import {
   SPORTS_LEAGUES,
 } from "./sports";
 import { downloadKalshiMinuteHistory } from "./kalshiMinuteHistory";
+import { decodeRequestCursor, scanRequestPage, selectRequestPage } from "./requestPagination";
 import { AlpacaClient } from "./alpacaClient";
 import {
   alertFromSnapshot,
@@ -13454,20 +13455,16 @@ ROUTES.get("/my-requests", async (req, res) => {
       return;
     }
 
-    await syncLegacyRequestsForUser(viewer.uid);
+    const cursor = req.query.cursor;
+    decodeRequestCursor(cursor, viewer.uid);
+    if (!cursor) await syncLegacyRequestsForUser(viewer.uid);
 
     const typeFilter = normalizeMyRequestType(req.query.type);
     const publishedFilter = normalizeMyRequestPublishedFilter(req.query.published);
     const queryText = sanitizeText(req.query.q, 140).toLowerCase();
     const limit = parseLimit(req.query.limit);
 
-    const snap = await db
-      .collection("users")
-      .doc(viewer.uid)
-      .collection("requests")
-      .orderBy("updatedAt", "desc")
-      .limit(Math.max(limit * 4, 140))
-      .get();
+    const snap = await scanRequestPage(db, viewer.uid, cursor, limit);
 
     const requestDocs = snap.docs.map((doc) => ({
       id: doc.id,
@@ -13498,15 +13495,14 @@ ROUTES.get("/my-requests", async (req, res) => {
       }
     }
 
-    const rows = requestDocs
-      .map((doc) => toMyRequestResponse(doc.id, doc.data, { includePayload: true }))
-      .filter((item) => !asBoolean(item.deleted, false))
-      .filter((item) => {
+    const page = selectRequestPage(requestDocs, viewer.uid, limit, snap.more, (doc) => {
+        const item = toMyRequestResponse(doc.id, doc.data, { includePayload: true });
+        if (asBoolean(item.deleted, false)) return null;
         const itemType = normalizeMyRequestType(item.type);
-        if (typeFilter && itemType !== typeFilter) return false;
-        if (publishedFilter === "published" && !asBoolean(item.published, false)) return false;
-        if (publishedFilter === "unpublished" && asBoolean(item.published, false)) return false;
-        if (!queryText) return true;
+        if (typeFilter && itemType !== typeFilter) return null;
+        if (publishedFilter === "published" && !asBoolean(item.published, false)) return null;
+        if (publishedFilter === "unpublished" && asBoolean(item.published, false)) return null;
+        if (!queryText) return item;
         const haystack = [
           asString(item.title),
           asString(item.ticker),
@@ -13518,13 +13514,12 @@ ROUTES.get("/my-requests", async (req, res) => {
         ]
           .join(" ")
           .toLowerCase();
-        return haystack.includes(queryText);
-      })
-      .slice(0, limit);
+        return haystack.includes(queryText) ? item : null;
+      });
 
     res.status(200).json({
-      items: rows,
-      count: rows.length,
+      ...page,
+      count: page.items.length,
       type: typeFilter || "all",
       published: publishedFilter,
       q: queryText,
@@ -13533,6 +13528,10 @@ ROUTES.get("/my-requests", async (req, res) => {
     const code = String(error?.message || "");
     if (code === "unauthenticated" || code === "invalid_token") {
       res.status(401).json({ error: code });
+      return;
+    }
+    if (code === "invalid_request_cursor") {
+      res.status(400).json({ error: code });
       return;
     }
     console.error("[API] list my requests failed", error);

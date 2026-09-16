@@ -9393,6 +9393,10 @@ html .toast[data-variant="warn"] {
 .ensemble-live-quote:empty { display: none; }
 .ensemble-live-quote p { margin: 4px 0; }
 .request-bulk-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.request-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-block: 8px; }
+.request-pagination[hidden] { display: none; }
+.request-pagination .task-chip { width: auto; min-height: 36px; }
+@media (max-width: 720px) { .request-pagination .task-chip { min-height: 44px; } }
 
 @media (max-width: 1100px) {
   .forecast-snapshot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
