@@ -46,6 +46,7 @@ def package(directory, destination, max_bytes=MAX_ARTIFACT_BYTES):
         or p.name in {"exit_comparison_trades.csv.gz", "exit_comparison_summary.csv", "signal_target_paths.csv.gz", "btc_minute_policy_trades.csv.gz"}
         or p.name in {'btc_limit_orders.csv.gz', 'btc_limit_trades.csv.gz'}
         or p.name in {'btc_hold_orders.csv.gz', 'btc_hold_trades.csv.gz'}
+        or p.name in {'btc_paired_minutes.csv.gz', 'btc_sticky_tracking.json.gz'}
         or (p.name.startswith("report-") and p.suffix == ".json")
     )
     if not files or any(p.is_symlink() or not p.is_file() for p in files):

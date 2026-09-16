@@ -3,6 +3,11 @@
 Scope: Polymarket US / Kalshi source history for Q Forecast, downloads,
 historical research, and paper workers. No exchange orders were submitted.
 
+**Policy update, September 15:** the flat-window rejection described in this
+historical incident report has been replaced by advisory quality metadata.
+Genuine unchanged windows are now forecastable on the website and in research;
+no missing observations or price variation are fabricated.
+
 ## Reproduced incident
 
 Market `aec-mlb-tex-az-2026-09-12`, Diamondbacks / short. Provider-recorded

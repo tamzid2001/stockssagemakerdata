@@ -22,6 +22,8 @@ def export(directory):
         if versions.intersection({'kalshi_btc_first2_next13_v1','kalshi_btc_first1_next14_v1'}):
             from .btc_signals import export as export_signals
             export_signals(store, int(time.time()))
+            from .btc_sticky_tracking import export as export_sticky
+            export_sticky(store)
         fields=["timestamp","sequence","game_id","contract_id","kind","level","price",
             "added_quantity","quantity","average_cost","cost_basis","exit","fees","net_pnl","details_json"]
         with (store.directory/"p1_orders_and_fills.csv.gz").open("wb") as raw, gzip.GzipFile(fileobj=raw,mode="wb",mtime=0) as gz:

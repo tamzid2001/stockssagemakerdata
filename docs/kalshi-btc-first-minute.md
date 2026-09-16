@@ -4,6 +4,10 @@ This is a separately versioned experiment, not a live exchange-order system or
 a replacement for saved `kalshi_btc_first2_next13_v1` results. Never combine the
 two cohorts when reporting strategy performance.
 
+The newer [sticky-direction next-minute taker and recursive ladder comparison](kalshi-btc-sticky-tracking.md)
+runs alongside the legacy benchmarks below, with independent minute/settlement
+collection and explicit current-fee sensitivities.
+
 ## First-P90 doubling averaging-down ladder
 
 `btc_first_p90_hold_10c_doubling_ladder_v1` adds a separate paper variant to both

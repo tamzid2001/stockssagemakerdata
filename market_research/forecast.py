@@ -41,8 +41,6 @@ def forecast_window(
     if any(b.timestamp <= a.timestamp for a, b in zip(window, window[1:])):
         raise ValueError("NON_CHRONOLOGICAL_CONTEXT")
     quality = history_quality(window)
-    if quality["forecast_blocked"]:
-        raise ValueError("HISTORY_FLAT_WINDOW")
     gaps = sum(b.timestamp - a.timestamp > 60 for a, b in zip(window, window[1:]))
     source = [
         {"timestamp": iso(q.timestamp), "target": q.ask, "observed": q.observed}
@@ -154,7 +152,9 @@ def forecast_window(
         "rows": rows,
         "weights": result["effective_weights_by_quantile"],
         "models": result.get("models"),
-        "warnings": result.get("warnings", []) + (["IRREGULAR_HISTORY: missing minutes retained; foundation-model observation steps are not equal elapsed time. Reliability requires validation."] if gaps else [])
+        "warnings": result.get("warnings", [])
+        + (["LOW_INFORMATION_HISTORY: genuine quotes are unchanged across the window or a long recent stretch. Forecast allowed without adding variation; predictive reliability is unvalidated."] if quality['low_information'] else [])
+        + (["IRREGULAR_HISTORY: missing minutes retained; foundation-model observation steps are not equal elapsed time. Reliability requires validation."] if gaps else [])
         + (
             [
                 f"SHORT_HISTORY: only {len(window)} genuine minute observations; forecast reliability is unvalidated."

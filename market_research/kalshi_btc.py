@@ -19,6 +19,7 @@ from .forecast import default_research_models, forecast_window
 from .local_store import LocalStore
 from .p1_oco import QUANTILES
 from .quantile_paths import from_store
+from .btc_minute_archive import MinuteCollector, archive_minutes, archive_settlement
 
 VERSION = "kalshi_btc_first2_next13_v1"
 ONE_MINUTE_VERSION = 'kalshi_btc_first1_next14_v1'
@@ -28,22 +29,25 @@ API = "https://external-api.kalshi.com/trade-api/v2"
 
 class KalshiBTCProvider:
     """Provider-specific translation; only approved public GET endpoints."""
+    def __init__(self, timeout=20, attempts=4):
+        self.timeout, self.attempts = timeout, attempts
+
     def get(self, path, params=None):
         if not re.fullmatch(r"/(markets|historical/markets|historical/cutoff|series/KXBTC15M|markets/KXBTC15M-[A-Z0-9-]+|(?:historical|series/KXBTC15M)/markets/KXBTC15M-[A-Z0-9-]+/candlesticks)", path):
             raise ValueError("UNAPPROVED_KALSHI_READ_ROUTE")
         url = API + path + ("?" + urllib.parse.urlencode(params) if params else "")
-        for attempt in range(4):
+        for attempt in range(self.attempts):
             try:
                 request = urllib.request.Request(url, headers={"User-Agent": "Quantura-Paper-Research/1"})
-                with urllib.request.urlopen(request, timeout=20) as response:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
                     return json.load(response)
             except urllib.error.HTTPError as error:
-                if error.code in {429, 502, 503, 504} and attempt < 3:
+                if error.code in {429, 502, 503, 504} and attempt < self.attempts-1:
                     time.sleep(2**attempt)
                     continue
                 raise RuntimeError(f"KALSHI_HTTP_{error.code}") from None
             except (urllib.error.URLError, TimeoutError):
-                if attempt < 3:
+                if attempt < self.attempts-1:
                     time.sleep(2**attempt)
                     continue
                 raise RuntimeError("KALSHI_UNAVAILABLE") from None
@@ -72,7 +76,11 @@ class KalshiBTCProvider:
         if params["end_ts"] < params["start_ts"]:
             return []
         # Official moving cutoff; do not assume live endpoints hold old history.
-        cutoff = self.get("/historical/cutoff")
+        cached = getattr(self, '_cutoff_cache', None)
+        if cached is None or time.monotonic()-cached[0] > 300:
+            cached = (time.monotonic(), self.get('/historical/cutoff'))
+            self._cutoff_cache = cached
+        cutoff = cached[1]
         boundary = stamp(cutoff["market_settled_ts"]) if cutoff.get("market_settled_ts") else 0
         historical = close < boundary
         if historical:
@@ -147,6 +155,19 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
     ticker = market["ticker"]
     opened, end = stamp(market["open_time"]), stamp(market["close_time"])
     saved = store._get("checkpoints", "btc:" + ticker) or {"market": market, "status": "waiting"}
+    if historical:
+        archive_minutes(store, provider, market, provider.candles(market, now), now, True)
+        archive_settlement(store, market, now, True)
+    if saved['status'] == 'inference_started':
+        # A restored crash can retry, but never acquire an earlier publication
+        # time. The exact input snapshot and origin remain immutable.
+        saved.update(status='retry_wait', reason='INFERENCE_INTERRUPTED_BEFORE_PUBLICATION', retry_at=now)
+    if saved['status'] == 'retry_wait':
+        if saved.get('attempts', 1) >= 2 or (not historical and now >= end-60):
+            saved.update(status='failed', reason='RETRY_BUDGET_OR_MARKET_DEADLINE')
+            store.checkpoint('btc:'+ticker, saved)
+        elif now < saved.get('retry_at', 0):
+            return saved
     if saved["status"] in {"missed_start", "failed", "missing_first_minutes"}:
         return saved
     origin = opened + history_minutes * 60
@@ -159,10 +180,11 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
         return saved
     raw = provider.candles(market, now)
     quotes = provider.quotes(raw, market, now)
-    if saved["status"] == "waiting":
+    if saved["status"] in {'waiting', 'retry_wait'}:
         try:
             window_builder = first_minute_window if history_minutes == 1 else two_minute_window
-            windows = {s: window_builder(q, opened) for s, q in quotes.items()}
+            windows = ({s:[Quote(**q) for q in rows] for s,rows in saved['input_windows'].items()}
+                       if saved.get('input_windows') else {s: window_builder(q, opened) for s, q in quotes.items()})
         except ValueError:
             if historical or now >= origin + 60:
                 saved.update(status="missing_first_minutes", reason="EXACT_FIRST_COMPLETED_MINUTE_REQUIRED" if history_minutes == 1 else "FIRST_TWO_COMPLETED_MINUTES_REQUIRED")
@@ -173,7 +195,8 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
             raise RuntimeError("INSUFFICIENT_SHORT_CONTEXT_MODELS")
         # Claim before inference: a crash never reruns an origin as if the
         # delayed forecast were available earlier. Failed/in-flight rows explicit.
-        saved.update(status="inference_started", requested_models=list(models), origin=origin)
+        saved.update(status="inference_started", requested_models=list(models), origin=origin,
+                     attempts=saved.get('attempts',0)+1, input_windows={s:[asdict(q) for q in rows] for s,rows in windows.items()})
         store.checkpoint("btc:" + ticker, saved)
         started = time.monotonic()
         pair = []
@@ -195,7 +218,16 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
                 f["forecast_id"] = digest([f["forecast_id"], ticker, side, version])
                 pair.append(f)
         except Exception as error:
-            saved.update(status="failed", error_type=type(error).__name__)
+            # Retry transient execution/network failures once, not malformed
+            # data or permission/license validation failures. No silent fallback.
+            retryable = isinstance(error, (RuntimeError, OSError, TimeoutError))
+            retry = retryable and not historical and saved['attempts'] < 2 and int(time.time()) < end-60
+            saved.update(status='retry_wait' if retry else 'failed', error_type=type(error).__name__,
+                         retry_at=int(time.time())+15, retryable=retryable)
+            with store.lock, store.db:
+                store._put('btc_forecast_attempts', digest([ticker, saved['attempts']]),
+                           {'market_id':ticker,'attempt':saved['attempts'],'status':'failed',
+                            'error_type':type(error).__name__,'at':int(time.time()),'retry_scheduled':retry}, True)
             store.checkpoint("btc:" + ticker, saved)
             raise
         duration = time.monotonic() - started
@@ -207,14 +239,13 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
                 store._put("forecasts", f["forecast_id"], f, True)
             saved.update(status="published" if available < end else "missed_deadline", available_at=available)
             store._put("checkpoints", "btc:" + ticker, saved)
+            store._put('btc_forecast_attempts', digest([ticker,saved['attempts']]),
+                       {'market_id':ticker,'attempt':saved['attempts'],'status':saved['status'],
+                        'available_at':available,'duration_seconds':duration}, True)
         if not historical:
             now = int(time.time())
             raw = provider.candles(market, now)
             quotes = provider.quotes(raw, market, now)
-    elif saved["status"] == "inference_started":
-        # Restored interruption: no unknowable publication time or duplicate fit.
-        saved.update(status="failed", reason="INFERENCE_INTERRUPTED_BEFORE_PUBLICATION")
-        store.checkpoint("btc:" + ticker, saved)
     if saved["status"] in {"published", "observing", "complete"}:
         received_at = int(time.time())
         with store.lock, store.db:
@@ -264,6 +295,8 @@ def report(store, coverage, failures):
     forecasts, observations, resolutions = simulation_inputs(store)
     result['p90_average_down_ladder'] = compact_report(
         ladder_compare(forecasts, observations, resolutions, as_of=result['generated_at']))
+    from .btc_sticky_tracking import from_store as sticky_report, compact
+    result['sticky_next_ask_tracking'] = compact(sticky_report(store,result['generated_at']))
     store.report(digest(result), result)
     print(json.dumps({"event": "btc_paper_report", **result}), flush=True)
     return result
@@ -292,12 +325,22 @@ def main():
             {'origin_code_sha':configuration['code_sha'],'execution_code_sha':os.environ['QUANTURA_CODE_SHA'],
              'at':int(time.time()),'reason':'private_cloud_checkpoint_storage; original records preserved'})
     provider = KalshiBTCProvider()
+    collector = MinuteCollector(store, KalshiBTCProvider(timeout=5, attempts=2)) if args.mode == 'live' else None
+    if collector:
+        collector.start()
     failures, coverage = [], {}
     budget = min(args.duration_minutes * 60, max(0, float(os.environ.get("QUANTURA_JOB_STARTED_AT", time.time())) + 350 * 60 - time.time()))
     deadline = time.monotonic() + budget
     try:
         while time.monotonic() < deadline and not store.at_capacity:
-            markets, coverage = provider.discover(args.mode == "historical", args.max_markets)
+            try:
+                markets, coverage = provider.discover(args.mode == "historical", args.max_markets)
+            except (RuntimeError, ValueError, OSError) as error:
+                if args.mode == 'historical':
+                    raise
+                # A provider outage must not terminate the entire handoff run.
+                markets = []
+                coverage = {'status':'discovery_retry','error_type':type(error).__name__}
             # Continue ended markets until official result is available. Selection
             # is fixed by checkpoint metadata, never hidden by current discovery.
             tracked = {m["ticker"]: m for m in markets}
@@ -335,6 +378,8 @@ def main():
             with open(os.environ["GITHUB_OUTPUT"], "a") as out:
                 out.write("handoff_ready=true\n")
     finally:
+        if collector:
+            collector.stop()
         report(store, coverage, failures)
         store.release()
 

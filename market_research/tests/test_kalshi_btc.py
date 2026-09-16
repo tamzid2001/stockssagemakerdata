@@ -47,7 +47,8 @@ def test_publication_latency_and_resume_no_duplicate_forecasts(tmp_path):
         def candles(self,*args):return candles()
         def resolution(self,m,side):return {'contract_id':m['ticker']+':'+side,'resolution_status':'resolved','selected_side_won':side=='yes'}
     calls=[]
-    def forecast(window,horizon,models,quantiles):
+    def forecast(window,horizon,models,quantiles,**options):
+        assert options=={}
         calls.append((window,horizon,models))
         assert len(window)==2 and window[-1].timestamp==OPEN+120 and horizon==13
         return {'forecast_id':str(len(calls)),'origin':OPEN+120,'models':[{'id':m,'status':'completed'} for m in models],
