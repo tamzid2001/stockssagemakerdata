@@ -1,0 +1,100 @@
+name: Sports First-Row P10 Buy P90 Sell Backtest
+run-name: ${{ inputs.provider }} first-row · 30m · ${{ inputs.campaign_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        type: choice
+        options: [polymarket_us, kalshi]
+        default: polymarket_us
+        description: Independent historical provider campaign (paper only)
+      campaign_id:
+        type: string
+        default: new
+        description: New campaign or exact existing encrypted campaign identifier
+      code_ref:
+        type: string
+        default: main
+        description: Main for a fresh campaign; pinned SHA for continuation
+      continuous:
+        type: boolean
+        default: true
+        description: Checkpoint and resume until historical discovery is exhausted
+      duration_minutes:
+        type: choice
+        options: ['5', '330']
+        default: '330'
+        description: Maximum compute time before checkpointed handoff
+      smoke_mode:
+        type: choice
+        options: [mock, real]
+        default: mock
+        description: Mock validation or genuine historical data and ensemble inference
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: sports-first-row-${{ inputs.provider }}
+  cancel-in-progress: false
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - name: Validate safe identifiers
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+          CAMPAIGN: ${{ inputs.campaign_id }}
+        run: |
+          [[ "$CODE_REF" == main || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$CAMPAIGN" == new || "$CAMPAIGN" =~ ^p90-[a-f0-9]{24}$ ]] || exit 1
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.code_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Record immutable code
+        run: echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: No-model validation
+        if: inputs.smoke_mode == 'mock'
+        run: |
+          python -m pip install pytest numpy pandas httpx pandas-market-calendars cryptography firebase-admin pyyaml
+          python -m pytest -q market_research/tests/test_first_row_strategy.py market_research/tests/test_recovery_replay.py market_research/tests/test_recovery_cloud.py
+      - name: Install locked CPU inference environment
+        if: inputs.smoke_mode == 'real'
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Replay thirty-minute origins into encrypted per-game checkpoints
+        id: campaign
+        if: inputs.smoke_mode == 'real'
+        env:
+          CAMPAIGN: ${{ inputs.campaign_id }}
+          PROVIDER: ${{ inputs.provider }}
+          CONTINUOUS: ${{ inputs.continuous }}
+          DURATION: ${{ inputs.duration_minutes }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        run: |
+          args=(--strategy first_row --campaign-id "$CAMPAIGN" --provider "$PROVIDER" --horizon 30 --duration-minutes "$DURATION")
+          if [[ "$CONTINUOUS" == true ]]; then args+=(--continuous); fi
+          python -m market_research.recovery_campaign "${args[@]}"
+      - name: Resume only the same checkpointed campaign
+        if: success() && inputs.smoke_mode == 'real' && inputs.continuous && steps.campaign.outputs.resume_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          CAMPAIGN: ${{ steps.campaign.outputs.campaign_id }}
+        run: python -m market_research.recovery_watchdog --first-row --campaign-id "$CAMPAIGN"
+      - name: Failure disclosure
+        if: failure()
+        run: echo 'Paper replay failed. Available game checkpoints remain private and encrypted; no full-coverage or return claim is implied.' >> "$GITHUB_STEP_SUMMARY"

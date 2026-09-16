@@ -605,9 +605,9 @@ body.shop-page { background: var(--q-bg) !important; color: var(--q-text) !impor
 .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 50%; color: var(--foreground); background: var(--secondary); cursor: pointer; }
 html .app-layout .panel-header h2 { font-size: 1.15rem; margin-block: 0 4px; }
 html .app-layout .panel-header { margin-bottom: 8px; }
-html .app-layout .panel .form-grid { gap: 8px 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
+html .app-layout .panel .form-grid { gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 220px)); }
 html .app-layout .panel .field { margin: 0; min-width: 0; gap: 4px; }
-html .app-layout .panel :is(input:not([type="checkbox"]):not([type="radio"]), select) { min-height: var(--control-height); padding: 6px 8px; font-size: .875rem; line-height: 1.3; color: var(--foreground); background: var(--card); border-color: var(--input); }
+html .app-layout .panel :is(input:not([type="checkbox"]):not([type="radio"]), select) { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: var(--control-height); padding: 6px 8px; font-size: .875rem; line-height: 1.3; color: var(--foreground); background: var(--card); border-color: var(--input); }
 html .app-layout .panel :is(.label, .small, small) { font-size: .8rem; line-height: 1.45; }
 html .app-layout .ensemble-model-grid { gap: 8px; }
 html .app-layout .ensemble-model-card { padding: 8px; }
@@ -752,15 +752,25 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .ensemble-model-weight input { max-width: 80px; }
 .ensemble-model-fieldset, .ensemble-quantile-fieldset { padding: 8px 0; margin: 8px 0; }
 .ensemble-forecast-body { padding: 10px; }
-#ensemble-forecast-form > .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr)); align-items: start; gap: 8px !important; }
+#ensemble-forecast-form > .form-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 220px)); align-items: start; gap: 8px !important; }
 #ensemble-forecast-form > .form-grid .field { gap: 4px; margin: 0; padding: 0; min-width: 0; }
-.ensemble-duration-control { display: grid; grid-template-columns: minmax(60px, .7fr) minmax(90px, 1fr); gap: 6px; }
+.ensemble-duration-control { display: grid; grid-template-columns: minmax(0, .6fr) minmax(0, 1fr); gap: 6px; min-width: 0; max-width: 100%; }
 .ensemble-duration-control > * { min-width: 0; }
+.ensemble-advanced-settings, .ensemble-model-fieldset, .ensemble-quantile-fieldset { min-inline-size: 0; max-inline-size: 100%; }
+.ensemble-preset-row .field { flex: 0 1 200px; min-width: 0; width: 100%; }
+#ensemble-custom-quantiles { max-width: 440px; }
+#ensemble-run-button { width: auto; max-width: 100%; justify-self: start; }
+.market-search-form :is(input, select, button), .ensemble-model-card :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.ensemble-model-card select { width: 100%; text-overflow: ellipsis; }
 @media (min-width: 769px) {
   #ensemble-forecast-form > .form-grid input, #ensemble-forecast-form > .form-grid select { height: 36px; min-height: 36px; padding-block: 4px; }
 }
 @media (max-width: 768px) {
+  #ensemble-forecast-form > .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #ensemble-forecast-form > .form-grid input, #ensemble-forecast-form > .form-grid select { min-height: 44px; }
+  #ensemble-forecast-form input[type="datetime-local"] { appearance: none; min-inline-size: 0; }
+  #ensemble-forecast-form .field:has(input[type="datetime-local"]:not([hidden])),
+  #ensemble-forecast-form .field:has(input[type="file"]) { grid-column: 1 / -1; }
 }
 .panel[data-panel="forecast"] > .ensemble-forecast-shell { margin-top: 8px; }
 .market-timing { color: var(--success); }

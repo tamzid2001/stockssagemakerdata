@@ -71,13 +71,25 @@ def run(args):
     sha = os.environ["QUANTURA_CODE_SHA"]
     if not re.fullmatch(r"[a-f0-9]{40}", sha):
         raise ValueError("PINNED_CODE_REQUIRED")
-    config = {"version": VERSION, "provider": args.provider, "horizon": args.horizon, "roll_minutes": args.horizon,
+    first_row = getattr(args, 'strategy', 'legacy') == 'first_row'
+    version = VERSION
+    reporter = from_store
+    if first_row:
+        from .first_row_strategy import VERSION as version, from_store as reporter
+        if args.horizon != 30:
+            raise ValueError('FIRST_ROW_REQUIRES_THIRTY_MINUTE_ORIGINS')
+    config = {"version": version, "provider": args.provider, "horizon": args.horizon, "roll_minutes": args.horizon,
               "history_phase": "in_game_with_point_in_time_pregame_fallback", "minimum_elapsed_minutes": 32, "minimum_history": 32,
               "quote_basis": "completed_one_minute_bid_ask",
               "maximum_history": 500, "models": list(MODELS), "base_shares": 1,
               "loss_multiplier": 2.5, "max_shares": 100, "fee_rate_assumption": .01,
               "reset_policy": "cumulative_game_net_recovery",
               "code_sha": sha, "paper_only": True, "continuous": args.continuous}
+    if first_row:
+        config.update(strategy='first_row', history_phase='pregame_and_in_game_then_in_game_after_32_elapsed_minutes',
+                      storage_policy='one_minute_tape_per_game_with_hashed_input_references',
+                      signal_policy='first_post_publication_minute_ask_vs_frozen_first_row',
+                      execution_policy='next_minute_book_hold_or_signal_switch', fee_status='assumption_not_verified')
     identifier = ("p90-" + digest([config, os.environ.get("GITHUB_RUN_ID", time.time_ns())])[:24]
                   if args.campaign_id == "new" else validate_campaign(args.campaign_id))
     cloud = Campaign(identifier, os.environ.get("GITHUB_RUN_ID", "local"))
@@ -85,7 +97,7 @@ def run(args):
     heartbeat = Heartbeat(cloud.lease); heartbeat.thread.start()
     state = cloud.load()
     state.setdefault("as_of", int(time.time())); state.setdefault("page_cursor", "0"); state.setdefault("page_index", 0)
-    cloud.update({"campaign_kind": VERSION, "status": "running", "as_of": state["as_of"],
+    cloud.update({"campaign_kind": version, "status": "running", "as_of": state["as_of"],
                   "page_cursor": state["page_cursor"], "page_index": state["page_index"], "current_run_id": os.environ.get("GITHUB_RUN_ID")})
     provider = KalshiProvider() if args.provider == 'kalshi' else QuanturaProvider()
     deadline = time.monotonic() + args.duration_minutes * 60
@@ -130,7 +142,7 @@ def run(args):
                     checkpoint = Checkpoints(cloud, local, game, heartbeat)
                     checkpoint.thread.start()
                     try:
-                        result = process_game(local, provider, pair, state["as_of"], args.horizon, 10000, deadline)
+                        result = process_game(local, provider, pair, state["as_of"], args.horizon, 10000, deadline, first_row=first_row)
                         checkpoint.close()
                         if not result["complete"]:
                             checkpoint.publish()
@@ -138,7 +150,9 @@ def run(args):
                                 raise RuntimeError("SINGLE_GAME_EXCEEDS_ONE_GIB_SAFETY_LIMIT")
                             break
                         local.checkpoint("recovery_coverage", {"as_of": state["as_of"], "game_results": {game: result}, "complete": True})
-                        report = from_store(local)
+                        report = reporter(local)
+                        if first_row:
+                            local.checkpoint('first_row_report', report)
                         file = Path(directory) / "completed.enc"
                         snapshot_package(root, file, max_bytes=MAX_GAME_ARCHIVE)
                         pointer = cloud.upload(file, "game")
@@ -147,7 +161,7 @@ def run(args):
                                   "code_sha": sha, "completed_at": time.time()}
                         cloud.finish_game(game, record, {"page_index": index + 1, "active_game": None,
                                                        "active_checkpoint": None, "last_game_id": game})
-                        print(json.dumps({"event": "p90_game_archived", "campaign_id": identifier, **record}), flush=True)
+                        print(json.dumps({"event": "research_game_archived", "campaign_id": identifier, **record}), flush=True)
                     except (ValueError, RuntimeError) as error:
                         checkpoint.close()
                         checkpoint.publish()
@@ -168,7 +182,7 @@ def run(args):
         summary = totals(records)
         cloud.update({"status": "completed" if complete else "paused", "summary": summary,
                       "resume_required": not complete, "updated_at": time.time()})
-        print(json.dumps({"event": "p90_campaign_report", "campaign_id": identifier,
+        print(json.dumps({"event": "research_campaign_report", "campaign_id": identifier,
                           "horizon": args.horizon, "complete": complete, "summary": summary}), flush=True)
         return identifier, not complete
     finally:
@@ -182,6 +196,7 @@ def main():
     parser.add_argument("--campaign-id", default="new")
     parser.add_argument("--duration-minutes", type=int, default=330)
     parser.add_argument("--continuous", action="store_true")
+    parser.add_argument('--strategy', choices=['legacy', 'first_row'], default='legacy')
     args = parser.parse_args()
     if not 1 <= args.duration_minutes <= 330:
         parser.error("duration must be 1–330 minutes")
