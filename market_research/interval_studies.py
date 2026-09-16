@@ -20,6 +20,8 @@ from .engine import digest, stamp, validate_forecast
 from .forecast import forecast_window
 from .interval_markets import KalshiIntervalProvider
 from .p1_oco import QUANTILES
+from ensemble_forecasting.capabilities import model_supports_quantile
+from ensemble_forecasting.schemas import canonical_quantile_string
 
 VERSION = 'interval_three_strategies_v1'
 ORIGINS = tuple(range(1, 13))
@@ -68,8 +70,11 @@ def validate_pair_member(f, origin, horizon, models):
     if sorted(actual) != sorted(models) or len(f.get('models', [])) != len(models) or f.get('failures'):
         raise ValueError('STRICT_INTERVAL_ENSEMBLE_REQUIRED')
     for q in QUANTILES:
-        weights = f.get('weights', {}).get(str(q), {})
-        if set(weights) != set(models) or any(not math.isfinite(w) or abs(w-1/len(models)) > 1e-8 for w in weights.values()):
+        # TimesFM has no native tails. Equal raw weights are renormalized among
+        # only capable models for EACH quantile by the authoritative engine.
+        contributors = {m for m in models if model_supports_quantile(m, q)}
+        weights = f.get('weights', {}).get(canonical_quantile_string(q), {})
+        if not contributors or set(weights) != contributors or any(not math.isfinite(w) or abs(w-1/len(contributors)) > 1e-8 for w in weights.values()):
             raise ValueError('EQUAL_INTERVAL_MODEL_WEIGHTS_REQUIRED')
     if not math.isfinite(f.get('duration_seconds', float('nan'))) or f['duration_seconds'] < 0:
         raise ValueError('INVALID_INFERENCE_DURATION')
