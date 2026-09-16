@@ -36,6 +36,10 @@ on:
         type: number
         default: 0
         description: Encrypted checkpoint ID; zero explicitly starts a new paper lineage
+      resume_run_id:
+        type: number
+        default: 0
+        description: Upgrade after this same-horizon run completes; restore its final verified checkpoint, not a stale queued snapshot
       code_ref:
         type: string
         default: main
@@ -60,9 +64,12 @@ jobs:
         env:
           CODE_REF: ${{ inputs.code_ref }}
           RESTORE_ID: ${{ inputs.resume_artifact_id }}
+          RESTORE_RUN: ${{ inputs.resume_run_id }}
         run: |
           [[ "$CODE_REF" == main || "$CODE_REF" =~ ^[a-f0-9]{40}$ ]] || exit 1
           [[ "$RESTORE_ID" =~ ^[0-9]+$ ]] || exit 1
+          [[ "${RESTORE_RUN:-0}" =~ ^[0-9]+$ ]] || exit 1
+          [[ "$RESTORE_ID" == 0 || "${RESTORE_RUN:-0}" == 0 ]] || exit 1
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.code_ref }}
@@ -82,7 +89,7 @@ jobs:
         if: inputs.smoke_mode == 'mock'
         run: |
           python -m pip install pytest==8.4.2 numpy pandas httpx pandas-market-calendars cryptography pyyaml
-          python -m pytest -q market_research/tests/test_kalshi_btc.py market_research/tests/test_quantile_paths.py
+          python -m pytest -q market_research/tests/test_kalshi_btc.py market_research/tests/test_quantile_paths.py market_research/tests/test_btc_first_minute.py market_research/tests/test_btc_sticky_tracking.py market_research/tests/test_btc_minute_archive.py
       - name: Install locked CPU research environment
         if: inputs.smoke_mode == 'real'
         run: |
@@ -90,28 +97,43 @@ jobs:
           npm ci --prefix market_research/node --ignore-scripts
       - name: Resolve checkpoint source run
         id: checkpoint_source
-        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        if: inputs.smoke_mode == 'real' && (inputs.resume_artifact_id != 0 || inputs.resume_run_id != 0)
         uses: actions/github-script@v8
         env:
           RESTORE_ID: ${{ inputs.resume_artifact_id }}
+          RESTORE_RUN: ${{ inputs.resume_run_id }}
+          RESTORE_HISTORY: ${{ inputs.history_minutes || '2' }}
         with:
           script: |
-            const id=Number(process.env.RESTORE_ID);
+            let id=Number(process.env.RESTORE_ID);
+            const sourceRun=Number(process.env.RESTORE_RUN || 0);
+            if(sourceRun){
+              if(!Number.isSafeInteger(sourceRun)||sourceRun<=0||id!==0) throw new Error('INVALID_UPGRADE_SOURCE');
+              const {data:run}=await github.rest.actions.getWorkflowRun({...context.repo,run_id:sourceRun});
+              if(run.status!=='completed'||run.head_branch!=='main'||run.path!=='.github/workflows/kalshi-btc-paper.yml'||
+                 !run.display_title.startsWith(`Kalshi BTC paper · live · first ${process.env.RESTORE_HISTORY}m`)) throw new Error('COMPLETED_SAME_HORIZON_BTC_RUN_REQUIRED');
+              const artifacts=await github.paginate(github.rest.actions.listWorkflowRunArtifacts,{...context.repo,run_id:sourceRun,per_page:100});
+              const verified=artifacts.filter(a=>!a.expired&&/^btc-paper-checkpoint-[a-f0-9]{40}-/.test(a.name));
+              verified.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
+              if(!verified.length) throw new Error('NO_VERIFIED_FINAL_CHECKPOINT');
+              id=verified[0].id;
+            }
             if(!Number.isSafeInteger(id)||id<=0) throw new Error('INVALID_ARTIFACT_ID');
             const {data}=await github.rest.actions.getArtifact({...context.repo,artifact_id:id});
             if(data.expired || !data.name.startsWith('btc-paper-checkpoint-') || !data.workflow_run?.id) throw new Error('VERIFIED_BTC_CHECKPOINT_REQUIRED');
             core.setOutput('run_id',String(data.workflow_run.id));
+            core.setOutput('artifact_id',String(id));
       - name: Download prior encrypted checkpoint
-        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        if: inputs.smoke_mode == 'real' && (inputs.resume_artifact_id != 0 || inputs.resume_run_id != 0)
         uses: actions/download-artifact@v8
         with:
-          artifact-ids: ${{ inputs.resume_artifact_id }}
+          artifact-ids: ${{ steps.checkpoint_source.outputs.artifact_id }}
           run-id: ${{ steps.checkpoint_source.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/btc-restore
           merge-multiple: true
       - name: Authenticate and restore original state
-        if: inputs.smoke_mode == 'real' && inputs.resume_artifact_id != 0
+        if: inputs.smoke_mode == 'real' && (inputs.resume_artifact_id != 0 || inputs.resume_run_id != 0)
         env:
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}

@@ -3,6 +3,10 @@
 This is private, read-only research, not a real-money trader. No exchange order
 endpoint or account key is available to this worker.
 
+See the newer [sticky-direction taker/recursive ladder tracking](kalshi-btc-sticky-tracking.md)
+for independent minute/settlement collection, bounded retries and checkpoint-safe
+upgrades. Legacy scenarios below keep their original fee assumptions.
+
 ## Exact prospective window
 
 The provider adapter discovers `KXBTC15M`, verifies binary contracts whose official
