@@ -19,7 +19,9 @@ Advanced settings offers approved, revision-pinned `toto_variant` values `4m`, `
 
 ## First-row minute signal
 
-The website compares the **first completed one-minute observation after forecast publication** with the **first predicted row's** frozen P10/P90 levels. These timestamps can differ and both are displayed. Below P10 is a BUY signal for the selected side; above P90 is a SELL signal for that side; otherwise no signal. Equality is not a signal. Missing observations remain pending, never replaced by a later quote or forward-filled price. Historical replay comparisons are labeled separately. Signals are research annotations, not orders, fills or verified strategy returns.
+The website compares the **completed one-minute observation at the first predicted timestamp**, immediately after the downloaded input history, with that row's frozen P10/P90 levels. Worker completion time does not change which quote is selected. The price is the same selected-side target used by the history/chart (closing ask for Kalshi, display quote for Polymarket US, closing price for stocks). Below P10 is BUY; above P90 is SELL; otherwise NEUTRAL. Equality is neutral. A missing exact observation remains pending, never replaced by a later quote or forward-filled price. If the forecast finished after this observation, the comparison is explicitly retrospective, not a backdated live entry. Signals are research annotations, not orders, fills or verified strategy returns.
+
+Daily stock charts align closes by exchange session date, while intraday bars use completed interval timestamps. Recent minute closes are separate from final daily closes; today's daily candle is not treated as final. Source, price adjustment, session and feed are retained for overlays and refreshed requests. Calendar cutoffs are validated against the current clock at submission, not the time the page was opened.
 
 Quantura's ensemble supports these stable model identifiers:
 

@@ -45,16 +45,15 @@ test('only the first completed quote displays Buy below P10, Sell above P90, oth
   d.window.close();
 });
 
-test('later crossings, ticks, missing first quote, unpublished and filled bars do not manufacture first-quote signals',()=>{
+test('later crossings, ticks, missing first quote and filled bars do not manufacture first-quote signals',()=>{
   const {d,job,run}=setup();
   assert.match(run(job),/NEUTRAL/); // Later P90/P10 crossings cannot change the first quote.
   for(const changed of [
     {...job,observations:[row(3,.9)]},
     {...job,observations:[{...row(2,.9),timestamp:minute+'02:15Z'}]},
     {...job,observations:[{...row(2,.9),is_forward_filled:true}]},
-    {...job,completed_at:minute+'04:30Z'},
-    {...job,completed_at:null},
   ]) assert.doesNotMatch(run(changed),/BUY —|SELL —|NEUTRAL/);
+  for(const completed_at of [minute+'04:30Z',null]) assert.match(run({...job,completed_at}),/NEUTRAL[\s\S]*retrospective/);
   assert.doesNotMatch(source,/ensembleMinuteSignals|Cross upward|Cross downward/);
   for(const folder of ['pages','functions_ssr/templates']) assert.doesNotMatch(fs.readFileSync(path.join(root,folder,'forecasting.html'),'utf8'),/ensemble-crossing-signals/);
   d.window.close();

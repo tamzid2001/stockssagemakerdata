@@ -14489,7 +14489,7 @@
     const source = job.source || {};
     let selected;
     if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency, history_phase: source.history_phase || "both", history_lookback_minutes: source.history_lookback_minutes || 0, limit: source.limit ?? 500 };
-    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500 };
+    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500, ...(source.adjustment ? {adjustment:source.adjustment} : {}), ...(source.session ? {session:source.session} : {}), ...(source.feed ? {feed:source.feed} : {}) };
     else if (source.type === "workspace_dataset") selected = { type: source.type, dataset_id: source.dataset_id, timestamp_column: source.timestamp_column || "timestamp", target_column: source.target_column || "target", frequency: job.frequency, timezone: source.timezone || "UTC" };
     else throw new Error("This immutable inline series cannot refresh automatically. Submit an updated dataset.");
     return { workspace_id: job.workspace_id, ...(job.toto_variant ? {toto_variant: job.toto_variant} : {}), source: selected, prediction_length: job.prediction_length, horizon_mode: job.horizon_mode, quantiles: job.quantiles,
@@ -14757,8 +14757,7 @@
     const contextRaw = String(data.get("context_length") || "").trim();
     const cutoffMode = document.getElementById("ensemble-cutoff-mode")?.value || "relative";
     const lag = cutoffMode === "relative" ? ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes")) : 0;
-    const cutoffAt = cutoffMode === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-history-cutoff").value) : undefined;
-    if (cutoffAt && Date.parse(cutoffAt) > Date.now()) throw new Error("The data cutoff cannot be in the future.");
+    const cutoffAt = cutoffMode === "date" ? window.QuanturaForecastControls.cutoffInstant(document.getElementById("ensemble-history-cutoff").value) : undefined;
     const endAt = document.getElementById("ensemble-prediction-mode")?.value === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-prediction-end").value) : undefined;
     const frequencyMinutes = ({"1Day":1440,"1D":1440,"1Hour":60,"1h":60,"1Min":1,"1min":1})[source.frequency] || 1440;
     const durationUnit = document.getElementById("ensemble-prediction-unit")?.value || (frequencyMinutes === 1440 ? "days" : frequencyMinutes === 60 ? "hours" : "minutes");
@@ -14839,15 +14838,25 @@
     }
     const source = job.source || {};
     const inputHistory = job.history || [];
-    if (inputHistory.length) traces.unshift({ type:"scatter",mode:"lines",x:inputHistory.map(r=>r.timestamp),y:inputHistory.map(r=>r.target),name:"Downloaded input history",line:{width:1.5,color:"#64748b"},connectgaps:false });
+    const plotTimestamp = row => window.QuanturaForecastControls.stockChartTimestamp(row, job);
+    if (inputHistory.length) traces.unshift({ type:"scatter",mode:"lines",x:inputHistory.map(plotTimestamp),y:inputHistory.map(r=>r.target),name:"Downloaded input history",line:{width:1.5,color:"#64748b"},connectgaps:false });
     const observed = job.observations || [];
-    if (observed.length) traces.push({type:"scatter",mode:"lines+markers",x:observed.map(r=>r.timestamp),y:observed.map(r=>r.target),name:source.analysis_mode === "historical_replay" ? "Actual prices after input cutoff" : "Observed after forecast",line:{width:2,color:isDarkMode()?"#5eead4":"#0f766e"},connectgaps:false});
+    const overlayGroups = source.type === "ticker" && job.frequency !== "1min"
+      ? [{rows:observed.filter(r => r.interval !== "1min"),name:"Completed forecast-interval closes"}, {rows:observed.filter(r => r.interval === "1min"),name:"Recent minute closes (not final daily closes)"}]
+      : [{rows:observed,name:"Actual prices after input cutoff"}];
+    for (const group of overlayGroups) {
+      // One latest minute close per daily session; do not draw hundreds of
+      // intraday points at a single daily x coordinate or call them final closes.
+      const points = source.type === "ticker" && job.frequency === "1D"
+        ? [...new Map(group.rows.map(row => [plotTimestamp(row),row])).values()] : group.rows;
+      if (points.length) traces.push({type:"scatter",mode:"lines+markers",x:points.map(plotTimestamp),y:points.map(r=>r.target),customdata:points.map(r=>ensembleChartTime(r.timestamp,timeZone)),name:group.name,line:{width:2,color:isDarkMode()?"#5eead4":"#0f766e"},connectgaps:false});
+    }
     const dark = isDarkMode();
     const firstSignal = window.QuanturaForecastControls?.firstRowSignal(job);
-    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.quoteTimestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (replay)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
+    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.quoteTimestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (retrospective)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
     renderEnsembleSignals(job);
     // Epoch positions stay absolute (including DST folds); only labels localize.
-    traces.forEach(trace => { trace.customdata = trace.x.map(value => ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
+    traces.forEach(trace => { trace.customdata ||= trace.x.map(value => job.frequency === "1D" && source.type === "ticker" ? value.slice(0,10) : ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
     const tickIndices = [...new Set(Array.from({ length: Math.min(6, rows.length) }, (_, i) => Math.round(i * (rows.length - 1) / Math.max(1, Math.min(6, rows.length) - 1))))];
     if (ensembleUiState.chartWindowId !== job.forecast_id) {
       ensembleUiState.chartWindowId = job.forecast_id;
@@ -14864,7 +14873,7 @@
       xaxis: { type: "date", ...(chartRange ? { range: chartRange, autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date" }, tickmode: "array", tickvals: tickTimes, ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: true, thickness: 0.12 } },
       yaxis: { title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target" } },
       legend: { orientation: "h", y: -0.25 },
-      shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:Date.parse(inputHistory.at(-1).timestamp),x1:Date.parse(inputHistory.at(-1).timestamp),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
+      shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:Date.parse(plotTimestamp(inputHistory.at(-1))),x1:Date.parse(plotTimestamp(inputHistory.at(-1))),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
   };
 
@@ -14893,7 +14902,8 @@
           const replay = job.source?.analysis_mode === "historical_replay";
           if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = `Actual-price overlay: ${job.observations.length} observed bars after input cutoff. ${replay ? "Some outcomes were already known when this replay was generated. " : ""}Updated ${ensembleLocalTime(response.data.observed_at)}. Refreshes once per minute; the forecast remains unchanged.`;
           const forecastByTime = new Map((job.predictions || []).map(row=>[Date.parse(row.timestamp),row.quantiles]));
-          const errors = job.observations.filter(row=>Date.parse(row.timestamp)>Date.parse(job.completed_at) && Number.isFinite(Number(forecastByTime.get(Date.parse(row.timestamp))?.['0.5']))).map(row=>Number(forecastByTime.get(Date.parse(row.timestamp))['0.5'])-row.target);
+          const matchedTime = row => Date.parse(window.QuanturaForecastControls.stockChartTimestamp(row,job));
+          const errors = job.observations.filter(row=>(!row.interval || row.interval === job.frequency) && (!job.source?.field || job.source.field === "close") && Date.parse(row.timestamp)>Date.parse(job.completed_at) && Number.isFinite(Number(forecastByTime.get(matchedTime(row))?.['0.5']))).map(row=>Number(forecastByTime.get(matchedTime(row))['0.5'])-row.target);
           if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = errors.length
             ? `Observed since publication: ${errors.length} matched forecast steps · MAE ${(errors.reduce((s,e)=>s+Math.abs(e),0)/errors.length).toFixed(4)} · RMSE ${Math.sqrt(errors.reduce((s,e)=>s+e*e,0)/errors.length).toFixed(4)} · Bias ${(errors.reduce((s,e)=>s+e,0)/errors.length).toFixed(4)}. This single live forecast is not a historical backtest.`
             : "Live validation: waiting for timestamp-matched observations after forecast publication. No accuracy score is invented.";
@@ -15159,7 +15169,9 @@
     const endInput = document.getElementById("ensemble-prediction-end");
     if (controls && cutoffInput && endInput) {
       cutoffInput.value = controls.localValue(Date.now() - 30*60000);
-      cutoffInput.max = controls.localValue();
+      // A page-load max becomes stale in long-lived/background tabs. Validate
+      // against the live clock at submission (and again on the server).
+      cutoffInput.removeAttribute("max");
       endInput.value = controls.localValue(Date.now() + 30*60000);
       const syncDates = () => {
         const cutoffMode = document.getElementById("ensemble-cutoff-mode").value;

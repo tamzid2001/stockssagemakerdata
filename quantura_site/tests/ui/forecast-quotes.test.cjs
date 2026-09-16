@@ -9,6 +9,7 @@ const start = source.slice(source.indexOf('  const startEnsembleObservations =')
 function setup() {
   const dom = new JSDOM('<button id="ensemble-chart-refresh"><i aria-hidden="true"></i><span>Refresh quotes</span></button>',{runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window, timers=new Map();let sequence=0,calls=0;
+  w.QuanturaForecastControls=require('../../public/forecast-controls.js');
   w.setTimeout=(fn,ms)=>{timers.set(++sequence,{fn,ms});return sequence;};
   w.clearTimeout=id=>timers.delete(id);
   w.ensembleUiState={forecastId:'f',observationGeneration:0,chartWindow:[0,100],busy:false};

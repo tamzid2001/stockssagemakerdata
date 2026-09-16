@@ -61,6 +61,51 @@ test("stock overlays include completed minute closes beside hourly forecasts, wi
   assert.deepEqual(calls,['1Min','1Hour']);
   assert.deepEqual(rows.map(r=>[r.timestamp,r.target]),[['2026-09-16T15:00:00.000Z',100],['2026-09-16T16:01:00.000Z',101]]);
 });
+test("stock overlays preserve price basis and daily closes despite minute rate limits",async()=>{
+  const cutoff=Date.parse('2026-09-14T13:30Z'),now=Date.parse('2026-09-16T15:01Z');
+  const requests:any[]=[];
+  const fetchHistory:any=async(request:any)=>{
+    requests.push(request);
+    if(request.timeframe==='1Min')throw new AlpacaError('rate_limit','Provider cooldown',429);
+    return {provider:'yahoo',exchangeTimezone:'America/New_York',adjustment:'all',feed:'yahoo',rows:[{timestamp:'2026-09-15T13:30:00Z',close:102},{timestamp:'2026-09-16T13:30:00Z',close:999},{timestamp:'2026-09-15T14:30:00Z',close:null}]};
+  };
+  const rows=await tickerOverlayRows({symbol:'PLTR',provider:'yahoo',adjustment:'all',session:'regular',feed:'yahoo'},'1D',cutoff,now,fetchHistory);
+  assert.equal(rows.length,1);assert.equal(rows[0].target,102);assert.equal(rows[0].session_date,'2026-09-15');
+  assert.ok(requests.every(r=>r.adjustment==='all'&&r.feed==='yahoo'&&r.session==='regular'));
+});
+test("daily history failure does not discard available minute closing prices",async()=>{
+  const fetchHistory:any=async(request:any)=>{
+    if(request.timeframe==='1Day')throw new AlpacaError('no_data','No daily history',404);
+    return {provider:'alpaca',rows:[{timestamp:'2026-09-16T15:00:00Z',close:104}]};
+  };
+  const rows=await tickerOverlayRows({symbol:'PLTR',provider:'alpaca'},'1D',Date.parse('2026-09-15T04:00Z'),Date.parse('2026-09-16T15:01Z'),fetchHistory);
+  assert.equal(rows.length,1);assert.equal(rows[0].timestamp,'2026-09-16T15:01:00.000Z');assert.equal(rows[0].target,104);
+  await assert.rejects(()=>tickerOverlayRows({symbol:'PLTR'},'1D',1,2,async()=>{throw new AlpacaError('rate_limit','cooldown',429);}),/cooldown/);
+});
+test("first prediction quote survives the bounded latest-500 overlay",()=>{
+  const start=Date.parse('2026-09-15T12:00Z');
+  const data=Array.from({length:510},(_,i)=>({timestamp:new Date(start+i*60000).toISOString(),price:.5}));
+  const normal=forecastObservationWindow(data,60000,start+510*60000,0,500);
+  const overlay=forecastObservationWindow(data,60000,start+510*60000,0,500,start);
+  assert.equal(normal.rows.length,500);assert.equal(overlay.rows.length,501);assert.equal(Date.parse(overlay.rows[0].timestamp),start);
+  assert.equal(forecastObservationWindow(data.slice(1),60000,start+510*60000,0,500,start).rows.length,500);
+});
+test("minute stock overlays recover only the exact first prediction close outside the latest 500",async()=>{
+  const cutoff=Date.parse('2026-09-15T13:30Z'),now=cutoff+600*60000;
+  const calls:any[]=[];
+  const fetchHistory:any=async(request:any)=>{
+    calls.push(request);
+    return {provider:'alpaca',rows:calls.length===1 ? Array.from({length:500},(_,i)=>({timestamp:new Date(cutoff+(i+100)*60000).toISOString(),close:100+i})) : [{timestamp:new Date(cutoff).toISOString(),close:99},{timestamp:new Date(cutoff+60000).toISOString(),close:999}]};
+  };
+  const rows=await tickerOverlayRows({symbol:'PLTR',provider:'alpaca'},'1min',cutoff,now,fetchHistory);
+  assert.equal(calls.length,2);assert.equal(rows.length,501);assert.equal(rows[0].target,99);assert.equal(Date.parse(rows[0].timestamp),cutoff+60000);
+  assert.equal(calls[1].end,new Date(cutoff+60000).toISOString());
+});
+test("server cutoff accepts the current minute and advances beyond an earlier page-load clock",()=>{
+  const cutoff='2026-09-16T10:15:00-04:00';
+  assert.throws(()=>absoluteHistoryCutoff({history_cutoff_at:cutoff},Date.parse('2026-09-16T12:48Z')));
+  assert.equal(absoluteHistoryCutoff({history_cutoff_at:cutoff},Date.parse('2026-09-16T14:16Z')),Date.parse(cutoff));
+});
 test("all five approved Toto variants are free, pinned and distinct cache configurations", () => {
   const rows=(publicModelCapabilities('free').models as any[]).find(m=>m.id==='toto');
   assert.equal(rows.available,true);assert.equal(rows.variants.length,5);

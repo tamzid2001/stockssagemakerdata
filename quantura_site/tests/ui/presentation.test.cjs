@@ -206,6 +206,7 @@ test('loading a saved preset restores history controls without switching the sel
 
 test('forecast chart focuses recent hour plus future and includes explicitly requested P10/P90 lines', async () => {
   const d=dom(page('forecasting.html')); const w=d.window;
+  w.QuanturaForecastControls=require('../../public/forecast-controls.js');
   w.eval('const ensembleChartDefaultRange =' + source('app.js').split('  const ensembleChartDefaultRange =')[1].split('  const ensembleDatasetFrequency =')[0] + '\nwindow.range=ensembleChartDefaultRange;');
   const job={forecast_id:'fixture',source:{type:'prediction_market'},frequency:'1min',created_at:'2026-09-12T16:30:00Z',
     history:[{timestamp:'2026-09-12T16:00:00Z',target:.4}],quantiles:[.1,.5,.9],predictions:[{timestamp:'2026-09-12T17:00:00Z',quantiles:{'0.1':.3,'0.5':.5,'0.9':.7}}]};
@@ -228,6 +229,17 @@ test('forecast chart focuses recent hour plus future and includes explicitly req
   assert.ok(w.record[0][2].xaxis.ticktext.every(t=>/AM|PM/.test(t)));
   await w.renderChart({...job,quantiles:[.5]});
   assert.ok(!w.record[1][1].some(t=>/^P(10|90) forecast/.test(t.name)));
+  const daily={...job,forecast_id:'daily',frequency:'1D',source:{type:'ticker',symbol:'PLTR',exchange_timezone:'America/New_York'},
+    history:[{timestamp:'2026-09-14T13:30:00Z',target:100}],
+    predictions:[{timestamp:'2026-09-15T00:00:00Z',quantiles:{'0.1':90,'0.5':100,'0.9':110}}],
+    observations:[{timestamp:'2026-09-15T13:30:00Z',target:102,interval:'1D'},{timestamp:'2026-09-16T15:00:00Z',target:104,interval:'1min'},{timestamp:'2026-09-16T15:01:00Z',target:105,interval:'1min'}]};
+  await w.renderChart(daily);
+  const dailyTraces=w.record[2][1];
+  assert.equal(dailyTraces.find(t=>t.name==='Completed forecast-interval closes').x[0],Date.parse(daily.predictions[0].timestamp));
+  const minuteTrace=dailyTraces.find(t=>t.name?.includes('not final daily'));
+  assert.equal(minuteTrace.x.length,1);assert.equal(minuteTrace.y[0],105);
+  assert.equal(minuteTrace.customdata[0],'2026-09-16T15:01:00Z');
+  assert.equal(w.record[2][2].shapes[0].x0,Date.parse('2026-09-14T00:00:00Z'));
   d.window.close();
 });
 
@@ -332,7 +344,7 @@ test('forecast summary averages columns and qualifies terminal quantile probabil
   assert.match(source('app.js'),/model-implied, not a validated win rate/);
   assert.match(source('app.js'),/Recipients must sign in and have access/);
   assert.match(source('app.js'),/Downloaded input history/);
-  assert.match(source('app.js'),/Observed after forecast/);
+  assert.match(source('app.js'),/Actual prices after input cutoff/);
   assert.doesNotMatch(source('app.js').split('const renderEnsembleChart =')[1].split('const startEnsembleObservations =')[0],/apiFetchTickerHistory/);
   d.window.close();
 });

@@ -13,6 +13,23 @@
     if (!Number.isFinite(instant.getTime()) || localValue(instant) !== value) throw new Error("This time does not exist in your timezone. Choose another time.");
     return instant.toISOString();
   };
+  const cutoffInstant = (value, now = Date.now()) => {
+    const instant = localInstant(value);
+    if (Date.parse(instant) > now) throw new Error("The data cutoff cannot be in the future.");
+    return instant;
+  };
+  const stockSessionFormatters = new Map();
+  function stockChartTimestamp(row, job) {
+    if (job.source?.type !== "ticker" || job.frequency !== "1D") return row.timestamp;
+    // Daily predictions use session-date labels, not the provider's midnight
+    // or opening-time bar label. Preserve real timestamps outside the plot.
+    const timeZone = job.source.exchange_timezone || "America/New_York";
+    if (!stockSessionFormatters.has(timeZone)) stockSessionFormatters.set(timeZone, new Intl.DateTimeFormat("en-CA", {
+      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    }));
+    const date = row.session_date || stockSessionFormatters.get(timeZone).format(new Date(row.timestamp));
+    return `${date}T00:00:00.000Z`;
+  }
   function parseCsv(text, maxRows = 10000) {
     text = String(text).replace(/^\uFEFF/, "");
     const records = []; let record = [], field = "", quoted = false, closed = false;
@@ -64,18 +81,19 @@
     if (![lower, upper].every(v => typeof v === "number" && Number.isFinite(v)) || lower > upper) return {status: "unavailable", reason: "Request both P10 and P90."};
     const published = Date.parse(job.completed_at);
     const replay = job.source?.analysis_mode === "historical_replay";
-    // Replay has no historical publication clock. Keep that retrospective
-    // comparison explicitly separate from the live post-completion signal.
-    const quoteTimestamp = replay ? timestamp : Math.floor(published / 60000) * 60000 + 60000;
+    // Match the first predicted interval after the immutable input cutoff.
+    // Worker latency must not move the signal to a different market minute.
+    const quoteTimestamp = timestamp;
     const observation = (job.observations || []).find(row => Date.parse(row.timestamp) === quoteTimestamp && row.is_forward_filled !== true && row.observed !== false);
-    // Frozen FIRST forecast row versus the first completed minute after
-    // publication. These timestamps need not match; neither is backdated.
-    const price = job.source?.type === "prediction_market" ? (observation?.ask ?? observation?.target) : observation?.target;
-    if (quoteTimestamp > now || !Number.isFinite(quoteTimestamp) || typeof price !== "number" || !Number.isFinite(price)) return {status: "waiting", timestamp, reason: "Waiting for the first completed one-minute quote after forecast completion; comparing it with the first predicted row."};
-    return {status: "observed", timestamp, quoteTimestamp, price, lower, upper, signal: price < lower ? "buy" : price > upper ? "sell" : "none", prospective: !replay,
-      timing: replay ? "Historical replay, not a live publication" : "First completed minute after publication versus frozen first-row thresholds"};
+    // Use the same selected-side target/closing price as the history and chart,
+    // not an ask from a different price series. This is not an execution fill.
+    const price = observation?.target;
+    if (quoteTimestamp > now || typeof price !== "number" || !Number.isFinite(price)) return {status: "waiting", timestamp, reason: "Waiting for the completed one-minute quote matching the first prediction row, immediately after the downloaded history. Later quotes cannot replace it."};
+    const prospective = !replay && Number.isFinite(published) && published < timestamp;
+    return {status: "observed", timestamp, quoteTimestamp, price, lower, upper, signal: price < lower ? "buy" : price > upper ? "sell" : "none", prospective,
+      timing: prospective ? "First predicted minute after downloaded history" : "First predicted minute after downloaded history · retrospective comparison, not a backdated live entry"};
   }
-  const helpers = Object.freeze({ localValue, localInstant, parseCsv, csvSeries, firstRowSignal });
+  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowSignal });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);

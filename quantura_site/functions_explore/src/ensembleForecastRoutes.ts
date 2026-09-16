@@ -99,23 +99,38 @@ function sendData(res: Response, data: unknown, requestId: string, meta: JsonRec
   res.json({ data, meta: { api_version: "v1", ...meta } });
 }
 
-export async function tickerOverlayRows(source: JsonRecord, frequency: string, cutoff: number, now = Date.now(), fetchHistory = fetchStockHistoryData): Promise<Array<{ timestamp: string; target: number; interval: string }>> {
-  const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || "regular", limit: 500 };
-  let rows: Array<{timestamp:string;target:number;interval:string}> = [];
-  try {
-    const minute = await fetchHistory({ ...common, start: new Date(Math.max(cutoff - 60000, now - 7 * 86400_000)).toISOString(), timeframe: "1Min" });
-    rows = minute.rows.filter(row => Date.parse(row.timestamp) + 60000 <= now).map(row => ({timestamp:new Date(Date.parse(row.timestamp)+60000).toISOString(),target:Number(row.close),interval:"1min"}));
-  } catch (error) {
-    if (frequency === "1min" || !(error instanceof AlpacaError) || error.code !== "no_data") throw error;
+export async function tickerOverlayRows(source: JsonRecord, frequency: string, cutoff: number, now = Date.now(), fetchHistory = fetchStockHistoryData) {
+  const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || "regular", adjustment: source.adjustment || "raw", feed: source.feed || undefined, limit: 500 };
+  const requests = [fetchHistory({ ...common, start: new Date(Math.max(cutoff - 60000, now - 7 * 86400_000)).toISOString(), timeframe: "1Min" })];
+  if (frequency !== "1min") requests.push(fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe: frequency === "1D" ? "1Day" : "1Hour", limit: 2000 }));
+  // A rate-limited minute endpoint must not hide available daily/hourly closes,
+  // and an unavailable coarse endpoint must not hide genuine recent quotes.
+  const results = await Promise.allSettled(requests);
+  if (results.every(result => result.status === "rejected")) throw (results[0] as PromiseRejectedResult).reason;
+  if (frequency === "1min" && results[0].status === "fulfilled" && results[0].value.rows.length >= 500 && !results[0].value.rows.some(row => Date.parse(row.timestamp) === cutoff)) {
+    try {
+      const first = await fetchHistory({...common, start:new Date(cutoff).toISOString(), end:new Date(Math.min(now,cutoff+60000)).toISOString(),timeframe:"1Min"});
+      results[0].value = {...results[0].value,rows:[...first.rows.filter(row => Date.parse(row.timestamp) === cutoff),...results[0].value.rows]};
+    } catch { /* A missing anchor stays pending; genuine recent closes still display. */ }
   }
-  if (frequency !== "1min") {
-    const timeframe = frequency === "1D" ? "1Day" : "1Hour";
-    const history = await fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe, limit: 2000 });
-    const sessionDate = (value: number) => new Intl.DateTimeFormat("en-CA", {timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(value);
-    const today = sessionDate(now);
-    rows.unshift(...history.rows.filter(row => frequency === "1D" ? sessionDate(Date.parse(row.timestamp)) < today : Date.parse(row.timestamp)+3600000 <= now).map(row => ({timestamp:frequency === "1D" ? row.timestamp : new Date(Date.parse(row.timestamp)+3600000).toISOString(),target:Number(row.close),interval:frequency})));
-  }
-  return [...new Map(rows.filter(row => Number.isFinite(row.target) && Date.parse(row.timestamp)>cutoff).map(row=>[row.timestamp,row])).values()].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+  const rows = results.flatMap((result, index) => {
+    if (result.status !== "fulfilled") return [];
+    const history = result.value, interval = index === 0 ? "1min" : frequency;
+    const timeZone = history.exchangeTimezone || text(source.exchange_timezone) || "America/New_York";
+    const sessionFormatter = new Intl.DateTimeFormat("en-CA", {timeZone, year:"numeric",month:"2-digit",day:"2-digit"});
+    const sessionDate = (value: number) => sessionFormatter.format(value);
+    return history.rows.flatMap(row => {
+      const start = Date.parse(row.timestamp), target = finite(row.close);
+      if (!Number.isFinite(start) || target === null) return [];
+      const end = interval === "1D" ? start : start + (interval === "1min" ? 60000 : 3600000);
+      // A daily bar's label is not its close time. Until its session has ended
+      // conservatively show today's minute closes as provisional, not final.
+      if (end <= cutoff || end > now || (interval === "1D" && sessionDate(start) >= sessionDate(now))) return [];
+      return [{timestamp: new Date(end).toISOString(), target, interval, session_date: sessionDate(start), provider: history.provider || source.provider, adjustment: history.adjustment || common.adjustment, feed: history.feed || source.feed || null}];
+    });
+  });
+  // Keep coarse and minute bars distinct even when their endpoints coincide.
+  return [...new Map(rows.map(row=>[`${row.interval}:${row.timestamp}`,row])).values()].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
 }
 
 function wrap(options: Options, handler: Handler): (req: Request, res: Response) => Promise<void> {
@@ -487,7 +502,7 @@ async function materializeSource(
     return { rows: history.rows, source: { type, provider, limit, ...selection, history_phase:source.history_phase === "auto" ? "auto" : selection.history_phase, effective_history_phase:history.selection.history_phase, history_quality: history.quality, event_start: history.contract.eventStart, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
   }
   if (type === "ticker") {
-    assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "limit"], "source");
+    assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "feed", "limit"], "source");
     const limit = forecastObservationLimit(source.limit, MAX_HISTORY_ROWS);
     const symbol = text(source.symbol, 30).toUpperCase();
     if (!/^(?:\^[A-Z0-9.\-]{1,23}|[A-Z0-9][A-Z0-9.^=\-]{0,23})$/.test(symbol)) throw new Error("source_symbol_invalid");
@@ -499,6 +514,7 @@ async function materializeSource(
       timeframe: source.frequency || "1Day",
       adjustment: source.adjustment || "raw",
       session: source.session || "regular",
+      feed: source.feed || undefined,
       // Provider download buckets are coarser than the requested forecast size.
       // Fetch a sufficient bucket, then take exactly the latest eligible N rows.
       limit: [500, 1000, 1500, 2000, 50000].find(size => size >= limit),
@@ -507,7 +523,7 @@ async function materializeSource(
     const completedRows = history.rows.map(row => ({...row,timestamp:interval ? new Date(Date.parse(row.timestamp)+interval).toISOString() : row.timestamp})).filter(row => Date.parse(row.timestamp) <= (cutoff ?? Date.now()));
     return {
       rows: normalizeSeriesRows(completedRows, "timestamp", text(source.field || "close", 50) || "close", 2, 50000).slice(-limit),
-      source: { type: "ticker", symbol, limit, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, start: source.start || null, end: source.end || null },
+      source: { type: "ticker", symbol, limit, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, adjustment: history.adjustment, session: history.session, feed: history.feed, exchange_timezone: history.exchangeTimezone || "UTC", start: source.start || null, end: source.end || null },
       frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
       timezone: "UTC",
     };
@@ -1021,7 +1037,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     // No heavy inference and no changes to immutable predictions/input snapshot.
     if (Date.now() - cutoff > 90 * 86400_000) availability = "live_overlay_window_expired";
     else if (source.type === "prediction_market") {
-      const result = await predictionForecastHistory(source.provider as "kalshi" | "polymarket_us", text(source.symbol), text(source.contract_id), frequency, { allowResolved: true, since: cutoff, minimumRows: 0, includeQuotes: true });
+      const result = await predictionForecastHistory(source.provider as "kalshi" | "polymarket_us", text(source.symbol), text(source.contract_id), frequency, { allowResolved: true, since: cutoff, minimumRows: 0, includeQuotes: true, ...(frequency === "1min" ? {preserveTimestamp:cutoff+60000} : {}) });
       rows = result.rows;
     } else if (source.type === "ticker") {
       try {
