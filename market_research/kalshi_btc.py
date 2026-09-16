@@ -29,11 +29,13 @@ API = "https://external-api.kalshi.com/trade-api/v2"
 
 class KalshiBTCProvider:
     """Provider-specific translation; only approved public GET endpoints."""
+    series_ticker = SERIES
     def __init__(self, timeout=20, attempts=4):
         self.timeout, self.attempts = timeout, attempts
 
     def get(self, path, params=None):
-        if not re.fullmatch(r"/(markets|historical/markets|historical/cutoff|series/KXBTC15M|markets/KXBTC15M-[A-Z0-9-]+|(?:historical|series/KXBTC15M)/markets/KXBTC15M-[A-Z0-9-]+/candlesticks)", path):
+        series = re.escape(self.series_ticker)
+        if not re.fullmatch(rf"/(markets|historical/markets|historical/cutoff|series|series/{series}|markets/{series}-[A-Z0-9-]+|(?:historical|series/{series})/markets/{series}-[A-Z0-9-]+/candlesticks)", path):
             raise ValueError("UNAPPROVED_KALSHI_READ_ROUTE")
         url = API + path + ("?" + urllib.parse.urlencode(params) if params else "")
         for attempt in range(self.attempts):
@@ -53,7 +55,7 @@ class KalshiBTCProvider:
                 raise RuntimeError("KALSHI_UNAVAILABLE") from None
 
     def discover(self, historical=False, limit=10):
-        result = self.get("/markets", {"series_ticker": SERIES, "status": "settled" if historical else "open", "limit": limit})
+        result = self.get("/markets", {"series_ticker": self.series_ticker, "status": "settled" if historical else "open", "limit": limit})
         markets = [m for m in result.get("markets", []) if self.valid_market(m)]
         return markets, {"markets_returned": len(result.get("markets", [])), "valid_15m_markets": len(markets),
                          "next_cursor": result.get("cursor") or None, "historical_tier": False}
@@ -85,7 +87,7 @@ class KalshiBTCProvider:
         historical = close < boundary
         if historical:
             params.pop("include_latest_before_start")
-        path = ("/historical" if historical else "/series/" + SERIES) + "/markets/" + ticker + "/candlesticks"
+        path = ("/historical" if historical else "/series/" + self.series_ticker) + "/markets/" + ticker + "/candlesticks"
         result = self.get(path, params)
         if result.get("ticker", ticker) != ticker:
             raise ValueError("KALSHI_CANDLE_IDENTITY_MISMATCH")

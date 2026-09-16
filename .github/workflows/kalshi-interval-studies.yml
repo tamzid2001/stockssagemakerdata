@@ -1,0 +1,120 @@
+name: Kalshi 15m All-Origin Strategy Studies
+run-name: Kalshi ${{ inputs.series || 'all' }} · all minute origins · ${{ inputs.as_of || 'new cohort' }}
+on:
+  workflow_dispatch:
+    inputs:
+      series:
+        type: string
+        default: all
+        description: All verified directional series or one exact KX...15M series
+      as_of:
+        type: string
+        default: now
+        description: Fixed past Unix seconds; now creates a new recent cohort
+      max_markets:
+        type: choice
+        options: ['2', '10', '50', '100']
+        default: '2'
+      code_ref:
+        type: string
+        default: main
+      continuous:
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: write
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      series: ${{ steps.matrix.outputs.series }}
+      as_of: ${{ steps.matrix.outputs.as_of }}
+      code: ${{ steps.matrix.outputs.code }}
+    steps:
+      - name: Validate references
+        env:
+          CODE: ${{ inputs.code_ref }}
+          SERIES: ${{ inputs.series }}
+          AS_OF: ${{ inputs.as_of }}
+        run: |
+          [[ "$CODE" == main || "$CODE" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$SERIES" == all || "$SERIES" =~ ^KX[A-Z0-9]{1,20}15M$ ]] || exit 1
+          [[ "$AS_OF" == now || "$AS_OF" =~ ^[0-9]{10}$ ]] || exit 1
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.code_ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install numpy==2.5.2 pandas==2.3.3 httpx==0.28.1 pandas-market-calendars==5.4.0
+      - name: Freeze series and cohort
+        id: matrix
+        env:
+          SERIES: ${{ inputs.series }}
+          AS_OF: ${{ inputs.as_of }}
+        run: |
+          python - <<'PY'
+          import json, os, time, subprocess
+          from market_research.interval_markets import discover_series, KalshiIntervalProvider
+          s=os.environ['SERIES']
+          series=[r['ticker'] for r in discover_series()['series']] if s=='all' else [s]
+          for item in series: KalshiIntervalProvider(item)
+          if not series: raise RuntimeError('NO_VERIFIED_SERIES')
+          cutoff=int(time.time()) if os.environ['AS_OF']=='now' else int(os.environ['AS_OF'])
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('series='+json.dumps(series)+'\n')
+              out.write('as_of='+str(cutoff)+'\n')
+              out.write('code='+subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()+'\n')
+          print(json.dumps({'series':series,'as_of':cutoff}))
+          PY
+  study:
+    needs: discover
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        series: ${{ fromJSON(needs.discover.outputs.series) }}
+    concurrency:
+      group: interval-study-${{ matrix.series }}-${{ needs.discover.outputs.as_of }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.discover.outputs.code }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Locked CPU models, no CUDA assumption
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: All minute origins, three independent strategies
+        id: study
+        env:
+          SERIES: ${{ matrix.series }}
+          AS_OF: ${{ needs.discover.outputs.as_of }}
+          MAXIMUM: ${{ inputs.max_markets }}
+          QUANTURA_CODE_SHA: ${{ needs.discover.outputs.code }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-hf
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+          PYTHONUNBUFFERED: '1'
+        run: python -m market_research.interval_studies --series "$SERIES" --as-of "$AS_OF" --max-markets "$MAXIMUM" --budget-minutes 270
+      - name: Continue identical incomplete cohort
+        if: success() && inputs.continuous && steps.study.outputs.complete == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SERIES: ${{ matrix.series }}
+          AS_OF: ${{ needs.discover.outputs.as_of }}
+          CODE: ${{ needs.discover.outputs.code }}
+          MAXIMUM: ${{ inputs.max_markets }}
+        run: gh workflow run kalshi-interval-studies.yml --repo "$GITHUB_REPOSITORY" --ref main -f series="$SERIES" -f as_of="$AS_OF" -f max_markets="$MAXIMUM" -f code_ref="$CODE" -f continuous=true

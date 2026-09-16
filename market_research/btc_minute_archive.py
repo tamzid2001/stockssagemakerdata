@@ -92,16 +92,18 @@ class MinuteCollector:
         self.last_discovery = self.last_fee = 0
         self.discovery_cursor_present = False
         for row in store.values('btc_lifecycle'):
-            if row.get('resolution_status') != 'resolved' and row.get('market'):
+            if (row.get('resolution_status') != 'resolved' and row.get('market')
+                    and provider.valid_market(row['market'])):
                 self.markets[row['market_id']] = row['market']
 
     def tick(self, now):
         errors = []
         if now-self.last_discovery >= 60:
             # Covers recent settlements (including games without forecasts) plus current games.
-            queries=[{'series_ticker':'KXBTC15M','min_close_ts':now-3600,
+            series_ticker = getattr(self.provider, 'series_ticker', 'KXBTC15M')
+            queries=[{'series_ticker':series_ticker,'min_close_ts':now-3600,
                       'max_close_ts':now+1800,'limit':100},
-                     {'series_ticker':'KXBTC15M','status':'settled','limit':20}]
+                     {'series_ticker':series_ticker,'status':'settled','limit':20}]
             self.discovery_cursor_present=False
             for params in queries:
                 try:
@@ -110,6 +112,8 @@ class MinuteCollector:
                         self.discovery_cursor_present=bool(response.get('cursor'))
                     for market in response.get('markets',[]):
                         if self.provider.valid_market(market):
+                            if self.store._get('checkpoints', 'finalized:'+market['ticker']):
+                                continue
                             self.markets[market['ticker']]=market
                             archive_settlement(self.store,market,int(time.time()))
                 except (RuntimeError,ValueError,OSError,KeyError) as error:
@@ -134,9 +138,10 @@ class MinuteCollector:
             if now > end+120 and (self.store._get('btc_lifecycle', ticker) or {}).get('resolution_status') == 'resolved':
                 self.markets.pop(ticker)
         if now-self.last_fee >= 3600:
-            series = self.provider.get('/series/KXBTC15M')['series']
+            series_ticker = getattr(self.provider, 'series_ticker', 'KXBTC15M')
+            series = self.provider.get('/series/'+series_ticker)['series']
             fee = {'observed_at':int(time.time()),'fee_type':series.get('fee_type'),
-                   'multiplier':series.get('fee_multiplier'),'source':'kalshi_series_KXBTC15M'}
+                   'multiplier':series.get('fee_multiplier'),'source':'kalshi_series_'+series_ticker}
             self.store.checkpoint('btc_fee_policy', fee)
             self.last_fee = now
         self.store.checkpoint('btc_collector_health', {'at':int(time.time()),'status':'degraded' if errors else 'ok',

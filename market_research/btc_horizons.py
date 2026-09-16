@@ -59,7 +59,7 @@ class Checkpoints:
                 raise ValueError('BTC_HORIZON_CONFIGURATION_CONFLICT')
         else:
             from google.api_core.exceptions import AlreadyExists
-            try:ref.create({'configuration':config,'research_kind':VERSION,'paper_only':True})
+            try:ref.create({'configuration':config,'research_kind':config.get('version', VERSION),'paper_only':True})
             except AlreadyExists:
                 if ref.get().to_dict().get('configuration')!=config:
                     raise ValueError('BTC_HORIZON_CONFIGURATION_CONFLICT')

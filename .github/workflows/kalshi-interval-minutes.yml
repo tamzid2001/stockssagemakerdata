@@ -1,0 +1,51 @@
+name: Kalshi All 15m Minute Archive
+run-name: Kalshi all verified 15m series · paired minute collection
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        type: choice
+        options: ['5', '330']
+        default: '330'
+      continuous:
+        type: boolean
+        default: true
+  schedule:
+    - cron: '11 * * * *'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: kalshi-all-interval-minute-archive
+  cancel-in-progress: false
+jobs:
+  collect:
+    if: github.event_name == 'workflow_dispatch' || vars.KALSHI_INTERVAL_RESEARCH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install lightweight collector, no model downloads
+        run: python -m pip install numpy==2.5.2 pandas==2.3.3 httpx==0.28.1 pandas-market-calendars==5.4.0 cryptography==50.0.1 firebase-admin==7.5.0
+      - name: Minute collection independent of model execution
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          DURATION: ${{ inputs.duration_minutes || '330' }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          export QUANTURA_CODE_SHA="$(git rev-parse HEAD)"
+          python -m market_research.interval_collector --duration-minutes "$DURATION"
+      - name: Checkpointed successor
+        if: success() && (github.event_name == 'schedule' || inputs.continuous) && vars.KALSHI_INTERVAL_RESEARCH_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run kalshi-interval-minutes.yml --repo "$GITHUB_REPOSITORY" --ref main -f duration_minutes=330 -f continuous=true
+      - name: Failure disclosure
+        if: failure()
+        run: echo 'Minute collection interrupted; resume from the verified cloud checkpoint. Missing receipts are not fabricated or presented as live.' >> "$GITHUB_STEP_SUMMARY"
