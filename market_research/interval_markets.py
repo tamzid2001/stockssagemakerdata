@@ -1,15 +1,29 @@
 """Discover actual crypto/commodity fifteen-minute contracts, not guessed tickers."""
 import re
+import threading
+import time
 from .engine import stamp
 from .kalshi_btc import KalshiBTCProvider
 
 
 class KalshiIntervalProvider(KalshiBTCProvider):
+    _request_lock = threading.Lock()
+    _last_request = 0.
     def __init__(self, series_ticker='KXBTC15M', **kwargs):
         if not re.fullmatch(r'KX[A-Z0-9]{1,20}15M', series_ticker):
             raise ValueError('INVALID_INTERVAL_SERIES')
         super().__init__(**kwargs)
         self.series_ticker = series_ticker
+
+    def get(self, path, params=None):
+        # A process-wide bound prevents 14 collectors bursting at one minute
+        # boundary. Each worker still retries provider throttling via the base.
+        with self._request_lock:
+            delay = .2 - (time.monotonic() - KalshiIntervalProvider._last_request)
+            if delay > 0:
+                time.sleep(delay)
+            KalshiIntervalProvider._last_request = time.monotonic()
+        return super().get(path, params)
 
     def valid_market(self, market):
         try:

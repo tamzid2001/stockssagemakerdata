@@ -146,6 +146,20 @@ def test_provider_hard_read_boundary_and_duration():
     with pytest.raises(ValueError):markets.KalshiIntervalProvider('../bad')
 
 
+def test_late_revision_during_upload_is_not_pruned(tmp_path):
+    s=LocalStore('x','x',tmp_path);p=Provider()
+    archive_minutes(s,p,MARKET,p.candles(MARKET,OPEN+900),OPEN+905)
+    archive_settlement(s,MARKET,OPEN+960)
+    class Concurrent(Archive):
+        def put(self,kind,key,value):
+            super().put(kind,key,value)
+            with s.lock,s.db:
+                s._put('btc_minute_revisions','late',{'market_id':MARKET['ticker'],'timestamp':OPEN+60})
+    assert collector.finalize_markets(s,Concurrent(),OPEN+1300)==0
+    assert s.values('btc_minute_revisions') and len(s.values('btc_minutes'))==15
+    s.db.close()
+
+
 def test_workflows_have_bounded_concurrency_no_orders_no_heavy_github_artifacts():
     root=Path(__file__).resolve().parents[2]
     for name in ('kalshi-interval-minutes.yml','kalshi-interval-studies.yml'):

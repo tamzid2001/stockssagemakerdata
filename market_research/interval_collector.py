@@ -49,8 +49,9 @@ def finalize_markets(store, archive, now):
         if life.get('resolution_status') != 'resolved' or now < life['close_at']+300:
             continue
         ticker = life['market_id']
-        rows = {kind:[r for r in store.values(kind) if r.get('market_id') == ticker]
-                for kind in KINDS if kind != 'checkpoints'}
+        with store.lock:
+            rows = {kind:[r for r in store.values(kind) if r.get('market_id') == ticker]
+                    for kind in KINDS if kind != 'checkpoints'}
         record = {'market':life['market'], 'lifecycle':life, 'records':rows,
                   'fee_policy':store._get('checkpoints', 'btc_fee_policy'),
                   'redistribution_status':'review_required', 'version':VERSION}
@@ -62,6 +63,11 @@ def finalize_markets(store, archive, now):
         if digest(durable) != digest(record):
             archive.put('source', ticker+'-'+digest(record)[:12], record)
         with store.lock, store.db:
+            current = {kind:[r for r in store.values(kind) if r.get('market_id') == ticker] for kind in rows}
+            if current != rows:
+                # A concurrent late receipt/revision must be archived first, not
+                # removed just because an older snapshot completed its upload.
+                continue
             for kind in rows:
                 for key, raw in store.db.execute('SELECT id,data FROM records WHERE kind=?', (kind,)).fetchall():
                     if json.loads(gzip.decompress(raw)).get('market_id') == ticker:
@@ -98,6 +104,7 @@ class SeriesSession:
                     raise ValueError('COLLECTOR_CONFIGURATION_CONFLICT')
                 restore_rows(self.store, saved['rows'])
         self.collector = MinuteCollector(self.store, KalshiIntervalProvider(series, timeout=5, attempts=2))
+        self.collector.start()
         self.saved_at = 0
 
     def save(self, now):
@@ -119,7 +126,7 @@ class SeriesSession:
 
     def tick(self, now):
         self.cloud.lease.renew()
-        self.collector.tick(now)
+        # Collector network thread runs independently of archive/storage latency.
         completed = finalize_markets(self.store, self.archive, now)
         if completed or now-self.saved_at >= 300:
             self.save(now)
@@ -129,8 +136,15 @@ class SeriesSession:
                 'finalized_markets':completed, 'health':health, 'at':now}), flush=True)
 
     def close(self):
+        self.collector.stop()
+        if self.collector.thread.is_alive():
+            raise RuntimeError('COLLECTOR_STILL_WRITING_CHECKPOINT')
         try:
             self.cloud.lease.renew(); self.save(int(time.time()))
+            minutes = self.store.values('btc_minutes')
+            print(json.dumps({'event':'interval_collector_closed', 'series':self.series,
+                'buffered_minutes':len(minutes), 'timely_minutes':sum(r['timely'] for r in minutes),
+                'health':self.store._get('checkpoints', 'btc_collector_health')}), flush=True)
         finally:
             self.cloud.lease.release(); self.store.db.close()
 
