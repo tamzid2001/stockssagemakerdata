@@ -12,6 +12,36 @@ import { generatePlatformApiKey, hashPlatformApiKey, workspaceMembershipId } fro
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
 
+test("guest forecast save transfers only with expiring cookie proof and revokes the former workspace", {skip:!emulatorAvailable}, async()=>{
+  const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`guest-save-${Date.now()}`);
+  const db=firebaseApp.firestore(), prefix=`save_${Date.now()}`;
+  const guest=`${prefix}_guest`, account=`${prefix}_account`, stranger=`${prefix}_other`;
+  const id=`${prefix}_forecast`, ref=db.collection("ensemble_forecast_jobs").doc(id);
+  const rows=Array.from({length:40},(_,i)=>({timestamp:new Date(Date.UTC(2026,8,16,12,i)).toISOString(),target:100+i}));
+  await ref.set({user_id:guest,workspace_id:guest,guest_session:true,status:"completed",created_at:new Date().toISOString(),source:{type:"series"},request:{prediction_length:1,quantiles:[.1,.5,.9],frequency:"1min"},input_row_count:40});
+  await ref.collection("input_chunks").doc("0000").set({rows});
+  const auth:any={verifyIdToken:async(token:string)=>[guest,account,stranger].includes(token)?{uid:token,firebase:{sign_in_provider:token===guest?"anonymous":"password"}}:null,getUser:async(uid:string)=>({uid,disabled:false,emailVerified:false})};
+  const app=express();app.use(express.json());const router=express.Router();registerEnsembleForecastRoutes(router,{db,auth,publicOrigin:"https://quantura.studio"});app.use("/api",router);
+  const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));const port=(server.address() as {port:number}).port;
+  const call=(suffix:string,token:string,method="POST",cookie="")=>fetch(`http://127.0.0.1:${port}/api/v1/ensemble-forecasts/${id}${suffix}`,{method,headers:{Authorization:`Bearer ${token}`,Cookie:cookie}});
+  try {
+    assert.equal((await call("/prepare-save",stranger)).status,403);
+    const prepared=await call("/prepare-save",guest);assert.equal(prepared.status,200,await prepared.clone().text());
+    const header=prepared.headers.get("set-cookie")!;assert.match(header,/HttpOnly; Secure; SameSite=Lax/);const cookie=header.split(";")[0];
+    assert.doesNotMatch(await prepared.text(),/guest_save_hash|q_forecast_save/);
+    assert.equal((await call("/save",guest)).status,403);
+    assert.equal((await call("/save",account)).status,403);
+    const saved=await call("/save",account,"POST",cookie);assert.equal(saved.status,200,await saved.clone().text());
+    const job=(await ref.get()).data()!;assert.equal(job.user_id,account);assert.equal(job.workspace_id,account);assert.equal(job.guest_origin_user_id,guest);assert.equal(job.guest_save_hash,null);
+    assert.equal((await db.collection("users").doc(account).collection("requests").doc(`ensemble__${id}`).get()).exists,true);
+    assert.equal((await call("/save",stranger,"POST",cookie)).status,403,"consumed proof cannot transfer again");
+    assert.equal((await call("",guest,"GET")).status,403);
+    const read=await call("",account,"GET");assert.equal(read.status,200,await read.clone().text());
+    assert.doesNotMatch(await read.text(),/guest_save_hash|guest_save_expires_at/);
+    assert.equal((await ref.collection("input_chunks").doc("0000").get()).data()?.rows.length,40,"source bytes stay immutable");
+  } finally {await new Promise<void>(r=>server.close(()=>r()));await firebaseApp.delete();}
+});
+
 test("ensemble job persists inputs, claims two-bar market history, downloads, and checks current membership", { skip: !emulatorAvailable }, async () => {
   const firebaseApp = admin.initializeApp({ projectId: "quantura-forecast-integration" }, `ensemble-route-test-${Date.now()}`);
   const db = firebaseApp.firestore();

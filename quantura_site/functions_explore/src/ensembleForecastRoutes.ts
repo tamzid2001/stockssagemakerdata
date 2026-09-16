@@ -32,6 +32,15 @@ const APPROVED_MODELS: ModelId[] = ["prophet", "toto", "granite", "chronos", "ti
 const MAX_HISTORY_ROWS = 10_000;
 const INPUT_CHUNK_ROWS = 250;
 const WORKER_SCHEMA_VERSION = "ensemble_forecast_job_v1";
+const observationCache = new Map<string, { until: number; value: Promise<JsonRecord> }>();
+
+export function validateGuestForecastClaim(id: string, cookie: string, job: JsonRecord, now = Date.now()): void {
+  const [claimedId, token, extra] = cookie.split(".");
+  const expected = typeof job.guest_save_hash === "string" ? job.guest_save_hash : "";
+  if (claimedId !== id || extra || !/^[a-f0-9]{64}$/.test(token || "") || !/^[a-f0-9]{64}$/.test(expected) ||
+      job.guest_session !== true || job.status !== "completed" || job.workspace_id !== job.user_id || Number(job.guest_save_expires_at || 0) <= now) throw new Error("workspace_forbidden");
+  if (!crypto.timingSafeEqual(Buffer.from(expected,"hex"), crypto.createHash("sha256").update(token).digest())) throw new Error("workspace_forbidden");
+}
 
 function text(value: unknown, max = 500): string { return String(value ?? "").trim().slice(0, max); }
 function plain(value: unknown): JsonRecord { return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}; }
@@ -90,6 +99,25 @@ function sendData(res: Response, data: unknown, requestId: string, meta: JsonRec
   res.json({ data, meta: { api_version: "v1", ...meta } });
 }
 
+export async function tickerOverlayRows(source: JsonRecord, frequency: string, cutoff: number, now = Date.now(), fetchHistory = fetchStockHistoryData): Promise<Array<{ timestamp: string; target: number; interval: string }>> {
+  const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || "regular", limit: 500 };
+  let rows: Array<{timestamp:string;target:number;interval:string}> = [];
+  try {
+    const minute = await fetchHistory({ ...common, start: new Date(Math.max(cutoff - 60000, now - 7 * 86400_000)).toISOString(), timeframe: "1Min" });
+    rows = minute.rows.filter(row => Date.parse(row.timestamp) + 60000 <= now).map(row => ({timestamp:new Date(Date.parse(row.timestamp)+60000).toISOString(),target:Number(row.close),interval:"1min"}));
+  } catch (error) {
+    if (frequency === "1min" || !(error instanceof AlpacaError) || error.code !== "no_data") throw error;
+  }
+  if (frequency !== "1min") {
+    const timeframe = frequency === "1D" ? "1Day" : "1Hour";
+    const history = await fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe, limit: 2000 });
+    const sessionDate = (value: number) => new Intl.DateTimeFormat("en-CA", {timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(value);
+    const today = sessionDate(now);
+    rows.unshift(...history.rows.filter(row => frequency === "1D" ? sessionDate(Date.parse(row.timestamp)) < today : Date.parse(row.timestamp)+3600000 <= now).map(row => ({timestamp:frequency === "1D" ? row.timestamp : new Date(Date.parse(row.timestamp)+3600000).toISOString(),target:Number(row.close),interval:frequency})));
+  }
+  return [...new Map(rows.filter(row => Number.isFinite(row.target) && Date.parse(row.timestamp)>cutoff).map(row=>[row.timestamp,row])).values()].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
+}
+
 function wrap(options: Options, handler: Handler): (req: Request, res: Response) => Promise<void> {
   return async (req, res) => {
     const requestId = crypto.randomUUID();
@@ -97,6 +125,9 @@ function wrap(options: Options, handler: Handler): (req: Request, res: Response)
     let principal: ApiPrincipal | undefined;
     try {
       principal = await authenticatePlatformRequest(req, options);
+      if (principal.guest && req.method === "POST" && /\/ensemble-forecasts(?:\/[^/]+\/reproduce)?$/.test(req.path)) {
+        await admitGuestCompute(options.db, req);
+      }
       await handler(req, res, principal, requestId);
     } catch (error) {
       sendError(res, error, requestId);
@@ -113,6 +144,20 @@ function wrap(options: Options, handler: Handler): (req: Request, res: Response)
       }).catch(() => undefined);
     }
   };
+}
+
+// Guest identity is still verified by Firebase. Daily network and global
+// admission budgets prevent new anonymous identities from bypassing quotas.
+async function admitGuestCompute(db: FirebaseFirestore.Firestore, req: Request): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  const network = crypto.createHash("sha256").update(`${date}:${req.ip || req.socket.remoteAddress || "unknown"}`).digest("hex");
+  const refs = [db.collection(USAGE).doc(`guest-network-${network}`), db.collection(USAGE).doc(`guest-global-${date}`)];
+  const limits = [10, 100];
+  await db.runTransaction(async transaction => {
+    const snapshots = await Promise.all(refs.map(ref => transaction.get(ref)));
+    snapshots.forEach((snapshot, i) => { if (Number(snapshot.data()?.count || 0) >= limits[i]) throw new Error("guest_compute_daily_quota_exceeded"); });
+    refs.forEach((ref, i) => transaction.set(ref, { date, count: Number(snapshots[i].data()?.count || 0) + 1 }, { merge: true }));
+  });
 }
 
 export function timesFmState(mode = runtimeMode()): { available: boolean; unavailable_reason: string | null; evaluation_only: boolean } {
@@ -143,6 +188,7 @@ export function publicModelCapabilities(plan: PlanKey = "free"): JsonRecord {
       name: source.name,
       checkpoint: source.checkpoint,
       checkpoint_revision: source.checkpointRevision || null,
+      ...(id === "toto" ? { variants: source.variants, default_variant: source.defaultVariant } : {}),
       available: licensed && planAllowsModel(plan, id),
       runtime_available: licensed,
       plan_available: planAllowsModel(plan, id),
@@ -189,6 +235,7 @@ function modelSupportsQuantile(modelId: ModelId, quantile: number): boolean {
 }
 
 type NormalizedConfiguration = {
+  toto_variant: string;
   prediction_length: number;
   horizon_mode: "trading_sessions" | "calendar_days" | "frequency_periods";
   quantiles: number[];
@@ -203,10 +250,13 @@ type NormalizedConfiguration = {
 };
 
 export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey): NormalizedConfiguration {
-  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "history_lag_minutes"], "configuration");
+  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes"], "configuration");
+  const totoVariant = body.toto_variant ?? modelRegistry.models.toto.defaultVariant;
+  if (typeof totoVariant !== "string" || !modelRegistry.models.toto.variants.some(v => v.id === totoVariant)) throw new Error("toto_variant_unsupported");
   historyCutoffAt(body.history_lag_minutes);
-  const predictionLength = Math.floor(Number(body.prediction_length ?? 30));
-  const planMaximum: Record<PlanKey, number> = { free: 30, pro: 90, quant: 365, research: 512 };
+  const predictionLength = Number(body.prediction_length ?? 30);
+  if (!Number.isInteger(predictionLength)) throw new Error("prediction_length_unsupported");
+  const planMaximum: Record<PlanKey, number> = { free: 512, pro: 512, quant: 512, research: 512 };
   if (!Number.isFinite(predictionLength) || predictionLength < 1 || predictionLength > planMaximum[plan]) throw new Error("prediction_length_unsupported");
   const horizonModeRaw = text(body.horizon_mode || "trading_sessions", 40);
   if (!new Set(["trading_sessions", "calendar_days", "frequency_periods"]).has(horizonModeRaw)) throw new Error("horizon_mode_unsupported");
@@ -247,6 +297,7 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
   const effectiveCentralWeights = Object.fromEntries(central.map((modelId) => [modelId, models[modelId].weight / centralTotal]));
   return {
     prediction_length: predictionLength,
+    toto_variant: totoVariant,
     horizon_mode: horizonModeRaw as NormalizedConfiguration["horizon_mode"],
     quantiles,
     transform: transformRaw as NormalizedConfiguration["transform"],
@@ -258,6 +309,14 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
     requested_weights: requestedWeights,
     effective_central_weights: effectiveCentralWeights,
   };
+}
+
+export function validateUploadedSeries(rows: unknown, timestampColumn: string, targetColumn: string): void {
+  if (!Array.isArray(rows) || rows.length > MAX_HISTORY_ROWS) throw new Error("source_series_rows_invalid");
+  for (const entry of rows) {
+    const row = plain(entry);
+    if (!iso(row[timestampColumn]) || finite(row[targetColumn]) === null) throw new Error("source_series_row_invalid");
+  }
 }
 
 function normalizeSeriesRows(rows: unknown, timestampColumn: string, targetColumn: string, minimumRows = 40, maximumRows = MAX_HISTORY_ROWS): Array<{ timestamp: string; target: number }> {
@@ -369,6 +428,31 @@ export function historyCutoffAt(value: unknown, now = Date.now()): number | unde
   return Math.floor(now / 60_000) * 60_000 - value * 60_000;
 }
 
+export function absoluteHistoryCutoff(body: JsonRecord, now = Date.now()): number | undefined {
+  if (body.history_cutoff_at === undefined || body.history_cutoff_at === "") return historyCutoffAt(body.history_lag_minutes, now);
+  if (body.history_lag_minutes) throw new Error("history_cutoff_conflict");
+  const value = text(body.history_cutoff_at, 100);
+  const cutoff = Date.parse(value);
+  if (!/(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(cutoff) || cutoff > now || now - cutoff > 90 * 86400_000) {
+    throw new PredictionMarketDataError("history_cutoff_invalid", "Choose a timezone-aware cutoff within the last 90 days, not in the future.", 422);
+  }
+  return cutoff;
+}
+
+export function resolvePredictionEnd(body: JsonRecord, lastTimestamp: string, frequency: string): JsonRecord {
+  if (!body.prediction_end_at) return body;
+  const value = text(body.prediction_end_at, 100), end = Date.parse(value), last = Date.parse(lastTimestamp);
+  if (!/(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(end) || end <= last) throw new Error("prediction_end_at_unsupported");
+  const match = frequency.match(/^(\d+)(min|h|D)$/i);
+  if (!match) throw new Error("prediction_end_frequency_unsupported");
+  const interval = Number(match[1]) * ({ min: 60000, h: 3600000, d: 86400000 }[match[2].toLowerCase()] || 0);
+  // Daily NYSE ranges are calendar windows; the Python worker enumerates the
+  // real exchange sessions within that window, including holiday exclusions.
+  const dailyExchange = /^(NYSE|XNYS)$/.test(String(body.calendar || "NYSE")) && frequency === "1D";
+  const steps = dailyExchange ? Math.floor(end / 86400000) - Math.floor(last / 86400000) : Math.floor((end-last) / interval);
+  return { ...body, prediction_length: steps, horizon_mode: dailyExchange ? "calendar_days" : "frequency_periods" };
+}
+
 export function normalizeEnsemblePreset(body: JsonRecord, plan: PlanKey): JsonRecord {
   const configuration = normalizeEnsembleConfiguration(body, plan);
   const source = plain(body.source);
@@ -378,7 +462,7 @@ export function normalizeEnsemblePreset(body: JsonRecord, plan: PlanKey): JsonRe
   if (source.type === "prediction_market" || source.type === "ticker") {
     historyControls.limit = forecastObservationLimit(source.limit, source.type === "ticker" ? MAX_HISTORY_ROWS : 500);
   }
-  if (source.type === "prediction_market") Object.assign(historyControls, historySelection(source));
+  if (source.type === "prediction_market") Object.assign(historyControls, historySelection({...source, ...(source.history_phase === "auto" ? {history_phase:"both"} : {})}), source.history_phase === "auto" ? {history_phase:"auto"} : {});
   return { ...configuration, history_controls: historyControls };
 }
 
@@ -397,10 +481,10 @@ async function materializeSource(
     const provider = text(source.provider);
     if (provider !== "polymarket_us" && provider !== "kalshi") throw new Error("source_provider_unsupported");
     let selection;
-    try { selection = historySelection(source); }
+    try { selection = historySelection({...source, ...(source.history_phase === "auto" ? {history_phase:"both"} : {})}); }
     catch (error) { throw new PredictionMarketDataError((error as Error).message, "Choose a valid history phase and lookback (0–129600 minutes).", 422); }
-    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined, selection, limit });
-    return { rows: history.rows, source: { type, provider, limit, ...selection, history_quality: history.quality, event_start: history.contract.eventStart, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
+    const history = await predictionForecastHistory(provider, text(source.symbol, 220), text(source.contract_id, 300), text(source.frequency || "1min", 20), { until: cutoff, allowResolved: cutoff !== undefined, selection, automaticPhase:source.history_phase === "auto", limit });
+    return { rows: history.rows, source: { type, provider, limit, ...selection, history_phase:source.history_phase === "auto" ? "auto" : selection.history_phase, effective_history_phase:history.selection.history_phase, history_quality: history.quality, event_start: history.contract.eventStart, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
   }
   if (type === "ticker") {
     assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "limit"], "source");
@@ -419,8 +503,10 @@ async function materializeSource(
       // Fetch a sufficient bucket, then take exactly the latest eligible N rows.
       limit: [500, 1000, 1500, 2000, 50000].find(size => size >= limit),
     });
+    const interval = history.timeframe === "1Min" ? 60000 : history.timeframe === "1Hour" ? 3600000 : 0;
+    const completedRows = history.rows.map(row => ({...row,timestamp:interval ? new Date(Date.parse(row.timestamp)+interval).toISOString() : row.timestamp})).filter(row => Date.parse(row.timestamp) <= (cutoff ?? Date.now()));
     return {
-      rows: normalizeSeriesRows(history.rows.filter(row => cutoff === undefined || Date.parse(String(row.timestamp)) <= cutoff), "timestamp", text(source.field || "close", 50) || "close", 2, 50000).slice(-limit),
+      rows: normalizeSeriesRows(completedRows, "timestamp", text(source.field || "close", 50) || "close", 2, 50000).slice(-limit),
       source: { type: "ticker", symbol, limit, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, start: source.start || null, end: source.end || null },
       frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
       timezone: "UTC",
@@ -434,6 +520,7 @@ async function materializeSource(
   }
   if (type === "series") {
     assertOnlyKeys(source, ["type", "name", "rows", "timestamp_column", "target_column", "frequency", "timezone"], "source");
+    validateUploadedSeries(source.rows, text(source.timestamp_column || "timestamp", 100), text(source.target_column || "target", 100));
     return {
       rows: normalizeSeriesRows(normalizeSeriesRows(source.rows, text(source.timestamp_column || "timestamp", 100), text(source.target_column || "target", 100)).filter(row => cutoff === undefined || Date.parse(row.timestamp) <= cutoff), "timestamp", "target"),
       source: { type: "series", name: text(source.name || "API historical series", 120) },
@@ -455,14 +542,14 @@ function requestHash(workspaceId: string, sourceHash: string, configuration: Jso
 export function approvedModelCheckpoints(configuration: NormalizedConfiguration): Record<ModelId, string | null> {
   return Object.fromEntries(APPROVED_MODELS
     .filter((modelId) => configuration.models[modelId].enabled && configuration.models[modelId].weight > 0)
-    .map((modelId) => [modelId, (modelRegistry.models as Record<string, any>)[modelId].checkpoint || null])) as Record<ModelId, string | null>;
+    .map((modelId) => [modelId, modelId === "toto" ? modelRegistry.models.toto.variants.find(v => v.id === configuration.toto_variant)!.checkpoint : (modelRegistry.models as Record<string, any>)[modelId].checkpoint || null])) as Record<ModelId, string | null>;
 }
 
 export function approvedModelRevisions(configuration: NormalizedConfiguration): Partial<Record<ModelId, string>> {
   return Object.fromEntries(APPROVED_MODELS
     .filter((modelId) => configuration.models[modelId].enabled && configuration.models[modelId].weight > 0)
     .flatMap((modelId) => {
-      const revision = (modelRegistry.models as Record<string, any>)[modelId].checkpointRevision;
+      const revision = modelId === "toto" ? modelRegistry.models.toto.variants.find(v => v.id === configuration.toto_variant)!.checkpointRevision : (modelRegistry.models as Record<string, any>)[modelId].checkpointRevision;
       return revision ? [[modelId, revision]] : [];
     }));
 }
@@ -543,6 +630,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     calendar: plain(data.request).calendar,
     model_failure_policy: plain(data.request).failure_policy,
     models: plain(data.request).models,
+    toto_variant: plain(data.request).toto_variant,
     model_checkpoints: data.model_checkpoints,
     model_revisions: data.model_revisions || {},
     requested_weights: data.requested_weights,
@@ -623,6 +711,7 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
 }
 
 async function indexEnsembleRequest(options: Options, id: string, job: JsonRecord): Promise<void> {
+  if (job.guest_session === true && job.saved_to_profile !== true) return;
   const source = plain(job.source);
   const ref = options.db.collection("users").doc(text(job.user_id)).collection("requests").doc(`ensemble__${id}`);
   const metadata = {
@@ -712,16 +801,18 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
 
   router.post("/v1/ensemble-forecasts", wrap(options, async (req, res, principal, requestId) => {
     const body = plain(req.body);
-    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "history_lag_minutes"], "request");
+    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes"], "request");
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
     requireWorkspacePermission(access, "forecast.create");
-    const configuration = normalizeEnsembleConfiguration(body, access.plan);
-    const cutoff = historyCutoffAt(body.history_lag_minutes);
+    normalizeEnsembleConfiguration(body, access.plan);
+    const cutoff = absoluteHistoryCutoff(body);
     const materialized = await materializeSource(options, principal, workspaceId, body.source, cutoff);
-    if (cutoff !== undefined) Object.assign(materialized.source, { history_lag_minutes: body.history_lag_minutes,
+    const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(body, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
+    if (cutoff !== undefined) Object.assign(materialized.source, { history_lag_minutes: body.history_lag_minutes || 0,
       requested_input_cutoff_at: new Date(cutoff).toISOString(), analysis_mode: "historical_replay" });
+    if (body.prediction_end_at) materialized.source.requested_prediction_end_at = iso(body.prediction_end_at);
     validateModelHistory(configuration, materialized.rows.length);
     if (materialized.source.type === "prediction_market" && configuration.horizon_mode !== "frequency_periods") throw new PredictionMarketDataError("horizon_mode_unsupported", "Prediction markets use frequency periods, not equity trading sessions.", 422);
     const sourceHash = datasetHash(materialized.rows, materialized.source);
@@ -735,6 +826,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       frequency: materialized.frequency,
       calendar: materialized.source.type === "prediction_market" ? "NONE" : configuration.calendar,
       models: configuration.models,
+      toto_variant: configuration.toto_variant,
     };
     const hash = requestHash(workspaceId, sourceHash, normalizedRequest);
     const idempotencyKey = text(req.headers["idempotency-key"], 180);
@@ -769,6 +861,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       schema_version: WORKER_SCHEMA_VERSION,
       forecast_id: ref.id,
       user_id: principal.userId,
+      guest_session: Boolean(principal.guest),
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: normalizedRequest,
@@ -779,6 +872,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       model_checkpoints: approvedModelCheckpoints(configuration),
       model_revisions: approvedModelRevisions(configuration),
       input_row_count: materialized.rows.length,
+      input_cutoff_at: materialized.rows.at(-1)!.timestamp,
       input_timestamp_column: "timestamp",
       input_target_column: "target",
       input_timezone: materialized.timezone,
@@ -835,6 +929,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       schema_version: WORKER_SCHEMA_VERSION,
       forecast_id: ref.id,
       user_id: principal.userId,
+      guest_session: Boolean(principal.guest),
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: original.request,
@@ -843,6 +938,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       source: original.source,
       dataset_hash: original.dataset_hash,
       input_row_count: rows.length,
+      input_cutoff_at: rows.at(-1)!.timestamp,
       input_timestamp_column: "timestamp",
       input_target_column: "target",
       input_timezone: original.input_timezone || "UTC",
@@ -911,24 +1007,79 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const access = await resolveWorkspaceAccess(options.db, principal, data.workspace_id);
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");
     requireWorkspacePermission(access, "forecast.read", id);
+    // Authorization is evaluated before every cache hit. Only the data fetch
+    // is coalesced; revoked workspace access is never cached.
+    const cacheKey = `${id}:${Math.floor(Date.now()/60000)}`;
+    const cached = observationCache.get(cacheKey);
+    if (cached && cached.until > Date.now()) { sendData(res, await cached.value, requestId); return; }
+    const load = async (): Promise<JsonRecord> => {
     const source = plain(data.source), config = plain(data.request);
-    const input = await loadInputRows(snap.ref, 2);
-    const cutoff = Date.parse(input[input.length - 1].timestamp);
+    const cutoff = Date.parse(text(data.input_cutoff_at) || (await loadInputRows(snap.ref, 2)).at(-1)!.timestamp);
     const frequency = text(config.frequency, 30);
     let rows: Array<{ timestamp: string; target: number }> = [];
     let availability = "available";
     // No heavy inference and no changes to immutable predictions/input snapshot.
-    if (Date.now() - cutoff > 7 * 86400_000) availability = "live_overlay_window_expired";
+    if (Date.now() - cutoff > 90 * 86400_000) availability = "live_overlay_window_expired";
     else if (source.type === "prediction_market") {
       const result = await predictionForecastHistory(source.provider as "kalshi" | "polymarket_us", text(source.symbol), text(source.contract_id), frequency, { allowResolved: true, since: cutoff, minimumRows: 0, includeQuotes: true });
       rows = result.rows;
     } else if (source.type === "ticker") {
       try {
-        const history = await fetchStockHistoryData({ symbol: text(source.symbol), source: source.provider, start: new Date(cutoff).toISOString(), end: new Date().toISOString(), timeframe: ({ "1D": "1Day", "1h": "1Hour", "1min": "1Min" } as Record<string,string>)[frequency] || frequency, session: "regular", limit: 500 });
-        rows = history.rows.map(row => ({timestamp:row.timestamp,target:Number(row.close)}));
+        // A daily forecast still overlays completed intraday quotes. Never
+        // mistake an unfinished daily candle for the latest one-minute price.
+        rows = await tickerOverlayRows(source, frequency, cutoff);
       } catch (error) { if (error instanceof AlpacaError && error.code === "no_data") availability = "no_new_observations"; else throw error; }
     } else availability = "immutable_dataset";
-    sendData(res, { forecast_id: id, rows: rows.filter(row => Date.parse(row.timestamp) > cutoff), input_cutoff: new Date(cutoff).toISOString(), observed_at: new Date().toISOString(), availability, refresh_after_seconds: 60 }, requestId);
+    return { forecast_id: id, rows: rows.filter(row => Date.parse(row.timestamp) > cutoff && Date.parse(row.timestamp) <= Math.floor(Date.now()/60000)*60000), input_cutoff: new Date(cutoff).toISOString(), observed_at: new Date().toISOString(), availability, observation_frequency: source.type === "ticker" && frequency !== "1min" ? "forecast_interval_and_recent_1min" : frequency, refresh_after_seconds: 60 };
+    };
+    const value = load().catch(error => { observationCache.delete(cacheKey); throw error; });
+    observationCache.set(cacheKey, {until:Date.now()+60000,value});
+    while(observationCache.size>50) observationCache.delete(observationCache.keys().next().value!);
+    sendData(res, await value, requestId);
+  }));
+
+  router.post("/v1/ensemble-forecasts/:forecastId/prepare-save", wrap(options, async (req, res, principal, requestId) => {
+    if (!principal.guest || principal.authMethod !== "firebase_session") throw new Error("workspace_permission_denied");
+    const id = safeId(req.params.forecastId, 220);
+    const ref = options.db.collection(JOBS).doc(id);
+    const token = crypto.randomBytes(32).toString("hex");
+    await options.db.runTransaction(async transaction => {
+      const snapshot = await transaction.get(ref);
+      const job = plain(snapshot.data());
+      if (!snapshot.exists || job.user_id !== principal.userId || job.workspace_id !== principal.userId || job.guest_session !== true) throw new Error("workspace_forbidden");
+      if (job.status !== "completed") throw new Error("claim_conflict");
+      transaction.update(ref, { guest_save_hash: crypto.createHash("sha256").update(token).digest("hex"), guest_save_expires_at: Date.now()+15*60000 });
+    });
+    // One-use proof of guest ownership, never readable by client JavaScript.
+    res.append("Set-Cookie", `q_forecast_save=${id}.${token}; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/ensemble-forecasts; Max-Age=900`);
+    sendData(res, {forecast_id:id, ready_to_sign_in:true}, requestId);
+  }));
+
+  router.post("/v1/ensemble-forecasts/:forecastId/save", wrap(options, async (req, res, principal, requestId) => {
+    if (principal.guest) throw new Error("workspace_permission_denied");
+    const ref = options.db.collection(JOBS).doc(safeId(req.params.forecastId, 220));
+    const snapshot = await ref.get();
+    if (!snapshot.exists) throw new Error("forecast_job_not_found");
+    let job = plain(snapshot.data());
+    const claim = text(req.headers.cookie, 16000).split(";").map(v=>v.trim()).find(v=>v.startsWith("q_forecast_save="))?.slice("q_forecast_save=".length) || "";
+    const transferring = job.guest_session === true && job.user_id !== principal.userId;
+    const access = await resolveWorkspaceAccess(options.db, principal, transferring ? principal.userId : job.workspace_id);
+    authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
+    requireWorkspacePermission(access, "forecast.read", ref.id);
+    await options.db.runTransaction(async transaction => {
+      const current = await transaction.get(ref);
+      job = plain(current.data());
+      if (job.user_id !== principal.userId) {
+        validateGuestForecastClaim(ref.id, claim, job);
+        job = {...job, guest_origin_user_id:job.user_id, user_id:principal.userId, workspace_id:principal.userId};
+      }
+      const patch = {user_id:job.user_id, workspace_id:job.workspace_id, ...(job.guest_origin_user_id ? {guest_origin_user_id:job.guest_origin_user_id} : {}), saved_to_profile:true, guest_save_hash:null, guest_save_expires_at:0};
+      transaction.update(ref, patch);
+      job = {...job,...patch};
+    });
+    res.append("Set-Cookie", "q_forecast_save=; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/ensemble-forecasts; Max-Age=0");
+    await indexEnsembleRequest(options, ref.id, job);
+    sendData(res, { forecast_id: ref.id, saved: true }, requestId);
   }));
 
   router.get("/v1/ensemble-forecasts/:forecastId/download", wrap(options, async (req, res, principal, requestId) => {
@@ -973,6 +1124,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
   }));
 
   router.post("/v1/ensemble-forecast-presets", wrap(options, async (req, res, principal, requestId) => {
+    if (principal.guest) throw new Error("workspace_permission_denied");
     const body = plain(req.body);
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);

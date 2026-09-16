@@ -101,6 +101,7 @@ export function withPlatformAccess(options: Options, handler: Handler): (req: Re
     let status = 500;
     try {
       principal = await authenticatePlatformRequest(req, options);
+      if (principal.guest && /\/me\/api-keys|\/collaborators|\/calendar\/interactions/.test(req.path)) throw new Error("workspace_permission_denied");
       await enforceRateLimit(options, principal);
       await handler(req, res, principal, requestId);
       status = res.statusCode;

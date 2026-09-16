@@ -12,7 +12,6 @@ def test_pages_exist():
         "forecasting.html",
         "screener.html",
         "dashboard.html",
-        "pricing.html",
         "contact.html",
         "shop.html",
         "ticker.html",
@@ -40,7 +39,6 @@ def test_pages_include_analytics():
         "forecasting.html",
         "screener.html",
         "dashboard.html",
-        "pricing.html",
         "contact.html",
         "shop.html",
         "ticker.html",
@@ -52,6 +50,13 @@ def test_pages_include_analytics():
         assert ("site.webmanifest" in html) or ("manifest.json" in html)
     dashboard_html = (PAGES / "dashboard.html").read_text()
     assert "firebase-messaging-compat" in dashboard_html
+
+
+def test_archived_pricing_does_not_boot_analytics_or_app():
+    html = (PAGES / "pricing.html").read_text()
+    assert "url=/forecasting" in html
+    assert "app.js" not in html
+    assert "firebase-analytics" not in html
 
 
 def test_vercel_observability_is_built_and_loaded_globally():
@@ -71,6 +76,9 @@ def test_vercel_observability_is_built_and_loaded_globally():
 
     for page in PAGES.rglob("*.html"):
         html = page.read_text()
+        if page.name == "pricing.html":
+            assert 'url=/forecasting' in html
+            continue
         assert "/app.js" in html or "/vercel-observability.js" in html, f"Observability missing from {page}"
 
     for direct_page in [PUBLIC / "shop/success.html"]:
@@ -215,25 +223,13 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
     assert "Preview rows will appear here." in client
 
 
-def test_pricing_describes_platform_features_without_generic_model_pricing():
+def test_paid_pricing_is_archived_and_free_access_is_explicit():
     pricing = (PAGES / "pricing.html").read_text().lower()
-    for required in [
-        "prediction csv",
-        "anomaly analysis",
-        "historical equity",
-        "options",
-        "polymarket us/kalshi",
-        "aws/sagemaker",
-        "billed separately by aws",
-        "$39/month",
-        "$374/year",
-        "$99/month",
-        "$950/year",
-        "$249/month",
-        "$2,390/year",
-        "enterprise data licensing",
-    ]:
-        assert required in pricing
+    assert 'url=/forecasting' in pricing
+    home = (PAGES / "index.html").read_text().lower()
+    assert "free to explore" in home
+    assert "billed separately by aws" in home
+    assert "$39/mo" not in home
     for removed in ["gpt token", "llm token", "ai model access", "quantura go", "quantura plus", "quantura business", "quantura desk"]:
         assert removed not in pricing
 
@@ -391,12 +387,13 @@ def test_prediction_market_runners_and_watchdog_are_independent():
     assert "/api/health/watchdog" in smoke
 
 
-def test_prediction_csv_analysis_is_available_from_forecast_foundry():
+def test_foundry_is_archived_in_favor_of_direct_csv_forecasting():
     forecasting = (PAGES / "forecasting.html").read_text()
     client = (PUBLIC / "app.js").read_text()
-    assert 'id="foundry-source-kind" name="sourceKind" type="hidden" value="prediction_csv"' in forecasting
+    assert 'data-panel="autopilot"' not in forecasting
     assert "Download business-day CSV" not in forecasting
-    assert 'id="foundry-file-help"' in forecasting
+    assert 'id="ensemble-csv-file"' in forecasting
+    assert 'id="ensemble-csv-help"' in forecasting
     assert "P50 95% Statistical Anomaly Band" in client
     for marker in [
         "forecast-summary-card",
@@ -419,7 +416,7 @@ def test_historical_data_supports_alpaca_yahoo_and_no_start_date():
     assert 'source: byId("market-history-source")?.value || "auto"' in client
 
 
-def test_notifications_page_has_functional_inbox_and_delivery_controls():
+def test_notifications_ui_is_archived_without_deleting_delivery_implementation():
     dashboard = (PAGES / "dashboard.html").read_text()
     client = (PUBLIC / "app.js").read_text()
     for marker in [
@@ -431,7 +428,8 @@ def test_notifications_page_has_functional_inbox_and_delivery_controls():
         'id="notifications-send-test"',
         'id="notifications-preferences-host"',
     ]:
-        assert marker in dashboard
+        assert marker not in dashboard
+    assert 'data-panel="notifications"' not in dashboard
     assert "loadNotificationFeed" in client
     assert "markAllNotificationsRead" in client
     assert "MODEL_COUNCIL_OUTPUT_DISCLAIMER" not in client
@@ -456,7 +454,7 @@ def test_notifications_do_not_request_or_store_location_context():
     ]:
         assert obsolete not in combined_ui
 
-    assert 'id="notifications-preferences-host"' in dashboard
+    assert 'id="notifications-preferences-host"' not in dashboard
     assert 'role="switch"' in client
     assert "notificationPrivacy: admin.firestore.FieldValue.delete()" in backend
     assert "fetchIpDerivedRegion" not in backend
@@ -489,7 +487,7 @@ def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
     client = (PUBLIC / "app.js").read_text()
     ssr = (ROOT / "functions_ssr" / "index.js").read_text()
     assert 'const QUANTURA_ICON_URL = "/favicon.svg?v=20260909a"' in client
-    assert 'const PUBLIC_SHELL_ASSET_VERSION = [process.env.GITLAB_SERVICE_VERSION, process.env.VERCEL_GIT_COMMIT_SHA]' in ssr
+    assert 'const PUBLIC_SHELL_ASSET_VERSION = [process.env.VERCEL_GIT_COMMIT_SHA, process.env.GITLAB_SERVICE_VERSION]' in ssr
     config = json.loads((ROOT / "vercel.json").read_text())
     for asset in ("/app.min.js", "/styles.min.css"):
         header = next(h for h in config["headers"] if h["source"] == asset)

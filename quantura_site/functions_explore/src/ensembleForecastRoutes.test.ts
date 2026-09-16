@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import test from "node:test";
 import {
   normalizeEnsembleConfiguration,
@@ -11,11 +12,69 @@ import {
   apiError,
   validateModelHistory,
   historyCutoffAt,
+  absoluteHistoryCutoff,
+  resolvePredictionEnd,
   expiredEnsembleJobCode,
   approvedModelCheckpoints,
   approvedModelRevisions,
+  validateGuestForecastClaim,
+  validateUploadedSeries,
+  tickerOverlayRows,
 } from "./ensembleForecastRoutes";
+import {automaticSportsHistoryPhase, eventHistoryRange} from "./eventHistory";
+
+test("sports auto switches at 32 elapsed in-game minutes, including cutoff replays", () => {
+  const start=Date.parse('2026-09-16T20:00:00Z');
+  for (const minutes of [-60,0,31.99]) assert.equal(automaticSportsHistoryPhase(start,start+minutes*60000),'both');
+  for (const minutes of [32,33,120]) {
+    const phase=automaticSportsHistoryPhase(start,start+minutes*60000);
+    assert.equal(phase,'in_game');
+    assert.equal(eventHistoryRange(start-100*60000,start+minutes*60000,start,{history_phase:phase,history_lookback_minutes:0}).start,start);
+  }
+  assert.equal(automaticSportsHistoryPhase(NaN,start),'both');
+  const preset=normalizeEnsemblePreset({source:{type:'prediction_market',history_phase:'auto'},models:{prophet:{enabled:true,weight:1}}},'free');
+  assert.equal((preset.history_controls as any).history_phase,'auto');
+});
+
+test("guest save is bound to the completed owner's job, one-use and expiring", () => {
+  const token='a'.repeat(64), id='forecast-example';
+  const job={guest_session:true,status:'completed',user_id:'guest',workspace_id:'guest',guest_save_expires_at:2000,guest_save_hash:crypto.createHash('sha256').update(token).digest('hex')};
+  validateGuestForecastClaim(id,`${id}.${token}`,job,1000);
+  for(const patch of [{status:'running'},{guest_session:false},{workspace_id:'other'},{guest_save_expires_at:999},{guest_save_hash:null}]) assert.throws(()=>validateGuestForecastClaim(id,`${id}.${token}`,{...job,...patch},1000),/forbidden/);
+  for(const cookie of ['',`other.${token}`,`${id}.${'b'.repeat(64)}`,`${id}.${token}.extra`]) assert.throws(()=>validateGuestForecastClaim(id,cookie,job,1000),/forbidden/);
+});
+
+test("uploaded rows reject invalid targets and dates rather than silently dropping them",()=>{
+  validateUploadedSeries([{time:'2026-09-16T20:00:00Z',value:0}], 'time','value');
+  for(const row of [{time:'bad',value:1},{time:'2026-09-16',value:''},{time:'2026-09-16',value:NaN},{time:'2026-09-16',value:false}]) assert.throws(()=>validateUploadedSeries([row],'time','value'),/source_series_row_invalid/);
+  assert.equal(resolvePredictionEnd({prediction_end_at:'2026-09-16T12:59:00Z',calendar:'NONE'},'2026-09-16T10:00:00Z','1h').prediction_length,2);
+});
 import { AlpacaError } from "./alpacaClient";
+test("stock overlays include completed minute closes beside hourly forecasts, without partial bars",async()=>{
+  const cutoff=Date.parse('2026-09-16T14:00:00Z'), now=Date.parse('2026-09-16T16:01:30Z');
+  const calls:string[]=[];
+  const fetchHistory:any=async(request:any)=>{
+    calls.push(request.timeframe);
+    return {rows:request.timeframe==='1Min' ? [{timestamp:'2026-09-16T16:00:00Z',close:101},{timestamp:'2026-09-16T16:01:00Z',close:999}] : [{timestamp:'2026-09-16T14:00:00Z',close:100},{timestamp:'2026-09-16T16:00:00Z',close:999}]};
+  };
+  const rows=await tickerOverlayRows({symbol:'PLTR',provider:'alpaca'},'1h',cutoff,now,fetchHistory);
+  assert.deepEqual(calls,['1Min','1Hour']);
+  assert.deepEqual(rows.map(r=>[r.timestamp,r.target]),[['2026-09-16T15:00:00.000Z',100],['2026-09-16T16:01:00.000Z',101]]);
+});
+test("all five approved Toto variants are free, pinned and distinct cache configurations", () => {
+  const rows=(publicModelCapabilities('free').models as any[]).find(m=>m.id==='toto');
+  assert.equal(rows.available,true);assert.equal(rows.variants.length,5);
+  const identities=new Set<string>();
+  for(const variant of rows.variants){
+    const config=normalizeEnsembleConfiguration({toto_variant:variant.id,models:{prophet:{enabled:false},toto:{enabled:true,weight:1}},quantiles:[.1,.5,.9]},'free');
+    assert.equal(approvedModelCheckpoints(config).toto,variant.checkpoint);
+    assert.match(approvedModelRevisions(config).toto!,/^[a-f0-9]{40}$/);
+    identities.add(JSON.stringify(config));
+  }
+  assert.equal(identities.size,5);
+  for(const value of ['../secret','Datadog/arbitrary',{},''])assert.throws(()=>normalizeEnsembleConfiguration({toto_variant:value},'free'),/toto_variant_unsupported/);
+  assert.throws(()=>normalizeEnsembleConfiguration({prediction_length:1.5},'free'),/prediction_length/);
+});
 import { parseMarketLink } from "./marketLink";
 import { watchdogAuthorized, shouldRecoverScreener } from "./marketResearchWatchdog";
 import { forecastObservationWindow, forecastObservationLimit, PredictionMarketDataError, isMoneyline, gameTiming, resolveMarketLink, normalizePolymarketEvents } from "./predictionMarketData";
@@ -229,11 +288,25 @@ test("weights reject negative and NaN values", () => {
   );
 });
 
-test("foundation models are plan gated", () => {
-  assert.throws(
-    () => normalizeEnsembleConfiguration({ models: { toto: { enabled: true, weight: 1 } }, quantiles: [0.5] }, "pro"),
-    /toto_required_entitlement/
-  );
+test("free access includes configured foundation models without bypassing model constraints", () => {
+  for (const plan of ["free", "pro", "quant", "research"] as const) {
+    const config = normalizeEnsembleConfiguration({ models: { toto: { enabled: true, weight: 1 } }, quantiles: [0.5], prediction_length: 60 }, plan);
+    assert.equal(config.models.toto.enabled, true);
+    assert.throws(() => normalizeEnsembleConfiguration({ prediction_length: 513 }, plan), /prediction_length/);
+  }
+});
+
+test("absolute local-time cutoffs become UTC with future, old and conflicting values rejected", () => {
+  const now = Date.parse("2026-09-15T20:00:00Z");
+  assert.equal(absoluteHistoryCutoff({history_cutoff_at:"2026-09-15T15:30:00-04:00"}, now), Date.parse("2026-09-15T19:30:00Z"));
+  for (const value of ["2026-09-15T21:00:00Z", "2020-01-01T00:00:00Z", "2026-09-15T15:30:00", "bad"]) assert.throws(() => absoluteHistoryCutoff({history_cutoff_at:value},now));
+  assert.throws(() => absoluteHistoryCutoff({history_cutoff_at:"2026-09-15T15:30:00-04:00",history_lag_minutes:30},now), /conflict/);
+  const minute = resolvePredictionEnd({prediction_end_at:"2026-09-15T16:00:00-04:00",calendar:"NONE"},"2026-09-15T19:15:00Z","1min");
+  assert.equal(minute.prediction_length,45);
+  assert.equal(minute.horizon_mode,"frequency_periods");
+  const daily = resolvePredictionEnd({prediction_end_at:"2026-09-18T16:00:00-04:00",calendar:"NYSE"},"2026-09-11T00:00:00Z","1D");
+  assert.equal(daily.prediction_length,7); assert.equal(daily.horizon_mode,"calendar_days");
+  assert.throws(() => resolvePredictionEnd({prediction_end_at:"2026-09-10T00:00:00Z"},"2026-09-11T00:00:00Z","1D"));
 });
 
 test("TimesFM production license flag is independent from access approval", () => {

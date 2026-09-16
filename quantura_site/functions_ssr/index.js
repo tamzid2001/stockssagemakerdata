@@ -81,7 +81,7 @@ const injectRemoteConfig = (html, { initialFetchResponse }) => {
 // Follow the committed deployment, not a manually maintained date string.
 // Validate metadata before using it in markup. Local development has a stable
 // fallback; production deploy.sh and Vercel Git builds both provide a commit.
-const PUBLIC_SHELL_ASSET_VERSION = [process.env.GITLAB_SERVICE_VERSION, process.env.VERCEL_GIT_COMMIT_SHA]
+const PUBLIC_SHELL_ASSET_VERSION = [process.env.VERCEL_GIT_COMMIT_SHA, process.env.GITLAB_SERVICE_VERSION]
   .find((value) => /^[a-f0-9]{40}$/i.test(value || ""))?.slice(0, 12) || "20260912b";
 const injectPublicShellAssets = (html) =>
   String(html || "")
@@ -448,6 +448,8 @@ const ssrHandler = async (req, res) => {
   }
 
   const requestPath = normalizePath(req.path || "/");
+  if (["/pricing", "/purchase", "/autopilot"].includes(requestPath)) { res.redirect(308, "/forecasting"); return; }
+  if (["/notifications", "/dashboard/notifications", "/watchlist"].includes(requestPath)) { res.redirect(308, "/dashboard"); return; }
   if (["/developers/api", "/docs/api", "/developers-api"].includes(requestPath)) {
     res.redirect(308, "https://quantura.mintlifysite.com/");
     return;

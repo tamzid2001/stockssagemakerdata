@@ -43,11 +43,12 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/forecast-controls.js?v=20260915a"></script>
     <script defer src="/app.js?v=20260824a"></script>
     <script defer src="/data-integrations.js?v=20260908a"></script>
     <script defer src="/market-search.js?v=20260908a"></script>
     <script defer src="/screener-panel-lazy.js?v=20260831a"></script>
-  
+
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -60,16 +61,7 @@
           <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
           <span>QUANTURA</span>
         </a>
-        <nav class="nav-links">
-          <a href="/forecasting" data-analytics="nav_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Terminal</span></a>
-          <a href="/blog" data-analytics="nav_blog"><i class="iconoir-page" aria-hidden="true"></i><span>Blog</span></a>
-          <a href="/research" data-analytics="nav_research"><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Research</span></a>
-          <a href="/events" data-analytics="nav_events"><i class="iconoir-calendar" aria-hidden="true"></i><span>Events</span></a>
-          <a href="/shop" data-analytics="nav_shop"><i class="iconoir-shop" aria-hidden="true"></i><span>Shop</span></a>
-          <a href="/about" data-analytics="nav_about"><i class="iconoir-info-circle" aria-hidden="true"></i><span>About</span></a>
-          <a href="/pricing" data-analytics="nav_pricing"><i class="iconoir-wallet" aria-hidden="true"></i><span>Pricing</span></a>
-          <a href="/contact" data-analytics="nav_contact"><i class="iconoir-mail" aria-hidden="true"></i><span>Contact Us</span></a>
-        </nav>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
           <div class="language-picker">
             <label class="language-picker-label" for="language-select">Language</label>
@@ -84,9 +76,9 @@
             </select>
           </div>
           <span id="header-user-status" class="pill">Logged Out</span>
-          <a class="cta secondary icon-only" id="header-notifications" href="/account" data-analytics="nav_notifications" aria-label="Sign in to manage notifications" title="Notifications"><i class="iconoir-bell-notification" aria-hidden="true"></i></a>
+
           <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
-          <a class="cta" href="/pricing"><i class="iconoir-page" aria-hidden="true"></i><span>View plans</span></a>
+
         </div>
       </div>
     </header>
@@ -97,7 +89,7 @@
 	          <div class="sidebar-card workspace-sidebar-switcher"><label class="small" for="forecast-workspace-select"><strong>Workspace</strong></label><select id="forecast-workspace-select" data-workspace-select><option>Sign in to load</option></select><a class="cta secondary small" href="/collaboration"><i class="iconoir-settings" aria-hidden="true"></i><span>Workspace settings</span></a></div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Q Forecast</span></a>
-              <a class="sidebar-link" href="/autopilot" data-panel-target="autopilot"><i class="iconoir-rocket" aria-hidden="true"></i><span>Forecast Foundry</span></a>
+
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
               <a class="sidebar-link" href="/historical-data" data-panel-target="news"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
@@ -150,7 +142,7 @@
                               <select id="ensemble-source-type" name="source_type">
                                 <option value="ticker">Market ticker</option>
                                 <option value="prediction_market">Selected prediction market</option>
-                                <option value="workspace_dataset">Workspace dataset</option>
+                                <option value="series">Upload your own CSV</option>
                               </select>
                             </div>
                             <div class="field" data-ensemble-source="ticker">
@@ -159,7 +151,7 @@
                             </div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><span class="label">Selected team / side</span><strong id="ensemble-selected-market">Choose a market above</strong></div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-market-frequency">Observed bars</label><select id="ensemble-market-frequency" name="market_frequency"><option value="1min">Minute</option><option value="1h">Hourly</option><option value="1D">Daily</option></select></div>
-                            <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-phase">Game history</label><select id="ensemble-history-phase" name="history_phase"><option value="both">Pregame + in-game</option><option value="in_game">In-game only</option><option value="pregame">Pregame only</option></select></div>
+                            <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-phase">Game history</label><select id="ensemble-history-phase" name="history_phase"><option value="auto">Auto · in-game only after 32 min</option><option value="both">Pregame + in-game</option><option value="in_game">In-game only</option><option value="pregame">Pregame only</option></select><small class="muted">Auto uses pregame + in-game before 32 elapsed game minutes. Flat observed prices are allowed.</small></div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-lookback">History time window</label><div class="ensemble-duration-control"><input id="ensemble-history-lookback" name="history_lookback" type="number" min="0" max="129600" step="1" value="0" aria-label="History lookback amount" /><select id="ensemble-history-lookback-unit" name="history_lookback_unit" aria-label="History lookback unit"><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><small class="muted">0 = no extra time restriction. In-game + 60 minutes uses only the latest hour of play.</small></div>
                             <div class="field" data-ensemble-history-count><label class="label" for="ensemble-history-limit">Last N observations</label><input id="ensemble-history-limit" name="history_limit" type="number" min="2" max="500" step="1" value="500" required /><small class="muted">Up to N real bars before the cutoff, after any history filters. Missing intervals are not filled. Model minimums still apply.</small></div>
                             <div class="field" data-ensemble-source="ticker">
@@ -179,18 +171,30 @@
                               <label class="label" for="ensemble-target-column">Target column</label>
                               <input id="ensemble-target-column" name="target_column" value="target" />
                             </div>
+                            <div class="field" data-ensemble-source="series" hidden>
+                              <label class="label" for="ensemble-csv-file">Time-series CSV <button id="ensemble-csv-help-open" type="button" class="help-icon" aria-label="CSV upload requirements" aria-haspopup="dialog">?</button></label>
+                              <input id="ensemble-csv-file" type="file" accept=".csv,text/csv" />
+                              <small id="ensemble-csv-status" class="muted" role="status">Choose a CSV, then select its date and value columns.</small>
+                            </div>
+                            <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-date">Date / time column</label><select id="ensemble-csv-date"></select></div>
+                            <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-target">Numeric value column</label><select id="ensemble-csv-target"></select></div>
+                            <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-frequency">Observation interval</label><select id="ensemble-csv-frequency"><option value="1D">Daily</option><option value="1h">Hourly</option><option value="1min">Minute</option></select></div>
                             <div class="field">
-                              <label class="label" for="ensemble-prediction-length">Prediction length</label>
-                              <input id="ensemble-prediction-length" name="prediction_length" type="number" min="1" max="512" value="30" required />
+                              <label class="label" for="ensemble-prediction-mode">Forecast until</label>
+                              <select id="ensemble-prediction-mode"><option value="duration">Duration</option><option value="date">Calendar date and time</option></select>
+                              <div id="ensemble-duration-fields" class="ensemble-duration-control"><input id="ensemble-prediction-length" name="prediction_length" type="number" min="1" max="512" value="30" required aria-label="Forecast duration" /><select id="ensemble-prediction-unit" aria-label="Forecast duration unit"><option value="days">Days / sessions</option><option value="hours">Hours</option><option value="minutes">Minutes</option></select></div>
+                              <input id="ensemble-prediction-end" type="datetime-local" step="60" aria-label="Forecast end in your local timezone" hidden disabled />
                             </div>
                             <div class="field">
                               <label class="label" for="ensemble-horizon-mode">Horizon type</label>
                               <select id="ensemble-horizon-mode" name="horizon_mode"><option value="trading_sessions">Trading sessions</option><option value="calendar_days">Calendar days</option><option value="frequency_periods">Dataset frequency periods</option></select>
                             </div>
                             <div class="field">
-                              <label class="label" for="ensemble-history-lag">Data cutoff</label>
-                              <div class="ensemble-duration-control"><input id="ensemble-history-lag" name="history_lag_amount" type="number" min="0" max="129600" step="1" value="0" aria-label="Data cutoff amount" /><select id="ensemble-history-lag-unit" name="history_lag_unit" aria-label="Data cutoff unit"><option value="minutes">Minutes ago</option><option value="hours">Hours ago</option><option value="days" selected>Days ago</option></select></div>
-                              <span class="small muted">0 = latest. Earlier cutoff creates a historical replay, with later prices overlaid.</span>
+                              <label class="label" for="ensemble-cutoff-mode">Data cutoff</label>
+                              <select id="ensemble-cutoff-mode"><option value="latest">Latest available</option><option value="date">Calendar date and time</option><option value="relative">Minutes / hours / days ago</option></select>
+                              <input id="ensemble-history-cutoff" type="datetime-local" step="60" aria-label="Data cutoff in your local timezone" hidden disabled />
+                              <div id="ensemble-relative-cutoff" class="ensemble-duration-control" hidden><input id="ensemble-history-lag" name="history_lag_amount" type="number" min="0" max="129600" step="1" value="0" aria-label="Data cutoff amount" /><select id="ensemble-history-lag-unit" name="history_lag_unit" aria-label="Data cutoff unit"><option value="minutes">Minutes ago</option><option value="hours">Hours ago</option><option value="days" selected>Days ago</option></select></div>
+                              <small id="ensemble-timezone-label" class="muted">Times use your device timezone. Later prices overlay the forecast.</small>
                             </div>
                           </div>
 
@@ -241,6 +245,15 @@
 
                           <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
                         </form>
+                        <dialog id="ensemble-csv-help" class="ensemble-help-dialog" aria-labelledby="ensemble-csv-help-title">
+                          <div class="forecast-section-heading"><h3 id="ensemble-csv-help-title">Forecast your own time series</h3><button id="ensemble-csv-help-close" class="task-chip" type="button">Close</button></div>
+                          <p>Upload a CSV with a header row, a date/time column and one numeric target. Select both columns after upload. Use 40–10,000 rows, at most 2 MB. Values must be finite; missing values are rejected, never invented.</p>
+                          <pre>timestamp,value
+2026-09-01T09:30:00-04:00,100.5
+2026-09-01T09:31:00-04:00,101.2</pre>
+                          <p>ISO dates represent daily observations. Date-times without an offset use your device timezone; include an explicit offset around daylight-saving transitions. Rows are sorted and duplicate timestamps use the last submitted value.</p>
+                          <p>The selected columns are sent securely for the forecast job. Guest results belong to your guest session; an account is needed to keep requests in your profile. Uploaded data is not automatically public.</p>
+                        </dialog>
                         <dialog id="ensemble-settings-help" class="ensemble-help-dialog" aria-labelledby="ensemble-settings-help-title">
                           <div class="forecast-section-heading"><h3 id="ensemble-settings-help-title">Advanced forecast settings</h3><button id="ensemble-settings-help-close" class="task-chip" type="button" autofocus>Close</button></div>
                           <dl>
@@ -249,13 +262,13 @@
                             <dt>Target transform</dt><dd>Auto uses logarithms for strictly positive values; None uses original values. Log requires positive inputs. Prediction-market probabilities use the service's bounded probability method automatically.</dd>
                             <dt>Model failure policy</dt><dd>Fail reproducibly stops if a selected model fails. Renormalize continues only if a surviving model supports every requested quantile, and reports the actual participating models and weights.</dd>
                             <dt>Dataset interval</dt><dd>Only needed for uploaded datasets. Detect reads timestamp spacing; choose an explicit interval for irregular data. Market data already has an interval selector, so no second setting is needed. Custom intervals use supported pandas frequency notation, such as 2h.</dd>
-                            <dt>Data cutoff</dt><dd>Choose minutes, hours, or days before now. Zero means latest. A 30-minute cutoff plus a 60-minute forecast overlays already-observed outcomes separately. This is a replay generated now, not a forecast published earlier.</dd>
+                            <dt>Data cutoff and forecast end</dt><dd>Choose an exact calendar date/time in your device timezone, or a duration in days, hours or minutes. Latest uses the newest available observation. A 30-minute cutoff plus a 60-minute forecast overlays already-observed outcomes separately. This is a replay generated now, not a forecast published earlier.</dd><dt>Game history</dt><dd>Auto uses pregame plus in-game history until 32 elapsed game minutes, then only in-game observations. Missing game start keeps both phases. Flat genuine observations are allowed; gaps are never filled.</dd><dt>Toto size</dt><dd>Choose an approved checkpoint from 4M through 2.5B. Larger checkpoints need more memory and startup time. The chosen revision is stored with your request.</dd>
                             <dt>Game history and lookback</dt><dd>Choose pregame, in-game, or both using the provider's recorded start. Set the history window to 60 minutes for only the last hour; zero uses up to 500 available bars. Genuine unchanged quotes can be forecast with a low-information warning. Missing prices are never filled and artificial variation is never added.</dd>
                             <dt>Quantiles and weights</dt><dd>P10 and P90 mark lower and upper positions in the model's forecast distribution—not guaranteed price boundaries. Equal entered weights are normalized per quantile; Toto and TimesFM do not supply P1 or P99.</dd>
                           </dl>
                         </dialog>
                         <progress id="ensemble-progress" class="ensemble-progress" aria-label="Forecast job progress" hidden></progress>
-                        <div id="ensemble-forecast-status" class="ensemble-job-status small muted" role="status" aria-live="polite">Sign in to load your available forecasting models.</div>
+                        <div id="ensemble-forecast-status" class="ensemble-job-status small muted" role="status" aria-live="polite">Free forecasting. Create an account only to keep requests in your profile. Fair-use compute limits apply.</div>
                         <section id="ensemble-forecast-results" class="ensemble-results" aria-labelledby="ensemble-results-title" hidden>
                           <div class="forecast-section-heading"><div><div class="eyebrow">Final ensemble</div><h3 id="ensemble-results-title">Probabilistic forecast</h3></div><span id="ensemble-result-state" class="status-pill">Queued</span></div>
                           <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
@@ -274,6 +287,7 @@
                             <details class="ensemble-toolbar-menu">
                               <summary class="task-chip"><i class="iconoir-download" aria-hidden="true"></i><span>Share &amp; export</span><i class="iconoir-nav-arrow-down" aria-hidden="true"></i></summary>
                               <div class="ensemble-toolbar-menu-items" role="group" aria-label="Share and export forecast">
+                                <button id="ensemble-save-profile" class="task-chip" type="button"><i class="iconoir-bookmark" aria-hidden="true"></i><span>Save to profile</span></button>
                                 <button id="ensemble-share-link" class="task-chip" type="button" title="Recipients must have workspace access"><i class="iconoir-link" aria-hidden="true"></i><span>Copy workspace share link</span></button>
                                 <a id="ensemble-download-csv" class="task-chip" href="#"><i class="iconoir-download" aria-hidden="true"></i><span>Download CSV</span></a>
                                 <a id="ensemble-download-json" class="task-chip" href="#"><i class="iconoir-download" aria-hidden="true"></i><span>Download JSON</span></a>
@@ -282,7 +296,7 @@
                               </div>
                             </details>
                           </div>
-                          <section id="ensemble-crossing-signals" class="ensemble-crossing-signals" aria-label="One-minute strategy signals" aria-live="polite"></section>
+                          <section id="ensemble-first-row-signal" class="ensemble-first-row-signal" aria-label="First forecast minute signal" aria-live="polite"></section>
                           <div id="ensemble-forecast-chart" class="chart ensemble-chart" aria-label="Final ensemble forecast chart"></div>
                           <section id="ensemble-live-quote" class="ensemble-live-quote" aria-label="Latest selected-side quote" aria-live="polite"></section>
                           <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>
@@ -337,102 +351,7 @@
                     </div>
                   </section>
 
-                  <section class="panel hidden" data-panel="autopilot" id="autopilot">
-                    <div class="container">
-                      <div class="section-title">
-                        <h2>Forecast Foundry</h2>
-                        <p class="small">Upload a prediction CSV and run deterministic quantile, anomaly, scenario, and tail-signal analysis inside your private workspace.</p>
-                      </div>
 
-                      <div class="foundry-layout">
-                        <div class="foundry-main-grid">
-                          <form id="foundry-source-form" class="card">
-                            <div class="eyebrow">Quantura Forecast Foundry</div>
-                            <h3>Upload prediction CSV</h3>
-                            <p class="small">Upload date-aware P10/P50/P90 forecasts. Ticker and actual-price columns are optional; additional quantiles and explicit 95% interval columns are supported.</p>
-                            <input id="foundry-source-kind" name="sourceKind" type="hidden" value="prediction_csv" />
-                            <input id="foundry-interval" name="interval" type="hidden" value="1d" />
-                            <div class="form-grid">
-                              <div class="field">
-                                <label class="label" for="foundry-ticker">Ticker (optional)</label>
-                                <input id="foundry-ticker" name="ticker" placeholder="AAPL" />
-                              </div>
-                              <div class="field">
-                                <label class="label" for="foundry-file">Prediction CSV</label>
-                                <input id="foundry-file" class="file-input" type="file" accept=".csv,text/csv" required />
-                                <div class="small muted" id="foundry-file-help">Include a date/timestamp plus P50 or median. P10, P90, other quantiles, ticker, actual price, and explicit 95% interval columns are optional.</div>
-                              </div>
-                            </div>
-
-                            <fieldset id="foundry-price-alert-config" class="forecast-alert-config hidden">
-                              <legend>Price Boundary Email Notifications</legend>
-                              <label class="forecast-alert-master-toggle">
-                                <input id="foundry-price-alert-enabled" type="checkbox" />
-                                <span><strong>Notify me when actual price crosses a forecast boundary</strong><small>Alerts use the latest completed Alpaca 1-minute bar close and begin with a baseline check, so merely remaining above or below a boundary does not send email.</small></span>
-                              </label>
-                              <div class="forecast-alert-options" id="foundry-price-alert-options">
-                                <div class="field">
-                                  <span class="label">Boundaries to monitor</span>
-                                  <div class="forecast-boundary-choices" role="group" aria-label="Forecast boundaries">
-                                    <label><input type="checkbox" value="P10" data-foundry-alert-boundary checked /> P10</label>
-                                    <label><input type="checkbox" value="P50" data-foundry-alert-boundary checked /> P50</label>
-                                    <label><input type="checkbox" value="P90" data-foundry-alert-boundary checked /> P90</label>
-                                  </div>
-                                </div>
-                                <div class="field">
-                                  <label class="label" for="foundry-price-alert-session">Market session</label>
-                                  <select id="foundry-price-alert-session">
-                                    <option value="regular" selected>Regular hours only</option>
-                                    <option value="extended">Include premarket and after-hours</option>
-                                  </select>
-                                </div>
-                              </div>
-                              <p class="small muted">Notifications go only to the verified email on your private account. Monitoring stops after this forecast horizon expires.</p>
-                            </fieldset>
-
-                            <div class="hero-actions" id="foundry-primary-actions" style="margin-top: 14px; justify-content: flex-start;">
-                              <button class="cta" id="foundry-prepare-button" type="submit" data-analytics="foundry_prepare_source">
-                                <i class="iconoir-data-transfer-up" aria-hidden="true"></i><span>Analyze prediction CSV</span>
-                              </button>
-                            </div>
-                            <p class="small" id="autopilot-status">Sign in with a full account to analyze a prediction CSV.</p>
-                          </form>
-
-                          <div class="card foundry-detail-card">
-                            <div class="card-head">
-                              <h3>Selected run</h3>
-                              <div class="hero-actions" style="justify-content: flex-start;">
-                                <button class="cta secondary small" id="foundry-refresh-button" type="button">
-                                  <i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh analysis</span>
-                                </button>
-                                <button class="cta secondary small" id="foundry-open-chart-button" type="button" disabled>
-                                  <i class="iconoir-graph-up" aria-hidden="true"></i><span>Open interactive chart</span>
-                                </button>
-                                <button class="cta secondary small" id="foundry-share-button" type="button">
-                                  <i class="iconoir-share-ios" aria-hidden="true"></i><span>Copy share link</span>
-                                </button>
-                              </div>
-                            </div>
-                            <div id="foundry-run-meta" class="panel-output small">Select a prediction analysis to inspect its schema, validation results, quantiles, and saved artifacts.</div>
-                            <div id="foundry-publish-host" class="small muted" style="margin-top: 12px;">Private workspace controls appear here after the prediction file is analyzed.</div>
-                            <div id="predictions-agent-output" class="panel-output small" style="margin-top: 14px;">Prediction quantile analysis will appear here.</div>
-                            <div id="foundry-price-alert-status" class="forecast-alert-status hidden" aria-live="polite"></div>
-                            <div id="predictions-plot-meta" class="small muted" style="margin-top: 14px;">Dataset preview metadata will appear here.</div>
-                            <div id="predictions-chart" class="chart foundry-chart-launcher" style="margin-top: 14px;"></div>
-                            <div id="predictions-preview" class="panel-output small" style="margin-top: 14px;">Preview will appear here.</div>
-                          </div>
-                        </div>
-
-                        <div class="results-panel foundry-runs-panel" id="autopilot-result">
-                          <div class="card-head">
-                            <h3>Prediction analyses</h3>
-                            <button class="cta secondary small" id="foundry-refresh-list" type="button">Refresh</button>
-                          </div>
-                          <div id="autopilot-output" class="panel-output small">Saved prediction analyses will appear here.</div>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
 
                   <section class="panel hidden" data-panel="sports-autopilot" id="sports-autopilot">
                     <div class="container prediction-market-hub" id="prediction-market-hub">
@@ -686,7 +605,7 @@
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
           <div><a href="/dashboard">Dashboard</a></div>
-          <div><a href="/pricing">Pricing</a></div>
+          <div></div>
           <div><a href="/contact">Contact</a></div>
         </div>
         <div class="small">

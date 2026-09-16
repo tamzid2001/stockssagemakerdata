@@ -24,30 +24,38 @@ test('every forecast action has one icon-labelled control above the chart, in bo
 const minute = '2026-09-13T12:';
 const row=(m,bid,target=bid)=>({timestamp:minute+String(m).padStart(2,'0')+':00Z',bid,target});
 function setup(){
-  const d=new JSDOM('',{runScripts:'outside-only'});
-  d.window.eval(source.slice(source.indexOf('  const ensembleMinuteSignals ='),source.indexOf('  const renderEnsembleSignals ='))+'\nwindow.signals=ensembleMinuteSignals;');
+  const d=new JSDOM('<section id="ensemble-first-row-signal"></section><table><tbody><tr><td>First row</td></tr></tbody></table>',{runScripts:'outside-only'});
+  const helper = require(path.join(root,'public/forecast-controls.js'));
+  d.window.QuanturaForecastControls={firstRowSignal:job=>helper.firstRowSignal(job,Date.parse(minute+'05:00Z'))};
+  d.window.eval('const escapeHtml=String,ensembleLocalTime=String,ui={ensembleResultTable:document.querySelector("table")};'+source.slice(source.indexOf('  const renderEnsembleSignals ='),source.indexOf('  const renderEnsembleLiveQuote ='))+'\nwindow.signals=renderEnsembleSignals;');
   const job={source:{type:'prediction_market'},frequency:'1min',completed_at:minute+'01:30Z',
     history:[row(1,.3)],predictions:[2,3,4,5].map(m=>({...row(m,0),quantiles:{'0.1':.2,'0.9':.8}})),
     observations:[row(2,.5),row(3,.85),row(4,.15)]};
-  return {d,job,run:j=>d.window.signals(j,Date.parse(minute+'05:00Z'))};
+  return {d,job,run:j=>{d.window.signals(j);return d.window.document.getElementById('ensemble-first-row-signal').textContent;}};
 }
 
-test('one-minute bid crossings produce P90 buy and P10 sell events',()=>{
-  const {d,job,run}=setup(), r=run(job);
-  assert.deepEqual(Array.from(r.events,e=>e.kind),['buy','sell']);
-  assert.equal(r.basis,'selected-side closing bid');
-  assert.equal(Date.parse(r.events[0].timestamp),Date.parse(minute+'03:00Z'));d.window.close();
+test('only the first completed quote displays Buy below P10, Sell above P90, otherwise Neutral',()=>{
+  const {d,job,run}=setup();
+  for(const [price,label] of [[.1,'BUY — below P10'],[.85,'SELL — above P90'],[.5,'NEUTRAL'],[.2,'NEUTRAL'],[.8,'NEUTRAL']]) {
+    job.observations[0]=row(2,price);
+    const text=run(job);assert.ok(text.includes(label));
+    assert.doesNotMatch(text,/Cross upward|Cross downward|P90 · Buy|P10 · Sell/);
+    assert.equal(d.window.document.querySelectorAll('.first-row-signal-badge').length,1);
+  }
+  d.window.close();
 });
 
-test('ticks, future quotes, gaps, absent bid, unpublished curves and unchanged-above do not fabricate signals',()=>{
+test('later crossings, ticks, missing first quote, unpublished and filled bars do not manufacture first-quote signals',()=>{
   const {d,job,run}=setup();
-  assert.equal(run({...job,observations:[row(2,.5),row(4,.85)]}).events.length,0);
-  assert.equal(run({...job,observations:[row(2,.5),{...row(3,.9),timestamp:minute+'03:15Z'}]}).events.length,0);
-  assert.equal(run({...job,observations:[row(2,.85),row(3,.95)]}).events.length,0);
-  assert.equal(run({...job,observations:[row(2,.5),row(3,.5,.9)]}).events.length,0); // ask is not bid
-  assert.equal(run({...job,observations:job.observations.map(({bid,...r})=>r)}).events.length,0);
-  assert.equal(run({...job,completed_at:minute+'04:30Z'}).events.length,0);
-  assert.equal(run({...job,frequency:'1h'}).available,false);
-  assert.equal(run({...job,observations:[row(2,.5),{...row(3,.9),is_forward_filled:true}]}).events.length,0);
+  assert.match(run(job),/NEUTRAL/); // Later P90/P10 crossings cannot change the first quote.
+  for(const changed of [
+    {...job,observations:[row(3,.9)]},
+    {...job,observations:[{...row(2,.9),timestamp:minute+'02:15Z'}]},
+    {...job,observations:[{...row(2,.9),is_forward_filled:true}]},
+    {...job,completed_at:minute+'04:30Z'},
+    {...job,completed_at:null},
+  ]) assert.doesNotMatch(run(changed),/BUY —|SELL —|NEUTRAL/);
+  assert.doesNotMatch(source,/ensembleMinuteSignals|Cross upward|Cross downward/);
+  for(const folder of ['pages','functions_ssr/templates']) assert.doesNotMatch(fs.readFileSync(path.join(root,folder,'forecasting.html'),'utf8'),/ensemble-crossing-signals/);
   d.window.close();
 });

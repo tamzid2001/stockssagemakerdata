@@ -54,6 +54,7 @@ export type ApiPrincipal = {
   plan: PlanKey;
   authMethod: "api_key" | "firebase_session";
   platformAdmin?: boolean;
+  guest?: boolean;
 };
 
 export type WorkspaceAccess = {
@@ -198,6 +199,7 @@ export async function authenticatePlatformRequest(
       tokenScopes: [...PLATFORM_API_SCOPES],
       plan: await userPlan(options.db, decoded.uid),
       authMethod: "firebase_session",
+      guest: decoded.firebase?.sign_in_provider === "anonymous",
       platformAdmin: await verifiedPlatformAdmin(options.auth, decoded.uid, options.adminEmails),
     };
   }

@@ -4084,11 +4084,7 @@
     };
 
     const isPromoEligibleViewer = () => {
-      const user = state.user;
-      if (!user || user.isAnonymous) return true;
-      if (isAdminUser(user)) return false;
-      if (state.userHasPaidPlan || String(state.userSubscriptionTier || "").toLowerCase() !== "free") return false;
-      return true;
+      return false; // Paid-product promotions are archived, not billing records.
     };
 
     const clearPromoTimer = () => {
@@ -7165,7 +7161,7 @@
         ? state.remoteFlags.aiUsageTiers[tier]
         : AI_USAGE_TIER_DEFAULTS[tier] || AI_USAGE_TIER_DEFAULTS.free;
     const raw = Number(config.workspace_limit ?? config.workspaceLimit ?? 0);
-    return Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+    return Number.isFinite(raw) ? Math.max(3, Math.floor(raw)) : 3;
   };
 
   const setPurchaseState = (user) => {
@@ -9409,6 +9405,7 @@
 
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
+    if (["autopilot", "notifications", "pricing"].includes(panel)) return "forecast";
     if (panel === "indicators") return "forecast";
     if (panel === "ticker-query") return "forecast";
     if (panel === "predictions") return "forecast";
@@ -9519,16 +9516,13 @@
     if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
-        <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Q Forecast</span></a>
-        <a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>
-        <a href="/research" data-analytics="nav_research">${icon("bookmark-book")}<span>Research</span></a>
+        ${document.querySelector(".app-sidebar") ? "" : `<a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Forecast</span></a><a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>`}
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
-        <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
-        <a href="/developers/api" data-analytics="nav_developers">${icon("code")}<span>API Docs</span></a>
+        <a href="https://quantura.mintlify.app/" data-analytics="nav_developers">${icon("code")}<span>API Docs</span></a>
       `;
     });
     navActions.forEach((group) => {
-      group.querySelectorAll('a[data-analytics="nav_cta"]').forEach((link) => link.remove());
+      group.querySelectorAll('a[data-analytics="nav_cta"], a[href="/pricing"], #header-notifications').forEach((link) => link.remove());
     });
   };
 
@@ -9576,7 +9570,7 @@
           <div><a href="/forecasts">Quantura Forecasts</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/dashboard">Workspace</a></div>
-          <div><a href="/pricing">Plans</a></div>
+          <div>Free tools · fair-use limits</div>
         `;
       }
       if (resources instanceof HTMLElement) {
@@ -9740,6 +9734,10 @@
   };
 
   const ensureHeaderNotificationsCta = () => {
+    document.getElementById("header-notifications")?.remove();
+    ui.headerNotifications = null;
+    return;
+    /* Archived notification navigation; delivery configuration is retained.
     const actions = document.querySelector(".header .nav-actions");
     if (!actions) return;
     let link = document.getElementById("header-notifications");
@@ -9762,6 +9760,7 @@
     link.classList.remove("icon-only");
     link.setAttribute("title", "Notifications");
     link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
+    */
   };
 
   const renderNotificationLog = () => {
@@ -14479,7 +14478,7 @@
     else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500 };
     else if (source.type === "workspace_dataset") selected = { type: source.type, dataset_id: source.dataset_id, timestamp_column: source.timestamp_column || "timestamp", target_column: source.target_column || "target", frequency: job.frequency, timezone: source.timezone || "UTC" };
     else throw new Error("This immutable inline series cannot refresh automatically. Submit an updated dataset.");
-    return { workspace_id: job.workspace_id, source: selected, prediction_length: job.prediction_length, horizon_mode: job.horizon_mode, quantiles: job.quantiles,
+    return { workspace_id: job.workspace_id, ...(job.toto_variant ? {toto_variant: job.toto_variant} : {}), source: selected, prediction_length: job.prediction_length, horizon_mode: job.horizon_mode, quantiles: job.quantiles,
       transform: job.transform, context_length: job.context_length, frequency: job.frequency, calendar: job.calendar, models: job.models, model_failure_policy: job.model_failure_policy || "fail" };
   };
   const setEnsembleBusy = (busy, completed = null, total = 1) => {
@@ -14533,41 +14532,15 @@
     return {symbol, side, title};
   };
 
-  // Strategy signals are sampled once per COMPLETED minute, never from tick
-  // streams. Compare the same immutable forecast at consecutive timestamps.
-  const ensembleMinuteSignals = (job, now = Date.now()) => {
-    if (job.frequency !== "1min") return { available: false, reason: "Choose a one-minute forecast to see P90 buy / P10 sell signals.", events: [] };
-    const isMarket = job.source?.type === "prediction_market";
-    const replay = job.source?.analysis_mode === "historical_replay";
-    const cutoff = Date.parse(job.history?.at(-1)?.timestamp);
-    const published = replay ? cutoff : Date.parse(job.completed_at);
-    if (!Number.isFinite(published)) return { available: false, reason: "Waiting for the forecast publication timestamp.", events: [] };
-    const levels = new Map((job.predictions || []).map(row => [Date.parse(row.timestamp), row.quantiles]));
-    const quotes = new Map();
-    for (const row of job.observations || []) {
-      const time = Date.parse(row.timestamp), value = isMarket ? row.bid : row.target;
-      if (time % 60000 === 0 && time <= Math.floor(now / 60000) * 60000 && time > published && row.is_forward_filled !== true && typeof value === "number" && Number.isFinite(value)) quotes.set(time, value);
-    }
-    const events = [];
-    for (const [time, price] of [...quotes].sort((a,b)=>a[0]-b[0])) {
-      const before = quotes.get(time - 60000), previous = levels.get(time - 60000), current = levels.get(time);
-      if (before === undefined || !previous || !current) continue;
-      for (const [q, kind] of [["0.9", "buy"], ["0.1", "sell"]]) {
-        if (typeof current[q] !== "number" || typeof previous[q] !== "number") continue;
-        const crosses = kind === "buy" ? before < previous[q] && price >= current[q] : before > previous[q] && price <= current[q];
-        if (crosses) events.push({ timestamp: new Date(time).toISOString(), price, level: current[q], quantile: q, kind });
-      }
-    }
-    return { available: true, events, quoteCount: quotes.size, replay, basis: isMarket ? "selected-side closing bid" : "closing price" };
-  };
-
   const renderEnsembleSignals = (job) => {
-    const host = document.getElementById("ensemble-crossing-signals");
-    if (!host) return;
-    const result = ensembleMinuteSignals(job);
-    if (!result.available) { host.textContent = result.reason; return; }
-    const latest = result.events.at(-1);
-    host.innerHTML = `<span class="ensemble-signal ensemble-signal-buy"><strong>P90 · Buy signal</strong> Cross upward</span><span class="ensemble-signal ensemble-signal-sell"><strong>P10 · Sell signal</strong> Cross downward</span><p>${latest ? `<strong>${latest.kind === "buy" ? "Buy" : "Sell"} crossing · ${escapeHtml(ensembleLocalTime(latest.timestamp))}</strong> · ${escapeHtml(Number(latest.price).toFixed(4))}` : result.quoteCount < 2 ? "Waiting for two consecutive completed one-minute quotes with bid data." : "No P90/P10 crossing detected in the available completed minutes."}</p><p>${result.replay ? "Historical replay — outcomes may already have been known. " : ""}Based on ${escapeHtml(result.basis)}, not stream ticks. Gaps are excluded. Strategy indicators are not orders, execution guarantees or validated win rates.</p>`;
+    const firstHost = document.getElementById("ensemble-first-row-signal");
+    const first = window.QuanturaForecastControls?.firstRowSignal(job);
+    if (firstHost && first) {
+      firstHost.dataset.signal = first.signal || "waiting";
+      firstHost.innerHTML = first.status !== "observed" ? escapeHtml(first.reason) : `<strong>First-quote signal · ${first.signal === "buy" ? "BUY — below P10" : first.signal === "sell" ? "SELL — above P90" : "NEUTRAL — within P10–P90"}</strong><p>Quote: ${escapeHtml(ensembleLocalTime(first.quoteTimestamp))} · ${escapeHtml(first.price.toFixed(4))}. Forecast row: ${escapeHtml(ensembleLocalTime(first.timestamp))} · P10 ${escapeHtml(first.lower.toFixed(4))} · P90 ${escapeHtml(first.upper.toFixed(4))}</p><small>${escapeHtml(first.timing)}. A research signal, not an order or fill.</small>`;
+      const firstCell = ui.ensembleResultTable?.querySelector("tbody tr:first-child td");
+      if (firstCell) { firstCell.querySelector(".first-row-signal-badge")?.remove(); if (first.status === "observed") { const badge = document.createElement("strong"); badge.className = "first-row-signal-badge"; badge.textContent = first.signal === "none" ? " · Neutral" : ` · ${first.signal.toUpperCase()}`; firstCell.append(badge); } }
+    }
   };
 
   const renderEnsembleLiveQuote = (job, now = Date.now()) => {
@@ -14620,10 +14593,11 @@
         return `<article class="ensemble-model-card ${available ? "" : "is-unavailable is-disabled"}" data-ensemble-model="${escapeHtml(model.id)}" title="${escapeHtml(describeEnsembleCapability(model))}">
           <label class="ensemble-model-toggle">
             <input type="checkbox" name="ensemble_model_enabled" value="${escapeHtml(model.id)}" ${available ? "checked" : "disabled"} />
-            <span class="ensemble-model-name">${escapeHtml(model.name)}</span>
+            <span class="ensemble-model-name">${escapeHtml(model.id === "toto" ? "Toto 2.0" : model.name)}</span>
           </label>
           <div class="small muted ensemble-model-capability">${escapeHtml(describeEnsembleCapability(model))}</div>
           <div class="small"><strong>${escapeHtml(reason)}</strong>${model?.evaluation_only ? " · evaluation only" : ""}</div>
+          ${model.id === "toto" ? `<label class="small">Toto size<select id="ensemble-toto-variant" aria-label="Toto checkpoint size" ${available ? "" : "disabled"}>${(model.variants || []).map(v => `<option value="${escapeHtml(v.id)}" ${v.id === model.default_variant ? "selected" : ""}>${escapeHtml(v.name)}</option>`).join("")}</select></label><small class="muted">Larger checkpoints need more memory and startup time. All require 32 genuine observations.</small>` : ""}
           <label class="ensemble-model-weight small">Weight<input type="number" name="ensemble_model_weight" data-model-weight="${escapeHtml(model.id)}" min="0" step="0.01" value="${escapeHtml(defaultWeight)}" ${available ? "" : "disabled"} /></label>
         </article>`;
       })
@@ -14674,6 +14648,8 @@
       card?.classList.toggle("is-disabled", !selection.enabled);
       const input = card?.querySelector("[data-model-weight]");
       if (input) input.disabled = !selection.enabled || !ensembleUiState.capabilities.models.find((model) => model.id === modelId)?.available;
+      const variant = card?.querySelector("#ensemble-toto-variant");
+      if (variant) variant.disabled = !selection.enabled;
       if (selection.enabled && Number.isFinite(selection.weight) && selection.weight >= 0) total += selection.weight;
     });
     const normalized = Object.entries(selections)
@@ -14699,16 +14675,16 @@
   };
 
   const syncEnsembleSourceFields = () => {
-    const type = String(ui.ensembleSourceType?.value || "ticker");
+    const type = String((ui.ensembleSourceType || document.getElementById("ensemble-source-type"))?.value || "ticker");
     document.querySelectorAll("[data-ensemble-source]").forEach((field) => {
       field.hidden = field.dataset.ensembleSource !== type;
     });
     document.querySelectorAll("[data-ensemble-history-count]").forEach(field => {
-      field.hidden = type === "workspace_dataset";
+      field.hidden = type === "workspace_dataset" || type === "series";
       field.querySelector("input").disabled = field.hidden;
     });
     const horizon = document.getElementById("ensemble-horizon-mode");
-    const frequency = type === "ticker" ? document.getElementById("ensemble-ticker-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
+    const frequency = type === "ticker" ? document.getElementById("ensemble-ticker-frequency")?.value : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
     const intraday = type !== "ticker" || frequency !== "1Day";
     if (horizon) {
       horizon.closest(".field").hidden = intraday;
@@ -14721,6 +14697,11 @@
       lagUnit.value = unit;
       lagUnit.dataset.sourceContext = `${type}:${frequency}`;
     }
+    const predictionUnit = document.getElementById("ensemble-prediction-unit");
+    if (predictionUnit) {
+      predictionUnit.value = unit;
+      predictionUnit.dataset.frequency = frequency || "1D";
+    }
   };
 
   const buildEnsembleRequest = () => {
@@ -14729,10 +14710,12 @@
     const data = new FormData(form);
     const sourceType = String(data.get("source_type") || "ticker");
     const historyLimit = Number(data.get("history_limit") ?? 500);
-    if (sourceType !== "workspace_dataset" && (!Number.isInteger(historyLimit) || historyLimit < 2 || historyLimit > 500)) throw new Error("Choose 2–500 historical observations. Model minimums still apply.");
+    if (!["workspace_dataset", "series"].includes(sourceType) && (!Number.isInteger(historyLimit) || historyLimit < 2 || historyLimit > 500)) throw new Error("Choose 2–500 historical observations. Model minimums still apply.");
     const selection = window.QuanturaMarketSelection;
     if (sourceType === "prediction_market" && !selection?.contract_id) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
-    const source = sourceType === "prediction_market"
+    const source = sourceType === "series"
+      ? { type: "series", name: ensembleUiState.csvName, rows: window.QuanturaForecastControls.csvSeries(ensembleUiState.csvTable || {headers:[],rows:[]}, document.getElementById("ensemble-csv-date").value, document.getElementById("ensemble-csv-target").value), timestamp_column: "timestamp", target_column: "target", frequency: document.getElementById("ensemble-csv-frequency").value, timezone: ensembleTimeZone() }
+      : sourceType === "prediction_market"
       ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")), limit: historyLimit }
       : sourceType === "workspace_dataset"
       ? {
@@ -14758,13 +14741,24 @@
     if (!enabled.length || !enabled.some((model) => Number.isFinite(model.weight) && model.weight > 0)) throw new Error("Enable at least one model with a positive weight.");
     if (enabled.some((model) => !Number.isFinite(model.weight) || model.weight < 0)) throw new Error("Model weights must be finite and nonnegative.");
     const contextRaw = String(data.get("context_length") || "").trim();
-    const lag = ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes"));
+    const cutoffMode = document.getElementById("ensemble-cutoff-mode")?.value || "relative";
+    const lag = cutoffMode === "relative" ? ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes")) : 0;
+    const cutoffAt = cutoffMode === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-history-cutoff").value) : undefined;
+    if (cutoffAt && Date.parse(cutoffAt) > Date.now()) throw new Error("The data cutoff cannot be in the future.");
+    const endAt = document.getElementById("ensemble-prediction-mode")?.value === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-prediction-end").value) : undefined;
+    const frequencyMinutes = ({"1Day":1440,"1D":1440,"1Hour":60,"1h":60,"1Min":1,"1min":1})[source.frequency] || 1440;
+    const durationUnit = document.getElementById("ensemble-prediction-unit")?.value || (frequencyMinutes === 1440 ? "days" : frequencyMinutes === 60 ? "hours" : "minutes");
+    const steps = endAt ? 30 : Number(data.get("prediction_length") || 30) * ({days:1440,hours:60,minutes:1})[durationUnit] / frequencyMinutes;
+    if (!Number.isInteger(steps) || steps < 1 || steps > 512) throw new Error("Choose a duration aligned with the observation interval, from 1 to 512 bars.");
     return {
       workspace_id: state.activeWorkspaceId || state.user?.uid || "",
+      ...(document.getElementById("ensemble-toto-variant")?.value ? {toto_variant: document.getElementById("ensemble-toto-variant").value} : {}),
       source,
       history_lag_minutes: lag,
-      prediction_length: Number(data.get("prediction_length") || 30),
-      horizon_mode: sourceType === "prediction_market" || (sourceType === "ticker" && source.frequency !== "1Day") ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
+      ...(cutoffAt ? { history_cutoff_at: cutoffAt } : {}),
+      ...(endAt ? { prediction_end_at: endAt } : {}),
+      prediction_length: steps,
+      horizon_mode: sourceType === "prediction_market" || sourceType === "series" || (sourceType === "ticker" && source.frequency !== "1Day") ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
       quantiles: getEnsembleQuantiles(),
       transform: sourceType === "prediction_market" ? "logit" : String(data.get("transform") || "auto"),
       context_length: contextRaw ? Number(contextRaw) : null,
@@ -14789,12 +14783,13 @@
     setEnsembleBusy(true, status === "queued" ? null : completed, total);
     window.clearTimeout(ensembleUiState.observationTimer);
     setEnsembleStatus(status === "queued"
-      ? "Queued · Data saved → Waiting for worker → Models → Final ensemble. You can leave this page; the job is saved in My Requests."
+      ? `Queued · Data snapshot → Waiting for worker → Models → Final ensemble. ${hasFullAccount() ? "Saved in My Requests." : "Keep this guest session to return to the result. Sign in to save to your profile."}`
       : `Running model ${Math.min(completed + 1, total || 1)} of ${total || 1}${current ? `: ${current}` : ""}. ${Number.isFinite(elapsed)?elapsed:0} min since request.`, "working");
     if (ui.ensembleResultMeta) ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id || "")}</span><span><strong>Completed:</strong> ${completed}/${total}</span><span><strong>Downloaded input:</strong> ${escapeHtml(job.input_row_count ?? "Loading")} observed bars</span>`;
     // Never show the previous job's distribution or metrics under a new ID.
     if (ui.ensembleSummary) { ui.ensembleSummary.hidden = true; ui.ensembleSummary.replaceChildren(); }
     document.getElementById("ensemble-live-quote")?.replaceChildren();
+    document.getElementById("ensemble-first-row-signal")?.replaceChildren();
     document.getElementById("ensemble-crossing-signals")?.replaceChildren();
     if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = "";
     if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = "";
@@ -14826,7 +14821,7 @@
     const median = quantiles.slice().sort((left, right) => Math.abs(left - 0.5) - Math.abs(right - 0.5))[0];
     traces.push({ type: "scatter", mode: "lines", x: rows.map((row) => row.timestamp), y: quantileValues(median), name: `${ensembleQuantileLabel(median)} ensemble`, line: { width: 2.5, color: "#4361ee" } });
     for (const [level, color] of [[0.1, isDarkMode() ? "#fbbf24" : "#a16207"], [0.9, isDarkMode() ? "#c4b5fd" : "#7c3aed"]]) {
-      if (quantiles.includes(level) && level !== median) traces.push({ type: "scatter", mode: "lines", x: rows.map(row => row.timestamp), y: quantileValues(level), name: `${ensembleQuantileLabel(level)} · ${level === 0.9 ? "Buy" : "Sell"} signal`, line: { width: 1.8, dash: "dash", color } });
+      if (quantiles.includes(level) && level !== median) traces.push({ type: "scatter", mode: "lines", x: rows.map(row => row.timestamp), y: quantileValues(level), name: `${ensembleQuantileLabel(level)} forecast`, line: { width: 1.8, dash: "dash", color } });
     }
     const source = job.source || {};
     const inputHistory = job.history || [];
@@ -14834,11 +14829,8 @@
     const observed = job.observations || [];
     if (observed.length) traces.push({type:"scatter",mode:"lines+markers",x:observed.map(r=>r.timestamp),y:observed.map(r=>r.target),name:source.analysis_mode === "historical_replay" ? "Actual prices after input cutoff" : "Observed after forecast",line:{width:2,color:isDarkMode()?"#5eead4":"#0f766e"},connectgaps:false});
     const dark = isDarkMode();
-    const signals = ensembleMinuteSignals(job).events;
-    for (const kind of ["buy", "sell"]) {
-      const points = signals.filter(s => s.kind === kind);
-      if (points.length) traces.push({ type: "scatter", mode: "markers", x: points.map(s=>s.timestamp), y: points.map(s=>s.price), name: `${kind === "buy" ? "P90 Buy" : "P10 Sell"} crossing`, marker: { size: 11, symbol: kind === "buy" ? "triangle-up" : "triangle-down", color: kind === "buy" ? (dark ? "#6ee7b7" : "#087f5b") : (dark ? "#fda4af" : "#b42318"), line: {width:1,color:dark ? "#111827" : "#ffffff"} } });
-    }
+    const firstSignal = window.QuanturaForecastControls?.firstRowSignal(job);
+    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.quoteTimestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (replay)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
     renderEnsembleSignals(job);
     // Epoch positions stay absolute (including DST folds); only labels localize.
     traces.forEach(trace => { trace.customdata = trace.x.map(value => ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
@@ -14990,7 +14982,10 @@
     ensembleUiState.forecastId = forecastId;
     const generation = ensembleUiState.pollGeneration;
     let failures = 0;
+    let checks = 0;
     const check = async () => {
+      if (generation !== ensembleUiState.pollGeneration) return;
+      if (document.hidden) { ensembleUiState.pollTimer = window.setTimeout(check, 15000); return; }
       try {
         const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(forecastId)}`);
         if (generation !== ensembleUiState.pollGeneration) return;
@@ -15009,7 +15004,8 @@
           return;
         }
         renderEnsembleProgress(job);
-        ensembleUiState.pollTimer = window.setTimeout(check, 3000);
+        checks++;
+        ensembleUiState.pollTimer = window.setTimeout(check, checks < 3 ? 5000 : 15000);
       } catch (error) {
         if (generation !== ensembleUiState.pollGeneration) return;
         failures++;
@@ -15023,14 +15019,14 @@
         }
       }
     };
-    if (immediate) await check(); else ensembleUiState.pollTimer = window.setTimeout(check, 3000);
+    if (immediate) await check(); else ensembleUiState.pollTimer = window.setTimeout(check, 5000);
   };
 
   const loadEnsembleCapabilities = async () => {
     const workspace = state.activeWorkspaceId || state.user?.uid || "";
     const accessKey = `${state.user?.uid || ""}:${workspace}`;
     if (ensembleUiState.capabilitiesLoaded && ensembleUiState.accessKey === accessKey) return;
-    setEnsembleStatus("Loading model availability for your plan…");
+    setEnsembleStatus("Loading configured forecasting models…");
     const response = await apiRequestJson(`/api/v1/ensemble-forecasts/models?workspace_id=${encodeURIComponent(workspace)}`);
     if (accessKey !== `${state.user?.uid || ""}:${state.activeWorkspaceId || state.user?.uid || ""}`) throw new Error("Workspace changed. Please retry in your current workspace.");
     ensembleUiState.accessKey = accessKey;
@@ -15042,13 +15038,9 @@
 
   const refreshPrimaryForecast = async () => {
     if (!ui.ensembleForecastSettings || ui.ensembleForecastSettings.closest('[data-panel]')?.classList.contains("hidden")) return;
-    if (!hasFullAccount()) {
-      if (ui.ensembleModelList) ui.ensembleModelList.innerHTML = '<p class="small muted"><a href="/account">Sign in</a> to configure your available models.</p>';
-      setEnsembleStatus("Sign in to run Quantura Forecast. No compute runs until you submit.");
-      return;
-    }
     try {
-      await Promise.all([loadEnsembleCapabilities(), loadEnsemblePresets()]);
+      await ensureSessionUser();
+      await Promise.all([loadEnsembleCapabilities(), hasFullAccount() ? loadEnsemblePresets() : Promise.resolve()]);
       if (ui.ensembleTicker && !ui.ensembleTicker.value) ui.ensembleTicker.value = normalizeTicker(state.tickerContext.ticker || getQueryParam("ticker") || "");
     } catch (error) {
       setEnsembleStatus(error.message || "Unable to load forecast capabilities. Submit to retry.", "error");
@@ -15090,6 +15082,12 @@
       set("ensemble-history-lag-unit", "minutes");
     }
     set("ensemble-prediction-length", configuration.prediction_length);
+    set("ensemble-toto-variant", configuration.toto_variant);
+    set("ensemble-prediction-mode", "duration");
+    set("ensemble-prediction-unit", /min/i.test(configuration.frequency || "") ? "minutes" : /h/i.test(configuration.frequency || "") ? "hours" : "days");
+    set("ensemble-cutoff-mode", configuration.history_controls?.history_lag_minutes || configuration.history_lag_minutes ? "relative" : "latest");
+    document.getElementById("ensemble-cutoff-mode")?.dispatchEvent(new Event("change"));
+    document.getElementById("ensemble-prediction-mode")?.dispatchEvent(new Event("change"));
     set("ensemble-horizon-mode", configuration.horizon_mode);
     set("ensemble-context-length", configuration.context_length);
     set("ensemble-transform", configuration.transform);
@@ -15142,6 +15140,61 @@
     exportMenu?.addEventListener("keydown", event => { if (event.key === "Escape") { exportMenu.open = false; exportMenu.querySelector("summary")?.focus(); } });
     document.addEventListener("click", event => { if (exportMenu?.open && !exportMenu.contains(event.target)) exportMenu.open = false; });
     syncEnsembleSourceFields();
+    const controls = window.QuanturaForecastControls;
+    const cutoffInput = document.getElementById("ensemble-history-cutoff");
+    const endInput = document.getElementById("ensemble-prediction-end");
+    if (controls && cutoffInput && endInput) {
+      cutoffInput.value = controls.localValue(Date.now() - 30*60000);
+      cutoffInput.max = controls.localValue();
+      endInput.value = controls.localValue(Date.now() + 30*60000);
+      const syncDates = () => {
+        const cutoffMode = document.getElementById("ensemble-cutoff-mode").value;
+        cutoffInput.hidden = cutoffInput.disabled = cutoffMode !== "date";
+        document.getElementById("ensemble-relative-cutoff").hidden = cutoffMode !== "relative";
+        const useDate = document.getElementById("ensemble-prediction-mode").value === "date";
+        endInput.hidden = endInput.disabled = !useDate;
+        endInput.required = useDate;
+        document.getElementById("ensemble-duration-fields").hidden = useDate;
+        document.getElementById("ensemble-prediction-length").required = !useDate;
+        document.getElementById("ensemble-timezone-label").textContent = `Your timezone: ${ensembleTimeZone()}. Calendar times convert to UTC for the worker.`;
+      };
+      document.getElementById("ensemble-cutoff-mode").addEventListener("change", syncDates);
+      document.getElementById("ensemble-prediction-mode").addEventListener("change", syncDates);
+      syncDates();
+    }
+    document.getElementById("ensemble-csv-frequency")?.addEventListener("change", syncEnsembleSourceFields);
+    document.getElementById("ensemble-csv-file")?.addEventListener("change", async event => {
+      const status = document.getElementById("ensemble-csv-status");
+      ensembleUiState.csvTable = null;
+      const file = event.target.files?.[0]; if (!file) return;
+      try {
+        if (file.size > 2*1024*1024) throw new Error("CSV must be at most 2 MB.");
+        const table = controls.parseCsv(await file.text());
+        ensembleUiState.csvTable = table; ensembleUiState.csvName = file.name;
+        for (const id of ["ensemble-csv-date", "ensemble-csv-target"]) {
+          const select = document.getElementById(id); select.replaceChildren(...table.headers.map(header => new Option(header, header)));
+        }
+        document.getElementById("ensemble-csv-date").value = table.headers.find(name => /date|time|^ds$/i.test(name)) || table.headers[0];
+        document.getElementById("ensemble-csv-target").value = table.headers.find(name => /close|value|target|^y$/i.test(name)) || table.headers[1];
+        status.textContent = `${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns. Review columns and interval before running.`;
+      } catch (error) { status.textContent = error.message; }
+    });
+    const csvHelp = document.getElementById("ensemble-csv-help");
+    document.getElementById("ensemble-csv-help-open")?.addEventListener("click", () => csvHelp?.showModal());
+    document.getElementById("ensemble-csv-help-close")?.addEventListener("click", () => csvHelp?.close());
+    document.getElementById("ensemble-save-profile")?.addEventListener("click", async () => {
+      try {
+        if (!hasFullAccount()) {
+          await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(ensembleUiState.forecastId)}/prepare-save`, {method:"POST",body:{}});
+          // Store only the resource ID. Ownership proof stays in an HttpOnly cookie.
+          window.sessionStorage.setItem("quantura_pending_forecast_save", ensembleUiState.forecastId);
+          window.location.href = "/account";
+          return;
+        }
+        await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(ensembleUiState.forecastId)}/save`, {method:"POST",body:{}});
+        showToast("Forecast saved to your profile.");
+      } catch(error) { showToast(error.message, "warn"); }
+    });
     ui.ensembleSourceType?.addEventListener("change", syncEnsembleSourceFields);
     document.getElementById("ensemble-check-status")?.addEventListener("click", () => { if (ensembleUiState.forecastId) pollEnsembleForecast(ensembleUiState.forecastId); });
     for (const [id, direction] of [["ensemble-request-previous", 1],["ensemble-request-next", -1]]) document.getElementById(id)?.addEventListener("click",async()=>{
@@ -15259,6 +15312,7 @@
       }
     });
     ui.ensembleSavePreset?.addEventListener("click", async () => {
+      if (!requireFullAccount("Sign in to save a preset to your profile.")) return;
       try {
         const name = String(ui.ensemblePresetName?.value || "").trim();
         if (!name) throw new Error("Enter a preset name.");
@@ -30093,6 +30147,20 @@
 			      state.user = user;
           syncProductivityAccess(user);
           const nextUid = String(user?.uid || "").trim();
+          if (hasFullAccount(user)) {
+            const pending = window.sessionStorage.getItem("quantura_pending_forecast_save");
+            if (pending && /^[A-Za-z0-9_-]{1,220}$/.test(pending)) {
+              try {
+                await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(pending)}/save`, {method:"POST",body:{}});
+                window.sessionStorage.removeItem("quantura_pending_forecast_save");
+                window.location.href = `/forecasting?ensembleForecastId=${encodeURIComponent(pending)}`;
+                return;
+              } catch {
+                window.sessionStorage.removeItem("quantura_pending_forecast_save");
+                showToast("Unable to save the guest forecast. Its 15-minute sign-in window may have expired.", "warn");
+              }
+            }
+          }
           if (previousWasAnonymous && hasFullAccount(user) && previousUid && nextUid && previousUid !== nextUid) {
             await mergeAnonymousSessionData(previousUid, nextUid).catch(() => undefined);
           }

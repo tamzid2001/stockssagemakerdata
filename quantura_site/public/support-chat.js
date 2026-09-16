@@ -34,8 +34,8 @@
     event.preventDefault();
     const question = input.value.trim(); if (!question || controller) return;
     const user = window.firebase?.auth?.()?.currentUser;
-    if (!user || user.isAnonymous) {
-      status.textContent = "Sign in using the website's Sign in button to chat. Documentation and Contact remain available below.";
+    if (!user) {
+      status.textContent = "Initializing a secure guest session. Retry shortly; documentation and Contact remain available below.";
       return;
     }
     if (/(?:qnt_live_|sk-|hf_|mint_)[A-Za-z0-9_\-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|Bearer\s+\S{20,}/i.test(question)) {

@@ -79,8 +79,8 @@ test("viewer and editor permissions remain workspace-scoped", () => {
   const analystAccess = { ...viewerAccess, role: "analyst" as const, permissions: permissionsForRole("analyst") };
   authorizeWorkspaceAction(token, analystAccess, "forecasts:write", "write");
   const ownAccess = { ...viewerAccess, workspaceId: token.userId, role: "owner" as const, plan: token.plan };
-  assert.throws(() => authorizeWorkspaceAction(token, ownAccess, "forecasts:write", "write"), /plan_upgrade_required/);
-  assert.throws(() => authorizeWorkspaceAction(token, ownAccess, "forecasts:read", "read"), /plan_upgrade_required/);
+  authorizeWorkspaceAction(token, ownAccess, "forecasts:write", "write");
+  authorizeWorkspaceAction(token, ownAccess, "forecasts:read", "read");
 
   const browserSession = { ...token, authMethod: "firebase_session" as const };
   authorizeWorkspaceAction(browserSession, ownAccess, "forecasts:write", "write");
@@ -94,7 +94,7 @@ test("a free collaborator API key keeps shared read access but not shared writes
     ownerUserId: "owner", name: "Owner", slug: "owner", legacyPersonal: true,
   };
   authorizeWorkspaceAction(token, sharedViewer, "forecasts:read", "read");
-  assert.throws(() => authorizeWorkspaceAction(token, sharedViewer, "forecasts:write", "write"), /plan_upgrade_required/);
+  assert.throws(() => authorizeWorkspaceAction(token, sharedViewer, "forecasts:write", "write"), /read_only/);
 });
 
 test("workspace membership and role are evaluated dynamically on every request", async () => {
