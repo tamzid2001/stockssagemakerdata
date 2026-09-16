@@ -40,6 +40,7 @@ export type StockHistoryResult = {
   feed: string;
   adjustment: string;
   session: string;
+  exchangeTimezone?: string;
   rows: AlpacaBar[];
 };
 
@@ -81,7 +82,7 @@ export async function fetchStockHistoryData(body: Record<string, unknown>): Prom
       result = await yahoo.getStockBars(input);
     }
   }
-  return { provider, sourceRequested: source, fallbackUsed, ...result };
+  return { provider, sourceRequested: source, fallbackUsed, exchangeTimezone: provider === "alpaca" ? "America/New_York" : "UTC", ...result };
 }
 
 export function registerMarketDataRoutes(router: Router): void {

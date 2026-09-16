@@ -83,6 +83,7 @@ function unixSeconds(value: unknown): number | null {
 }
 
 function finite(value: unknown): number | null {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -342,6 +343,7 @@ export class YahooFinanceClient {
     feed: string;
     adjustment: string;
     session: string;
+    exchangeTimezone: string;
     rows: AlpacaBar[];
   }> {
     const ticker = symbol(input.symbol, optionContract);
@@ -371,12 +373,18 @@ export class YahooFinanceClient {
       timeframe: timeframe.canonical,
     });
     if (!rows.length) throw new AlpacaError("no_data", "Yahoo Finance returned no observations for this ticker and timeframe.", 404);
+    const meta = (payload as any).chart?.result?.[0]?.meta;
+    let exchangeTimezone = "UTC";
+    if (typeof meta?.exchangeTimezoneName === "string") {
+      try { new Intl.DateTimeFormat("en", {timeZone: meta.exchangeTimezoneName}); exchangeTimezone = meta.exchangeTimezoneName; } catch { /* Unknown provider timezone remains UTC, never a guessed exchange. */ }
+    }
     return {
       symbol: ticker,
       timeframe: timeframe.canonical,
       feed: "yahoo",
       adjustment: String(input.adjustment || "raw").toLowerCase(),
       session: String(input.session || "extended").toLowerCase() === "regular" ? "regular" : "extended",
+      exchangeTimezone,
       rows,
     };
   }

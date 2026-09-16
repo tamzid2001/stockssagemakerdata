@@ -36,6 +36,18 @@ test("Yahoo adjusted history scales OHLC consistently", () => {
   assert.equal(rows[0].open, 50);
   assert.equal(rows[0].close, 51);
 });
+test("Yahoo missing prices never become zero closes or zero adjusted prices", () => {
+  const data:any=payload();
+  data.chart.result[0].indicators.quote[0].close[0]=null;
+  data.chart.result[0].indicators.adjclose[0].adjclose[1]=null;
+  const rows=parseYahooChartResponse(data,{adjustment:"all",session:"extended"});
+  assert.equal(rows.length,1);assert.equal(rows[0].close,104);
+});
+test("Yahoo retains the provider exchange timezone for daily session alignment", async()=>{
+  const data:any=payload();data.chart.result[0].meta={exchangeTimezoneName:'Asia/Tokyo'};
+  const client=new YahooFinanceClient({fetchImpl:async()=>new Response(JSON.stringify(data))});
+  assert.equal((await client.getStockBars({symbol:'7203.T'})).exchangeTimezone,'Asia/Tokyo');
+});
 
 test("Yahoo client maps supported timeframes and returns the requested source schema", async () => {
   const client = new YahooFinanceClient({
