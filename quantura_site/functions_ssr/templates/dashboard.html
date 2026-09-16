@@ -60,7 +60,7 @@
           <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
           <span>QUANTURA</span>
         </a>
-        <nav class="nav-links" aria-label="Main navigation"><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
 
           <span id="header-user-status" class="pill">Logged Out</span>
@@ -200,7 +200,7 @@
       <section class="section panel hidden" data-panel="profile" id="profile">
         <div class="container">
           <div class="section-title">
-            <div><div class="eyebrow">Private account settings</div><h2>Profile &amp; Integrations</h2><p class="small">Manage private account details and connect cloud resources. Quantura does not publish user profile pages.</p></div>
+            <div><div class="eyebrow">Private account settings</div><h2>Profile</h2><p class="small">Manage your private account details and saved research.</p></div>
           </div>
           <div class="content-grid">
             <div class="card">
@@ -211,45 +211,10 @@
               <div class="billing-panel"><span class="label">Billing</span><a id="billing-portal-link" class="cta secondary small" href="/account">Sign in to manage billing</a><span class="small muted">Manage your plan, invoices, and payment method in Stripe.</span></div>
               <div class="notice small">This settings area is authenticated and private. Public profiles and user discovery have been removed.</div>
             </div>
-            <div class="card security-summary">
-              <h3>Cloud security</h3>
-              <ul class="compact-list small">
-                <li>No AWS access key or secret key is requested or stored.</li>
-                <li>Vercel OIDC exchanges deployment identity for temporary STS credentials.</li>
-                <li>Your configuration is authorized by Firebase ID token and isolated by user ID.</li>
-                <li>Disconnecting does not delete resources already running in your AWS account.</li>
-              </ul>
-            </div>
+
           </div>
-          <section class="card aws-integration-card" aria-labelledby="aws-integration-title">
-            <div class="card-head"><div><div class="eyebrow">Bring your own cloud</div><h3 id="aws-integration-title">AWS / SageMaker Integration</h3><p class="small muted">Connect a least-privilege IAM role so SageMaker and S3 requests run under your AWS identity and are billed by AWS to your account.</p></div><span class="pill">Vercel OIDC + STS</span></div>
-            <form id="aws-integration-form" autocomplete="off">
-              <div class="form-grid">
-                <div class="field"><label class="label" for="aws-account-id">AWS account ID</label><input id="aws-account-id" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" placeholder="123456789012" required /></div>
-                <div class="field"><label class="label" for="aws-region">AWS region</label><select id="aws-region" required><option value="us-east-1">US East (N. Virginia)</option><option value="us-east-2">US East (Ohio)</option><option value="us-west-1">US West (N. California)</option><option value="us-west-2">US West (Oregon)</option><option value="ca-central-1">Canada (Central)</option><option value="eu-west-1">Europe (Ireland)</option><option value="eu-west-2">Europe (London)</option><option value="eu-central-1">Europe (Frankfurt)</option><option value="ap-south-1">Asia Pacific (Mumbai)</option><option value="ap-northeast-1">Asia Pacific (Tokyo)</option><option value="ap-southeast-1">Asia Pacific (Singapore)</option><option value="ap-southeast-2">Asia Pacific (Sydney)</option></select></div>
-                <div class="field field-span-2"><label class="label" for="aws-role-arn">IAM role ARN for Quantura/Vercel</label><input id="aws-role-arn" placeholder="arn:aws:iam::123456789012:role/QuanturaVercelRole" required /><div class="small muted">Trust Vercel's OIDC provider and restrict the subject to this production project.</div></div>
-                <div class="field field-span-2"><label class="label" for="aws-execution-role-arn">SageMaker execution role ARN</label><input id="aws-execution-role-arn" placeholder="arn:aws:iam::123456789012:role/QuanturaSageMakerExecutionRole" required /><div class="small muted">This role is passed to SageMaker jobs. Do not attach AdministratorAccess.</div></div>
-                <div class="field field-span-2"><label class="label" for="aws-s3-bucket">S3 bucket</label><input id="aws-s3-bucket" pattern="[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]" placeholder="quantura-forecast-data-123456789012" required /><div class="small muted">Input datasets and SageMaker outputs are written here using your assumed role.</div></div>
-              </div>
-              <div class="hero-actions workflow-actions"><button class="cta" type="submit">Save / Update</button><button class="cta secondary" id="aws-test-connection" type="button" disabled>Test Connection</button><button class="cta danger" id="aws-disconnect" type="button" disabled>Disconnect</button></div>
-              <p id="aws-integration-status" class="integration-status" role="status" aria-live="polite">Sign in to load your AWS integration status.</p>
-            </form>
-          </section>
-          <section class="card forecast-alert-settings-card" aria-labelledby="forecast-alert-settings-title">
-            <div class="card-head"><div><div class="eyebrow">Prediction monitoring</div><h3 id="forecast-alert-settings-title">Forecast Price Alerts</h3><p class="small muted">Manage date-aware quantile crossing emails created by your private prediction CSV analyses.</p></div><span class="pill">Alpaca + Resend</span></div>
-            <form id="forecast-alert-settings-form">
-              <div class="form-grid">
-                <label class="forecast-alert-master-toggle field-span-2"><input id="forecast-alerts-email-enabled" type="checkbox" /><span><strong>Email notifications enabled</strong><small>Disable this to pause every prediction alert without deleting its configuration.</small></span></label>
-                <div class="field field-span-2"><label class="label" for="forecast-alert-email">Verified alert email</label><input id="forecast-alert-email" type="email" readonly aria-readonly="true" /><div id="forecast-alert-email-help" class="small muted">The verified email on your Firebase account is used; custom unverified recipients are never stored.</div></div>
-                <div class="field"><span class="label">Default boundaries</span><div class="forecast-boundary-choices" role="group" aria-label="Default forecast boundaries"><label><input type="checkbox" value="P10" data-profile-alert-boundary /> P10</label><label><input type="checkbox" value="P50" data-profile-alert-boundary /> P50</label><label><input type="checkbox" value="P90" data-profile-alert-boundary /> P90</label></div></div>
-                <div class="field"><label class="label" for="forecast-alert-default-session">Default market session</label><select id="forecast-alert-default-session"><option value="regular">Regular hours only</option><option value="extended">Include premarket and after-hours</option></select></div>
-              </div>
-              <div class="hero-actions workflow-actions"><button class="cta" id="forecast-alert-settings-save" type="submit">Save alert settings</button><button class="cta secondary" id="forecast-alert-settings-refresh" type="button">Refresh</button></div>
-              <p id="forecast-alert-settings-status" class="integration-status" role="status" aria-live="polite">Sign in to load forecast alert settings.</p>
-            </form>
-            <div class="card-head forecast-active-alerts-head"><h4>Prediction alerts</h4><span class="small muted">Active, disabled, and expired</span></div>
-            <div id="forecast-active-alerts" class="forecast-active-alerts"><div class="small muted">No alert configurations loaded.</div></div>
-          </section>
+
+
         </div>
       </section>
 

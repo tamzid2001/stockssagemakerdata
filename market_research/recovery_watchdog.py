@@ -10,9 +10,10 @@ WORKFLOW = "polymarket-p90-ingame-backtest.yml"
 VERSION = "in_game_p90_switch_v1"
 
 
-def resume_inputs(record):
+def resume_inputs(record, *, first_row=False):
     c = record.get("configuration", {})
-    if record.get("campaign_kind") != VERSION or not c.get("continuous") or record.get("status") == "completed":
+    version = 'first_row_p10_buy_p90_sell_v1' if first_row else VERSION
+    if record.get("campaign_kind") != version or not c.get("continuous") or record.get("status") in ('completed', 'archived', 'cancelled'):
         return None
     if record.get("lease", {}).get("expires", 0) > time.time():
         return None
@@ -22,30 +23,38 @@ def resume_inputs(record):
     provider = c.get('provider', 'polymarket_us')
     if provider not in ('polymarket_us', 'kalshi'):
         raise ValueError('INVALID_STORED_PROVIDER')
-    return {"provider": provider, "horizon": str(c["horizon"]), "campaign_id": validate_campaign(record["id"]),
-            "code_ref": c["code_sha"], "continuous": "true", "smoke_mode": "real"}
+    inputs = {"provider": provider, "horizon": str(c["horizon"]), "campaign_id": validate_campaign(record["id"]),
+              "code_ref": c["code_sha"], "continuous": "true", "smoke_mode": "real"}
+    if first_row:
+        if c['horizon'] != 30:
+            raise ValueError('FIRST_ROW_HORIZON_MISMATCH')
+        inputs.pop('horizon')
+    return inputs
 
 
 def main():
     parser = argparse.ArgumentParser(); parser.add_argument("--campaign-id")
+    parser.add_argument('--first-row', action='store_true')
     args = parser.parse_args()
+    workflow = 'sports-first-row-backtest.yml' if args.first_row else WORKFLOW
+    version = 'first_row_p10_buy_p90_sell_v1' if args.first_row else VERSION
     cloud = Campaign(args.campaign_id or "p90-" + "0" * 24, os.environ.get("GITHUB_RUN_ID", "watchdog"))
     if args.campaign_id:
         records = [{**cloud.load(), "id": args.campaign_id}]
     else:
         from google.cloud.firestore_v1.base_query import FieldFilter
         records = [{**r.to_dict(), "id": r.id} for r in cloud.lease.db.collection("market_research_sessions")
-                   .where(filter=FieldFilter("campaign_kind", "==", VERSION)).stream()]
-    runs = api(f"/actions/workflows/{WORKFLOW}/runs?per_page=100")["workflow_runs"]
+                   .where(filter=FieldFilter("campaign_kind", "==", version)).stream()]
+    runs = api(f"/actions/workflows/{workflow}/runs?per_page=100")["workflow_runs"]
     current = os.environ.get("GITHUB_RUN_ID")
     occupied = {(p,h) for p in ('polymarket_us','kalshi') for h in ("15", "30") if any(str(r["id"]) != current and r["status"] != "completed"
                 and r.get('display_title','').startswith(p+' ') and f"· {h}m ·" in r.get("display_title", "") for r in runs)}
     for record in records:
-        inputs = resume_inputs(record)
-        if not inputs or (inputs['provider'],inputs["horizon"]) in occupied:
+        inputs = resume_inputs(record, first_row=args.first_row)
+        if not inputs or (inputs['provider'],inputs.get('horizon', '30')) in occupied:
             continue
-        api(f"/actions/workflows/{WORKFLOW}/dispatches", {"ref": "main", "inputs": inputs})
-        occupied.add((inputs['provider'],inputs["horizon"]))
+        api(f"/actions/workflows/{workflow}/dispatches", {"ref": "main", "inputs": inputs})
+        occupied.add((inputs['provider'],inputs.get('horizon', '30')))
         print(f"Resumed {inputs['campaign_id']} on its immutable code and existing checkpoint.")
 
 

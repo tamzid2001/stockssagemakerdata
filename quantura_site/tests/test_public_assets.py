@@ -178,7 +178,8 @@ def test_data_integration_surfaces_are_present():
         'id="pm-download-csv"',
     ]:
         assert marker in forecasting
-    assert 'id="aws-integration-form"' in dashboard
+    assert 'id="aws-integration-form"' not in dashboard
+    assert 'id="forecast-alert-settings-form"' not in dashboard
     assert "/api/market-data/stocks/history" in client
     assert "/api/market-data/options/history" in client
     assert "/api/sports/prediction-markets/categories" in client

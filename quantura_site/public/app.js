@@ -2422,31 +2422,43 @@
     });
     return nativeAuthRequested;
   };
+  const createSessionCoordinator = (auth, persistenceReady) => {
+    // Never use currentUser === null as proof of sign-out before IndexedDB
+    // restoration finishes. Concurrent panels share one guest bootstrap.
+    const restored = Promise.resolve(persistenceReady).then(() => new Promise((resolve, reject) => {
+      let unsubscribe;
+      unsubscribe = auth.onAuthStateChanged(() => {
+        queueMicrotask(() => unsubscribe?.());
+        resolve();
+      }, reject);
+    }));
+    let pending = null;
+    return async () => {
+      await restored;
+      if (auth.currentUser) return auth.currentUser;
+      if (!pending) {
+        pending = Promise.resolve().then(async () => {
+          if (auth.currentUser) return auth.currentUser;
+          const result = await auth.signInAnonymously();
+          return auth.currentUser || result.user;
+        }).finally(() => { pending = null; });
+      }
+      return pending;
+    };
+  };
   const ensureSessionUser = async ({ reason = "session_required", message = "Initializing guest session..." } = {}) => {
-    if (hasSessionUser()) return state.user;
     const auth = state.clients?.auth;
-    if (!auth) throw new Error("Authentication is not initialized.");
-    const ownsBootstrap = !state.anonymousBootstrapInFlight;
-    if (ownsBootstrap) {
-      state.anonymousBootstrapInFlight = true;
-    }
+    if (!auth || !state.ensureRestoredSession) throw new Error("Authentication is not initialized. Please retry.");
     try {
-      await auth.signInAnonymously();
+      const nextUser = await state.ensureRestoredSession();
+      if (!nextUser) throw new Error("Unable to restore authentication.");
+      if (state.user?.uid !== nextUser.uid) state.activeWorkspaceId = nextUser.uid;
+      state.user = nextUser;
+      return nextUser;
     } catch (error) {
       requestNativeAuthGate({ reason, message });
       throw error;
-    } finally {
-      if (ownsBootstrap) {
-        state.anonymousBootstrapInFlight = false;
-      }
     }
-    const nextUser = auth.currentUser || state.user;
-    if (nextUser) {
-      state.user = nextUser;
-      return nextUser;
-    }
-    requestNativeAuthGate({ reason, message });
-    throw new Error("Unable to initialize guest session.");
   };
   const requireFullAccount = (message = "Sign in to continue.", opts = {}) => {
     if (hasFullAccount()) return true;
@@ -9516,7 +9528,9 @@
     if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
-        ${document.querySelector(".app-sidebar") ? "" : `<a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Forecast</span></a><a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>`}
+        <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Terminal</span></a>
+        ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>`}
+        <a href="/shop" data-analytics="nav_shop">${icon("shopping-bag")}<span>Shop</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
         <a href="https://quantura.mintlify.app/" data-analytics="nav_developers">${icon("code")}<span>API Docs</span></a>
       `;
@@ -25599,6 +25613,11 @@
           const nativeAuthBridge = installNativeAuthBridge(auth);
 
 	      state.clients = { auth, db, functions, storage, messaging };
+        const persistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(async () => {
+          await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+          showToast("Using session-only sign-in in this browser.", "warn");
+        });
+        state.ensureRestoredSession = createSessionCoordinator(auth, persistenceReady);
 	      hydrateUnsplashGallery(functions);
 	      bindFeatureVoteForms(functions);
 
@@ -27032,18 +27051,6 @@
         renderCsvPreview(table);
       }
 		    });
-
-	    const persistenceReady = auth
-	      .setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-	      .catch(async () => {
-        // Some browsers block persistent storage (e.g., private browsing). Fall back to session persistence.
-        try {
-          await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
-        } catch (error) {
-          // Ignore persistence failures.
-        }
-	        showToast("Using session-only sign-in in this browser.", "warn");
-	      });
 
         bindMyRequestsPanels();
         renderMyRequestsPanels();
@@ -30128,7 +30135,7 @@
             if (!state.anonymousBootstrapInFlight) {
               state.anonymousBootstrapInFlight = true;
               try {
-                await auth.signInAnonymously();
+                await ensureSessionUser();
                 logEvent("login", { method: "anonymous_auto", runtime: resolveRuntimeLabel() });
               } catch (anonError) {
                 if (ui.emailMessage) {
@@ -30145,6 +30152,7 @@
           }
 			      state.authResolved = true;
 			      state.user = user;
+          if (previousUid !== user.uid || isFirstAuthEvent) state.activeWorkspaceId = user.uid;
           syncProductivityAccess(user);
           const nextUid = String(user?.uid || "").trim();
           if (hasFullAccount(user)) {
