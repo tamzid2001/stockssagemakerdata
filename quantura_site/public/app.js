@@ -14532,49 +14532,15 @@
     return {symbol, side, title};
   };
 
-  // Strategy signals are sampled once per COMPLETED minute, never from tick
-  // streams. Compare the same immutable forecast at consecutive timestamps.
-  const ensembleMinuteSignals = (job, now = Date.now()) => {
-    if (job.frequency !== "1min") return { available: false, reason: "Choose a one-minute forecast to see P90 buy / P10 sell signals.", events: [] };
-    const isMarket = job.source?.type === "prediction_market";
-    const replay = job.source?.analysis_mode === "historical_replay";
-    const cutoff = Date.parse(job.history?.at(-1)?.timestamp);
-    const published = replay ? cutoff : Date.parse(job.completed_at);
-    if (!Number.isFinite(published)) return { available: false, reason: "Waiting for the forecast publication timestamp.", events: [] };
-    const levels = new Map((job.predictions || []).map(row => [Date.parse(row.timestamp), row.quantiles]));
-    const quotes = new Map();
-    for (const row of job.observations || []) {
-      const time = Date.parse(row.timestamp), value = isMarket ? row.bid : row.target;
-      if (time % 60000 === 0 && time <= Math.floor(now / 60000) * 60000 && time > published && row.is_forward_filled !== true && typeof value === "number" && Number.isFinite(value)) quotes.set(time, value);
-    }
-    const events = [];
-    for (const [time, price] of [...quotes].sort((a,b)=>a[0]-b[0])) {
-      const before = quotes.get(time - 60000), previous = levels.get(time - 60000), current = levels.get(time);
-      if (before === undefined || !previous || !current) continue;
-      for (const [q, kind] of [["0.9", "buy"], ["0.1", "sell"]]) {
-        if (typeof current[q] !== "number" || typeof previous[q] !== "number") continue;
-        const crosses = kind === "buy" ? before < previous[q] && price >= current[q] : before > previous[q] && price <= current[q];
-        if (crosses) events.push({ timestamp: new Date(time).toISOString(), price, level: current[q], quantile: q, kind });
-      }
-    }
-    return { available: true, events, quoteCount: quotes.size, replay, basis: isMarket ? "selected-side closing bid" : "closing price" };
-  };
-
   const renderEnsembleSignals = (job) => {
     const firstHost = document.getElementById("ensemble-first-row-signal");
     const first = window.QuanturaForecastControls?.firstRowSignal(job);
     if (firstHost && first) {
       firstHost.dataset.signal = first.signal || "waiting";
-      firstHost.innerHTML = first.status !== "observed" ? escapeHtml(first.reason) : `<strong>First-row signal · ${first.signal === "buy" ? "BUY — below P10" : first.signal === "sell" ? "SELL — above P90" : "NO SIGNAL — between P10 and P90"}</strong><p>Quote: ${escapeHtml(ensembleLocalTime(first.quoteTimestamp))} · ${escapeHtml(first.price.toFixed(4))}. Forecast row: ${escapeHtml(ensembleLocalTime(first.timestamp))} · P10 ${escapeHtml(first.lower.toFixed(4))} · P90 ${escapeHtml(first.upper.toFixed(4))}</p><small>${escapeHtml(first.timing)}. A research signal, not an order or fill.</small>`;
+      firstHost.innerHTML = first.status !== "observed" ? escapeHtml(first.reason) : `<strong>First-quote signal · ${first.signal === "buy" ? "BUY — below P10" : first.signal === "sell" ? "SELL — above P90" : "NEUTRAL — within P10–P90"}</strong><p>Quote: ${escapeHtml(ensembleLocalTime(first.quoteTimestamp))} · ${escapeHtml(first.price.toFixed(4))}. Forecast row: ${escapeHtml(ensembleLocalTime(first.timestamp))} · P10 ${escapeHtml(first.lower.toFixed(4))} · P90 ${escapeHtml(first.upper.toFixed(4))}</p><small>${escapeHtml(first.timing)}. A research signal, not an order or fill.</small>`;
       const firstCell = ui.ensembleResultTable?.querySelector("tbody tr:first-child td");
-      if (firstCell) { firstCell.querySelector(".first-row-signal-badge")?.remove(); if (first.status === "observed") { const badge = document.createElement("strong"); badge.className = "first-row-signal-badge"; badge.textContent = first.signal === "none" ? " · No signal" : ` · ${first.signal.toUpperCase()}`; firstCell.append(badge); } }
+      if (firstCell) { firstCell.querySelector(".first-row-signal-badge")?.remove(); if (first.status === "observed") { const badge = document.createElement("strong"); badge.className = "first-row-signal-badge"; badge.textContent = first.signal === "none" ? " · Neutral" : ` · ${first.signal.toUpperCase()}`; firstCell.append(badge); } }
     }
-    const host = document.getElementById("ensemble-crossing-signals");
-    if (!host) return;
-    const result = ensembleMinuteSignals(job);
-    if (!result.available) { host.textContent = result.reason; return; }
-    const latest = result.events.at(-1);
-    host.innerHTML = `<span class="ensemble-signal ensemble-signal-buy"><strong>P90 · Buy signal</strong> Cross upward</span><span class="ensemble-signal ensemble-signal-sell"><strong>P10 · Sell signal</strong> Cross downward</span><p>${latest ? `<strong>${latest.kind === "buy" ? "Buy" : "Sell"} crossing · ${escapeHtml(ensembleLocalTime(latest.timestamp))}</strong> · ${escapeHtml(Number(latest.price).toFixed(4))}` : result.quoteCount < 2 ? "Waiting for two consecutive completed one-minute quotes with bid data." : "No P90/P10 crossing detected in the available completed minutes."}</p><p>${result.replay ? "Historical replay — outcomes may already have been known. " : ""}Based on ${escapeHtml(result.basis)}, not stream ticks. Gaps are excluded. Strategy indicators are not orders, execution guarantees or validated win rates.</p>`;
   };
 
   const renderEnsembleLiveQuote = (job, now = Date.now()) => {
@@ -14855,7 +14821,7 @@
     const median = quantiles.slice().sort((left, right) => Math.abs(left - 0.5) - Math.abs(right - 0.5))[0];
     traces.push({ type: "scatter", mode: "lines", x: rows.map((row) => row.timestamp), y: quantileValues(median), name: `${ensembleQuantileLabel(median)} ensemble`, line: { width: 2.5, color: "#4361ee" } });
     for (const [level, color] of [[0.1, isDarkMode() ? "#fbbf24" : "#a16207"], [0.9, isDarkMode() ? "#c4b5fd" : "#7c3aed"]]) {
-      if (quantiles.includes(level) && level !== median) traces.push({ type: "scatter", mode: "lines", x: rows.map(row => row.timestamp), y: quantileValues(level), name: `${ensembleQuantileLabel(level)} · ${level === 0.9 ? "Buy" : "Sell"} signal`, line: { width: 1.8, dash: "dash", color } });
+      if (quantiles.includes(level) && level !== median) traces.push({ type: "scatter", mode: "lines", x: rows.map(row => row.timestamp), y: quantileValues(level), name: `${ensembleQuantileLabel(level)} forecast`, line: { width: 1.8, dash: "dash", color } });
     }
     const source = job.source || {};
     const inputHistory = job.history || [];
@@ -14863,13 +14829,8 @@
     const observed = job.observations || [];
     if (observed.length) traces.push({type:"scatter",mode:"lines+markers",x:observed.map(r=>r.timestamp),y:observed.map(r=>r.target),name:source.analysis_mode === "historical_replay" ? "Actual prices after input cutoff" : "Observed after forecast",line:{width:2,color:isDarkMode()?"#5eead4":"#0f766e"},connectgaps:false});
     const dark = isDarkMode();
-    const signals = ensembleMinuteSignals(job).events;
     const firstSignal = window.QuanturaForecastControls?.firstRowSignal(job);
-    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.quoteTimestamp).toISOString()], y:[firstSignal.price], name:`First-row signal · ${firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (replay)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
-    for (const kind of ["buy", "sell"]) {
-      const points = signals.filter(s => s.kind === kind);
-      if (points.length) traces.push({ type: "scatter", mode: "markers", x: points.map(s=>s.timestamp), y: points.map(s=>s.price), name: `${kind === "buy" ? "P90 Buy" : "P10 Sell"} crossing`, marker: { size: 11, symbol: kind === "buy" ? "triangle-up" : "triangle-down", color: kind === "buy" ? (dark ? "#6ee7b7" : "#087f5b") : (dark ? "#fda4af" : "#b42318"), line: {width:1,color:dark ? "#111827" : "#ffffff"} } });
-    }
+    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.quoteTimestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (replay)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
     renderEnsembleSignals(job);
     // Epoch positions stay absolute (including DST folds); only labels localize.
     traces.forEach(trace => { trace.customdata = trace.x.map(value => ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });

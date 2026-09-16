@@ -33,7 +33,7 @@ for (const filename of await walk(path.join(root, "pages"))) {
   if (filename.endsWith("/forecasting.html")) {
     html = html.replace(/    <script defer src="\/forecast-controls[^\n]+\n/g, "").replace(/(    <script defer src="\/app\.js)/, '    <script defer src="/forecast-controls.js?v=20260915a"></script>\n$1');
   }
-  if (filename.endsWith("/pricing.html")) html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=/forecasting"><title>Quantura is free</title></head><body><p>Paid plans are archived. <a href="/forecasting">Use Quantura for free</a>. Existing subscribers can manage billing in their account.</p></body></html>\n';
+  if (filename.endsWith("/pricing.html")) html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=/forecasting"><title>Quantura is free</title></head><body><p>Paid plans are archived. <a href="/forecasting">Use Quantura for free</a>. Existing subscribers can manage billing in their account.</p><footer><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/disclaimer">Disclaimer</a></footer></body></html>\n';
   html = html.replace(/[\t ]+$/gm, "");
   await fs.writeFile(filename, html);
   const relative = path.relative(path.join(root, "pages"), filename);
