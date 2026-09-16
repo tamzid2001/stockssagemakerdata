@@ -94,6 +94,26 @@ def test_two_value_real_worker_path_with_mock_adapters(monkeypatch):
         execute_job(job, mock=True)
 
 
+def test_unchanged_two_btc_minutes_allowed_only_in_exact_scoped_research(monkeypatch):
+    from ensemble_forecasting.worker import execute_job
+    monkeypatch.setenv('TIMESFM_HF_ACCESS_APPROVED','true')
+    monkeypatch.setenv('TIMESFM_COMMERCIAL_LICENSED','true')
+    monkeypatch.setattr(forecast,'execute_job',lambda job,**kw:execute_job(job,mock=True,**kw))
+    window=[Quote(60,.5,.49),Quote(120,.5,.49)]
+    models=('prophet','granite','chronos','timesfm')
+    with pytest.raises(ValueError,match='HISTORY_FLAT_WINDOW'):
+        forecast.forecast_window(window,13,models)
+    result=forecast.forecast_window(window,13,models,btc_two_point_research=True)
+    assert result['history_count']==2 and result['imputed_context_steps']==0
+    assert len(result['rows'])==13 and len(result['models'])==4
+    assert any('UNCHANGED_TWO_POINT_CONTEXT' in w for w in result['warnings'])
+    for invalid in ([Quote(60,.5,.49),Quote(180,.5,.49)],window+[Quote(180,.5,.49)]):
+        with pytest.raises(ValueError,match='BTC_TWO_POINT_RESEARCH'):
+            forecast.forecast_window(invalid,13,models,btc_two_point_research=True)
+    with pytest.raises(ValueError,match='BTC_TWO_POINT_RESEARCH'):
+        forecast.forecast_window(window,30,models,btc_two_point_research=True)
+
+
 def test_chronos_partial_native_range_never_requests_clamped_tails(monkeypatch):
     requested = []
 

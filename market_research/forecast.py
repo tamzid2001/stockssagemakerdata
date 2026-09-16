@@ -22,6 +22,7 @@ def forecast_window(
     models: tuple[str, ...] | None = None,
     quantiles: tuple[float, ...] = QUANTILES,
     *, single_point_research: bool = False, failure_policy: str | None = None,
+    btc_two_point_research: bool = False,
 ) -> dict:
     models = default_research_models() if models is None else models
     if failure_policy not in (None, 'fail', 'renormalize'):
@@ -36,12 +37,16 @@ def forecast_window(
         raise ValueError("unsupported_models")
     if single_point_research and (len(window) != 1 or horizon != 14 or set(models) != {'granite','chronos','timesfm'}):
         raise ValueError('SINGLE_POINT_RESEARCH_CONFIGURATION_REQUIRED')
+    if btc_two_point_research and (single_point_research or len(window)!=2 or horizon!=13
+            or window[1].timestamp-window[0].timestamp!=60
+            or not set(models)<= {'prophet','granite','chronos','timesfm'}):
+        raise ValueError('BTC_TWO_POINT_RESEARCH_CONFIGURATION_REQUIRED')
     if len(window) < (1 if single_point_research else 2) or any(not q.observed for q in window):
         raise ValueError("TWO_GENUINE_OBSERVATIONS_REQUIRED")
     if any(b.timestamp <= a.timestamp for a, b in zip(window, window[1:])):
         raise ValueError("NON_CHRONOLOGICAL_CONTEXT")
     quality = history_quality(window)
-    if quality["forecast_blocked"]:
+    if quality["forecast_blocked"] and not btc_two_point_research:
         raise ValueError("HISTORY_FLAT_WINDOW")
     gaps = sum(b.timestamp - a.timestamp > 60 for a, b in zip(window, window[1:]))
     source = [
@@ -148,13 +153,16 @@ def forecast_window(
         "input_snapshot": source,
         "model_versions": versions,
         "history_quality": quality,
+        "btc_two_point_research": btc_two_point_research,
         "configuration": configuration,
         "transform": "logit_inverse_logit",
         "epsilon": 1e-6,
         "rows": rows,
         "weights": result["effective_weights_by_quantile"],
         "models": result.get("models"),
-        "warnings": result.get("warnings", []) + (["IRREGULAR_HISTORY: missing minutes retained; foundation-model observation steps are not equal elapsed time. Reliability requires validation."] if gaps else [])
+        "warnings": result.get("warnings", [])
+        + (["UNCHANGED_TWO_POINT_CONTEXT: two genuine consecutive BTC minute quotes were equal; no synthetic variation added; reliability unvalidated."] if btc_two_point_research and quality['forecast_blocked'] else [])
+        + (["IRREGULAR_HISTORY: missing minutes retained; foundation-model observation steps are not equal elapsed time. Reliability requires validation."] if gaps else [])
         + (
             [
                 f"SHORT_HISTORY: only {len(window)} genuine minute observations; forecast reliability is unvalidated."

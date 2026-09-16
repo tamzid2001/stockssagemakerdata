@@ -63,7 +63,8 @@ def test_live_forecast_retry_keeps_input_and_never_backdates(store,monkeypatch):
         def candles(self,*args):return candles()
     clock=[OPEN+125];monkeypatch.setattr(btc.time,'time',lambda:clock[0])
     calls=[]
-    def forecast(window,horizon,models,quantiles):
+    def forecast(window,horizon,models,quantiles,**options):
+        assert options=={'btc_two_point_research':True}
         calls.append(window)
         if len(calls)==1:raise RuntimeError('transient')
         return {'forecast_id':str(len(calls)),'origin':OPEN+120,
@@ -83,7 +84,7 @@ def test_permanent_validation_error_not_retried(store,monkeypatch):
     class Provider(btc.KalshiBTCProvider):
         def candles(self,*args):return candles()
     monkeypatch.setattr(btc.time,'time',lambda:OPEN+125)
-    def fail(*args):raise ValueError('LICENSE_REQUIRED')
+    def fail(*args,**kwargs):raise ValueError('LICENSE_REQUIRED')
     with pytest.raises(ValueError):btc.process_market(store,Provider(),MARKET,OPEN+125,False,fail)
     assert store._get('checkpoints','btc:'+MARKET['ticker'])['status']=='failed'
     assert not store.values('forecasts')

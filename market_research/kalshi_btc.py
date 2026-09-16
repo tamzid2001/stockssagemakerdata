@@ -202,7 +202,7 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
         pair = []
         try:
             for side in ("yes", "no"):
-                options = {'single_point_research': True} if history_minutes == 1 else {}
+                options = {'single_point_research': True} if history_minutes == 1 else {'btc_two_point_research':True}
                 f = forecaster(windows[side], horizon, models, QUANTILES, **options)
                 validate_forecast(f, origin, horizon)
                 f["market_context"] = {"event_id": market["event_ticker"], "market_id": ticker,
