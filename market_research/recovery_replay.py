@@ -147,7 +147,7 @@ def process_game(store, provider, pair, as_of, horizon, max_origins, deadline, f
                 continue
             try:
                 result = provider.resolution(side)
-                result["settled_at"] = stamp(side["resolutionTime"])
+                result.setdefault("settled_at", stamp(side["resolutionTime"]))
                 store.checkpoint("resolution:" + side["contractId"], result)
             except (ValueError, RuntimeError, OSError):
                 pass  # Unknown settlement is an open position, not a loss.

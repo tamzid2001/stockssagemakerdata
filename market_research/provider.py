@@ -170,6 +170,51 @@ class KalshiProvider(QuanturaProvider):
         self.series_ticker = series_ticker
         self.series = None
 
+    def resolution(self, contract):
+        """Verify a binary payout against official live/historical market data."""
+        from decimal import Decimal, InvalidOperation
+        from .kalshi_btc import API, KalshiBTCProvider
+        from .engine import stamp
+
+        ticker, side = contract.get('providerSymbol', ''), contract.get('side')
+        if (not re.fullmatch(r'KX[A-Z0-9]+-[A-Z0-9-]{1,180}', ticker) or
+                side not in {'yes', 'no'} or contract.get('marketId') != ticker or
+                contract.get('contractId') != f'{ticker}:{side}'):
+            raise ValueError('KALSHI_RESOLUTION_IDENTITY_MISMATCH')
+        reader = KalshiBTCProvider()
+        reader.series_ticker = ticker.split('-', 1)[0]
+        path = ('/historical' if contract.get('sourceTier') == 'historical' else '') + '/markets/' + ticker
+        try:
+            market = reader.get(path)['market']
+        except RuntimeError as error:
+            if str(error) != 'KALSHI_HTTP_404':
+                raise
+            path = ('/markets/' if path.startswith('/historical/') else '/historical/markets/') + ticker
+            market = reader.get(path)['market']
+        if (market.get('ticker') != ticker or market.get('event_ticker') != contract.get('eventId') or
+                market.get('market_type') != 'binary'):
+            raise ValueError('KALSHI_RESOLUTION_IDENTITY_MISMATCH')
+        evidence = dict(provider='kalshi', contract_id=contract['contractId'], side=side,
+                        checked_at=int(time.time()), source_url=API + path, result=market.get('result'),
+                        resolution_status='pending_or_unverified', selected_side_won=None)
+        if (market.get('status') not in {'finalized', 'settled'} or
+                market.get('result') not in {'yes', 'no'} or market.get('is_provisional') is True):
+            return evidence
+        expected = int(market['result'] == 'yes')
+        if market.get('settlement_value_dollars') is not None:
+            try:
+                if Decimal(str(market['settlement_value_dollars'])) != expected:
+                    return {**evidence, 'resolution_status': 'conflicting_or_partial_settlement'}
+            except InvalidOperation:
+                return {**evidence, 'resolution_status': 'conflicting_or_partial_settlement'}
+        try:
+            settled_at = stamp(market.get('settlement_ts') or '')
+        except (KeyError, TypeError, ValueError):
+            return {**evidence, 'resolution_status': 'settlement_time_unverified'}
+        payout = expected if side == 'yes' else 1 - expected
+        return {**evidence, 'resolution_status': 'resolved', 'settled_at': settled_at,
+                'selected_side_won': bool(payout), 'selected_side_payout': payout}
+
     def discover(self, mode, max_pages=1, start_cursor="0"):
         if mode == "live":
             contracts, cursor, coverage = {}, start_cursor, {}

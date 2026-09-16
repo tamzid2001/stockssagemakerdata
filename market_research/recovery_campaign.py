@@ -74,8 +74,10 @@ def run(args):
     first_row = getattr(args, 'strategy', 'legacy') == 'first_row'
     version = VERSION
     reporter = from_store
+    group_games = game_groups
     if first_row:
         from .first_row_strategy import VERSION as version, from_store as reporter
+        from .first_row_strategy import game_groups as group_games
         if args.horizon != 30:
             raise ValueError('FIRST_ROW_REQUIRES_THIRTY_MINUTE_ORIGINS')
     config = {"version": version, "provider": args.provider, "horizon": args.horizon, "roll_minutes": args.horizon,
@@ -120,7 +122,7 @@ def run(args):
                     file = Path(directory) / "catalog.enc"; encode_catalog(catalog, file)
                     pointer = cloud.upload(file, "catalog")
                 cloud.update({"catalog": pointer})
-            games = list(game_groups(catalog["contracts"]).items())
+            games = list(group_games(catalog["contracts"]).items())
             index = int(state["page_index"])
             while index < len(games) and time.monotonic() < deadline:
                 game, pair = games[index]
