@@ -1,0 +1,2 @@
+# Screener provider fallback, resolved against the exercised model-stack lock.
+yfinance[repair]==1.7.0

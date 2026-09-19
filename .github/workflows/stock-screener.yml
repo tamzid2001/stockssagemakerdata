@@ -144,7 +144,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - name: Install locked five-model inference environment
-        run: python -m pip install --no-cache-dir --disable-pip-version-check --requirement requirements-ensemble-forecast.lock
+        run: |
+          python -m pip install --no-cache-dir --disable-pip-version-check --requirement requirements-ensemble-forecast.lock --requirement requirements-screener-marketdata.lock
+          python -c 'import yfinance; from scripts.weekly_screener import weekly_configuration; assert len(weekly_configuration()["models"]) == 5'
       - name: Check production TimesFM license and access flags
         run: |
           test "$TIMESFM_HF_ACCESS_APPROVED" = true
