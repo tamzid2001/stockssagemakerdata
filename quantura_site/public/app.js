@@ -14450,12 +14450,13 @@
   const ensembleQuantileKey = (value) => Number(Number(value).toPrecision(12)).toString();
 
   const ensembleChartDefaultRange = (job) => {
-    if (job.source?.type !== "prediction_market" && !/min|hour|^\d+h$/i.test(job.frequency || "")) return null;
-    const end = Date.parse(job.predictions?.at(-1)?.timestamp);
-    const lastInput = Date.parse(job.history?.at(-1)?.timestamp);
-    const latest = Math.max(lastInput, Date.parse(job.observations?.at(-1)?.timestamp) || lastInput,
-      Math.min(Date.parse(job.created_at) || lastInput, end));
-    return Number.isFinite(latest) && Number.isFinite(end) ? [latest - 60*60_000, Math.max(end, latest)] : null;
+    return window.QuanturaForecastControls.forecastChartRange(job);
+  };
+  let nyseChartCalendarPromise;
+  const loadEnsembleChartCalendar = async job => {
+    if(job.source?.type!=="ticker" || job.calendar!=="NYSE" || job.frequency!=="1D")return;
+    nyseChartCalendarPromise ||= fetch("/market-calendars/nyse.json").then(response=>{if(!response.ok)throw new Error("Calendar unavailable");return response.json();}).catch(()=>{nyseChartCalendarPromise=null;return null;});
+    job.chart_calendar=await nyseChartCalendarPromise;
   };
 
   const ensembleDatasetFrequency = (data) => {
@@ -14823,6 +14824,8 @@
     const quantileValues = (quantile) => rows.map((row) => Number(row?.quantiles?.[ensembleQuantileKey(quantile)]));
     const traces = [];
     const timeZone = ensembleTimeZone();
+    await loadEnsembleChartCalendar(job);
+    window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
     const chartTimes = rows.map(row => Date.parse(row.timestamp));
     const addBand = (lower, upper, name, color) => {
       if (lower === undefined || upper === undefined || lower === upper) return;
@@ -14841,11 +14844,11 @@
     const source = job.source || {};
     const inputHistory = job.history || [];
     const plotTimestamp = row => window.QuanturaForecastControls.stockChartTimestamp(row, job);
-    if (inputHistory.length) traces.unshift({ type:"scatter",mode:"lines",x:inputHistory.map(plotTimestamp),y:inputHistory.map(r=>r.target),name:"Downloaded input history",line:{width:1.5,color:"#64748b"},connectgaps:false });
+    if (inputHistory.length) traces.unshift({ type:"scatter",mode:"lines+markers",x:inputHistory.map(plotTimestamp),y:inputHistory.map(r=>r.target),name:"Input history",line:{width:1.5,color:"#64748b"},marker:{size:3},connectgaps:false });
     const observed = job.observations || [];
     const overlayGroups = source.type === "ticker" && job.frequency !== "1min"
-      ? [{rows:observed.filter(r => r.interval !== "1min"),name:"Completed forecast-interval closes"}, {rows:observed.filter(r => r.interval === "1min"),name:"Recent minute closes (not final daily closes)"}]
-      : [{rows:observed,name:"Actual prices after input cutoff"}];
+      ? [{rows:observed.filter(r => r.interval !== "1min"),name:"Completed closes"}, {rows:observed.filter(r => r.interval === "1min"),name:"Minute close (provisional)"}]
+      : [{rows:observed,name:"Observed prices"}];
     for (const group of overlayGroups) {
       // One latest minute close per daily session; do not draw hundreds of
       // intraday points at a single daily x coordinate or call them final closes.
@@ -14857,26 +14860,52 @@
     const firstSignal = window.QuanturaForecastControls?.firstRowSignal(job);
     if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.timestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (retrospective)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
     renderEnsembleSignals(job);
-    // Epoch positions stay absolute (including DST folds); only labels localize.
-    traces.forEach(trace => { trace.customdata ||= trace.x.map(value => job.frequency === "1D" && source.type === "ticker" ? value.slice(0,10) : ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
+    // ISO UTC positions avoid Plotly's browser-local conversion of numeric date
+    // values, which can put Monday/session-open points inside a closed-day gap.
+    traces.forEach(trace => { trace.customdata ||= trace.x.map(value => job.frequency === "1D" && source.type === "ticker" ? value.slice(0,10) : ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => new Date(value).toISOString()); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
     const tickIndices = [...new Set(Array.from({ length: Math.min(6, rows.length) }, (_, i) => Math.round(i * (rows.length - 1) / Math.max(1, Math.min(6, rows.length) - 1))))];
     if (ensembleUiState.chartWindowId !== job.forecast_id) {
       ensembleUiState.chartWindowId = job.forecast_id;
       ensembleUiState.chartWindow = ensembleChartDefaultRange(job);
     }
     const chartRange = ensembleUiState.chartWindow;
-    const tickTimes = chartRange ? Array.from({length:6}, (_,i) => chartRange[0] + i*(chartRange[1]-chartRange[0])/5) : tickIndices.map(i => chartTimes[i]);
+    const availableTicks=[...new Set(traces.flatMap(trace=>trace.x).map(Date.parse).filter(t=>!chartRange || (t>=chartRange[0] && t<=chartRange[1])))].sort((a,b)=>a-b);
+    const tickTimes=availableTicks.length ? [...new Set(Array.from({length:Math.min(6,availableTicks.length)},(_,i)=>availableTicks[Math.round(i*(availableTicks.length-1)/Math.max(1,Math.min(6,availableTicks.length)-1))]))] : tickIndices.map(i => chartTimes[i]);
     const intraday = /min|hour|^\d+h$/i.test(job.frequency || "");
+    const yRange=window.QuanturaForecastControls.visibleForecastYRange(traces,chartRange);
+    const mobile=window.matchMedia("(max-width: 600px)").matches;
     await Plotly.react(ui.ensembleForecastChart, traces, {
       font: { family: "Manrope, sans-serif", color: dark ? "rgba(246,244,238,.92)" : "#12182a" },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
       title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
-      margin: { l: 62, r: 24, t: 58, b: 58 }, height: 440, hovermode: "closest", uirevision: job.forecast_id,
-      xaxis: { type: "date", ...(chartRange ? { range: chartRange, autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date" }, tickmode: "array", tickvals: tickTimes, ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: true, thickness: 0.12 } },
-      yaxis: { title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target" } },
-      legend: { orientation: "h", y: -0.25 },
-      shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:Date.parse(plotTimestamp(inputHistory.at(-1))),x1:Date.parse(plotTimestamp(inputHistory.at(-1))),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
+      margin: { l: mobile?48:62, r: 16, t: 58, b: mobile?175:125, autoexpand:false }, height: mobile?565:490, hovermode: "closest", uirevision: job.forecast_id,
+      xaxis: { type: "date", ...(chartRange ? { range: chartRange.map(t=>new Date(t).toISOString()), autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date", standoff: 14 }, automargin:true, rangebreaks:window.QuanturaForecastControls.exchangeDateBreaks(job), tickmode: "array", tickvals: tickTimes.map(t=>new Date(t).toISOString()), ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: false } },
+      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
+      legend: { orientation: "h", yref:"container", y:0.01, yanchor:"bottom", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
+      shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:plotTimestamp(inputHistory.at(-1)),x1:plotTimestamp(inputHistory.at(-1)),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
+    const chart=ui.ensembleForecastChart;
+    // Reserve the actual wrapped legend height plus axis-label space. Anchoring
+    // to the container avoids Plotly's auto-margin feedback on mobile redraws.
+    const legendHeight=chart.querySelector(".legend")?.getBoundingClientRect().height;
+    if(Number.isFinite(legendHeight) && legendHeight>0) {
+      const bottom=Math.ceil(legendHeight)+90;
+      await Plotly.relayout(chart,{"margin.b":bottom,height:(mobile?300:310)+58+bottom});
+    }
+    if(chart.__ensembleRelayout)chart.removeListener?.("plotly_relayout",chart.__ensembleRelayout);
+    chart.__ensembleRelayout=event=>{
+      const raw=event["xaxis.range"] || (event["xaxis.autorange"] ? chart._fullLayout?.xaxis.range : [event["xaxis.range[0]"],event["xaxis.range[1]"]]);
+      const range=(raw || []).map(window.QuanturaForecastControls.chartInstant);
+      if(range.length!==2)return;
+      if(!range.every(Number.isFinite))return;
+      ensembleUiState.chartWindow=range;
+      const y=window.QuanturaForecastControls.visibleForecastYRange(chart.data || traces,range);
+      const visible=[...new Set((chart.data || traces).flatMap(trace=>trace.x).map(Date.parse).filter(t=>t>=range[0]&&t<=range[1]))].sort((a,b)=>a-b);
+      const ticks=Array.from({length:Math.min(6,visible.length)},(_,i)=>visible[Math.round(i*(visible.length-1)/Math.max(1,Math.min(6,visible.length)-1))]);
+      const labels=ticks.map(t=>new Intl.DateTimeFormat(undefined,intraday?{timeZone,hour:"numeric",minute:"2-digit",hour12:true}:{timeZone:"UTC",month:"short",day:"numeric"}).format(t));
+      if(y)void Plotly.relayout(chart,{"yaxis.range":y,"yaxis.autorange":false,"xaxis.tickvals":ticks.map(t=>new Date(t).toISOString()),"xaxis.ticktext":labels});
+    };
+    chart.on?.("plotly_relayout",chart.__ensembleRelayout);
   };
 
   const startEnsembleObservations = (job) => {
@@ -14903,19 +14932,14 @@
           renderEnsembleLiveQuote(job);
           const replay = job.source?.analysis_mode === "historical_replay";
           if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = `Actual-price overlay: ${job.observations.length} observed bars after input cutoff. ${replay ? "Some outcomes were already known when this replay was generated. " : ""}Updated ${ensembleLocalTime(response.data.observed_at)}. Refreshes once per minute; the forecast remains unchanged.`;
-          const forecastByTime = new Map((job.predictions || []).map(row=>[Date.parse(row.timestamp),row.quantiles]));
-          const matchedTime = row => Date.parse(window.QuanturaForecastControls.stockChartTimestamp(row,job));
-          const errors = job.observations.filter(row=>(!row.interval || row.interval === job.frequency) && (!job.source?.field || job.source.field === "close") && Date.parse(row.timestamp)>Date.parse(job.completed_at) && Number.isFinite(Number(forecastByTime.get(matchedTime(row))?.['0.5']))).map(row=>Number(forecastByTime.get(matchedTime(row))['0.5'])-row.target);
-          if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = errors.length
-            ? `Observed since publication: ${errors.length} matched forecast steps · MAE ${(errors.reduce((s,e)=>s+Math.abs(e),0)/errors.length).toFixed(4)} · RMSE ${Math.sqrt(errors.reduce((s,e)=>s+e*e,0)/errors.length).toFixed(4)} · Bias ${(errors.reduce((s,e)=>s+e,0)/errors.length).toFixed(4)}. This single live forecast is not a historical backtest.`
-            : "Live validation: waiting for timestamp-matched observations after forecast publication. No accuracy score is invented.";
+          window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
           const latest = Date.parse(job.observations.at(-1)?.timestamp);
           const moveWindow = focusLatest || (ensembleUiState.chartWindow && latest > ensembleUiState.chartWindow[1]);
           if (moveWindow) ensembleUiState.chartWindow = ensembleChartDefaultRange(job);
           await renderEnsembleChart(job);
           if (moveWindow && current() && ensembleUiState.chartWindow) {
             const Plotly = await getPlotly();
-            if (Plotly && current()) await Plotly.relayout(ui.ensembleForecastChart, { "xaxis.range": ensembleUiState.chartWindow, "xaxis.autorange": false });
+            if (Plotly && current()) await Plotly.relayout(ui.ensembleForecastChart, { "xaxis.range": ensembleUiState.chartWindow.map(t=>new Date(t).toISOString()), "xaxis.autorange": false });
           }
           stopped = ["immutable_dataset","live_overlay_window_expired"].includes(response.data.availability);
       } catch (error) {
@@ -14937,6 +14961,7 @@
     if (!Array.isArray(job.history)) job = (await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}`)).data;
     setEnsembleBusy(false);
     ensembleUiState.lastJob = job;
+    window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
     const statusButton = document.getElementById("ensemble-check-status");
     if (statusButton) statusButton.hidden = true;
     const otherSide = document.getElementById("ensemble-other-side");
@@ -15266,7 +15291,7 @@
       const range = ensembleChartDefaultRange(job);
       const Plotly = await getPlotly();
       ensembleUiState.chartWindow = range;
-      if (Plotly && ui.ensembleForecastChart) { await renderEnsembleChart(job); await Plotly.relayout(ui.ensembleForecastChart, range ? {"xaxis.range":range,"xaxis.autorange":false} : {"xaxis.autorange":true}); }
+      if (Plotly && ui.ensembleForecastChart) { await renderEnsembleChart(job); await Plotly.relayout(ui.ensembleForecastChart, range ? {"xaxis.range":range.map(t=>new Date(t).toISOString()),"xaxis.autorange":false} : {"xaxis.autorange":true}); }
     });
     document.getElementById("ensemble-chart-refresh")?.addEventListener("click", () => ensembleUiState.refreshObservations?.({ focusLatest: true }));
     const resumeQuoteOverlay = () => { if (!document.hidden) ensembleUiState.refreshObservations?.(); };
