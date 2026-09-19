@@ -71,20 +71,38 @@
             <h1 id="screener-title">Quantitative Forecast Screener</h1>
             <p>
               Find forecast dislocations across the current S&amp;P 500, broad eligible Nasdaq common-stock universe, and SPY.
-              Actual prices are compared with a consistent 10-business-day P10/P50/P90 forecast horizon.
+              Compare the latest available close with forecast quantiles. Current signals include extended hours; saved closing signals remain separate.
             </p>
           </div>
           <div class="qs-hero-actions">
+            <a class="cta secondary" href="#saved-alerts"><i class="iconoir-bell" aria-hidden="true"></i>Save filters &amp; alerts</a>
             <button class="cta secondary" id="qs-refresh" type="button"><i class="iconoir-refresh" aria-hidden="true"></i>Refresh data</button>
             <a class="cta disabled" id="qs-export" aria-disabled="true"><i class="iconoir-download" aria-hidden="true"></i>Download CSV</a>
           </div>
         </section>
 
+        <details class="qs-filter-panel" id="saved-alerts">
+          <summary>Saved filters &amp; daily notifications</summary>
+          <div class="qs-saved-content">
+            <p class="small">Save the current filters to your account. Matching finalized exchange closes appear in your inbox once per trading day. Email is optional and requires a verified email address.</p>
+            <div class="qs-saved-toolbar">
+              <label class="qs-field"><span>Filter name</span><input id="qs-alert-name" maxlength="80" placeholder="Weekly value opportunities" /></label>
+              <label><input id="qs-alert-email" type="checkbox" /> Daily email when matched</label>
+              <button class="cta" id="qs-save-alert" type="button"><i class="iconoir-bookmark" aria-hidden="true"></i>Save current filters</button>
+              <button class="cta secondary" id="qs-load-alerts" type="button">Refresh saved filters &amp; inbox</button>
+            </div>
+            <p class="small" id="qs-alert-status" role="status" aria-live="polite"></p>
+            <ul id="qs-saved-list" class="qs-saved-list" aria-label="Saved filters"></ul>
+            <h2 class="qs-inbox-title">Notification inbox</h2>
+            <ul id="qs-alert-inbox" class="qs-saved-list" aria-label="Recent notifications"></ul>
+            <p class="small muted">Maximum 10 saved filters. One daily email combines matching email-enabled filters. Delivery is subject to the shared email allowance; in-app notifications remain available. Remove a saved filter to stop its alerts.</p>
+          </div>
+        </details>
         <section class="qs-metrics" aria-label="Screener dataset status">
           <article><span>Matching securities</span><strong id="qs-metric-matches">—</strong><small id="qs-metric-total">of — in universe</small></article>
           <article><span>Scan coverage</span><strong id="qs-metric-coverage">—</strong><small id="qs-metric-processed">Awaiting manifest</small></article>
           <article><span>Last validated scan</span><strong id="qs-metric-date">—</strong><small id="qs-metric-freshness">Timestamps are shown explicitly</small></article>
-          <article><span>Forecast engine</span><strong>Quantile Drift v1</strong><small>Log-return P10 / P50 / P90 bands</small></article>
+          <article><span>Published forecast engine</span><strong id="qs-engine">Awaiting manifest</strong><small id="qs-engine-detail">Forecast method is verified from the published data.</small></article>
         </section>
 
         <details class="qs-filter-panel" id="qs-filter-panel" open>
@@ -119,23 +137,22 @@
                 </select>
               </label>
               <label class="qs-field">
-                <span>Model bias</span>
-                <select id="qs-bias" name="bias">
-                  <option value="all">All bias states</option>
-                  <option value="buying">Buying Bias</option>
-                  <option value="selling">Selling Bias</option>
-                  <option value="neutral">Neutral / Mixed</option>
+                <span>Current signal</span>
+                <select id="qs-signal" name="signal">
+                  <option value="all">All signals</option>
+                  <option value="buy">Buy · below P10</option>
+                  <option value="sell">Sell · above P90</option>
+                  <option value="neutral">Neutral · within P10–P90</option>
+                  <option value="unavailable">Unavailable</option>
                 </select>
               </label>
               <label class="qs-field">
-                <span>Next earnings</span>
-                <select id="qs-earnings" name="earnings">
-                  <option value="all">Any date</option>
-                  <option value="today">Today</option>
-                  <option value="7">Next 7 days</option>
-                  <option value="14">Next 14 days</option>
-                  <option value="30">Next 30 days</option>
-                  <option value="unknown">No known date</option>
+                <span>Quantile values shown</span>
+                <select id="qs-statistic" name="statistic">
+                  <option value="row">Comparison session</option>
+                  <option value="avg">Horizon average</option>
+                  <option value="min">Horizon minimum</option>
+                  <option value="max">Horizon maximum</option>
                 </select>
               </label>
               <label class="qs-field">
@@ -151,7 +168,6 @@
                   <option value="distanceP10">Distance from P10</option>
                   <option value="distanceP50">Distance from P50</option>
                   <option value="distanceP90">Distance from P90</option>
-                  <option value="nextEarnings">Next earnings</option>
                   <option value="lastUpdate">Last update</option>
                 </select>
               </label>
@@ -177,8 +193,15 @@
               <p>Conditions combine with AND. For example, Above P50 + Below P90 isolates the P50–P90 range.</p>
             </fieldset>
 
+            <fieldset class="qs-quantile-filters">
+              <legend>Quantile value relative to current price</legend>
+              <div id="qs-rules" class="qs-rules"></div>
+              <button class="cta secondary small" id="qs-add-rule" type="button"><i class="iconoir-plus" aria-hidden="true"></i>Add min / max / average filter</button>
+              <p>All rules must match. Example: average P50 greater than current price by 10%. Missing values do not match.</p>
+            </fieldset>
+
             <div class="qs-filter-footer">
-              <label class="qs-signal-toggle"><input id="qs-special-p10" name="specialP10" type="checkbox" value="true" /><span>Special P10 Signal: Active</span></label>
+              <label class="qs-signal-toggle"><input id="qs-signal-changed" name="signalChanged" type="checkbox" /><span>Opposite to last saved buy/sell signal</span></label>
               <button class="cta secondary small" id="qs-clear" type="button"><i class="iconoir-erase" aria-hidden="true"></i>Clear filters</button>
             </div>
           </form>
@@ -212,14 +235,18 @@
                 <tr>
                   <th scope="col">Security</th>
                   <th scope="col">Actual</th>
+                  <th scope="col">P01</th>
                   <th scope="col">P10</th>
+                  <th scope="col">P25</th>
                   <th scope="col">P50</th>
+                  <th scope="col">P75</th>
                   <th scope="col">P90</th>
+                  <th scope="col">P99</th>
                   <th scope="col">Quantile position</th>
                   <th scope="col">Distance %<span>P10 / P50 / P90</span></th>
                   <th scope="col">Market cap</th>
-                  <th scope="col">Next earnings</th>
-                  <th scope="col">Model signal</th>
+                  <th scope="col">Current signal</th>
+                  <th scope="col">Last saved buy/sell</th>
                   <th scope="col">Updated</th>
                 </tr>
               </thead>
@@ -237,15 +264,15 @@
         <section class="qs-methodology">
           <article>
             <h2>How to read this screener</h2>
-            <p>The latest adjusted daily bar close is compared with the final P10, P50, and P90 values in a 10-business-day forecast. Positive distance means actual price is above that boundary; negative distance means it is below.</p>
+            <p>Buy means the latest completed minute close is below P10; sell means it is above P90; otherwise neutral. Extended-hours bars are eligible. If no newer bar is available, the historical close is used. Before the first forecast session arrives, its first row is the comparison; the row date is always shown.</p>
           </article>
           <article>
-            <h3>Bias and special signals</h3>
-            <p>Buying, Selling, and Neutral labels reuse the platform’s P50 statistical anomaly heuristic. “2W P10 Buy Bias” is shown only when the final two business-day P10 forecasts are unusually low.</p>
+            <h3>Current versus closing signals</h3>
+            <p>Current signals are provisional, not trade instructions. Saved closing signals use the final observed minute of an exchange session (normally 4 pm New York time; earlier on early-close days). After-hours movement never changes that record. No closing signal is backfilled using a forecast generated after the close.</p>
           </article>
           <article>
             <h3>Freshness and gaps</h3>
-            <p>Missing market cap, earnings, actual-price, or forecast values remain explicitly unavailable. The scheduled scan never fabricates metadata and does not replace the last valid dataset when coverage is below threshold.</p>
+            <p>Quote time, source, and forecast date are explicit. Missing quotes and expired forecast rows are not fabricated. Splits that invalidate a forecast require a new scan. The prior validated dataset remains published until the next scan passes its coverage checks.</p>
           </article>
         </section>
       </div>

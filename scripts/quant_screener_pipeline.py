@@ -18,6 +18,7 @@ import math
 import os
 import random
 import statistics
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -29,10 +30,13 @@ except ModuleNotFoundError:  # Pure unit tests do not need provider dependencies
     requests = None  # type: ignore[assignment]
 
 
-SCHEMA_VERSION = "quantura-screener-v2"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.weekly_screener import build_weekly_forecast, configuration_hash, completed_history
+
+SCHEMA_VERSION = "quantura-screener-v3"
 DEFAULT_CHUNK_COUNT = 16
 DEFAULT_COVERAGE_THRESHOLD = 0.90
-DEFAULT_FORECAST_HORIZON = 10
+DEFAULT_FORECAST_HORIZON = 7
 Z10 = -1.2815515655446004
 Z90 = 1.2815515655446004
 NASDAQ_LISTED_URL = "https://www.nasdaqtrader.com/dynamic/symdir/nasdaqlisted.txt"
@@ -486,56 +490,9 @@ def series_anomalies(values: Sequence[float]) -> dict[str, Any]:
 
 
 def build_forecast(history: Sequence[Mapping[str, Any]], horizon: int = DEFAULT_FORECAST_HORIZON) -> dict[str, Any] | None:
-    usable = [row for row in history if safe_float(row.get("close")) not in (None, 0)]
-    if len(usable) < 60:
-        return None
-    usable = usable[-504:]
-    closes = [float(row["close"]) for row in usable]
-    returns = [math.log(closes[index] / closes[index - 1]) for index in range(1, len(closes)) if closes[index - 1] > 0]
-    if len(returns) < 30:
-        return None
-    drift = statistics.fmean(returns)
-    volatility = statistics.pstdev(returns) if len(returns) > 1 else 0.0001
-    volatility = max(volatility, 0.0001)
-    last_date = dt.date.fromisoformat(str(usable[-1]["timestamp"])[:10])
-    dates = next_business_days(last_date, horizon)
-    rows: list[dict[str, Any]] = []
-    for index, forecast_date in enumerate(dates, start=1):
-        mean_log = math.log(closes[-1]) + drift * index
-        sigma = volatility * math.sqrt(index)
-        rows.append(
-            {
-                "date": forecast_date,
-                "p10": math.exp(mean_log + Z10 * sigma),
-                "p50": math.exp(mean_log),
-                "p90": math.exp(mean_log + Z90 * sigma),
-            }
-        )
-    p50_stats = series_anomalies([row["p50"] for row in rows])
-    p10_stats = series_anomalies([row["p10"] for row in rows])
-    unusual = p50_stats["unusual"]
-    above = sum(1 for index in unusual if rows[index]["p50"] > p50_stats["average"])
-    below = sum(1 for index in unusual if rows[index]["p50"] < p50_stats["average"])
-    bias = "Neutral / Mixed"
-    if unusual and above / len(unusual) > 0.5:
-        bias = "Selling Bias"
-    elif unusual and below / len(unusual) > 0.5:
-        bias = "Buying Bias"
-    p10_unusual_low = {index for index in p10_stats["unusual"] if rows[index]["p10"] < p10_stats["average"]}
-    p10_signal = len(rows) >= 2 and {len(rows) - 2, len(rows) - 1}.issubset(p10_unusual_low)
-    return {
-        "rows": rows,
-        "p10": rows[-1]["p10"],
-        "p50": rows[-1]["p50"],
-        "p90": rows[-1]["p90"],
-        "forecast_date": rows[-1]["date"],
-        "last_forecast_update": iso_now(),
-        "general_bias": bias,
-        "unusual_p50_count": len(unusual),
-        "p10_signal_active": p10_signal,
-        "forecast_engine": "quantura_quantile_drift_v1",
-        "forecast_history_points": len(closes),
-    }
+    if horizon != 7:
+        raise ValueError("screener requires seven trading sessions")
+    return build_weekly_forecast(history)
 
 
 def normalize_bar(timestamp: Any, close: Any) -> dict[str, Any] | None:
@@ -563,7 +520,7 @@ def fetch_alpaca_histories(symbols: Sequence[str], start: str, end: str) -> dict
                 "timeframe": "1Day",
                 "start": f"{start}T00:00:00Z",
                 "end": f"{end}T23:59:59Z",
-                "adjustment": "all",
+                "adjustment": "split",
                 "feed": str(os.getenv("ALPACA_DATA_FEED") or "iex").strip(),
                 "limit": 10000,
                 "sort": "asc",
@@ -601,7 +558,8 @@ def fetch_yfinance_histories(symbols: Sequence[str]) -> dict[str, list[dict[str,
             group_by="ticker",
             threads=True,
             progress=False,
-            auto_adjust=True,
+            auto_adjust=False,
+            repair=True,
             timeout=30,
         )
         if frame is None or frame.empty:
@@ -655,6 +613,7 @@ def distance(price: float, boundary: float) -> tuple[float, float]:
 
 
 def completed_row(item: Mapping[str, Any], history: Sequence[Mapping[str, Any]], market_cap: float | None, price_source: str) -> dict[str, Any]:
+    history = completed_history(history, utc_now())
     row = dict(item)
     row.update(
         {
@@ -688,6 +647,9 @@ def completed_row(item: Mapping[str, Any], history: Sequence[Mapping[str, Any]],
     diff90, pct90 = distance(price, p90)
     row.update(
         {
+            **{key: value for key, value in forecast.items() if key != "rows"},
+            "forecast_rows": forecast["rows"],
+            "price_adjustment": "split",
             "forecast_available": True,
             "status": "success",
             "p10": round(p10, 6),
@@ -707,7 +669,7 @@ def completed_row(item: Mapping[str, Any], history: Sequence[Mapping[str, Any]],
             "general_bias": forecast["general_bias"],
             "unusual_p50_count": forecast["unusual_p50_count"],
             "p10_signal_active": forecast["p10_signal_active"],
-            "analysis_url": f"/forecasting?ticker={row['ticker']}",
+            "analysis_url": f"/forecasting?panel=forecast&ticker={row['ticker']}&preset=weekly-screener",
         }
     )
     return row
@@ -720,6 +682,7 @@ def command_chunk(args: argparse.Namespace) -> int:
     expected_hash = str(universe.get("universe_hash") or "")
     chunk_items = [item for item in items if item_chunk(item["ticker"], args.chunk_count) == args.chunk]
     output_path = Path(args.output)
+    resumed_rows: list[dict[str, Any]] = []
     if args.resume and output_path.exists():
         existing = read_json(output_path)
         if (
@@ -727,9 +690,13 @@ def command_chunk(args: argparse.Namespace) -> int:
             and existing.get("universe_hash") == expected_hash
             and int(existing.get("chunk", -1)) == args.chunk
             and int(existing.get("chunk_count") or 0) == args.chunk_count
+            and existing.get("forecast_config_hash") == configuration_hash()
+            and existing.get("scan_date") == universe.get("scan_date")
         ):
-            print(json.dumps({"event": "chunk_reused", "chunk": args.chunk, "rows": len(existing.get("items") or [])}))
-            return 0
+            resumed_rows = [row for row in existing.get("items", []) if row.get("status") == "success"]
+            if len(resumed_rows) == len(chunk_items):
+                print(json.dumps({"event": "chunk_reused", "chunk": args.chunk, "rows": len(resumed_rows)}))
+                return 0
 
     symbols = [normalize_symbol(item["ticker"]) for item in chunk_items]
     end = dt.date.today()
@@ -744,9 +711,12 @@ def command_chunk(args: argparse.Namespace) -> int:
         price_source = "yahoo_daily_bar_close_fallback"
     market_caps = {item["ticker"]: safe_float(item.get("market_cap")) for item in chunk_items}
 
-    rows: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = list(resumed_rows)
+    completed_symbols = {r["ticker"] for r in rows}
     for item in chunk_items:
         symbol = item["ticker"]
+        if symbol in completed_symbols:
+            continue
         try:
             rows.append(completed_row(item, histories.get(symbol) or [], market_caps.get(symbol), price_source))
         except Exception as error:
@@ -762,12 +732,17 @@ def command_chunk(args: argparse.Namespace) -> int:
                 }
             )
             rows.append(failed)
+        # Every completed symbol survives a runner failure; do not cache model weights.
+        write_json(output_path, {"schema_version": SCHEMA_VERSION, "universe_hash": expected_hash,
+            "forecast_config_hash": configuration_hash(), "chunk": args.chunk, "chunk_count": args.chunk_count,
+            "scan_date": universe.get("scan_date"), "generated_at": iso_now(), "items": rows})
 
     status_counts: dict[str, int] = {}
     for row in rows:
         status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
     payload = {
         "schema_version": SCHEMA_VERSION,
+        "forecast_config_hash": configuration_hash(),
         "scan_date": universe.get("scan_date"),
         "generated_at": iso_now(),
         "universe_hash": expected_hash,
@@ -801,6 +776,9 @@ CSV_FIELDS = [
     "p10",
     "p50",
     "p90",
+    "p01", "p25", "p75", "p99",
+    *[f"{q}_{stat}" for q in ("p01", "p10", "p25", "p50", "p75", "p90", "p99") for stat in ("min", "max", "avg")],
+    "forecast_engine", "history_cutoff_at", "withheld_session", "price_adjustment",
     "quantile_position",
     "distance_p10_pct",
     "distance_p50_pct",
@@ -822,6 +800,9 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         writer.writeheader()
         for raw in rows:
             row = dict(raw)
+            for q, statistics in (row.get("quantile_stats") or {}).items():
+                for stat in ("min", "max", "avg"):
+                    row[f"{q}_{stat}"] = statistics.get(stat)
             row["universe_memberships"] = ";".join(row.get("universe_memberships") or [])
             writer.writerow(row)
 
@@ -853,8 +834,8 @@ def coverage_manifest(universe: Mapping[str, Any], rows: Sequence[Mapping[str, A
         "coverage_threshold": threshold,
         "coverage_ok": coverage >= threshold,
         "runtime_seconds": round(time.monotonic() - started, 2),
-        "actual_price_definition": "Most recent adjusted daily bar close. Alpaca IEX is preferred; Yahoo is the credential-free fallback.",
-        "forecast_methodology": "Quantura quantile drift v1: log-return drift with volatility-scaled P10/P50/P90 bands over 10 business days.",
+        "actual_price_definition": "Most recent completed split-adjusted daily close at publication. The website overlays newer completed minute closes with an explicit source and timestamp. Alpaca IEX is preferred; Yahoo is the fallback.",
+        "forecast_methodology": "Five-model ensemble; one completed NYSE session withheld; next seven NYSE sessions; 20% central weights, tails renormalized; Toto 4M; split-adjusted price basis.",
         "market_cap_convention": "Mega ≥ $200B; Large $10B–$200B; Mid $2B–$10B; Small $300M–$2B; Micro < $300M. ETFs are unclassified.",
         "earnings_source": (universe.get("earnings") or {}).get("source") or "unavailable",
     }
@@ -867,7 +848,7 @@ def command_aggregate(args: argparse.Namespace) -> int:
     chunks: dict[int, Mapping[str, Any]] = {}
     for path in sorted(Path(args.chunks_dir).glob("**/chunk-*.json")):
         payload = read_json(path)
-        if payload.get("schema_version") != SCHEMA_VERSION or payload.get("universe_hash") != universe.get("universe_hash"):
+        if payload.get("schema_version") != SCHEMA_VERSION or payload.get("universe_hash") != universe.get("universe_hash") or payload.get("forecast_config_hash") != configuration_hash() or payload.get("scan_date") != universe.get("scan_date"):
             continue
         chunks[int(payload.get("chunk") or 0)] = payload
     rows_by_symbol: dict[str, dict[str, Any]] = {}

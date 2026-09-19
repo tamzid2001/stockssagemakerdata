@@ -25,7 +25,7 @@ for (const filename of await walk(path.join(root, "pages"))) {
   for (const node of doc.querySelectorAll('.aws-integration-card, .forecast-alert-settings-card, #profile .security-summary')) replace(node);
   for (const title of doc.querySelectorAll('#profile .section-title h2')) replace(title, '<h2>Profile</h2>');
   for (const note of doc.querySelectorAll('#profile .section-title p')) replace(note, '<p class="small">Manage your private account details and saved research.</p>');
-  for (const node of doc.querySelectorAll('[data-panel="autopilot"], [data-panel="notifications"], a[href="/pricing"], a[href="/purchase"], a[href="/notifications"], a[href="/autopilot"], [data-panel-target="autopilot"], [data-panel-target="notifications"], #header-notifications')) replace(node);
+  for (const node of doc.querySelectorAll('[data-panel="autopilot"], a[href="/pricing"], a[href="/purchase"], a[href="/autopilot"], [data-panel-target="autopilot"]')) replace(node);
   for (const grid of doc.querySelectorAll(".pricing-grid")) {
     const section = grid.closest("section");
     if (section) replace(section, '<section class="section free-access-note"><div class="container"><h2>Free to explore. Yours to save.</h2><p>Forecast markets, explore the Screener and download supported data without a paid plan. Create an account to save your requests and organize private workspaces. Fair-use limits and provider availability apply.</p><a class="cta" href="/forecasting">Run a forecast</a><p class="small muted">Bring-your-own AWS infrastructure is billed separately by AWS. Third-party data licensing restrictions still apply.</p></div></section>');

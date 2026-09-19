@@ -36,7 +36,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PYTHON_VERSION: "3.11"
+  PYTHON_VERSION: "3.12"
   CHUNK_COUNT: ${{ github.event.inputs.chunk_count || '16' }}
   COVERAGE_THRESHOLD: ${{ github.event.inputs.coverage_threshold || '0.90' }}
   MAX_TICKERS: ${{ github.event.inputs.max_tickers || '' }}
@@ -67,6 +67,10 @@ jobs:
       - name: Generate S&P 500, Nasdaq, SPY, and earnings universe
         shell: bash
         run: |
+          if [[ -n "$MAX_TICKERS" && "$PUBLISH_RESULTS" == true ]]; then
+            echo 'A capped smoke scan cannot replace the full production universe.' >&2
+            exit 1
+          fi
           mkdir -p screener-work/universe
           command=(
             python scripts/quant_screener_pipeline.py universe
@@ -95,7 +99,7 @@ jobs:
           name: quantura-screener-universe-${{ github.run_id }}
           path: screener-work/universe
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
       - name: Summarize universe
         run: |
           {
@@ -113,7 +117,7 @@ jobs:
     name: Scan chunk ${{ matrix.chunk }} of ${{ matrix.chunk_count }}
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 345
     permissions:
       contents: read
     strategy:
@@ -125,6 +129,12 @@ jobs:
       ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
       ALPACA_DATA_URL: ${{ vars.ALPACA_DATA_URL || 'https://data.alpaca.markets' }}
       ALPACA_DATA_FEED: ${{ vars.ALPACA_DATA_FEED || 'iex' }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      GRANITE_DEVICE: cpu
+      CUDA_VISIBLE_DEVICES: ''
     steps:
       - name: Checkout authoritative code
         uses: actions/checkout@v6
@@ -133,18 +143,25 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - name: Install scanner dependencies
-        run: python -m pip install --disable-pip-version-check pandas requests yfinance
+      - name: Install locked five-model inference environment
+        run: python -m pip install --no-cache-dir --disable-pip-version-check --requirement requirements-ensemble-forecast.lock
+      - name: Check production TimesFM license and access flags
+        run: |
+          test "$TIMESFM_HF_ACCESS_APPROVED" = true
+          test "$TIMESFM_COMMERCIAL_LICENSED" = true
+          test -n "$HF_TOKEN"
       - name: Download immutable universe input
         uses: actions/download-artifact@v8
         with:
           name: quantura-screener-universe-${{ github.run_id }}
           path: screener-work/universe
       - name: Restore valid same-day chunk checkpoint
-        uses: actions/cache@v6
+        id: checkpoint
+        uses: actions/cache/restore@v6
         with:
           path: screener-work/chunks/chunk-${{ matrix.chunk }}.json
-          key: quantura-screener-${{ needs.prepare.outputs.scan_date }}-${{ needs.prepare.outputs.universe_hash }}-chunk-${{ matrix.chunk }}-v2
+          key: quantura-screener-v3-${{ github.sha }}-${{ needs.prepare.outputs.scan_date }}-${{ needs.prepare.outputs.universe_hash }}-${{ matrix.chunk_count }}-${{ matrix.chunk }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: quantura-screener-v3-${{ github.sha }}-${{ needs.prepare.outputs.scan_date }}-${{ needs.prepare.outputs.universe_hash }}-${{ matrix.chunk_count }}-${{ matrix.chunk }}-
       - name: Evaluate chunk with batched market data and isolated failures
         run: |
           mkdir -p screener-work/chunks
@@ -154,6 +171,12 @@ jobs:
             --chunk-count "${{ matrix.chunk_count }}" \
             --output "screener-work/chunks/chunk-${{ matrix.chunk }}.json" \
             --resume
+      - name: Save small progress checkpoint even after inference failure
+        if: always() && hashFiles(format('screener-work/chunks/chunk-{0}.json', matrix.chunk)) != ''
+        uses: actions/cache/save@v6
+        with:
+          path: screener-work/chunks/chunk-${{ matrix.chunk }}.json
+          key: ${{ steps.checkpoint.outputs.cache-primary-key }}
       - name: Upload chunk checkpoint
         if: always()
         uses: actions/upload-artifact@v7
@@ -161,7 +184,7 @@ jobs:
           name: quantura-screener-chunk-${{ matrix.chunk }}
           path: screener-work/chunks/chunk-${{ matrix.chunk }}.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
 
   aggregate:
     name: Validate coverage and publish dataset
@@ -207,10 +230,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: quantura-screener-v2
+          name: quantura-screener-v3
           path: screener-work/final
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
       - name: Publish rolling website dataset
         if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
         env:

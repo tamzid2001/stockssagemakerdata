@@ -14,6 +14,8 @@ import { fetchStockHistoryData } from "./marketDataRoutes";
 import { AlpacaError } from "./alpacaClient";
 import { PredictionMarketDataError, predictionForecastHistory, forecastObservationLimit } from "./predictionMarketData";
 import { historySelection } from "./eventHistory";
+import { loadPublishedScreenerDataset } from "./quantScreener";
+import { screenerForecastSnapshot } from "./screenerForecast";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 
 type JsonRecord = Record<string, unknown>;
@@ -802,6 +804,57 @@ function internal(options: Options, handler: (req: Request, res: Response, reque
 }
 
 export function registerEnsembleForecastRoutes(router: Router, options: Options): void {
+  const publishedSnapshot = async (req: Request) => screenerForecastSnapshot(
+    await loadPublishedScreenerDataset(process.env.GITHUB_REPO_OWNER || "tamzid2001", process.env.GITHUB_REPO_NAME || "stockssagemakerdata"),
+    text(req.params.ticker,20),text(req.query.scan_id || req.body?.scan_id,160));
+  // Public, precomputed data only: opening a screener row does not run models or create private requests.
+  router.get("/v1/screener/forecasts/:ticker", async (req,res) => {
+    const requestId=crypto.randomUUID();
+    try {
+      const snapshot=await publishedSnapshot(req);validateWorkerResult(snapshot.result,snapshot.job);
+      const id=`screener-${snapshot.job.published_screener.scan_id}-${req.params.ticker}`;
+      const payload={...publicEnsembleJob(id,snapshot.job,snapshot.result),history:snapshot.history,published_screener:snapshot.job.published_screener};
+      res.setHeader("Cache-Control","public, max-age=60, s-maxage=300");
+      if(req.query.format==="csv") {
+        res.setHeader("Content-Type","text/csv; charset=utf-8");res.setHeader("Content-Disposition",'attachment; filename="quantura-screener-forecast.csv"');
+        res.send(["timestamp,"+snapshot.result.quantiles.map((q:number)=>`q_${q}`).join(","),...snapshot.result.predictions.map(row=>[row.timestamp,...snapshot.result.quantiles.map((q:number)=>row.quantiles[String(q)])].join(","))].join("\n")+"\n");
+      } else if(req.query.format==="json") {
+        res.setHeader("Content-Type","application/json; charset=utf-8");res.setHeader("Content-Disposition",'attachment; filename="quantura-screener-forecast.json"');res.send(JSON.stringify(payload));
+      } else res.json({data:payload});
+    }catch(error){sendError(res,error,requestId);}
+  });
+  router.get("/v1/screener/forecasts/:ticker/observations", async (req,res)=>{
+    const requestId=crypto.randomUUID();
+    try {
+      const {job}=await publishedSnapshot(req);const key=`screener:${job.published_screener.scan_id}:${req.params.ticker}:${Math.floor(Date.now()/60000)}`;
+      let cached=observationCache.get(key);
+      if(!cached || cached.until<Date.now()) {
+        const value=tickerOverlayRows(job.source,"1D",Date.parse(job.input_cutoff_at)).then(rows=>({rows,observed_at:new Date().toISOString(),availability:"available"})).catch(error=>{observationCache.delete(key);throw error;});
+        cached={until:Date.now()+60_000,value};observationCache.set(key,cached);
+        while(observationCache.size>50)observationCache.delete(observationCache.keys().next().value!);
+      }
+      res.setHeader("Cache-Control","public, max-age=30, s-maxage=60");res.json({data:await cached.value});
+    }catch(error){sendError(res,error,requestId);}
+  });
+  router.post("/v1/screener/forecasts/:ticker/save",wrap(options,async(req,res,principal,requestId)=>{
+    if(principal.guest)throw new Error("workspace_permission_denied");
+    assertOnlyKeys(plain(req.body),["scan_id","workspace_id"],"request");
+    const workspaceId=text(req.body?.workspace_id || principal.userId,220);
+    const access=await resolveWorkspaceAccess(options.db,principal,workspaceId);
+    authorizeWorkspaceAction(principal,access,"forecasts:write","write");requireWorkspacePermission(access,"forecast.create");
+    const snapshot=await publishedSnapshot(req);validateWorkerResult(snapshot.result,snapshot.job);
+    const id="sc_"+crypto.createHash("sha256").update(JSON.stringify([principal.userId,workspaceId,snapshot.job.published_screener])).digest("hex").slice(0,40);
+    const ref=options.db.collection(JOBS).doc(id);
+    const job={...snapshot.job,forecast_id:id,user_id:principal.userId,workspace_id:workspaceId,api_key_id:principal.tokenId||null,guest_session:false,saved_to_profile:true,saved_at:new Date().toISOString()};
+    await options.db.runTransaction(async tx=>{
+      const existing=await tx.get(ref);if(existing.exists)return;
+      tx.create(ref,job);tx.create(options.db.collection(RESULTS).doc(id),{...snapshot.result,forecast_id:id});
+      for(let offset=0;offset<snapshot.history.length;offset+=INPUT_CHUNK_ROWS)
+        tx.create(ref.collection(INPUT_CHUNKS).doc(String(offset/INPUT_CHUNK_ROWS).padStart(4,"0")),{rows:snapshot.history.slice(offset,offset+INPUT_CHUNK_ROWS)});
+    });
+    await indexEnsembleRequest(options,id,job);
+    sendData(res,{forecast_id:id,saved:true,url:`/forecasting?panel=forecast&ensembleForecastId=${id}`},requestId);
+  }));
   router.get("/v1/forecast/models", wrap(options, async (req, res, principal, requestId) => {
     const access = await resolveWorkspaceAccess(options.db, principal, text(req.query.workspace_id || principal.userId, 220));
     authorizeWorkspaceAction(principal, access, "forecasts:read", "read");

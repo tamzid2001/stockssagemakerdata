@@ -21,6 +21,8 @@ on:
           - automation-schedules
           - forecast-boundary-alerts
           - forecast-lifecycle
+          - screener-close
+          - screener-email-test
           - fiscaldata-refresh
 
 concurrency:
@@ -106,6 +108,12 @@ jobs:
             run_job "$NEWSLETTER_ORIGIN" "newsletter-weekly"
           fi
 
+          # The backend checks the actual exchange session close, including
+          # early-close days, and never finalizes after-hours quotes as EOD.
+          if (( 10#$local_weekday <= 5 && 10#$local_hour >= 13 && 10#$local_hour <= 17 )); then
+            run_job "$API_ORIGIN" "screener-close"
+          fi
+
           exit "$job_status"
 
       - name: Run requested production job
@@ -121,7 +129,7 @@ jobs:
             newsletter-weekly)
               job_origin="$NEWSLETTER_ORIGIN"
               ;;
-            autopilot-reconcile|automation-schedules|forecast-boundary-alerts|forecast-lifecycle|fiscaldata-refresh)
+            autopilot-reconcile|automation-schedules|forecast-boundary-alerts|forecast-lifecycle|fiscaldata-refresh|screener-close|screener-email-test)
               job_origin="$API_ORIGIN"
               ;;
             social-dispatch|forecast-report|social-planner|newsletter-daily)

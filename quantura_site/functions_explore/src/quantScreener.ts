@@ -24,6 +24,9 @@ export type QuantScreenerDataset = {
 };
 
 export type QuantScreenerQuery = {
+  signal?: "all" | "buy" | "sell" | "neutral" | "unavailable";
+  signalChanged?: boolean;
+  quantileRules?: Array<{ quantile: string; statistic: "min" | "max" | "avg"; operator: "gt" | "gte" | "lt" | "lte"; percent: number }>;
   search: string;
   universe: "all" | "sp500" | "nasdaq" | "etf";
   marketCap: "all" | "mega" | "large" | "mid" | "small" | "micro";
@@ -94,6 +97,21 @@ function normalizeEnum<T extends string>(value: unknown, allowed: readonly T[], 
 
 export function parseQuantScreenerQuery(raw: Record<string, unknown>): { query: QuantScreenerQuery; errors: string[] } {
   const errors: string[] = [];
+  const signal = firstValue(raw.signal).toLowerCase();
+  if (signal && !["all", "buy", "sell", "neutral", "unavailable", "1", "true", "yes", "active"].includes(signal)) errors.push("Invalid signal filter.");
+  let quantileRules: NonNullable<QuantScreenerQuery["quantileRules"]> = [];
+  if (raw.quantileRules) {
+    try {
+      const input = typeof raw.quantileRules === "string" ? JSON.parse(raw.quantileRules) : raw.quantileRules;
+      if (!Array.isArray(input) || input.length > 12) throw new Error();
+      for (const rule of input) {
+        if (!rule || !["p01","p10","p25","p50","p75","p90","p99"].includes(rule.quantile) ||
+          !["min","max","avg"].includes(rule.statistic) || !["gt","gte","lt","lte"].includes(rule.operator) ||
+          typeof rule.percent !== "number" || !Number.isFinite(rule.percent) || Math.abs(rule.percent) > 100000) throw new Error();
+      }
+      quantileRules = input.map(({quantile,statistic,operator,percent}) => ({quantile,statistic,operator,percent}));
+    } catch { errors.push("Quantile rules must contain up to 12 valid min/max/avg percentage comparisons."); }
+  }
   const search = firstValue(raw.search || raw.q).slice(0, 80);
   const universeRaw = firstValue(raw.universe).toLowerCase();
   const marketCapRaw = firstValue(raw.marketCap || raw.cap).toLowerCase();
@@ -128,6 +146,9 @@ export function parseQuantScreenerQuery(raw: Record<string, unknown>): { query: 
 
   return {
     query: {
+      signal: ["buy", "sell", "neutral", "unavailable"].includes(signal) ? signal as QuantScreenerQuery["signal"] : "all",
+      signalChanged: ["true", "1"].includes(firstValue(raw.signalChanged)),
+      quantileRules,
       search,
       universe: normalizeEnum(universeRaw, ["all", "sp500", "nasdaq", "etf"] as const, "all"),
       marketCap: normalizeEnum(marketCapRaw, ["all", "mega", "large", "mid", "small", "micro"] as const, "all"),
@@ -170,6 +191,17 @@ function earningsDiffDays(value: unknown, today: dtShim = new Date()): number | 
 type dtShim = Pick<Date, "getUTCFullYear" | "getUTCMonth" | "getUTCDate">;
 
 export function rowMatchesQuery(row: QuantScreenerRow, query: QuantScreenerQuery, today: Date = new Date()): boolean {
+  if (query.signal && query.signal !== "all" && row.signal !== query.signal) return false;
+  const prior = row.last_non_neutral_signal as {value?: string} | undefined;
+  if (query.signalChanged && (!prior || !["buy","sell"].includes(String(row.signal)) || row.signal === prior.value)) return false;
+  for (const rule of query.quantileRules || []) {
+    const value = (row.quantile_stats as Record<string, Record<string, unknown>> | undefined)?.[rule.quantile]?.[rule.statistic];
+    const price = row.actual_price;
+    if (typeof value !== "number" || !Number.isFinite(value) || typeof price !== "number" || !(price > 0)) return false;
+    // Quantile value relative to price, NOT price relative to the quantile.
+    const percent = (value - price) / price * 100;
+    if (!(rule.operator === "gt" ? percent > rule.percent : rule.operator === "gte" ? percent >= rule.percent : rule.operator === "lt" ? percent < rule.percent : percent <= rule.percent)) return false;
+  }
   const ticker = String(row.ticker || "").toUpperCase();
   const company = String(row.company_name || "").toUpperCase();
   const search = query.search.toUpperCase();
@@ -299,7 +331,7 @@ export async function loadPublishedScreenerDataset(owner: string, repo: string):
   if (datasetCache && datasetCache.expiresAt > Date.now()) return datasetCache.value;
   const response = await fetchReleaseAsset(owner, repo, JSON_ASSET);
   const payload = (await response.json()) as QuantScreenerDataset;
-  if (payload?.schema_version !== "quantura-screener-v2" || !Array.isArray(payload.items) || !payload.manifest) {
+  if (!["quantura-screener-v2", "quantura-screener-v3"].includes(payload?.schema_version) || !Array.isArray(payload.items) || !payload.manifest) {
     throw new Error("screener_dataset_invalid");
   }
   const validItems = payload.items.filter((row) => row && typeof row === "object" && String(row.ticker || "").trim());
@@ -311,6 +343,20 @@ export async function loadPublishedScreenerDataset(owner: string, repo: string):
 export async function loadPublishedScreenerCsv(owner: string, repo: string): Promise<Buffer> {
   const response = await fetchReleaseAsset(owner, repo, CSV_ASSET);
   return Buffer.from(await response.arrayBuffer());
+}
+
+/** Export the same filtered quote/signal snapshot, with formula-safe text fields. */
+export function screenerRowsCsv(rows: QuantScreenerRow[]): string {
+  const levels=["p01","p10","p25","p50","p75","p90","p99"];
+  const keys=["ticker","company_name","actual_price","actual_price_timestamp","quote_source","quote_session","signal","forecast_comparison_date","saved_closing_signal","saved_closing_date","previous_signal","previous_signal_date",...levels,...levels.flatMap(q=>["min","max","avg"].map(s=>`${q}_${s}`)),"last_forecast_update","forecast_engine","split_status"];
+  const cell=(value:unknown)=>{let text=String(value??"");if(typeof value!=="number" && /^[\s]*[=+@-]/.test(text))text=`'${text}`;return `"${text.replace(/"/g,'""')}"`;};
+  return [keys.join(","),...rows.map(row=>{
+    const closing=row.closing_signal as Record<string,unknown>|undefined;
+    const previous=row.last_non_neutral_signal as Record<string,unknown>|undefined;
+    const values:Record<string,unknown>={...row,saved_closing_signal:closing?.value,saved_closing_date:closing?.forecast_date,previous_signal:previous?.value,previous_signal_date:previous?.forecast_date};
+    for(const q of levels)for(const stat of ["min","max","avg"])values[`${q}_${stat}`]=(row.quantile_stats as Record<string,Record<string,unknown>>|undefined)?.[q]?.[stat];
+    return keys.map(k=>cell(values[k])).join(",");
+  })].join("\r\n")+"\r\n";
 }
 
 export function clearPublishedScreenerCache(): void {

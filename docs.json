@@ -50,6 +50,7 @@
               "docs/workspace-collaboration",
               "docs/uploaded-csv-api",
               "docs/ensemble-api",
+              "docs/screener-alerts",
               "docs/mcp",
               "docs/data-provenance",
               "docs/errors"
