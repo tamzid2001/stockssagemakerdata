@@ -43,7 +43,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/forecast-controls.js?v=20260916c"></script>
+    <script defer src="/forecast-controls.js?v=20260919a"></script>
+    <script defer src="/forecast-metrics.js?v=20260919a"></script>
     <script defer src="/app.js?v=20260824a"></script>
     <script defer src="/data-integrations.js?v=20260908a"></script>
     <script defer src="/market-search.js?v=20260916c"></script>
@@ -275,7 +276,7 @@
                           <div class="ensemble-chart-toolbar" role="group" aria-label="Forecast chart actions">
                             <div class="ensemble-toolbar-group" role="group" aria-label="Chart and data">
                               <button id="ensemble-chart-refresh" class="task-chip" type="button" aria-describedby="ensemble-observation-status" title="Fetch completed quotes without running models"><i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh quotes</span></button>
-                              <button id="ensemble-chart-focus" class="task-chip" type="button" title="Zoom only; no data fetch or new forecast"><i class="iconoir-expand" aria-hidden="true"></i><span>Latest 60 minutes + forecast</span></button>
+                              <button id="ensemble-chart-focus" class="task-chip" type="button" title="Show the latest history interval and forecast, with a fitted price scale"><i class="iconoir-expand" aria-hidden="true"></i><span>Latest interval + forecast</span></button>
                               <button id="ensemble-refresh-latest" class="task-chip" type="button" title="Download fresh history and create a new forecast; the saved forecast is preserved"><i class="iconoir-play" aria-hidden="true"></i><span>Refresh data &amp; forecast</span></button>
                               <button id="ensemble-check-status" class="task-chip" type="button" title="Retry checking the current job; does not start another forecast"><i class="iconoir-clock" aria-hidden="true"></i><span>Check job status</span></button>
                             </div>
@@ -301,7 +302,7 @@
                           <section id="ensemble-live-quote" class="ensemble-live-quote" aria-label="Latest selected-side quote" aria-live="polite"></section>
                           <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>
                           <div id="ensemble-observation-status" class="small muted" role="status"></div>
-                          <div id="ensemble-observed-metrics" class="small muted" role="status"></div>
+                          <section id="ensemble-observed-metrics" class="forecast-quality" aria-labelledby="ensemble-quality-title"></section>
                           <div id="ensemble-result-table" class="table-wrap"></div>
                         </section>
                       </div>

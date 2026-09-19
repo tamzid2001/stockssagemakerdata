@@ -1,0 +1,64 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {JSDOM}=require('jsdom');
+const {compute,render}=require('../../public/forecast-metrics.js');
+const time=n=>new Date(Date.UTC(2026,8,18,14,n)).toISOString();
+const job=()=>({source:{type:'prediction_market'},frequency:'1min',completed_at:time(0),
+  quantiles:[.1,.5,.9],history:[{timestamp:time(-1),target:8},{timestamp:time(0),target:10}],
+  predictions:[1,2,3].map(n=>({timestamp:time(n),quantiles:{'0.1':n+8,'0.5':n+10,'0.9':n+12}})),
+  observations:[{timestamp:time(1),target:10,interval:'1min'},{timestamp:time(2),target:14,interval:'1min'},{timestamp:time(3),target:12,interval:'1min'}]});
+test('point errors, bias and quantile calibration use the final ensemble on matching actuals',()=>{
+  const r=compute(job()).prospective;
+  assert.equal(r.count,3);assert.equal(r.mae,4/3);assert.equal(r.mse,2);assert.equal(r.rmse,Math.sqrt(2));
+  assert.equal(r.median_ae,1);assert.equal(r.bias,0);assert.equal(r.wape,4/36);assert.equal(r.mase,2/3);assert.equal(r.r2,.25);
+  assert.equal(r.directional_accuracy,1/3);assert.equal(r.direction_count,3);
+  assert.equal(r.quantiles[0].coverage,0);assert.equal(r.quantiles[2].coverage,1);
+  assert.ok(Math.abs(r.quantiles[0].pinball-.2)<1e-12);assert.equal(r.intervals[0].coverage,1);
+});
+test('deduplicate outcomes and ignore unfinished, fabricated, wrong-frequency, unmatched and future bars',()=>{
+  const j=job();j.observations.push(j.observations[0],{timestamp:time(1),target:999,interval:'1h'},
+    {timestamp:time(1),target:999,is_forward_filled:true},{timestamp:time(1),target:999,is_complete:false},
+    {timestamp:time(1),target:999,observed:false},{timestamp:time(5),target:999});
+  assert.equal(compute(j,Date.parse(time(2))).prospective.count,2);
+});
+test('retrospective outcomes and unknown publication times never inflate prospective metrics',()=>{
+  const j=job();j.completed_at=time(2);
+  assert.equal(compute(j).prospective.count,1);assert.equal(compute(j).retrospective.count,2);
+  j.source.analysis_mode='historical_replay';assert.equal(compute(j).prospective.count,0);
+  delete j.source.analysis_mode;delete j.completed_at;assert.equal(compute(j).prospective.count,0);
+});
+test('daily comparisons use final session closes, not provisional minute quotes or mismatched target fields',()=>{
+  const j=job();j.frequency='1D';j.source={type:'ticker',field:'close'};j.completed_at='2026-09-17T20:01:00Z';
+  j.predictions=[{timestamp:'2026-09-18T00:00:00Z',quantiles:{'0.1':9,'0.5':10,'0.9':11}}];
+  j.observations=[{timestamp:'2026-09-18T13:30:00Z',interval:'1D',target:10},{timestamp:'2026-09-18T15:00:00Z',interval:'1min',target:100}];
+  assert.equal(compute(j).prospective.count,1);assert.equal(compute(j).prospective.mae,0);
+  j.source.field='volume';assert.equal(compute(j).prospective.count,0);assert.equal(compute(j).target_supported,false);
+});
+test('no P50 means no fabricated point forecast; custom quantiles still receive their own metrics',()=>{
+  const j=job();j.quantiles=[.123,.876];j.predictions.forEach(r=>r.quantiles={'.123':11,'.876':14});
+  // The public contract uses canonical numeric-string keys.
+  j.predictions.forEach(r=>r.quantiles={'0.123':11,'0.876':14});
+  const r=compute(j).prospective;assert.equal(r.count,3);assert.equal(r.point_count,0);assert.equal(r.mae,null);
+  assert.equal(r.quantiles.length,2);assert.equal(r.quantiles[0].count,3);assert.equal(r.intervals.length,0);
+});
+test('zero denominators and constant outcomes remain unavailable, never NaN/Infinity',()=>{
+  const j=job();j.history.forEach(r=>r.target=0);j.observations.forEach(r=>r.target=0);j.predictions.forEach(r=>r.quantiles={'0.1':0,'0.5':0,'0.9':0});
+  const r=compute(j).prospective;
+  for(const key of ['mape','wape','mase','r2','average_wql'])assert.equal(r[key],null);
+  assert.equal(r.smape,0);assert.equal(r.mae,0);assert.doesNotMatch(JSON.stringify(r),/NaN|Infinity/);
+});
+test('missing intermediate observations do not manufacture directional transitions',()=>{
+  const j=job();j.observations.splice(1,1);assert.equal(compute(j).prospective.direction_count,1);
+});
+test('completed forecast renders honest pending cards immediately, then observed metrics and accessible explanations',()=>{
+  const dom=new JSDOM('<section id="metrics"></section>'),host=dom.window.document.getElementById('metrics'),j=job();
+  j.observations=[];render(host,j);assert.match(host.textContent,/Forecast quality/);assert.match(host.textContent,/Waiting for completed/);
+  assert.match(host.textContent,/Not available/);assert.equal(host.querySelectorAll('dl > div').length,8);
+  render(host,job());assert.match(host.textContent,/3 \/ 3 timestamp-matched/);assert.match(host.textContent,/Small sample/);
+  const help=host.querySelector('button');help.click();assert.equal(help.getAttribute('aria-expanded'),'true');
+  assert.equal(help.nextElementSibling.hidden,false);assert.match(host.textContent,/Pinball loss/);
+  host.querySelector('details').open=true;help.focus();render(host,job());
+  assert.equal(host.querySelector('details').open,true);assert.equal(host.querySelector('button').getAttribute('aria-expanded'),'true');
+  assert.equal(dom.window.document.activeElement,host.querySelector('button'));
+  assert.doesNotMatch(host.textContent,/Brier|ensemble accuracy/i);dom.window.close();
+});
