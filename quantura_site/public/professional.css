@@ -913,10 +913,6 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .forecast-metric-help { border: 0; background: transparent; color: var(--muted-foreground); padding: 3px 6px; min-width: 28px; min-height: 28px; cursor: help; }
 .forecast-metric-help:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .forecast-quality summary { cursor: pointer; padding-block: 8px; font-size: 13px; }
-.forecast-metrics-table { max-width: 100%; overflow-x: auto; margin-block: 8px; }
-.forecast-metrics-table table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-.forecast-metrics-table th, .forecast-metrics-table td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--border); }
-.forecast-metrics-table th { color: var(--muted-foreground); font-weight: 600; }
 @media (max-width: 600px) {
   .forecast-metric-help { min-width: 40px; min-height: 40px; }
   .forecast-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
