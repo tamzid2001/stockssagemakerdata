@@ -112,9 +112,12 @@
     const frequency=String(job.frequency || "1D").toLowerCase();
     const amount=Number.parseInt(frequency,10)||1;
     const unit=/min|^\d+m$/.test(frequency)?60_000:/hour|^\d+h$/.test(frequency)?3600_000:/week|^\d+w$/.test(frequency)?7*86400_000:86400_000;
-    let start=latest-amount*unit;
+    const firstPrediction=Date.parse(job.predictions?.[0]?.timestamp);
+    // Later overlays must not push the saved forecast's first rows offscreen.
+    const anchor=Number.isFinite(firstPrediction)?Math.min(latest,firstPrediction):latest;
+    let start=anchor-amount*unit;
     if(job.source?.type==="ticker" && frequency==="1d" && job.chart_calendar?.sessions) {
-      const date=new Date(latest).toISOString().slice(0,10);
+      const date=new Date(anchor).toISOString().slice(0,10);
       const previous=job.chart_calendar.sessions.filter(day=>day<date).at(-1);
       if(previous)start=Date.parse(previous+"T00:00:00Z");
     }

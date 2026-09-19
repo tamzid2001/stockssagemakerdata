@@ -37,3 +37,9 @@ test('Plotly relayout coordinates without timezone remain UTC, independent of vi
   assert.equal(h.chartInstant('2026-09-18 14:30:00'),Date.parse('2026-09-18T14:30:00Z'));
   assert.equal(h.chartInstant('2026-09-18T14:30:00-04:00'),Date.parse('2026-09-18T18:30:00Z'));
 });
+test('later quote overlays keep all saved forecast rows inside the initial window',()=>{
+  const j={...job,observations:[{timestamp:'2026-09-18T20:00:00Z',interval:'1min',target:760}]};
+  const range=h.forecastChartRange(j);
+  assert.ok(range[0]<Date.parse(j.predictions[0].timestamp));
+  assert.ok(range[1]>=Date.parse(j.predictions.at(-1).timestamp));
+});
