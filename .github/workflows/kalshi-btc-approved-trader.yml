@@ -1,0 +1,109 @@
+name: Kalshi BTC Approval-Gated P90 Trader
+run-name: Kalshi BTC execution · ${{ inputs.mode }} · first ${{ inputs.history_minutes }}m
+on:
+  pull_request:
+    paths:
+      - 'market_research/kalshi_execution.py'
+      - 'market_research/kalshi_live_*.py'
+      - 'market_research/tests/test_kalshi_execution.py'
+      - 'market_research/tests/test_kalshi_live_workflow.py'
+      - '.github/workflows/kalshi-btc-approved-*.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [verify, readiness, observe, live]
+        default: verify
+        description: Verify is offline. Readiness is signed GET only. Observe never sends orders. Live requires independent approval gates.
+      history_minutes:
+        type: choice
+        options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+        default: '2'
+        description: Exact opening minute observations; forecast through minute 15. No Toto.
+      subaccount:
+        type: number
+        default: 1
+        description: Dedicated, already provisioned Kalshi subaccount 1..63; no other bots/manual trading.
+      continuous:
+        type: boolean
+        default: false
+        description: Queue successor only when operator continuous gate is enabled.
+      code_ref:
+        type: string
+        default: ''
+        description: Internal handoff only; empty uses dispatched commit, otherwise exact approved 40-character SHA.
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: quantura-kalshi-btc-execution-${{ (github.event_name == 'pull_request' || inputs.mode == 'verify') && github.run_id || 'singleton' }}
+  cancel-in-progress: false
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    environment: quantura-kalshi-live
+    env:
+      MODE: ${{ inputs.mode || 'verify' }}
+      HISTORY_MINUTES: ${{ inputs.history_minutes || '2' }}
+      SUBACCOUNT: ${{ inputs.subaccount || 1 }}
+      QUANTURA_CODE_SHA: ${{ inputs.code_ref || github.sha }}
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+      CUDA_VISIBLE_DEVICES: ''
+      GRANITE_DEVICE: cpu
+      QUANTURA_KALSHI_LIVE_ENABLED: ${{ vars.QUANTURA_KALSHI_LIVE_ENABLED || 'false' }}
+      QUANTURA_KALSHI_APPROVED_CONFIG: ${{ vars.QUANTURA_KALSHI_APPROVED_CONFIG }}
+      QUANTURA_KALSHI_APPROVED_SHA: ${{ vars.QUANTURA_KALSHI_APPROVED_SHA }}
+    steps:
+      - name: Validate immutable code reference
+        run: '[[ "$QUANTURA_CODE_SHA" =~ ^[a-f0-9]{40}$ ]]'
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.code_ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Record total job budget
+        run: echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == observe || "$MODE" == live ]]; then
+            python -m pip install --require-hashes -r market_research/requirements.lock
+          else
+            python -m pip install --require-hashes -r market_research/requirements-analysis.lock
+            python -m pip install pytest==8.4.2 pyyaml==6.0.2
+          fi
+      - name: Offline execution and restart tests
+        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py -q
+      - name: Display exact configuration for approval (no secrets)
+        run: python -m market_research.kalshi_live_worker --mode config --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT"
+      - name: Readiness or explicitly selected worker
+        if: github.event_name == 'workflow_dispatch' && inputs.mode != 'verify'
+        env:
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_PROD_API_KEY }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-live-model-cache
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        run: python -m market_research.kalshi_live_worker --mode "$MODE" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --duration-minutes 300
+      - name: Serialized handoff after successful durable worker exit
+        if: success() && inputs.continuous && (inputs.mode == 'observe' || inputs.mode == 'live') && vars.QUANTURA_KALSHI_CONTINUOUS == 'true'
+        uses: actions/github-script@v8
+        env:
+          CONTINUOUS_MODE: ${{ inputs.mode }}
+        with:
+          script: |
+            // Pinned approved code; no arbitrary dataset or shell interpolation.
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'kalshi-btc-approved-trader.yml', ref: context.payload.repository.default_branch,
+              inputs: {mode: process.env.CONTINUOUS_MODE, history_minutes: process.env.HISTORY_MINUTES,
+                       subaccount: process.env.SUBACCOUNT, continuous: 'true', code_ref: process.env.QUANTURA_CODE_SHA}
+            });
