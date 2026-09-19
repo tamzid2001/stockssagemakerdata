@@ -149,7 +149,13 @@ def forecast_origin(market, n, source, config, archive, provider, forecaster=for
         if f['source_hash'] != digest(source) or f['input_snapshot'] != [asdict(q) for q in windows[side]]:
             raise ValueError('FROZEN_SOURCE_CONFLICT')
         pair.append(f)
-    publication = origin + 5 + max(1, math.ceil(sum(f['duration_seconds'] for f in pair)))
+    # Archive replay preserves original quote receipts; a late input cannot be
+    # treated as available at the candle timestamp. Legacy API replay retains
+    # its explicitly disclosed five-second receipt assumption.
+    receipts = source.get('minute_receipts', {})
+    input_ready = max([origin + 5] + [receipts.get(str(q.timestamp), origin + 5)
+                                    for window in windows.values() for q in window])
+    publication = input_ready + max(1, math.ceil(sum(f['duration_seconds'] for f in pair)))
     pair = [{**f, 'available_at':publication, 'publication_clock':'historical_measured_runtime_proxy'} for f in pair]
     record = {'market':ticker, 'history_minutes':n, 'horizon_minutes':15-n, 'forecasts':pair,
               'status':'evaluated' if publication < end else 'missed_deadline',
