@@ -298,7 +298,9 @@ def test_five_model_ensemble_is_integrated_into_existing_forecast_workspace():
     assert '>Run forecast</span>' in forecasting
     assert 'apiRequestJson("/api/v1/ensemble-forecasts"' in client
     assert "pollEnsembleForecast" in client
-    assert "Downloaded input history" in client
+    assert 'name:"Input history"' in client
+    assert "QuanturaForecastMetrics?.render" in client
+    assert '/forecast-metrics.js' in forecasting
     assert "publicEnsembleJob" in backend
     assert 'router.post("/v1/ensemble-forecasts"' in backend
     assert 'router.get("/v1/ensemble-forecasts/:forecastId"' in backend

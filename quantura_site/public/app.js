@@ -14877,13 +14877,20 @@
       font: { family: "Manrope, sans-serif", color: dark ? "rgba(246,244,238,.92)" : "#12182a" },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
       title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
-      margin: { l: mobile?48:62, r: 16, t: 58, b: mobile?175:125 }, height: mobile?565:490, hovermode: "closest", uirevision: job.forecast_id,
+      margin: { l: mobile?48:62, r: 16, t: 58, b: mobile?175:125, autoexpand:false }, height: mobile?565:490, hovermode: "closest", uirevision: job.forecast_id,
       xaxis: { type: "date", ...(chartRange ? { range: chartRange.map(t=>new Date(t).toISOString()), autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date", standoff: 14 }, automargin:true, rangebreaks:window.QuanturaForecastControls.exchangeDateBreaks(job), tickmode: "array", tickvals: tickTimes.map(t=>new Date(t).toISOString()), ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: false } },
       yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
-      legend: { orientation: "h", y: -0.3, yanchor:"top", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
+      legend: { orientation: "h", yref:"container", y:0.01, yanchor:"bottom", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
       shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:plotTimestamp(inputHistory.at(-1)),x1:plotTimestamp(inputHistory.at(-1)),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
     const chart=ui.ensembleForecastChart;
+    // Reserve the actual wrapped legend height plus axis-label space. Anchoring
+    // to the container avoids Plotly's auto-margin feedback on mobile redraws.
+    const legendHeight=chart.querySelector(".legend")?.getBoundingClientRect().height;
+    if(Number.isFinite(legendHeight) && legendHeight>0) {
+      const bottom=Math.ceil(legendHeight)+90;
+      await Plotly.relayout(chart,{"margin.b":bottom,height:(mobile?300:310)+58+bottom});
+    }
     if(chart.__ensembleRelayout)chart.removeListener?.("plotly_relayout",chart.__ensembleRelayout);
     chart.__ensembleRelayout=event=>{
       const raw=event["xaxis.range"] || (event["xaxis.autorange"] ? chart._fullLayout?.xaxis.range : [event["xaxis.range[0]"],event["xaxis.range[1]"]]);

@@ -274,6 +274,8 @@ test('forecast chart focuses latest interval plus future and includes explicitly
   assert.ok(w.record[0][1].some(t=>t.name==='P90 forecast'));
   assert.ok(!w.record[0][1].some(t=>/Buy signal|Sell signal|crossing/.test(t.name)));
   assert.equal(w.record[0][2].uirevision,'fixture');
+  assert.equal(w.record[0][2].legend.yref,'container');
+  assert.equal(w.record[0][2].margin.autoexpand,false);
   assert.equal(w.record[0][2].title.text,'Selected side · Fixture game');
   assert.ok(w.record[0][2].xaxis.ticktext.every(t=>/AM|PM/.test(t)));
   await w.renderChart({...job,quantiles:[.5]});
