@@ -1,4 +1,14 @@
 import type { ForecastAlertEmailProvider, ForecastAlertEvent } from "./forecastPriceAlerts";
+import type { Firestore } from "firebase-admin/firestore";
+import { BrevoNotificationMailer, FirestoreEmailDeliveryLedger } from "./brevoEmail";
+
+export function createForecastAlertEmailProvider(db: Firestore): ForecastAlertEmailProvider {
+  if (process.env.NOTIFICATION_EMAIL_PROVIDER !== "brevo") return new ResendForecastAlertEmailProvider();
+  const mailer = new BrevoNotificationMailer(new FirestoreEmailDeliveryLedger(db));
+  return { sendBoundaryCrossing: (event) => mailer.send({
+    id: `forecast-boundary-${event.id}`, to: event.email, ...buildForecastBoundaryEmail(event),
+  }) };
+}
 
 function cleanText(value: unknown, maxLength = 500): string {
   return String(value ?? "")

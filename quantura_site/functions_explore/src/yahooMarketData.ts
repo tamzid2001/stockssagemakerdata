@@ -89,7 +89,9 @@ function finite(value: unknown): number | null {
 }
 
 function adjustedOhlc(raw: { open: number; high: number; low: number; close: number }, adjustedClose: number | null, adjustment: string) {
-  if (adjustment === "raw" || adjustedClose === null || raw.close === 0) return raw;
+  // Yahoo OHLC already includes split adjustments. AdjClose additionally
+  // adjusts dividends; applying that ratio for "split" misstates price levels.
+  if (adjustment === "raw" || adjustment === "split" || adjustedClose === null || raw.close === 0) return raw;
   const factor = adjustedClose / raw.close;
   return {
     open: raw.open * factor,

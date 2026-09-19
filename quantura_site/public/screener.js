@@ -8,11 +8,13 @@
     search: document.getElementById("qs-search"),
     universe: document.getElementById("qs-universe"),
     marketCap: document.getElementById("qs-market-cap"),
-    bias: document.getElementById("qs-bias"),
-    earnings: document.getElementById("qs-earnings"),
+    signal: document.getElementById("qs-signal"),
+    statistic: document.getElementById("qs-statistic"),
+    rules: document.getElementById("qs-rules"),
+    addRule: document.getElementById("qs-add-rule"),
     sort: document.getElementById("qs-sort"),
     direction: document.getElementById("qs-direction"),
-    specialP10: document.getElementById("qs-special-p10"),
+    signalChanged: document.getElementById("qs-signal-changed"),
     clear: document.getElementById("qs-clear"),
     emptyClear: document.getElementById("qs-empty-clear"),
     refresh: document.getElementById("qs-refresh"),
@@ -43,11 +45,12 @@
     search: "",
     universe: "all",
     marketCap: "all",
-    bias: "all",
-    earnings: "all",
+    signal: "all",
+    statistic: "row",
+    quantileRules: [],
     sort: "ticker",
     direction: "asc",
-    specialP10: false,
+    signalChanged: false,
     positions: [],
     page: 1,
     pageSize: 50,
@@ -56,6 +59,7 @@
   let activeRequest = null;
   let searchTimer = null;
   let lastPersistedUrl = `${window.location.pathname}${window.location.search}`;
+  let savedAlerts = [];
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -135,11 +139,15 @@
       search: String(refs.search.value || "").trim(),
       universe: refs.universe.value || "all",
       marketCap: refs.marketCap.value || "all",
-      bias: refs.bias.value || "all",
-      earnings: refs.earnings.value || "all",
+      signal: refs.signal.value || "all",
+      statistic: refs.statistic.value || "row",
+      quantileRules: Array.from(refs.rules.querySelectorAll(".qs-rule")).map(rule => ({
+        quantile:rule.querySelector('[data-rule="quantile"]').value,statistic:rule.querySelector('[data-rule="statistic"]').value,
+        operator:rule.querySelector('[data-rule="operator"]').value,percent:Number(rule.querySelector('[data-rule="percent"]').value),
+      })),
       sort: refs.sort.value || "ticker",
       direction: refs.direction.value === "desc" ? "desc" : "asc",
-      specialP10: Boolean(refs.specialP10.checked),
+      signalChanged: Boolean(refs.signalChanged.checked),
       positions: checkedPositions(),
     };
   }
@@ -148,11 +156,12 @@
     refs.search.value = state.search || "";
     refs.universe.value = state.universe || "all";
     refs.marketCap.value = state.marketCap || "all";
-    refs.bias.value = state.bias || "all";
-    refs.earnings.value = state.earnings || "all";
+    refs.signal.value = state.signal || "all";
+    refs.statistic.value = state.statistic || "row";
+    renderRules(state.quantileRules || []);
     refs.sort.value = state.sort || "ticker";
     refs.direction.value = state.direction || "asc";
-    refs.specialP10.checked = Boolean(state.specialP10);
+    refs.signalChanged.checked = Boolean(state.signalChanged);
     root.querySelectorAll('input[name="position"]').forEach((input) => {
       input.checked = state.positions.includes(input.value);
     });
@@ -163,8 +172,8 @@
     const allowed = {
       universe: ["all", "sp500", "nasdaq", "etf"],
       marketCap: ["all", "mega", "large", "mid", "small", "micro"],
-      bias: ["all", "buying", "selling", "neutral"],
-      earnings: ["all", "today", "7", "14", "30", "unknown"],
+      signal: ["all", "buy", "sell", "neutral", "unavailable"],
+      statistic: ["row", "min", "max", "avg"],
       direction: ["asc", "desc"],
     };
     const state = { ...defaults, positions: [] };
@@ -175,7 +184,11 @@
     });
     const sort = params.get("sort");
     if (Array.from(refs.sort.options).some((option) => option.value === sort)) state.sort = sort;
-    state.specialP10 = params.get("specialP10") === "true";
+    state.signalChanged = params.get("signalChanged") === "true";
+    try {
+      const rules=JSON.parse(params.get("quantileRules") || "[]");
+      if(Array.isArray(rules)) state.quantileRules=rules.slice(0,12).filter(rule => rule && ["p01","p10","p25","p50","p75","p90","p99"].includes(rule.quantile) && ["min","max","avg"].includes(rule.statistic) && ["gt","gte","lt","lte"].includes(rule.operator) && Number.isFinite(rule.percent));
+    } catch { state.quantileRules=[]; }
     const validPositions = new Set(["below-p10", "above-p10", "below-p50", "above-p50", "below-p90", "above-p90"]);
     state.positions = String(params.get("position") || "").split(",").filter((value) => validPositions.has(value));
     const page = Number(params.get("page"));
@@ -189,11 +202,12 @@
     if (state.search) params.set("search", state.search);
     if (state.universe !== "all") params.set("universe", state.universe);
     if (state.marketCap !== "all") params.set("marketCap", state.marketCap);
-    if (state.bias !== "all") params.set("bias", state.bias);
-    if (state.earnings !== "all") params.set("earnings", state.earnings);
+    if (state.signal !== "all") params.set("signal", state.signal);
+    if (state.statistic !== "row") params.set("statistic", state.statistic);
+    if (state.quantileRules.length) params.set("quantileRules", JSON.stringify(state.quantileRules));
     if (state.sort !== "ticker") params.set("sort", state.sort);
     if (state.direction !== "asc") params.set("direction", state.direction);
-    if (state.specialP10) params.set("specialP10", "true");
+    if (state.signalChanged) params.set("signalChanged", "true");
     if (state.positions.length) params.set("position", state.positions.join(","));
     if (state.page > 1) params.set("page", String(state.page));
     params.set("pageSize", String(state.pageSize));
@@ -211,8 +225,8 @@
   }
 
   function updateFilterCount(state) {
-    const active = [state.search, state.universe !== "all", state.marketCap !== "all", state.bias !== "all", state.earnings !== "all", state.specialP10]
-      .filter(Boolean).length + state.positions.length;
+    const active = [state.search, state.universe !== "all", state.marketCap !== "all", state.signal !== "all", state.signalChanged]
+      .filter(Boolean).length + state.positions.length + state.quantileRules.length;
     refs.filterCount.textContent = `${active} active`;
   }
 
@@ -233,9 +247,29 @@
   }
 
   function signalView(row) {
-    const bias = String(row.general_bias || "Unavailable");
-    const biasClass = bias === "Buying Bias" ? "qs-position-below" : bias === "Selling Bias" ? "qs-position-above" : "";
-    return `<div class="qs-signal-stack"><span class="qs-badge ${biasClass}">${escapeHtml(bias)}</span>${row.p10_signal_active ? '<span class="qs-badge qs-special-badge">2W P10 Buy Bias</span>' : ""}<small>${escapeHtml(String(row.unusual_p50_count ?? 0))} unusual P50</small></div>`;
+    const signal = row.current_signal;
+    if (!signal) return `<span class="qs-muted-cell">Unavailable</span><small>${escapeHtml(row.signal_status || "No comparable forecast row")}</small>`;
+    const cls = signal.value === "buy" ? "qs-position-below" : signal.value === "sell" ? "qs-position-above" : "";
+    return `<div class="qs-signal-stack"><span class="qs-badge ${cls}">${escapeHtml(signal.value)} · current</span><small>Forecast ${escapeHtml(formatDate(signal.forecast_date,false))}</small>${row.signal_comparison === "before_first_forecast_session" ? '<small>First forecast session not started</small>' : ""}</div>`;
+  }
+
+  function savedSignalView(row) {
+    const last=row.last_non_neutral_signal;
+    if(!last)return '<span class="qs-muted-cell">None saved yet</span>';
+    const previous=row.previous_non_neutral_signal;
+    return `<div class="qs-signal-stack"><span class="qs-badge">${escapeHtml(last.value)}</span><small>${escapeHtml(formatDate(last.forecast_date,false))} close</small>${previous?`<small>Prior: ${escapeHtml(previous.value)} · ${escapeHtml(formatDate(previous.forecast_date,false))}</small>`:""}</div>`;
+  }
+
+  function renderRules(rules) {
+    const options=(values,selected)=>values.map(([value,label])=>`<option value="${value}"${value===selected?" selected":""}>${label}</option>`).join("");
+    refs.rules.innerHTML=rules.map((rule,i)=>`<div class="qs-rule">
+      <select data-rule="statistic" aria-label="Rule ${i+1} statistic">${options([["avg","Average"],["min","Minimum"],["max","Maximum"]],rule.statistic)}</select>
+      <select data-rule="quantile" aria-label="Rule ${i+1} quantile">${options(["p01","p10","p25","p50","p75","p90","p99"].map(q=>[q,q.toUpperCase()]),rule.quantile)}</select>
+      <select data-rule="operator" aria-label="Rule ${i+1} comparison">${options([["gt","> price by"],["gte","≥ price by"],["lt","< price by"],["lte","≤ price by"]],rule.operator)}</select>
+      <label><input data-rule="percent" aria-label="Rule ${i+1} percent difference" type="number" min="-100000" max="100000" step="any" value="${escapeHtml(rule.percent)}"> %</label>
+      <button type="button" class="cta secondary small" data-remove-rule="${i}" aria-label="Remove filter ${i+1}"><i class="iconoir-cancel" aria-hidden="true"></i></button>
+    </div>`).join("");
+    refs.addRule.disabled=rules.length>=12;
   }
 
   function rowHtml(row) {
@@ -247,16 +281,14 @@
       : `/forecasting?ticker=${encodeURIComponent(String(row.ticker || ""))}`;
     const actualStamp = row.actual_price_timestamp ? ` title="Actual close ${escapeHtml(formatDate(row.actual_price_timestamp, true))}"` : "";
     return `<tr>
-      <td data-label="Security"><div class="qs-security"><a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span></div></td>
-      <td data-label="Actual" class="qs-mono"${actualStamp}>${escapeHtml(formatPrice(row.actual_price))}</td>
-      <td data-label="P10" class="qs-mono">${escapeHtml(formatPrice(row.p10))}</td>
-      <td data-label="P50" class="qs-mono">${escapeHtml(formatPrice(row.p50))}</td>
-      <td data-label="P90" class="qs-mono">${escapeHtml(formatPrice(row.p90))}</td>
+      <td data-label="Security"><div class="qs-security"><a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>View forecast</a>`:'<small>Weekly forecast not published</small>'}</div></td>
+      <td data-label="Actual" class="qs-mono"${actualStamp}>${escapeHtml(formatPrice(row.actual_price))}<small>${escapeHtml(formatDate(row.actual_price_timestamp,true))}</small><small>${escapeHtml(String(row.quote_session || "historical").replace(/_/g," "))} · ${escapeHtml(row.quote_source || row.data_source || "historical")}</small></td>
+      ${["p01","p10","p25","p50","p75","p90","p99"].map(q=>`<td data-label="${q.toUpperCase()}" class="qs-mono" title="${escapeHtml(current.statistic === "row" ? "Comparison session" : `Horizon ${current.statistic}`)}">${escapeHtml(formatPrice(current.statistic === "row" ? row[q] : row.quantile_stats?.[q]?.[current.statistic]))}</td>`).join("")}
       <td data-label="Position"><span class="${position[1]}">${escapeHtml(position[0])}</span></td>
       <td data-label="Distance P10 / P50 / P90"><div class="qs-distance-stack">${distanceView(row.distance_p10_pct)}${distanceView(row.distance_p50_pct)}${distanceView(row.distance_p90_pct)}</div></td>
       <td data-label="Market cap" class="qs-mono">${escapeHtml(formatCap(row.market_cap, row.is_etf))}</td>
-      <td data-label="Next earnings">${escapeHtml(formatDate(row.next_earnings_date, false))}</td>
-      <td data-label="Model signal">${signalView(row)}</td>
+      <td data-label="Current signal">${signalView(row)}</td>
+      <td data-label="Last saved buy/sell">${savedSignalView(row)}</td>
       <td data-label="Updated" title="Forecast horizon ends ${escapeHtml(formatDate(row.forecast_date, false))}">${escapeHtml(formatDate(row.last_forecast_update, true))}</td>
     </tr>`;
   }
@@ -275,7 +307,7 @@
       refs.export.setAttribute("aria-disabled", "true");
       refs.export.classList.add("disabled");
     } else {
-      refs.export.href = "/api/screener/export.csv";
+      refs.export.href = `/api/screener/export.csv?${buildParams(current)}`;
       refs.export.removeAttribute("aria-disabled");
       refs.export.classList.remove("disabled");
     }
@@ -291,7 +323,10 @@
     refs.metricProcessed.textContent = `${Number(manifest.successfully_processed || 0).toLocaleString()} evaluated · ${Number(manifest.failed || 0).toLocaleString()} failed`;
     refs.metricDate.textContent = formatDate(payload.generatedAt || payload.scanDate, false);
     refs.metricFreshness.textContent = freshnessLabel(payload.generatedAt);
-    refs.freshness.textContent = `Scan ${formatDate(payload.generatedAt, true)} · actual price is the most recent adjusted daily bar close · forecast timestamp varies by row.`;
+    const weekly=payload.schemaVersion === "quantura-screener-v3";
+    document.getElementById("qs-engine").textContent=weekly ? "Five-model weekly ensemble" : "Prior validated scan";
+    document.getElementById("qs-engine-detail").textContent=weekly ? "1 session withheld · 7 NYSE sessions · Toto 4M" : "Weekly ensemble scan not published yet";
+    refs.freshness.textContent = `Scan ${formatDate(payload.generatedAt, true)} · latest completed minute close or historical fallback · quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`;
     refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} securities match the active research filters.`;
     current.page = Number(payload.page || current.page || 1);
     refs.pageLabel.textContent = `Page ${current.page.toLocaleString()} of ${Number(payload.pageCount || 1).toLocaleString()}`;
@@ -346,6 +381,14 @@
     load({ resetPage: true });
   });
   root.addEventListener("change", () => load({ resetPage: true }));
+  refs.addRule.addEventListener("click",()=>{
+    current=readControls();if(current.quantileRules.length>=12)return;
+    current.quantileRules=[...current.quantileRules,{quantile:"p50",statistic:"avg",operator:"gt",percent:10}];writeControls(current);load({resetPage:true});
+  });
+  refs.rules.addEventListener("click",event=>{
+    const button=event.target.closest("[data-remove-rule]");if(!button)return;
+    current=readControls();current.quantileRules.splice(Number(button.dataset.removeRule),1);writeControls(current);load({resetPage:true});
+  });
   refs.search.addEventListener("input", () => {
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => load({ resetPage: true }), 250);
@@ -377,4 +420,37 @@
   writeControls(current);
   disableExport(true);
   load();
+
+  const alertStatus=document.getElementById("qs-alert-status");
+  const accountRequest=(path,options)=>{
+    if(!window.QuanturaScreenerAccount)throw new Error("Account tools are still loading. Try again shortly.");
+    return window.QuanturaScreenerAccount.request(path,options);
+  };
+  async function loadSavedAlerts(){
+    const payload=await accountRequest("/api/v1/me/screener-alerts");savedAlerts=payload.data||[];
+    document.getElementById("qs-saved-list").innerHTML=savedAlerts.length?savedAlerts.map(a=>`<li><span><strong>${escapeHtml(a.name)}</strong><small>${a.email?"Inbox + email":"Inbox only"}</small></span><button type="button" class="cta secondary" data-apply-alert="${escapeHtml(a.id)}">Apply</button><button type="button" class="cta secondary" data-remove-alert="${escapeHtml(a.id)}" aria-label="Remove ${escapeHtml(a.name)} and stop its alerts">Remove</button></li>`).join(""):"<li>No saved filters yet.</li>";
+  }
+  document.getElementById("qs-save-alert").addEventListener("click",async event=>{
+    const button=event.currentTarget;button.disabled=true;alertStatus.textContent="Saving…";
+    try{const state=readControls();
+      // Saved responses also carry legacy normalized query fields. Do not send
+      // them back as new editable filters when applying and saving a preset.
+      const filters=Object.fromEntries(["search","universe","marketCap","minMarketCap","maxMarketCap","signal","signalChanged","quantileRules","positions","sort","direction","statistic"].filter(key=>state[key]!==undefined).map(key=>[key,state[key]]));
+      await accountRequest("/api/v1/me/screener-alerts",{method:"POST",body:{name:document.getElementById("qs-alert-name").value,filters,email:document.getElementById("qs-alert-email").checked}});
+      await loadSavedAlerts();alertStatus.textContent="Saved. Matching closing results will appear once per trading day.";
+    }catch(error){alertStatus.textContent=error.message;}finally{button.disabled=false;}
+  });
+  document.getElementById("qs-load-alerts").addEventListener("click",async event=>{
+    const button=event.currentTarget;button.disabled=true;alertStatus.textContent="Loading…";
+    try{await loadSavedAlerts();const inbox=await accountRequest("/api/notifications/items?limit=20");
+      document.getElementById("qs-alert-inbox").innerHTML=inbox.items?.length?inbox.items.map(item=>`<li><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.body)}</small><small>${escapeHtml(new Date(item.createdAtMs).toLocaleString())}</small></span></li>`).join(""):"<li>No notifications yet.</li>";alertStatus.textContent="Saved filters and inbox updated.";
+    }catch(error){alertStatus.textContent=error.message;}finally{button.disabled=false;}
+  });
+  document.getElementById("qs-saved-list").addEventListener("click",async event=>{
+    const apply=event.target.closest("[data-apply-alert]");const remove=event.target.closest("[data-remove-alert]");
+    if(apply){const a=savedAlerts.find(s=>s.id===apply.dataset.applyAlert);if(a){current={...defaults,...a.filters,positions:[...a.filters.positions],page:1};writeControls(current);load();alertStatus.textContent=`Applied ${a.name}.`;}}
+    if(remove){remove.disabled=true;try{await accountRequest(`/api/v1/me/screener-alerts/${remove.dataset.removeAlert}`,{method:"DELETE"});await loadSavedAlerts();alertStatus.textContent="Removed. This filter will no longer send notifications.";}catch(error){alertStatus.textContent=error.message;remove.disabled=false;}}
+  });
+  if(window.location.hash==="#saved-alerts")document.getElementById("saved-alerts").open=true;
+  window.addEventListener("hashchange",()=>{if(window.location.hash==="#saved-alerts")document.getElementById("saved-alerts").open=true;});
 })();

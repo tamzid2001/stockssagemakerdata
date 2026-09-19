@@ -35,10 +35,13 @@ import {
 } from "./forecastingScreener";
 import {
   filterSortPaginateRows,
-  loadPublishedScreenerCsv,
+  screenerRowsCsv,
   loadPublishedScreenerDataset,
   parseQuantScreenerQuery,
 } from "./quantScreener";
+import { ScreenerMarketService, ScreenerSignalStore } from "./screenerMarketService";
+import { registerScreenerAlertRoutes, runScreenerDigests } from "./screenerAlerts";
+import { BrevoNotificationMailer, FirestoreEmailDeliveryLedger } from "./brevoEmail";
 import {
   analyzeSportsPredictionCsv,
   buildSportsAutopilotDatasetCsv,
@@ -66,7 +69,7 @@ import {
   type ForecastAlertRecord,
   type ForecastBoundaryScheduleRow,
 } from "./forecastPriceAlerts";
-import { ResendForecastAlertEmailProvider } from "./forecastAlertEmail";
+import { createForecastAlertEmailProvider } from "./forecastAlertEmail";
 import {
   buildForecastAgentRequest,
   buildForecastAnalysisContext,
@@ -139,6 +142,7 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
+const screenerMarketService = new ScreenerMarketService(new AlpacaClient(), new ScreenerSignalStore(db), process.env.SCREENER_ALPACA_FEED || "iex");
 const auth = admin.auth();
 const messaging = admin.messaging();
 
@@ -679,6 +683,7 @@ registerPlatformApiRoutes(ROUTES, {
   auth,
   publicOrigin: PUBLIC_ORIGIN,
 });
+registerScreenerAlertRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
 registerSupportChatRoutes(ROUTES, {
   db, auth, publicOrigin: PUBLIC_ORIGIN,
   complete: async (messages) => (await invokeOpenAiLlm({
@@ -8365,8 +8370,10 @@ ROUTES.get("/screener/data", async (req, res) => {
   }
   try {
     const dataset = await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
-    const page = filterSortPaginateRows(dataset.items, parsed.query);
-    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+    const current = await screenerMarketService.current(dataset);
+    const page = filterSortPaginateRows(current.items, parsed.query);
+    page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...row,forecast_view_url:row.forecast_engine==="quantura_weekly_ensemble_v1"?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
+    res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=30");
     res.status(200).json({
       ok: true,
       ...page,
@@ -8376,6 +8383,9 @@ ROUTES.get("/screener/data", async (req, res) => {
       manifest: dataset.manifest,
       universeCount: dataset.items.length,
       dataSource: "validated_github_release",
+      warnings: current.warnings,
+      schemaVersion: dataset.schema_version,
+      signalPolicy: "Latest completed minute close (including extended hours), historical-close fallback. Before the first forecast session, compare with its first row. Saved closing signals are separate.",
     });
   } catch (error: any) {
     const detail = sanitizeText(error?.message || error, 120);
@@ -8389,11 +8399,15 @@ ROUTES.get("/screener/data", async (req, res) => {
   }
 });
 
-ROUTES.get("/screener/export.csv", async (_req, res) => {
+ROUTES.get("/screener/export.csv", async (req, res) => {
+  const parsed = parseQuantScreenerQuery(asPlainObject(req.query));
+  if (parsed.errors.length) { res.status(400).json({error:"invalid_screener_query",details:parsed.errors}); return; }
   try {
-    const csv = await loadPublishedScreenerCsv(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    const dataset = await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    const current = await screenerMarketService.current(dataset);
+    const csv = screenerRowsCsv(filterSortPaginateRows(current.items,{...parsed.query,page:1,pageSize:Math.max(1,current.items.length)}).items);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+    res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
     res.setHeader("Content-Disposition", 'attachment; filename="quantura-screener-latest.csv"');
     res.status(200).send(csv);
   } catch (error) {
@@ -14421,6 +14435,24 @@ ROUTES.all("/internal/cron/:jobName", async (req, res) => {
   }
   try {
     const jobName = sanitizeText(req.params.jobName, 100);
+    if (jobName === "screener-email-test") {
+      // Manual scheduler-authenticated smoke only; no client-provided recipient.
+      const recipient = await auth.getUserByEmail(ADMIN_EMAIL);
+      if (!recipient.emailVerified || recipient.disabled || !recipient.email) throw new Error("email_verification_required");
+      const mailer = new BrevoNotificationMailer(new FirestoreEmailDeliveryLedger(db));
+      const receipt = await mailer.send({id:"screener-email-release-smoke-20260919",to:recipient.email,
+        subject:"Quantura screener email connection verified",text:"This is a one-time integration test of Quantura notifications through Brevo and the approved Fixie outbound proxy. Manage saved filters at https://quantura.studio/screener#saved-alerts. No trading action was taken.",
+        html:'<p>This is a one-time integration test of Quantura notifications through Brevo and the approved Fixie outbound proxy.</p><p><a href="https://quantura.studio/screener#saved-alerts">Manage saved filters and alerts</a></p><p>No trading action was taken.</p>'});
+      res.status(200).json({ok:true,job:jobName,provider_accepted:Boolean(receipt.messageId)});return;
+    }
+    if (jobName === "screener-close") {
+      const dataset = await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+      const result = await screenerMarketService.close(dataset);
+      const current = await screenerMarketService.current(dataset);
+      const digests = await runScreenerDigests({db,auth,publicOrigin:PUBLIC_ORIGIN},dataset,current.items);
+      res.status(200).json({ok:true,job:jobName,result,digests});
+      return;
+    }
     if (jobName === "autopilot-reconcile") {
       await reconcileAutopilotRuns({});
       res.status(200).json({ ok: true, job: jobName });
@@ -14495,7 +14527,7 @@ export async function reconcileAutopilotRuns(_cloudEvent: any): Promise<void> {
 export async function monitorForecastBoundaryAlerts(_cloudEvent: any): Promise<Record<string, number>> {
   const alpaca = new AlpacaClient();
   const repository = new FirestoreForecastAlertRepository(db);
-  const emailProvider = new ResendForecastAlertEmailProvider();
+  const emailProvider = createForecastAlertEmailProvider(db);
   const feed = sanitizeText(process.env.FORECAST_ALERT_ALPACA_FEED, 20).toLowerCase() || "iex";
   const result = await runForecastAlertMonitor({
     repository,
