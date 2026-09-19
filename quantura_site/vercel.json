@@ -6,8 +6,8 @@
   "trailingSlash": false,
   "redirects": [
     { "source": "/pricing", "destination": "/forecasting", "permanent": true },
-    { "source": "/notifications", "destination": "/dashboard", "permanent": true },
-    { "source": "/dashboard/notifications", "destination": "/dashboard", "permanent": true },
+    { "source": "/notifications", "destination": "/screener#saved-alerts", "permanent": false },
+    { "source": "/dashboard/notifications", "destination": "/screener#saved-alerts", "permanent": false },
     { "source": "/autopilot", "destination": "/forecasting", "permanent": true },
     { "source": "/developers/api", "destination": "https://quantura.mintlifysite.com/", "permanent": true },
     { "source": "/docs/api", "destination": "https://quantura.mintlifysite.com/", "permanent": true },

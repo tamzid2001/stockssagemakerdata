@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildOpenApiDocument } from "./openapi";
 
+test("OpenAPI local schema references resolve", () => {
+  const document = buildOpenApiDocument() as any;
+  const visit = (value:any):void => {
+    if (!value || typeof value !== "object") return;
+    if (typeof value.$ref === "string" && value.$ref.startsWith("#/")) {
+      const target = value.$ref.slice(2).split("/").reduce((node:any,key:string)=>node?.[key.replace(/~1/g,"/").replace(/~0/g,"~")],document);
+      assert.notEqual(target,undefined,`Unresolved reference: ${value.$ref}`);
+    }
+    Object.values(value).forEach(visit);
+  };
+  visit(document);
+});
+
 test("OpenAPI documents workspace and uploaded CSV lifecycle routes", () => {
   const document = buildOpenApiDocument() as any;
   const paths = document.paths || {};

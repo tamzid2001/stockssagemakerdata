@@ -368,6 +368,55 @@ export class AlpacaClient {
     return prices;
   }
 
+  /** Exact completed minute, including the session's closing minute; no forward fill. */
+  async getStockMinuteCloses(symbolValues: string[], timestamp: string, feedValue = "iex"): Promise<Map<string, AlpacaLatestPrice>> {
+    const symbols = [...new Set(symbolValues.map(value => normalizeSymbol(value)))];
+    const start = Date.parse(timestamp);
+    if (!Number.isFinite(start)) throw new AlpacaError("invalid_request", "A valid minute timestamp is required.", 422);
+    const feed = STOCK_FEEDS.has(feedValue) ? feedValue : "iex";
+    const prices = new Map<string, AlpacaLatestPrice>();
+    for (let i = 0; i < symbols.length; i += 100) {
+      const chunk = symbols.slice(i, i + 100);
+      const query = new URLSearchParams({symbols:chunk.join(","),timeframe:"1Min",start:new Date(start).toISOString(),end:new Date(start+60_000).toISOString(),adjustment:"raw",feed,limit:"1000"});
+      const seen = new Set<string>();
+      do {
+        const payload = await this.request("/v2/stocks/bars", {query});
+        const bars = (payload.bars || {}) as Record<string, Record<string, unknown>[]>;
+        for (const symbol of chunk) for (const raw of Array.isArray(bars[symbol]) ? bars[symbol] : []) {
+          const bar = mapBar(raw);
+          if (Date.parse(bar.timestamp) === start && Number.isFinite(bar.close) && bar.close > 0)
+            prices.set(symbol,{symbol,price:bar.close,timestamp:bar.timestamp,session:bar.session});
+        }
+        const next = String(payload.next_page_token || "");
+        if (!next) break;
+        if (seen.has(next) || seen.size > 20) throw new AlpacaError("upstream", "Invalid minute-bar pagination.", 502);
+        seen.add(next); query.set("page_token",next);
+      } while (true);
+    }
+    return prices;
+  }
+
+  async getStockSplits(start: string, end: string): Promise<Array<{symbol: string; ex_date: string}>> {
+    const query = new URLSearchParams({types:"forward_split,reverse_split,unit_split",start,end,limit:"1000"});
+    const output: Array<{symbol:string;ex_date:string}> = [];
+    const seen = new Set<string>();
+    do {
+      const payload = await this.request("/v1/corporate-actions",{query});
+      const groups = payload.corporate_actions;
+      if (!groups || typeof groups !== "object") throw new AlpacaError("upstream", "Corporate action response unavailable.", 502);
+      for (const name of ["forward_splits","reverse_splits","unit_splits"]) {
+        const actions = (groups as Record<string, unknown>)[name];
+        for (const action of Array.isArray(actions) ? actions : [])
+          if (typeof action.symbol === "string" && /^\d{4}-\d{2}-\d{2}$/.test(action.ex_date)) output.push({symbol:action.symbol,ex_date:action.ex_date});
+      }
+      const next = String(payload.next_page_token || "");
+      if (!next) break;
+      if (seen.has(next) || seen.size > 100) throw new AlpacaError("upstream", "Invalid corporate action pagination.", 502);
+      seen.add(next);query.set("page_token",next);
+    } while (true);
+    return output;
+  }
+
   async listOptionContracts(input: { underlying: string; expiration?: string; type?: string; limit?: number }): Promise<Array<Record<string, unknown>>> {
     const underlying = normalizeSymbol(input.underlying);
     const maxRows = Math.max(1, Math.min(Number(input.limit) || 2000, 10000));

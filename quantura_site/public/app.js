@@ -9750,10 +9750,6 @@
   };
 
   const ensureHeaderNotificationsCta = () => {
-    document.getElementById("header-notifications")?.remove();
-    ui.headerNotifications = null;
-    return;
-    /* Archived notification navigation; delivery configuration is retained.
     const actions = document.querySelector(".header .nav-actions");
     if (!actions) return;
     let link = document.getElementById("header-notifications");
@@ -9771,12 +9767,11 @@
 	      ui.headerNotifications = link;
     }
     const authed = hasFullAccount();
-    link.href = authed ? "/notifications" : "/account";
+    link.href = authed ? "/screener#saved-alerts" : "/account";
     link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
     link.classList.remove("icon-only");
     link.setAttribute("title", "Notifications");
     link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
-    */
   };
 
   const renderNotificationLog = () => {
@@ -14429,6 +14424,15 @@
     return payload;
   };
 
+  // Reuse the application's Firebase/session bridge; never expose ID tokens.
+  window.QuanturaScreenerAccount = {
+    request: (path, options) => {
+      if (!/^\/api\/v1\/me\/screener-alerts(?:\/[a-f0-9]{24})?$/.test(path) && path !== "/api/notifications/items?limit=20") throw new Error("Unsupported screener account operation.");
+      if (!hasFullAccount()) throw new Error("Sign in to save filters and view notifications.");
+      return apiRequestJson(path, options);
+    },
+  };
+
   const ensembleUiState = {
     capabilities: null,
     presets: [],
@@ -14449,13 +14453,16 @@
 
   const ensembleQuantileKey = (value) => Number(Number(value).toPrecision(12)).toString();
 
+  const screenerForecastEndpoint = (job, action = "") => `/api/v1/screener/forecasts/${encodeURIComponent(job.published_screener.ticker)}${action}?scan_id=${encodeURIComponent(job.published_screener.scan_id)}`;
+
   const ensembleChartDefaultRange = (job) => {
-    if (job.source?.type !== "prediction_market" && !/min|hour|^\d+h$/i.test(job.frequency || "")) return null;
-    const end = Date.parse(job.predictions?.at(-1)?.timestamp);
-    const lastInput = Date.parse(job.history?.at(-1)?.timestamp);
-    const latest = Math.max(lastInput, Date.parse(job.observations?.at(-1)?.timestamp) || lastInput,
-      Math.min(Date.parse(job.created_at) || lastInput, end));
-    return Number.isFinite(latest) && Number.isFinite(end) ? [latest - 60*60_000, Math.max(end, latest)] : null;
+    return window.QuanturaForecastControls.forecastChartRange(job);
+  };
+  let nyseChartCalendarPromise;
+  const loadEnsembleChartCalendar = async job => {
+    if(job.source?.type!=="ticker" || job.calendar!=="NYSE" || job.frequency!=="1D")return;
+    nyseChartCalendarPromise ||= fetch("/market-calendars/nyse.json").then(response=>{if(!response.ok)throw new Error("Calendar unavailable");return response.json();}).catch(()=>{nyseChartCalendarPromise=null;return null;});
+    job.chart_calendar=await nyseChartCalendarPromise;
   };
 
   const ensembleDatasetFrequency = (data) => {
@@ -14823,6 +14830,8 @@
     const quantileValues = (quantile) => rows.map((row) => Number(row?.quantiles?.[ensembleQuantileKey(quantile)]));
     const traces = [];
     const timeZone = ensembleTimeZone();
+    await loadEnsembleChartCalendar(job);
+    window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
     const chartTimes = rows.map(row => Date.parse(row.timestamp));
     const addBand = (lower, upper, name, color) => {
       if (lower === undefined || upper === undefined || lower === upper) return;
@@ -14841,11 +14850,11 @@
     const source = job.source || {};
     const inputHistory = job.history || [];
     const plotTimestamp = row => window.QuanturaForecastControls.stockChartTimestamp(row, job);
-    if (inputHistory.length) traces.unshift({ type:"scatter",mode:"lines",x:inputHistory.map(plotTimestamp),y:inputHistory.map(r=>r.target),name:"Downloaded input history",line:{width:1.5,color:"#64748b"},connectgaps:false });
+    if (inputHistory.length) traces.unshift({ type:"scatter",mode:"lines+markers",x:inputHistory.map(plotTimestamp),y:inputHistory.map(r=>r.target),name:"Input history",line:{width:1.5,color:"#64748b"},marker:{size:3},connectgaps:false });
     const observed = job.observations || [];
     const overlayGroups = source.type === "ticker" && job.frequency !== "1min"
-      ? [{rows:observed.filter(r => r.interval !== "1min"),name:"Completed forecast-interval closes"}, {rows:observed.filter(r => r.interval === "1min"),name:"Recent minute closes (not final daily closes)"}]
-      : [{rows:observed,name:"Actual prices after input cutoff"}];
+      ? [{rows:observed.filter(r => r.interval !== "1min"),name:"Completed closes"}, {rows:observed.filter(r => r.interval === "1min"),name:"Minute close (provisional)"}]
+      : [{rows:observed,name:"Observed prices"}];
     for (const group of overlayGroups) {
       // One latest minute close per daily session; do not draw hundreds of
       // intraday points at a single daily x coordinate or call them final closes.
@@ -14857,26 +14866,52 @@
     const firstSignal = window.QuanturaForecastControls?.firstRowSignal(job);
     if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.timestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (retrospective)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
     renderEnsembleSignals(job);
-    // Epoch positions stay absolute (including DST folds); only labels localize.
-    traces.forEach(trace => { trace.customdata ||= trace.x.map(value => job.frequency === "1D" && source.type === "ticker" ? value.slice(0,10) : ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => Date.parse(value)); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
+    // ISO UTC positions avoid Plotly's browser-local conversion of numeric date
+    // values, which can put Monday/session-open points inside a closed-day gap.
+    traces.forEach(trace => { trace.customdata ||= trace.x.map(value => job.frequency === "1D" && source.type === "ticker" ? value.slice(0,10) : ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => new Date(value).toISOString()); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
     const tickIndices = [...new Set(Array.from({ length: Math.min(6, rows.length) }, (_, i) => Math.round(i * (rows.length - 1) / Math.max(1, Math.min(6, rows.length) - 1))))];
     if (ensembleUiState.chartWindowId !== job.forecast_id) {
       ensembleUiState.chartWindowId = job.forecast_id;
       ensembleUiState.chartWindow = ensembleChartDefaultRange(job);
     }
     const chartRange = ensembleUiState.chartWindow;
-    const tickTimes = chartRange ? Array.from({length:6}, (_,i) => chartRange[0] + i*(chartRange[1]-chartRange[0])/5) : tickIndices.map(i => chartTimes[i]);
+    const availableTicks=[...new Set(traces.flatMap(trace=>trace.x).map(Date.parse).filter(t=>!chartRange || (t>=chartRange[0] && t<=chartRange[1])))].sort((a,b)=>a-b);
+    const tickTimes=availableTicks.length ? [...new Set(Array.from({length:Math.min(6,availableTicks.length)},(_,i)=>availableTicks[Math.round(i*(availableTicks.length-1)/Math.max(1,Math.min(6,availableTicks.length)-1))]))] : tickIndices.map(i => chartTimes[i]);
     const intraday = /min|hour|^\d+h$/i.test(job.frequency || "");
+    const yRange=window.QuanturaForecastControls.visibleForecastYRange(traces,chartRange);
+    const mobile=window.matchMedia("(max-width: 600px)").matches;
     await Plotly.react(ui.ensembleForecastChart, traces, {
       font: { family: "Manrope, sans-serif", color: dark ? "rgba(246,244,238,.92)" : "#12182a" },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: dark ? "#0b0f1a" : "#ffffff",
       title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
-      margin: { l: 62, r: 24, t: 58, b: 58 }, height: 440, hovermode: "closest", uirevision: job.forecast_id,
-      xaxis: { type: "date", ...(chartRange ? { range: chartRange, autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date" }, tickmode: "array", tickvals: tickTimes, ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: true, thickness: 0.12 } },
-      yaxis: { title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target" } },
-      legend: { orientation: "h", y: -0.25 },
-      shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:Date.parse(plotTimestamp(inputHistory.at(-1))),x1:Date.parse(plotTimestamp(inputHistory.at(-1))),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
+      margin: { l: mobile?48:62, r: 16, t: 58, b: mobile?175:125, autoexpand:false }, height: mobile?565:490, hovermode: "closest", uirevision: job.forecast_id,
+      xaxis: { type: "date", ...(chartRange ? { range: chartRange.map(t=>new Date(t).toISOString()), autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date", standoff: 14 }, automargin:true, rangebreaks:window.QuanturaForecastControls.exchangeDateBreaks(job), tickmode: "array", tickvals: tickTimes.map(t=>new Date(t).toISOString()), ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: false } },
+      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
+      legend: { orientation: "h", yref:"container", y:0.01, yanchor:"bottom", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
+      shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:plotTimestamp(inputHistory.at(-1)),x1:plotTimestamp(inputHistory.at(-1)),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
+    const chart=ui.ensembleForecastChart;
+    // Reserve the actual wrapped legend height plus axis-label space. Anchoring
+    // to the container avoids Plotly's auto-margin feedback on mobile redraws.
+    const legendHeight=chart.querySelector(".legend")?.getBoundingClientRect().height;
+    if(Number.isFinite(legendHeight) && legendHeight>0) {
+      const bottom=Math.ceil(legendHeight)+90;
+      await Plotly.relayout(chart,{"margin.b":bottom,height:(mobile?300:310)+58+bottom});
+    }
+    if(chart.__ensembleRelayout)chart.removeListener?.("plotly_relayout",chart.__ensembleRelayout);
+    chart.__ensembleRelayout=event=>{
+      const raw=event["xaxis.range"] || (event["xaxis.autorange"] ? chart._fullLayout?.xaxis.range : [event["xaxis.range[0]"],event["xaxis.range[1]"]]);
+      const range=(raw || []).map(window.QuanturaForecastControls.chartInstant);
+      if(range.length!==2)return;
+      if(!range.every(Number.isFinite))return;
+      ensembleUiState.chartWindow=range;
+      const y=window.QuanturaForecastControls.visibleForecastYRange(chart.data || traces,range);
+      const visible=[...new Set((chart.data || traces).flatMap(trace=>trace.x).map(Date.parse).filter(t=>t>=range[0]&&t<=range[1]))].sort((a,b)=>a-b);
+      const ticks=Array.from({length:Math.min(6,visible.length)},(_,i)=>visible[Math.round(i*(visible.length-1)/Math.max(1,Math.min(6,visible.length)-1))]);
+      const labels=ticks.map(t=>new Intl.DateTimeFormat(undefined,intraday?{timeZone,hour:"numeric",minute:"2-digit",hour12:true}:{timeZone:"UTC",month:"short",day:"numeric"}).format(t));
+      if(y)void Plotly.relayout(chart,{"yaxis.range":y,"yaxis.autorange":false,"xaxis.tickvals":ticks.map(t=>new Date(t).toISOString()),"xaxis.ticktext":labels});
+    };
+    chart.on?.("plotly_relayout",chart.__ensembleRelayout);
   };
 
   const startEnsembleObservations = (job) => {
@@ -14897,25 +14932,20 @@
         if (ensembleUiState.busy || document.hidden || !ui.ensembleForecastResults?.getClientRects().length) return;
         inFlight = true;
         if (refreshButton) { refreshButton.disabled = true; label.textContent = "Updating quotes…"; refreshButton.setAttribute("aria-busy", "true"); }
-          const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`, { headers: { "Cache-Control": "no-cache" } });
+          const response = await apiRequestJson(job.published_screener ? screenerForecastEndpoint(job,"/observations") : `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`, { headers: { "Cache-Control": "no-cache" } });
           if (!current() || ensembleUiState.busy) return;
           job.observations = response.data.rows || [];
           renderEnsembleLiveQuote(job);
           const replay = job.source?.analysis_mode === "historical_replay";
           if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = `Actual-price overlay: ${job.observations.length} observed bars after input cutoff. ${replay ? "Some outcomes were already known when this replay was generated. " : ""}Updated ${ensembleLocalTime(response.data.observed_at)}. Refreshes once per minute; the forecast remains unchanged.`;
-          const forecastByTime = new Map((job.predictions || []).map(row=>[Date.parse(row.timestamp),row.quantiles]));
-          const matchedTime = row => Date.parse(window.QuanturaForecastControls.stockChartTimestamp(row,job));
-          const errors = job.observations.filter(row=>(!row.interval || row.interval === job.frequency) && (!job.source?.field || job.source.field === "close") && Date.parse(row.timestamp)>Date.parse(job.completed_at) && Number.isFinite(Number(forecastByTime.get(matchedTime(row))?.['0.5']))).map(row=>Number(forecastByTime.get(matchedTime(row))['0.5'])-row.target);
-          if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = errors.length
-            ? `Observed since publication: ${errors.length} matched forecast steps · MAE ${(errors.reduce((s,e)=>s+Math.abs(e),0)/errors.length).toFixed(4)} · RMSE ${Math.sqrt(errors.reduce((s,e)=>s+e*e,0)/errors.length).toFixed(4)} · Bias ${(errors.reduce((s,e)=>s+e,0)/errors.length).toFixed(4)}. This single live forecast is not a historical backtest.`
-            : "Live validation: waiting for timestamp-matched observations after forecast publication. No accuracy score is invented.";
+          window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
           const latest = Date.parse(job.observations.at(-1)?.timestamp);
           const moveWindow = focusLatest || (ensembleUiState.chartWindow && latest > ensembleUiState.chartWindow[1]);
           if (moveWindow) ensembleUiState.chartWindow = ensembleChartDefaultRange(job);
           await renderEnsembleChart(job);
           if (moveWindow && current() && ensembleUiState.chartWindow) {
             const Plotly = await getPlotly();
-            if (Plotly && current()) await Plotly.relayout(ui.ensembleForecastChart, { "xaxis.range": ensembleUiState.chartWindow, "xaxis.autorange": false });
+            if (Plotly && current()) await Plotly.relayout(ui.ensembleForecastChart, { "xaxis.range": ensembleUiState.chartWindow.map(t=>new Date(t).toISOString()), "xaxis.autorange": false });
           }
           stopped = ["immutable_dataset","live_overlay_window_expired"].includes(response.data.availability);
       } catch (error) {
@@ -14937,8 +14967,13 @@
     if (!Array.isArray(job.history)) job = (await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}`)).data;
     setEnsembleBusy(false);
     ensembleUiState.lastJob = job;
+    window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
     const statusButton = document.getElementById("ensemble-check-status");
     if (statusButton) statusButton.hidden = true;
+    if (ui.ensembleRunAgain) {
+      ui.ensembleRunAgain.disabled = Boolean(job.published_screener);
+      ui.ensembleRunAgain.title = job.published_screener ? "Save this published forecast to your requests before reproducing its immutable input." : "Reproduce the saved input and configuration";
+    }
     const otherSide = document.getElementById("ensemble-other-side");
     if (otherSide) otherSide.hidden = job.source?.type !== "prediction_market";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = false;
@@ -14977,8 +15012,8 @@
       ui.ensembleResultTable.innerHTML = `<table class="data-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
     }
     const base = `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/download`;
-    if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = `${base}?format=csv`;
-    if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = `${base}?format=json`;
+    if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = job.published_screener ? `${screenerForecastEndpoint(job)}&format=csv` : `${base}?format=csv`;
+    if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = job.published_screener ? `${screenerForecastEndpoint(job)}&format=json` : `${base}?format=json`;
     const visibleWarnings = [...new Set([...(job.source?.warnings || []), ...(job.warnings || [])])].filter(warning => !/logit|epsilon|inverse-logit|transformed space/i.test(warning));
     if (job.source?.analysis_mode === "historical_replay") visibleWarnings.unshift(`Historical replay: input cutoff ${ensembleLocalTime(job.source.requested_input_cutoff_at)}. Generated now, not published before the overlaid outcomes.`);
     setEnsembleStatus(`Forecast complete. ${visibleWarnings.join(" ")}`, "success");
@@ -14993,7 +15028,7 @@
     await renderEnsembleChart(job);
     renderEnsembleLiveQuote(job);
     const identity = ensembleMarketIdentity(job);
-    await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
+    if (!job.published_screener) await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
     startEnsembleObservations(job);
   };
 
@@ -15212,6 +15247,15 @@
     document.getElementById("ensemble-csv-help-close")?.addEventListener("click", () => csvHelp?.close());
     document.getElementById("ensemble-save-profile")?.addEventListener("click", async () => {
       try {
+        const published=ensembleUiState.lastJob;
+        if(published?.published_screener) {
+          if(!requireFullAccount("Sign in to save this published forecast to My Requests."))return;
+          const saved=await apiRequestJson(screenerForecastEndpoint(published,"/save"),{method:"POST",body:{scan_id:published.published_screener.scan_id}});
+          history.replaceState({},"",saved.data.url);
+          await pollEnsembleForecast(saved.data.forecast_id);
+          await fetchMyRequestsList({force:true});renderMyRequestsPanels();
+          showToast("This exact published forecast is saved in My Requests.");return;
+        }
         if (!hasFullAccount()) {
           await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(ensembleUiState.forecastId)}/prepare-save`, {method:"POST",body:{}});
           // Store only the resource ID. Ownership proof stays in an HttpOnly cookie.
@@ -15266,7 +15310,7 @@
       const range = ensembleChartDefaultRange(job);
       const Plotly = await getPlotly();
       ensembleUiState.chartWindow = range;
-      if (Plotly && ui.ensembleForecastChart) { await renderEnsembleChart(job); await Plotly.relayout(ui.ensembleForecastChart, range ? {"xaxis.range":range,"xaxis.autorange":false} : {"xaxis.autorange":true}); }
+      if (Plotly && ui.ensembleForecastChart) { await renderEnsembleChart(job); await Plotly.relayout(ui.ensembleForecastChart, range ? {"xaxis.range":range.map(t=>new Date(t).toISOString()),"xaxis.autorange":false} : {"xaxis.autorange":true}); }
     });
     document.getElementById("ensemble-chart-refresh")?.addEventListener("click", () => ensembleUiState.refreshObservations?.({ focusLatest: true }));
     const resumeQuoteOverlay = () => { if (!document.hidden) ensembleUiState.refreshObservations?.(); };
@@ -15387,6 +15431,11 @@
     ui.ensembleShareLink?.addEventListener("click", async () => {
       if (!ensembleUiState.forecastId) return;
       try {
+        const published=ensembleUiState.lastJob?.published_screener;
+        if(published) {
+          await navigator.clipboard.writeText(`${window.location.origin}/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(published.ticker)}&screenerScan=${encodeURIComponent(published.scan_id)}`);
+          showToast("Published forecast link copied. Save to My Requests to keep it after the next scan.");return;
+        }
         await navigator.clipboard.writeText(`${window.location.origin}/forecasting?panel=forecast&ensembleForecastId=${encodeURIComponent(ensembleUiState.forecastId)}`);
         showToast("Forecast link copied. Recipients must sign in and have access to this workspace.");
       } catch { showToast("Unable to copy. Share the forecast URL in your address bar.", "warn"); }
@@ -15411,6 +15460,16 @@
     if (forecastId) {
       ensembleUiState.forecastId = forecastId;
       window.setTimeout(() => pollEnsembleForecast(forecastId).catch(() => undefined), 400);
+    }
+    const screenerTicker=String(getQueryParam("screenerTicker") || "").trim();
+    const screenerScan=String(getQueryParam("screenerScan") || "").trim();
+    if(!forecastId && screenerTicker && screenerScan) {
+      const generation=ensembleUiState.pollGeneration;
+      setEnsembleStatus("Loading the exact published screener forecast…","working");
+      fetch(`/api/v1/screener/forecasts/${encodeURIComponent(screenerTicker)}?scan_id=${encodeURIComponent(screenerScan)}`)
+        .then(async response=>{const payload=await response.json();if(!response.ok)throw new Error("This screener snapshot is no longer published. Open the latest Screener, or open your saved copy in My Requests.");return payload.data;})
+        .then(async job=>{if(generation!==ensembleUiState.pollGeneration||ensembleUiState.forecastId)return;ensembleUiState.forecastId=job.forecast_id;await renderCompletedEnsemble(job);})
+        .catch(error=>{if(generation===ensembleUiState.pollGeneration&&!ensembleUiState.forecastId)setEnsembleStatus(error.message,"error");});
     }
     window.addEventListener("beforeunload", stopEnsemblePolling, { once: true });
   };

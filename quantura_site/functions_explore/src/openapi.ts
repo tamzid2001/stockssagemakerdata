@@ -713,6 +713,8 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
       },
     },
   };
+  addScreenerOpenapi(document);
   addDocumentationExamples(document);
   return document;
 }
+import { addScreenerOpenapi } from "./screenerOpenapi";

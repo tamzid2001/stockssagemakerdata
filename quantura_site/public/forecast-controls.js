@@ -20,6 +20,7 @@
   };
   const stockSessionFormatters = new Map();
   function stockChartTimestamp(row, job) {
+    if (!row.timestamp || !Number.isFinite(Date.parse(row.timestamp))) return row.timestamp;
     if (job.source?.type !== "ticker" || job.frequency !== "1D") return row.timestamp;
     // Daily predictions use session-date labels, not the provider's midnight
     // or opening-time bar label. Preserve real timestamps outside the plot.
@@ -27,7 +28,7 @@
     if (!stockSessionFormatters.has(timeZone)) stockSessionFormatters.set(timeZone, new Intl.DateTimeFormat("en-CA", {
       timeZone, year: "numeric", month: "2-digit", day: "2-digit",
     }));
-    const date = row.session_date || stockSessionFormatters.get(timeZone).format(new Date(row.timestamp));
+    const date = row.session_date || (job.source?.daily_timestamp_convention === "session_date" && (!row.interval || row.interval === "1D") ? String(row.timestamp).slice(0,10) : stockSessionFormatters.get(timeZone).format(new Date(row.timestamp)));
     return `${date}T00:00:00.000Z`;
   }
   function parseCsv(text, maxRows = 10000) {
@@ -102,7 +103,68 @@
     return {status: "observed", timestamp, quoteTimestamp, price, lower, upper, signal: price < lower ? "buy" : price > upper ? "sell" : "none", prospective,
       timing: `First predicted ${intervalLabel} after downloaded history${prospective ? "" : " · retrospective comparison, not a backdated live entry"}`};
   }
-  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowSignal });
+  function forecastChartRange(job) {
+    const lastInput=Date.parse(stockChartTimestamp(job.history?.at(-1) || {},job));
+    const candidates=[lastInput,...(job.observations || []).map(row=>Date.parse(stockChartTimestamp(row,job)))].filter(Number.isFinite);
+    const latest=candidates.length ? Math.max(...candidates) : Date.parse(job.predictions?.[0]?.timestamp);
+    const end=Math.max(latest,Date.parse(job.predictions?.at(-1)?.timestamp));
+    if(!Number.isFinite(latest)||!Number.isFinite(end))return null;
+    const frequency=String(job.frequency || "1D").toLowerCase();
+    const amount=Number.parseInt(frequency,10)||1;
+    const unit=/min|^\d+m$/.test(frequency)?60_000:/hour|^\d+h$/.test(frequency)?3600_000:/week|^\d+w$/.test(frequency)?7*86400_000:86400_000;
+    const firstPrediction=Date.parse(job.predictions?.[0]?.timestamp);
+    // Later overlays must not push the saved forecast's first rows offscreen.
+    const anchor=Number.isFinite(firstPrediction)?Math.min(latest,firstPrediction):latest;
+    let start=anchor-amount*unit;
+    if(job.source?.type==="ticker" && frequency==="1d" && job.chart_calendar?.sessions) {
+      const date=new Date(anchor).toISOString().slice(0,10);
+      const previous=job.chart_calendar.sessions.filter(day=>day<date).at(-1);
+      if(previous)start=Date.parse(previous+"T00:00:00Z");
+    }
+    return [start,end];
+  }
+  // Plotly emits UTC chart coordinates without a timezone on relayout. Native
+  // Date.parse would reinterpret those as the visitor's local clock.
+  function chartInstant(value) {
+    if (typeof value === "number") return value;
+    const text = String(value || "");
+    return Date.parse(/^\d{4}-\d{2}-\d{2}[T ]/.test(text) && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(text) ? text + "Z" : text);
+  }
+  function visibleForecastYRange(traces,range) {
+    if(!range)return null;
+    let lo=Infinity,hi=-Infinity;
+    const add=value=>{if(typeof value==="number"&&Number.isFinite(value)){lo=Math.min(lo,value);hi=Math.max(hi,value);}};
+    for(const trace of traces) {
+      if(trace.visible===false || trace.visible==="legendonly")continue;
+      for(let i=0;i<(trace.x || []).length;i++) {
+        const x=typeof trace.x[i]==="number"?trace.x[i]:Date.parse(trace.x[i]); const y=trace.y[i];
+        if(x>=range[0]&&x<=range[1])add(y);
+        if(i>0 && /lines/.test(trace.mode || "")) {
+          const before=typeof trace.x[i-1]==="number"?trace.x[i-1]:Date.parse(trace.x[i-1]);const prev=trace.y[i-1];
+          if(typeof y==="number" && typeof prev==="number" && x>before)for(const edge of range)
+            if(before<edge&&x>edge)add(prev+(y-prev)*(edge-before)/(x-before));
+        }
+      }
+    }
+    if(!Number.isFinite(lo)||!Number.isFinite(hi))return null;
+    const pad=Math.max((hi-lo)*0.08,Math.abs(hi)*0.001,1e-6);
+    return [lo-pad,hi+pad];
+  }
+  function exchangeDateBreaks(job) {
+    const calendar=job.chart_calendar;
+    if(job.source?.type!=="ticker" || job.frequency!=="1D" || calendar?.exchange!=="NYSE")return [];
+    const times=[...(job.history || []).map(r=>stockChartTimestamp(r,job)),...(job.predictions || []).map(r=>r.timestamp),...(job.observations || []).map(r=>stockChartTimestamp(r,job))].map(Date.parse).filter(Number.isFinite);
+    if(!times.length)return [];
+    const start=Math.min(...times),end=Math.max(...times);
+    if(start<Date.parse(calendar.start)||end>=Date.parse(calendar.end)+86400_000)return [];
+    const sessions=new Set(calendar.sessions);const closed=[];
+    for(let time=Math.floor(start/86400_000)*86400_000;time<=end;time+=86400_000) {
+      const day=new Date(time).toISOString().slice(0,10);
+      if(!sessions.has(day))closed.push(day);
+    }
+    return closed.length?[{values:closed,dvalue:86400_000}]:[];
+  }
+  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowSignal, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);

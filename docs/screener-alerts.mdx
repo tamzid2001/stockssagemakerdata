@@ -1,0 +1,62 @@
+---
+title: 'Weekly Screener and Daily Filter Alerts'
+description: 'Seven-session ensemble forecasts, closing signals, saved filters and optional daily email.'
+---
+
+## Weekly methodology
+
+The pipeline runs **daily after the market closes** (22:15 UTC on weekdays).
+“Weekly” describes the forecast horizon, not a once-a-week schedule.
+It withholds one completed NYSE session and forecasts the next
+**seven actual exchange sessions**. Prophet, Toto 4M, Granite, Chronos-2 and
+TimesFM each receive a 20% central weight. Tail weights are renormalized across
+capable models. There is no synthetic fallback. The prior validated scan remains
+published until the new scan passes coverage. The website identifies the actual
+published engine, including older scans during validation.
+
+Prices use a split-adjusted basis. Later splits invalidate current comparisons
+until refreshed. Current buy/sell signals mean strictly below P10 / above P90;
+equality is neutral. The latest completed minute may include extended hours.
+Historical-close fallback and comparison dates are labeled. Only the actual
+exchange closing minute is saved as the closing signal, respecting early closes
+and holidays. Previous non-neutral signals remain separate.
+
+## Save filters and receive matches
+
+Use any combination of minimum, maximum or average P01/P10/P25/P50/P75/P90/P99
+across the seven sessions. Rules combine with AND. “Average P50 > 10% above price”
+means `(average P50 - price) / price * 100 > 10`.
+
+Open **Save filters & alerts**, sign in, and name the current filters. Optionally
+enable daily email to your verified account address. Maximum ten filters.
+Identical filters update their existing entry. Remove an entry to stop alerts.
+Matches use finalized closing prices, not after-hours provisional quotes.
+The inbox receives matches once per trading day; email-enabled matches are
+combined into one email per account/day. Delivery limits apply. No location
+permission is required. Provider acceptance does not prove inbox delivery.
+
+```bash
+curl https://quantura.studio/api/v1/me/screener-alerts \
+  -H 'Authorization: Bearer YOUR_API_KEY'
+
+curl -X POST https://quantura.studio/api/v1/me/screener-alerts \
+  -H 'Authorization: Bearer YOUR_API_KEY' -H 'Content-Type: application/json' \
+  -d '{"name":"P50 opportunity","email":false,"filters":{"signal":"buy","quantileRules":[{"quantile":"p50","statistic":"avg","operator":"gt","percent":10}]}}'
+```
+
+Reading requires `alerts:read`; saving/removing requires `alerts:write`.
+Workspace Viewer status does not prevent managing personal saved filters.
+
+## Open the published forecast
+
+**View forecast** opens the exact published ticker forecast in Q Forecast without
+new inference. **Save to profile** creates an immutable private copy including
+history and model provenance; destination workspace write permission is required.
+Old public scan links expire after publication replacement; saved private copies remain.
+
+## Delivery operations
+
+Brevo sends through a server-only Fixie proxy, with no direct-IP fallback.
+The free Fixie plan allows 500 requests/month. Quantura budgets at most 450 per
+billing window for all notification email and deduplicates sends durably.
+Unknown delivery outcomes require reconciliation, not automatic retries.
