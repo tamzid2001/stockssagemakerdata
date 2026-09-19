@@ -39,9 +39,19 @@
     const prospective = [],retrospective = [];
     for (const [time,actual] of [...actuals].sort((a,b)=>a[0]-b[0])) {
       const row = byTime.get(time), match = {actual,index:row.index,quantiles:row.quantiles || {}};
+      let outcomeTime = time;
+      const calendar = job.chart_calendar;
+      if(job.source?.type === "ticker" && job.frequency === "1D" && calendar?.exchange === "NYSE") {
+        const index = calendar.sessions.indexOf(new Date(time).toISOString().slice(0,10));
+        const closeMinute = calendar.close_minute_utc?.[index];
+        if(finite(closeMinute)) outcomeTime = time + closeMinute*60000;
+      }
+      if(outcomeTime>now)continue;
       // Conservatively exclude any target timestamp already reached at publication.
+      // Daily session-date labels are not close times: use actual exchange closes,
+      // including early closes and DST. Without a calendar retain conservative labeling.
       // A historical replay is descriptive only, never a walk-forward backtest.
-      (job.source?.analysis_mode !== "historical_replay" && Number.isFinite(published) && time>published ? prospective : retrospective).push(match);
+      (job.source?.analysis_mode !== "historical_replay" && Number.isFinite(published) && outcomeTime>published ? prospective : retrospective).push(match);
     }
     return {expected:predictions.length,levels,target_supported:selectedTarget,
       prospective:summarize(prospective,levels),retrospective:summarize(retrospective,levels)};

@@ -32,6 +32,16 @@ test('daily comparisons use final session closes, not provisional minute quotes 
   assert.equal(compute(j).prospective.count,1);assert.equal(compute(j).prospective.mae,0);
   j.source.field='volume';assert.equal(compute(j).prospective.count,0);assert.equal(compute(j).target_supported,false);
 });
+test('same-day daily forecasts use exchange close time, including early closes, rather than the midnight label',()=>{
+  const j=job();j.source={type:'ticker'};j.frequency='1D';j.chart_calendar=require('../../public/market-calendars/nyse.json');
+  j.completed_at='2026-11-27T17:00:00Z'; // Black Friday, 1pm NY / 18:00 UTC early close.
+  j.predictions=[{timestamp:'2026-11-27T00:00:00Z',quantiles:{'0.1':9,'0.5':10,'0.9':11}}];
+  j.observations=[{timestamp:'2026-11-27T14:30:00Z',interval:'1D',target:10}];
+  assert.equal(compute(j,Date.parse('2026-11-27T17:30:00Z')).prospective.count,0);
+  assert.equal(compute(j,Date.parse('2026-11-27T19:00:00Z')).prospective.count,1);
+  j.completed_at='2026-11-27T18:01:00Z';
+  assert.equal(compute(j,Date.parse('2026-11-27T19:00:00Z')).retrospective.count,1);
+});
 test('no P50 means no fabricated point forecast; custom quantiles still receive their own metrics',()=>{
   const j=job();j.quantiles=[.123,.876];j.predictions.forEach(r=>r.quantiles={'.123':11,'.876':14});
   // The public contract uses canonical numeric-string keys.

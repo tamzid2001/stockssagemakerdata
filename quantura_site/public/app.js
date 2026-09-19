@@ -14825,6 +14825,7 @@
     const traces = [];
     const timeZone = ensembleTimeZone();
     await loadEnsembleChartCalendar(job);
+    window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
     const chartTimes = rows.map(row => Date.parse(row.timestamp));
     const addBand = (lower, upper, name, color) => {
       if (lower === undefined || upper === undefined || lower === upper) return;
