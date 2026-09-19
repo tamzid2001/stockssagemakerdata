@@ -204,7 +204,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install aggregate dependencies
-        run: python -m pip install --disable-pip-version-check requests
+        run: |
+          python -m pip install --disable-pip-version-check requests numpy==2.5.2
+          python -c 'from scripts.weekly_screener import configuration_hash; assert len(configuration_hash()) == 64'
       - name: Download universe
         uses: actions/download-artifact@v8
         with:
