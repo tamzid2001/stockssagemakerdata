@@ -65,7 +65,7 @@ class Checkpoints:
                     raise ValueError('BTC_HORIZON_CONFIGURATION_CONFLICT')
 
     def ref(self, kind, key):
-        if kind not in ('catalog','source','forecast','market','report') or not re.fullmatch(r'[A-Za-z0-9_-]{1,120}',key):
+        if kind not in ('catalog','source','forecast','market','report','attempt') or not re.fullmatch(r'[A-Za-z0-9_-]{1,120}',key):
             raise ValueError('INVALID_BTC_HORIZON_RECORD')
         return self.campaign.lease.ref.collection('btc_horizon_'+kind).document(key)
 

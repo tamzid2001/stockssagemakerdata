@@ -53,6 +53,35 @@ def test_missing_minute_does_not_shift_window():
         study.window_at([Quote(OPEN+120,.5,.49)],OPEN,1)
 
 
+def test_transient_retry_checkpoint_preserves_inputs_and_counts_latency(monkeypatch):
+    from ensemble_forecasting.adapters.base import ModelExecutionError
+    p=Provider();archive=Archive();source=study.source_for(MARKET,archive,p)
+    config=study.configuration('KXETH15M',OPEN+1800,2,'a'*40);calls=[]
+    clock=iter([10,17,20,25]);monkeypatch.setattr(study.time,'monotonic',lambda:next(clock))
+    def fit(window,*args,**kw):
+        calls.append(deepcopy(window))
+        if len(calls)==1:raise ModelExecutionError('chronos','MODEL_INFERENCE_FAILED',retryable=True)
+        return model(window,*args,**kw)
+    result=study.forecast_origin(MARKET,2,source,config,archive,p,fit)
+    assert len(calls)==3 and calls[0]==calls[1]
+    assert result['forecasts'][0]['duration_seconds']==pytest.approx(7.1)
+    assert result['forecasts'][0]['available_at']==OPEN+120+5+8
+    assert archive.get('attempt',MARKET['ticker']+'-n2-yes-1')['model']=='chronos'
+    assert study.forecast_origin(MARKET,2,source,config,archive,p,lambda *a,**k:pytest.fail('resume'))==result
+
+
+@pytest.mark.parametrize('retryable,attempts',[(False,1),(True,2)])
+def test_permanent_or_exhausted_retry_never_publishes_or_retries_on_resume(retryable,attempts):
+    from ensemble_forecasting.adapters.base import ModelExecutionError
+    p=Provider();a=Archive();source=study.source_for(MARKET,a,p)
+    config=study.configuration('KXETH15M',OPEN+1800,2,'a'*40);calls=[]
+    def fail(*args,**kw):
+        calls.append(1);raise ModelExecutionError('timesfm','MODEL_INFERENCE_FAILED',retryable=retryable)
+    for _ in range(2):
+        with pytest.raises(ModelExecutionError):study.forecast_origin(MARKET,2,source,config,a,p,fail)
+    assert len(calls)==attempts and a.get('market',MARKET['ticker']+'-n2') is None
+
+
 def test_short_or_failed_ensemble_is_rejected():
     f=model([Quote(OPEN+60,.5,.49)],14,study.models_for(1),study.QUANTILES,
             single_point_research=True,failure_policy='fail')

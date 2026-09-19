@@ -13,9 +13,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from ensemble_forecasting.capabilities import MODEL_REGISTRY
+from ensemble_forecasting.adapters.base import ModelExecutionError
 from .engine import Quote, digest, stamp, validate_forecast
-from .forecast import default_research_models, forecast_window
+from .forecast import forecast_window
 from .local_store import LocalStore
 from .p1_oco import QUANTILES
 from .quantile_paths import from_store
@@ -143,8 +143,9 @@ def first_minute_window(quotes, opened):
 
 
 def short_context_models():
-    return tuple(m for m in default_research_models()
-                 if MODEL_REGISTRY["models"][m].get("minimumObservedContext", 2) <= 2)
+    # A deployment/licensing failure is not permission to silently shrink the
+    # requested four-model experiment. The common engine validates availability.
+    return ('prophet', 'granite', 'chronos', 'timesfm')
 
 
 def process_market(store, provider, market, now, historical=False, forecaster=forecast_window, history_minutes=2):
@@ -176,8 +177,8 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
     if now < origin:
         store.checkpoint("btc:" + ticker, saved)
         return saved
-    if saved["status"] == "waiting" and not historical and now > origin + 60:
-        saved.update(status="missed_start", reason="WORKER_NOT_READY_WITHIN_ORIGIN_WINDOW")
+    if saved["status"] == "waiting" and not historical and now >= end - 60:
+        saved.update(status="missed_start", reason="NO_TRADEABLE_MINUTE_REMAINS")
         store.checkpoint("btc:" + ticker, saved)
         return saved
     raw = provider.candles(market, now)
@@ -188,7 +189,7 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
             windows = ({s:[Quote(**q) for q in rows] for s,rows in saved['input_windows'].items()}
                        if saved.get('input_windows') else {s: window_builder(q, opened) for s, q in quotes.items()})
         except ValueError:
-            if historical or now >= origin + 60:
+            if historical or now >= end - 60:
                 saved.update(status="missing_first_minutes", reason="EXACT_FIRST_COMPLETED_MINUTE_REQUIRED" if history_minutes == 1 else "FIRST_TWO_COMPLETED_MINUTES_REQUIRED")
             store.checkpoint("btc:" + ticker, saved)
             return saved
@@ -204,9 +205,12 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
         pair = []
         try:
             for side in ("yes", "no"):
-                options = {'single_point_research': True} if history_minutes == 1 else {}
+                options = {'failure_policy':'fail', **({'single_point_research': True} if history_minutes == 1 else {})}
                 f = forecaster(windows[side], horizon, models, QUANTILES, **options)
                 validate_forecast(f, origin, horizon)
+                completed = [m.get('id',m.get('model')) for m in f.get('models',[]) if m.get('status')=='completed']
+                if sorted(completed) != sorted(models) or f.get('failures'):
+                    raise ValueError('STRICT_INTERVAL_ENSEMBLE_REQUIRED')
                 f["market_context"] = {"event_id": market["event_ticker"], "market_id": ticker,
                                        "contract_id": ticker + ":" + side, "side": side,
                                        "outcome": "BTC up" if side == "yes" else "BTC not up", "provider": "kalshi"}
@@ -222,14 +226,18 @@ def process_market(store, provider, market, now, historical=False, forecaster=fo
         except Exception as error:
             # Retry transient execution/network failures once, not malformed
             # data or permission/license validation failures. No silent fallback.
-            retryable = isinstance(error, (RuntimeError, OSError, TimeoutError))
+            retryable = (error.retryable if isinstance(error, ModelExecutionError)
+                         else isinstance(error, (RuntimeError, OSError, TimeoutError)))
             retry = retryable and not historical and saved['attempts'] < 2 and int(time.time()) < end-60
             saved.update(status='retry_wait' if retry else 'failed', error_type=type(error).__name__,
-                         retry_at=int(time.time())+15, retryable=retryable)
+                         retry_at=int(time.time())+15, retryable=retryable,
+                         error_code=error.code if isinstance(error,ModelExecutionError) else 'FORECAST_EXECUTION_FAILED',
+                         model=error.model if isinstance(error,ModelExecutionError) else None)
             with store.lock, store.db:
                 store._put('btc_forecast_attempts', digest([ticker, saved['attempts']]),
                            {'market_id':ticker,'attempt':saved['attempts'],'status':'failed',
-                            'error_type':type(error).__name__,'at':int(time.time()),'retry_scheduled':retry}, True)
+                            'error_type':type(error).__name__,'error_code':saved['error_code'],
+                            'model':saved['model'],'at':int(time.time()),'retry_scheduled':retry}, True)
             store.checkpoint("btc:" + ticker, saved)
             raise
         duration = time.monotonic() - started

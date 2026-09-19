@@ -51,8 +51,20 @@ class ProphetAdapter(ForecastAdapter):
             model.add_country_holidays(country_name="US")
         if span_days >= 90:
             model.add_seasonality(name="monthly", period=30.5, fourier_order=5)
+        fit_options = {}
+        warnings = []
+        if len(train) == 2:
+            # Newton can drive sigma_obs to zero for a two-point exact line,
+            # overflow Stan's GLM, or run indefinitely. Keep the real inputs
+            # and Prophet posterior; use the converged BFGS optimizer instead.
+            # Do not accept unconverged fits or fall back to the failing Newton
+            # path. Longer histories retain their existing optimizer policy.
+            model.stan_backend.set_options(newton_fallback=False)
+            fit_options = {"algorithm": "BFGS", "seed": int(series.dataset_hash[:8], 16),
+                           "timeout": 20, "require_converged": True}
+            warnings.append("PROPHET_TWO_POINT_BFGS: two observations cannot establish calibrated uncertainty; short-history research only.")
         try:
-            model.fit(train)
+            model.fit(train, **fit_options)
             future = pd.DataFrame(
                 {"ds": pd.to_datetime(list(timestamps), utc=True).tz_convert(None)}
             )
@@ -95,4 +107,5 @@ class ProphetAdapter(ForecastAdapter):
             device="cpu",
             duration_seconds=time.monotonic() - started,
             package_versions=package_versions(["prophet", "numpy"]),
+            warnings=warnings,
         )

@@ -22,8 +22,9 @@ from .interval_markets import KalshiIntervalProvider
 from .p1_oco import QUANTILES
 from ensemble_forecasting.capabilities import model_supports_quantile
 from ensemble_forecasting.schemas import canonical_quantile_string
+from ensemble_forecasting.adapters.base import ModelExecutionError
 
-VERSION = 'interval_three_strategies_v1'
+VERSION = 'interval_three_strategies_v2'
 ORIGINS = tuple(range(1, 13))
 
 
@@ -132,12 +133,43 @@ def forecast_origin(market, n, source, config, archive, provider, forecaster=for
     data = provider.quotes(source['candles'], market, end)
     windows = {s:window_at(data[s], opened, n) for s in ('yes', 'no')}
     models = models_for(n); origin = opened + n*60; pair = []
+    receipts = source.get('minute_receipts', {})
+    input_ready = max([origin + 5] + [receipts.get(str(q.timestamp), origin + 5)
+                                    for window in windows.values() for q in window])
+    if input_ready >= end:
+        record = {'market':ticker, 'history_minutes':n, 'status':'missed_deadline',
+                  'error_code':'INPUT_RECEIVED_AFTER_MARKET_END', 'forecasts':[],
+                  'input_ready_at':input_ready, 'paper_only':True}
+        archive.put('market', key, record)
+        return record
     for side in ('yes', 'no'):
         fkey = key+'-'+side
         f = archive.get('forecast', fkey)
         if f is None:
-            f = forecaster(windows[side], 15-n, models, QUANTILES,
-                           failure_policy='fail', **({'single_point_research':True} if n == 1 else {}))
+            retries = [v for i in (1, 2) if (v := archive.get('attempt', fkey+'-'+str(i))) is not None]
+            retry_seconds = sum(v['duration_seconds'] for v in retries)
+            if retries and (len(retries) == 2 or not retries[-1]['retryable']):
+                last = retries[-1]
+                raise ModelExecutionError(last['model'], last['code'], retryable=last['retryable'])
+            for attempt in range(len(retries)+1, 3):
+                started = time.monotonic()
+                try:
+                    f = forecaster(windows[side], 15-n, models, QUANTILES,
+                                   failure_policy='fail', **({'single_point_research':True} if n == 1 else {}))
+                    break
+                except ModelExecutionError as error:
+                    elapsed = time.monotonic()-started
+                    retry_seconds += elapsed
+                    failure = {'model':error.model, 'code':error.code, 'retryable':error.retryable,
+                               'attempt':attempt, 'duration_seconds':elapsed}
+                    archive.put('attempt', fkey+'-'+str(attempt), failure)
+                    retries.append(failure)
+                    if not error.retryable or attempt == 2:
+                        raise
+            # Include failed-attempt time in the historical publication proxy;
+            # retrying never earns an earlier simulated entry.
+            f['duration_seconds'] += retry_seconds
+            f['inference_retries'] = retries
             validate_pair_member(f, origin, 15-n, models)
             f.update(market_context={'market_id':ticker, 'event_id':market['event_ticker'],
                 'contract_id':ticker+':'+side, 'side':side, 'provider':'kalshi', 'series':config['series']},
@@ -149,10 +181,14 @@ def forecast_origin(market, n, source, config, archive, provider, forecaster=for
         if f['source_hash'] != digest(source) or f['input_snapshot'] != [asdict(q) for q in windows[side]]:
             raise ValueError('FROZEN_SOURCE_CONFLICT')
         pair.append(f)
-    publication = origin + 5 + max(1, math.ceil(sum(f['duration_seconds'] for f in pair)))
+    # Archive replay preserves original quote receipts; a late input cannot be
+    # treated as available at the candle timestamp. Legacy API replay retains
+    # its explicitly disclosed five-second receipt assumption.
+    publication = input_ready + max(1, math.ceil(sum(f['duration_seconds'] for f in pair)))
     pair = [{**f, 'available_at':publication, 'publication_clock':'historical_measured_runtime_proxy'} for f in pair]
     record = {'market':ticker, 'history_minutes':n, 'horizon_minutes':15-n, 'forecasts':pair,
               'status':'evaluated' if publication < end else 'missed_deadline',
+              'input_ready_at':input_ready,
               'paper_only':True, 'live_execution_verified':False}
     archive.put('market', key, record)
     return record
