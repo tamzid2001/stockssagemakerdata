@@ -9750,10 +9750,6 @@
   };
 
   const ensureHeaderNotificationsCta = () => {
-    document.getElementById("header-notifications")?.remove();
-    ui.headerNotifications = null;
-    return;
-    /* Archived notification navigation; delivery configuration is retained.
     const actions = document.querySelector(".header .nav-actions");
     if (!actions) return;
     let link = document.getElementById("header-notifications");
@@ -9771,12 +9767,11 @@
 	      ui.headerNotifications = link;
     }
     const authed = hasFullAccount();
-    link.href = authed ? "/notifications" : "/account";
+    link.href = authed ? "/screener#saved-alerts" : "/account";
     link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
     link.classList.remove("icon-only");
     link.setAttribute("title", "Notifications");
     link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
-    */
   };
 
   const renderNotificationLog = () => {
@@ -14429,6 +14424,15 @@
     return payload;
   };
 
+  // Reuse the application's Firebase/session bridge; never expose ID tokens.
+  window.QuanturaScreenerAccount = {
+    request: (path, options) => {
+      if (!/^\/api\/v1\/me\/screener-alerts(?:\/[a-f0-9]{24})?$/.test(path) && path !== "/api/notifications/items?limit=20") throw new Error("Unsupported screener account operation.");
+      if (!hasFullAccount()) throw new Error("Sign in to save filters and view notifications.");
+      return apiRequestJson(path, options);
+    },
+  };
+
   const ensembleUiState = {
     capabilities: null,
     presets: [],
@@ -14448,6 +14452,8 @@
   };
 
   const ensembleQuantileKey = (value) => Number(Number(value).toPrecision(12)).toString();
+
+  const screenerForecastEndpoint = (job, action = "") => `/api/v1/screener/forecasts/${encodeURIComponent(job.published_screener.ticker)}${action}?scan_id=${encodeURIComponent(job.published_screener.scan_id)}`;
 
   const ensembleChartDefaultRange = (job) => {
     return window.QuanturaForecastControls.forecastChartRange(job);
@@ -14926,7 +14932,7 @@
         if (ensembleUiState.busy || document.hidden || !ui.ensembleForecastResults?.getClientRects().length) return;
         inFlight = true;
         if (refreshButton) { refreshButton.disabled = true; label.textContent = "Updating quotes…"; refreshButton.setAttribute("aria-busy", "true"); }
-          const response = await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`, { headers: { "Cache-Control": "no-cache" } });
+          const response = await apiRequestJson(job.published_screener ? screenerForecastEndpoint(job,"/observations") : `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`, { headers: { "Cache-Control": "no-cache" } });
           if (!current() || ensembleUiState.busy) return;
           job.observations = response.data.rows || [];
           renderEnsembleLiveQuote(job);
@@ -14964,6 +14970,10 @@
     window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
     const statusButton = document.getElementById("ensemble-check-status");
     if (statusButton) statusButton.hidden = true;
+    if (ui.ensembleRunAgain) {
+      ui.ensembleRunAgain.disabled = Boolean(job.published_screener);
+      ui.ensembleRunAgain.title = job.published_screener ? "Save this published forecast to your requests before reproducing its immutable input." : "Reproduce the saved input and configuration";
+    }
     const otherSide = document.getElementById("ensemble-other-side");
     if (otherSide) otherSide.hidden = job.source?.type !== "prediction_market";
     if (ui.ensembleForecastChart) ui.ensembleForecastChart.hidden = false;
@@ -15002,8 +15012,8 @@
       ui.ensembleResultTable.innerHTML = `<table class="data-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
     }
     const base = `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/download`;
-    if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = `${base}?format=csv`;
-    if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = `${base}?format=json`;
+    if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = job.published_screener ? `${screenerForecastEndpoint(job)}&format=csv` : `${base}?format=csv`;
+    if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = job.published_screener ? `${screenerForecastEndpoint(job)}&format=json` : `${base}?format=json`;
     const visibleWarnings = [...new Set([...(job.source?.warnings || []), ...(job.warnings || [])])].filter(warning => !/logit|epsilon|inverse-logit|transformed space/i.test(warning));
     if (job.source?.analysis_mode === "historical_replay") visibleWarnings.unshift(`Historical replay: input cutoff ${ensembleLocalTime(job.source.requested_input_cutoff_at)}. Generated now, not published before the overlaid outcomes.`);
     setEnsembleStatus(`Forecast complete. ${visibleWarnings.join(" ")}`, "success");
@@ -15018,7 +15028,7 @@
     await renderEnsembleChart(job);
     renderEnsembleLiveQuote(job);
     const identity = ensembleMarketIdentity(job);
-    await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
+    if (!job.published_screener) await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
     startEnsembleObservations(job);
   };
 
@@ -15237,6 +15247,15 @@
     document.getElementById("ensemble-csv-help-close")?.addEventListener("click", () => csvHelp?.close());
     document.getElementById("ensemble-save-profile")?.addEventListener("click", async () => {
       try {
+        const published=ensembleUiState.lastJob;
+        if(published?.published_screener) {
+          if(!requireFullAccount("Sign in to save this published forecast to My Requests."))return;
+          const saved=await apiRequestJson(screenerForecastEndpoint(published,"/save"),{method:"POST",body:{scan_id:published.published_screener.scan_id}});
+          history.replaceState({},"",saved.data.url);
+          await pollEnsembleForecast(saved.data.forecast_id);
+          await fetchMyRequestsList({force:true});renderMyRequestsPanels();
+          showToast("This exact published forecast is saved in My Requests.");return;
+        }
         if (!hasFullAccount()) {
           await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(ensembleUiState.forecastId)}/prepare-save`, {method:"POST",body:{}});
           // Store only the resource ID. Ownership proof stays in an HttpOnly cookie.
@@ -15412,6 +15431,11 @@
     ui.ensembleShareLink?.addEventListener("click", async () => {
       if (!ensembleUiState.forecastId) return;
       try {
+        const published=ensembleUiState.lastJob?.published_screener;
+        if(published) {
+          await navigator.clipboard.writeText(`${window.location.origin}/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(published.ticker)}&screenerScan=${encodeURIComponent(published.scan_id)}`);
+          showToast("Published forecast link copied. Save to My Requests to keep it after the next scan.");return;
+        }
         await navigator.clipboard.writeText(`${window.location.origin}/forecasting?panel=forecast&ensembleForecastId=${encodeURIComponent(ensembleUiState.forecastId)}`);
         showToast("Forecast link copied. Recipients must sign in and have access to this workspace.");
       } catch { showToast("Unable to copy. Share the forecast URL in your address bar.", "warn"); }
@@ -15436,6 +15460,16 @@
     if (forecastId) {
       ensembleUiState.forecastId = forecastId;
       window.setTimeout(() => pollEnsembleForecast(forecastId).catch(() => undefined), 400);
+    }
+    const screenerTicker=String(getQueryParam("screenerTicker") || "").trim();
+    const screenerScan=String(getQueryParam("screenerScan") || "").trim();
+    if(!forecastId && screenerTicker && screenerScan) {
+      const generation=ensembleUiState.pollGeneration;
+      setEnsembleStatus("Loading the exact published screener forecast…","working");
+      fetch(`/api/v1/screener/forecasts/${encodeURIComponent(screenerTicker)}?scan_id=${encodeURIComponent(screenerScan)}`)
+        .then(async response=>{const payload=await response.json();if(!response.ok)throw new Error("This screener snapshot is no longer published. Open the latest Screener, or open your saved copy in My Requests.");return payload.data;})
+        .then(async job=>{if(generation!==ensembleUiState.pollGeneration||ensembleUiState.forecastId)return;ensembleUiState.forecastId=job.forecast_id;await renderCompletedEnsemble(job);})
+        .catch(error=>{if(generation===ensembleUiState.pollGeneration&&!ensembleUiState.forecastId)setEnsembleStatus(error.message,"error");});
     }
     window.addEventListener("beforeunload", stopEnsemblePolling, { once: true });
   };

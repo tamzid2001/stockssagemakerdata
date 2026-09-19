@@ -36,6 +36,10 @@ test("Yahoo adjusted history scales OHLC consistently", () => {
   assert.equal(rows[0].open, 50);
   assert.equal(rows[0].close, 51);
 });
+test("Yahoo split-only history does not introduce dividend adjustment or apply splits twice",()=>{
+  const rows=parseYahooChartResponse(payload(),{adjustment:"split",session:"extended",limit:500});
+  assert.equal(rows[0].open,100);assert.equal(rows[0].close,102);
+});
 test("Yahoo missing prices never become zero closes or zero adjusted prices", () => {
   const data:any=payload();
   data.chart.result[0].indicators.quote[0].close[0]=null;

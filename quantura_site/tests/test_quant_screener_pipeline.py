@@ -125,6 +125,8 @@ def test_chunk_zero_reuses_a_valid_checkpoint(tmp_path, monkeypatch, capsys):
             {
                 "schema_version": pipeline.SCHEMA_VERSION,
                 "universe_hash": "checkpoint-fixture",
+                "forecast_config_hash": pipeline.configuration_hash(),
+                "scan_date": "2026-08-24",
                 "chunk": 0,
                 "chunk_count": 1,
                 "items": [{**base_item("SPY"), "status": "success"}],
@@ -148,12 +150,16 @@ def test_chunk_zero_reuses_a_valid_checkpoint(tmp_path, monkeypatch, capsys):
     assert '"event": "chunk_reused"' in capsys.readouterr().out
 
 
-def test_quantile_forecast_reuses_site_drift_methodology():
-    forecast = pipeline.build_forecast(history())
-    assert forecast is not None
-    assert len(forecast["rows"]) == 10
-    assert forecast["p10"] < forecast["p50"] < forecast["p90"]
-    assert forecast["forecast_engine"] == "quantura_quantile_drift_v1"
+def test_quantile_forecast_delegates_to_shared_ensemble(monkeypatch):
+    calls=[]
+    expected={"forecast_engine":"quantura_weekly_ensemble_v1"}
+    def run(rows):
+        calls.append(rows)
+        return expected
+    monkeypatch.setattr(pipeline,"build_weekly_forecast",run)
+    rows=history()
+    assert pipeline.build_forecast(rows) is expected
+    assert calls == [rows]
 
 
 def test_missing_history_is_reported_not_silently_dropped():

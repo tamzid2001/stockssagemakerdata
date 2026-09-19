@@ -531,7 +531,9 @@ def test_quantitative_screener_surface_replaces_manual_prophet_dispatch():
         'id="qs-market-cap"',
         'value="above-p50"',
         'value="below-p90"',
-        'id="qs-special-p10"',
+        'id="qs-signal"',
+        'id="qs-statistic"',
+        'id="qs-save-alert"',
         'id="qs-table-body"',
         'id="qs-pagination"',
         "Download CSV",
@@ -541,6 +543,7 @@ def test_quantitative_screener_surface_replaces_manual_prophet_dispatch():
     assert "history.pushState" in client
     assert "@media (max-width: 760px)" in styles
     assert 'id="screener-generate-button"' not in screener
+    assert 'id="qs-special-p10"' not in screener
     assert "$100B" not in screener
 
 

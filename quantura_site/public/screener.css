@@ -73,6 +73,15 @@
   padding: 16px clamp(12px, 1.5vw, 24px) 32px;
 }
 
+.qs-rules { display: grid; gap: 8px; width: 100%; }
+.qs-rules .qs-rule { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+.qs-rule select, .qs-rule input { width: auto; min-width: 0; max-width: 100%; min-height: var(--control-height); color: var(--foreground); background: var(--input-background, var(--card)); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+.qs-rule input { width: 78px; }
+.qs-rule label { display: inline-flex; align-items: center; gap: 4px; }
+.qs-table td > small { display: block; color: var(--muted-foreground); white-space: normal; font-size: .72rem; max-width: 180px; }
+.qs-security .qs-view-forecast { display: inline-flex; width: fit-content; font-size: .76rem; line-height: 1.2; padding: 5px 8px; }
+@media(max-width: 600px) { .qs-rule select, .qs-rule input, .qs-rule button { min-height: 44px; } }
+
 .qs-hero {
   display: flex;
   align-items: flex-end;
@@ -852,3 +861,13 @@
     animation-duration: 1.8s;
   }
 }
+/* Account tools share the screener's semantic theme and compact rhythm. */
+.qs-saved-content { padding: 10px 12px; }
+.qs-saved-toolbar { display:flex; flex-wrap:wrap; align-items:end; gap:10px; }
+.qs-saved-toolbar .qs-field { width:min(100%,260px); }
+.qs-saved-toolbar input[type="checkbox"] { width:18px; height:18px; }
+.qs-saved-list { padding:0; list-style:none; }
+.qs-saved-list li { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); }
+.qs-saved-list li>span { flex:1 1 200px; min-width:0; overflow-wrap:anywhere; }
+.qs-saved-list small { display:block; margin-top:4px; color:var(--muted-foreground,var(--muted)); }
+.qs-inbox-title { font-size:16px; margin:16px 0 8px; }
