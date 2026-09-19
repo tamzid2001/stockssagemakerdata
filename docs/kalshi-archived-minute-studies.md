@@ -11,8 +11,11 @@ upstream-candlestick study. No exchange orders are sent by either mode.
 
 The archive mode freezes existing encrypted source generations. It reads exact
 first-received paired bid/ask minute closes and official settlement receipts.
-Delayed backfills, price revisions, missing minutes and invalid quotes do not
-become timely prices. Flat windows are valid. Every settlement updates that
+Delayed genuine first receipts can be historical inputs, but publication waits
+for their actual receipt plus inference time. They never become timely trade
+observations: the signal/entry tape still requires receipt within 30 seconds.
+Price revisions, missing minutes and invalid quotes are not substituted.
+Flat windows are valid. Every settlement updates that
 series' sticky direction, including markets with no trade or failed forecast.
 
 Each market is evaluated after observations 1 through 12, forecasting the
@@ -67,3 +70,28 @@ Report `selected_markets`, `analyzed_markets`, failed/missed origins and usable
 paired minutes alongside results. Market windows overlap across origins; adding
 their trade counts does not create independent samples. Select best timings only
 as exploratory, in-sample findings, not established profitable opportunities.
+
+## Reliability and the v2 cohort boundary
+
+Version 2 excludes settlement-only seed records from the forecast candidate
+denominator, while retaining every settlement for sticky direction. Coverage
+separately counts seed records, quote-bearing markets, missing-history skips,
+missed deadlines and genuine model failures. Original v1 artifacts stay immutable.
+
+Prophet's default Newton optimization can overflow on a two-point exact line.
+Exactly two points use deterministic BFGS with a 20-second optimization timeout,
+required convergence and no Newton fallback. Other history lengths are unchanged.
+All quantiles still come from one Prophet predictive distribution. Successful
+execution does not establish calibrated two-point uncertainty or trading edge.
+
+Explicitly retryable model failures get one checkpointed retry of the same input.
+Failed-attempt runtime delays replay publication; permanent failures, licensing
+failures and exhausted retries never publish a reduced ensemble. The failing
+model/code/retryability are retained without raw exceptions or secret-bearing logs.
+Linux workers run the real pinned Prophet regression before a long study.
+
+Missing opening minutes are never padded or shifted to later observations. The
+live paper worker waits for delayed opening history until the last actionable
+minute; forecasts are only available after actual inference finishes. A provider
+outage, incomplete ensemble or deadline miss means **no new trade**, not a made-up
+forecast. These jobs remain read-only paper research, not a live-order system.

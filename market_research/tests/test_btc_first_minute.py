@@ -13,7 +13,7 @@ def test_first_minute_exact_quote_no_repetition_and_exactly_two_forecasts(tmp_pa
     def forecast(window,horizon,models,quantiles,**kwargs):
         assert len(window)==1 and window[0].timestamp==OPEN+60
         assert horizon==14 and models==('granite','chronos','timesfm')
-        assert kwargs=={'single_point_research':True}
+        assert kwargs=={'single_point_research':True,'failure_policy':'fail'}
         calls.append(window)
         return {'forecast_id':str(len(calls)),'origin':OPEN+60,'models':[{'id':m,'status':'completed'} for m in models],
                 'rows':[{'timestamp':OPEN+(i+1)*60,'quantiles':{str(q):q for q in quantiles}} for i in range(1,15)]}

@@ -103,6 +103,10 @@ jobs:
           python-version: '3.12'
       - name: Locked CPU models, no CUDA assumption
         run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Real short-history numerical regression before study
+        env:
+          QUANTURA_REAL_PROPHET_SMOKE: '1'
+        run: python -m pytest -q ensemble_forecasting/tests/test_prophet_short_history.py
       - name: All minute origins, three independent strategies
         id: study
         env:

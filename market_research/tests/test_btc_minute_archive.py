@@ -64,7 +64,7 @@ def test_live_forecast_retry_keeps_input_and_never_backdates(store,monkeypatch):
     clock=[OPEN+125];monkeypatch.setattr(btc.time,'time',lambda:clock[0])
     calls=[]
     def forecast(window,horizon,models,quantiles,**options):
-        assert options=={}
+        assert options=={'failure_policy':'fail'}
         calls.append(window)
         if len(calls)==1:raise RuntimeError('transient')
         return {'forecast_id':str(len(calls)),'origin':OPEN+120,
@@ -88,3 +88,32 @@ def test_permanent_validation_error_not_retried(store,monkeypatch):
     with pytest.raises(ValueError):btc.process_market(store,Provider(),MARKET,OPEN+125,False,fail)
     assert store._get('checkpoints','btc:'+MARKET['ticker'])['status']=='failed'
     assert not store.values('forecasts')
+
+
+def test_typed_nonretryable_model_error_is_not_retried(store,monkeypatch):
+    from ensemble_forecasting.adapters.base import ModelExecutionError
+    class Provider(btc.KalshiBTCProvider):
+        def candles(self,*args):return candles()
+    monkeypatch.setattr(btc.time,'time',lambda:OPEN+125)
+    def fail(*a,**k):raise ModelExecutionError('timesfm','LICENSE_REQUIRED',retryable=False)
+    with pytest.raises(ModelExecutionError):btc.process_market(store,Provider(),MARKET,OPEN+125,False,fail)
+    saved=store._get('checkpoints','btc:'+MARKET['ticker'])
+    assert saved['status']=='failed' and not saved['retryable']
+    assert saved['model']=='timesfm' and saved['error_code']=='LICENSE_REQUIRED'
+    assert not store.values('forecasts')
+
+
+def test_delayed_opening_history_waits_then_forecasts_without_backdating(store,monkeypatch):
+    class Provider(btc.KalshiBTCProvider):
+        ready=False
+        def candles(self,*a):return candles() if self.ready else candles()[2:]
+    p=Provider();clock=[OPEN+185];monkeypatch.setattr(btc.time,'time',lambda:clock[0])
+    assert btc.process_market(store,p,MARKET,clock[0])['status']=='waiting'
+    p.ready=True;clock[0]=OPEN+230
+    def fit(window,horizon,models,quantiles,**kw):
+        assert len(window)==2 and window[-1].timestamp==OPEN+120
+        assert kw=={'failure_policy':'fail'}
+        return {'forecast_id':'test','origin':OPEN+120,'models':[{'id':m,'status':'completed'} for m in models],
+            'rows':[{'timestamp':OPEN+(i+2)*60,'quantiles':{str(q):q for q in quantiles}} for i in range(1,14)]}
+    result=btc.process_market(store,p,MARKET,clock[0],False,fit)
+    assert result['available_at']==OPEN+230 and result['status']=='observing'

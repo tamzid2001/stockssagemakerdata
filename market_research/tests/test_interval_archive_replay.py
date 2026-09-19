@@ -30,14 +30,49 @@ def test_archive_prefix_each_minute_flat_valid_and_no_provider_io(n):
         assert 'toto' not in [m['id'] for m in f['models']]
 
 
-def test_missing_late_and_revised_minutes_not_filled():
+def test_late_history_delays_publication_but_never_becomes_trade_tape():
     raw=archived();raw['records']['btc_minutes'][0]['received_at']+=31
     provider=replay.PairedProvider('KXETH15M');source,tape=replay.inputs(raw,provider)
     assert len(tape)==28
+    result=study.forecast_origin(MARKET,1,source,study.configuration('KXETH15M',OPEN+1800,2,'a'*40),Archive(),provider,model)
+    assert result['input_ready_at']==OPEN+60+39
+    assert all(f['available_at']>=OPEN+60+40 for f in result['forecasts'])
+    assert all(q['timestamp']!=OPEN+60 for q in tape)
+
+
+def test_missing_and_revised_minutes_not_filled():
+    raw=archived();raw['records']['btc_minutes'].pop(0)
+    provider=replay.PairedProvider('KXETH15M');source,_=replay.inputs(raw,provider)
     with pytest.raises(ValueError,match='MISSING_FIRST'):
         study.forecast_origin(MARKET,1,source,study.configuration('KXETH15M',OPEN+1800,2,'a'*40),Archive(),provider,model)
     raw=archived();raw['records']['btc_minutes'].append(raw['records']['btc_minutes'][0])
     with pytest.raises(ValueError,match='DUPLICATE'):replay.inputs(raw,provider)
+
+
+def test_history_arriving_after_close_skips_compute_entirely():
+    raw=archived();raw['records']['btc_minutes'][0]['received_at']=OPEN+960
+    provider=replay.PairedProvider('KXETH15M');source,_=replay.inputs(raw,provider)
+    result=study.forecast_origin(MARKET,1,source,study.configuration('KXETH15M',OPEN+1800,2,'a'*40),
+        Archive(),provider,lambda *a,**k:pytest.fail('No useful horizon remains'))
+    assert result['status']=='missed_deadline' and result['forecasts']==[]
+
+
+def test_settlement_only_seeds_not_forecast_candidates_but_update_direction():
+    market=archived();market['lifecycle']={'close_at':OPEN+900}
+    seed=deepcopy(market);seed['records']['btc_minutes']=[]
+    seed['market']['ticker']='KXETH15M-SEED';seed['lifecycle']['close_at']=OPEN
+    seed['records']['btc_settlements']=[{'market_id':'KXETH15M-SEED','result':'yes','first_confirmed_at':OPEN+5}]
+    selected,settlements,coverage=replay.select_sources([seed,market],OPEN+1800,100)
+    assert selected==[market] and settlements==seed['records']['btc_settlements']
+    assert coverage=={'closed_source_records':2,'quote_bearing_markets':1,'settlement_only_records':1}
+
+
+def test_failure_metadata_keeps_model_and_retryability_without_raw_exception():
+    from ensemble_forecasting.adapters.base import ModelExecutionError
+    result=replay.failure_record(MARKET['ticker'],2,ModelExecutionError('prophet','MODEL_INFERENCE_FAILED'))
+    assert result['model']=='prophet' and not result['retryable'] and result['error_code']=='MODEL_INFERENCE_FAILED'
+    assert replay.failure_record('x',1,ValueError('MISSING_FIRST_N_COMPLETED_MINUTES'))['status']=='skipped_missing_history'
+    assert 'secret' not in str(replay.failure_record('x',1,RuntimeError('https://secret@example.com')))
 
 
 def test_archive_identity_and_bid_ask_rejection():

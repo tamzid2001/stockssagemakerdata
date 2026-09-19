@@ -48,7 +48,7 @@ def test_publication_latency_and_resume_no_duplicate_forecasts(tmp_path):
         def resolution(self,m,side):return {'contract_id':m['ticker']+':'+side,'resolution_status':'resolved','selected_side_won':side=='yes'}
     calls=[]
     def forecast(window,horizon,models,quantiles,**options):
-        assert options=={}
+        assert options=={'failure_policy':'fail'}
         calls.append((window,horizon,models))
         assert len(window)==2 and window[-1].timestamp==OPEN+120 and horizon==13
         return {'forecast_id':str(len(calls)),'origin':OPEN+120,'models':[{'id':m,'status':'completed'} for m in models],
@@ -70,7 +70,7 @@ def test_publication_latency_and_resume_no_duplicate_forecasts(tmp_path):
 
 def test_late_live_start_skipped_and_interrupted_inference_not_backdated(tmp_path):
     store=LocalStore('test','holder',tmp_path);store.claim({})
-    result=btc.process_market(store,btc.KalshiBTCProvider(),MARKET,OPEN+181)
+    result=btc.process_market(store,btc.KalshiBTCProvider(),MARKET,OPEN+840)
     assert result['status']=='missed_start' and not store.values('forecasts')
     store.db.close()
 

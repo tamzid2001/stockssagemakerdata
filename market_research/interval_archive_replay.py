@@ -23,8 +23,9 @@ from .interval_markets import KalshiIntervalProvider
 from .interval_studies import ORIGINS, configuration, forecast_origin, first_p10_signals
 from .recovery_cloud import Campaign, decode_catalog
 from .recovery_switch import statistics
+from ensemble_forecasting.adapters.base import ModelExecutionError
 
-VERSION = 'interval_archived_minutes_p90_sticky_v1'
+VERSION = 'interval_archived_minutes_p90_sticky_v2'
 COLLECTOR_VERSION = 'interval_paired_minute_collection_v1'
 SERIES = ('KXBTC15M', 'KXBNB15M', 'KXCOPPER15M', 'KXDOGE15M', 'KXETH15M',
           'KXGOLD15M', 'KXHYPE15M', 'KXNATGAS15M', 'KXNEAR15M', 'KXSILVER15M',
@@ -72,9 +73,11 @@ class PairedProvider(KalshiIntervalProvider):
             if t in seen:
                 raise ValueError('DUPLICATE_ARCHIVED_MINUTE')
             seen.add(t)
-            # Keep exact first receipts, never revisions or delayed backfills.
+            # Real delayed first receipts are valid HISTORY, but not timely
+            # trade observations. forecast_origin delays publication until all
+            # inputs were actually received. Never substitute revised values.
             if not (opened < t <= end and row.get('collection_mode') == 'live'
-                    and type(received) is int and t <= received <= t+30):
+                    and type(received) is int and t <= received):
                 continue
             for side in out:
                 out[side].append(Quote(t, row[side+'_ask'], row[side+'_bid']))
@@ -90,12 +93,38 @@ def inputs(record, provider):
     receipts = {r['timestamp']:r['received_at'] for r in minutes}
     tape = [{**asdict(q), 'contract_id':market['ticker']+':'+side,
              'game_id':market['event_ticker'], 'received_at':receipts[q.timestamp],
-             'collection_mode':'live'} for side, rows in data.items() for q in rows]
+             'collection_mode':'live'} for side, rows in data.items() for q in rows
+            if receipts[q.timestamp] <= q.timestamp+30]
     source = {'market':market, 'candles':minutes, 'minute_receipts':
               {str(q.timestamp):receipts[q.timestamp] for q in data['yes']},
               'collector_record_hash':digest(record), 'format':'archived_paired_candle_closes',
               'redistribution_status':'review_required'}
     return source, tape
+
+
+def select_sources(records, as_of, maximum):
+    """Settlement seeds inform direction, never inflate forecast denominators."""
+    closed = [r for r in records if r['lifecycle']['close_at'] <= as_of]
+    eligible = [r for r in closed if r['records'].get('btc_minutes')]
+    settlements = {(s['market_id'],s['first_confirmed_at']):s for r in closed
+                   for s in r['records'].get('btc_settlements', [])}
+    selected = sorted(eligible, key=lambda r:(r['lifecycle']['close_at'],r['market']['ticker']))[-maximum:]
+    coverage = {'closed_source_records':len(closed), 'quote_bearing_markets':len(eligible),
+                'settlement_only_records':len(closed)-len(eligible)}
+    return selected, list(settlements.values()), coverage
+
+
+def failure_record(ticker, n, error):
+    """Keep structured causes, never serialize exception text/credentials."""
+    if isinstance(error, ModelExecutionError):
+        code, model, retryable = error.code, error.model, error.retryable
+    else:
+        code = str(error)
+        code = code if re.fullmatch('[A-Z][A-Z0-9_]{3,80}',code) else 'MODEL_OR_DATA_FAILURE'
+        model, retryable = None, False
+    return {'market':ticker, 'history_minutes':n,
+            'status':'skipped_missing_history' if code == 'MISSING_FIRST_N_COMPLETED_MINUTES' else 'failed',
+            'error_code':code, 'model':model, 'retryable':retryable, 'paper_only':True}
 
 
 def signals_for(pair, tape, settlements, as_of):
@@ -222,7 +251,7 @@ def make_report(config, games, settlements, fee, selected, as_of):
         'fee_status':'unknown_gross_only' if unknown_fee else 'current_schedule_sensitivity',
         'paper_only':True,'execution_verified':False,
         'limitations':['Models fit retrospectively; measured runtime plus stored receipt is a publication proxy, not live inference evidence.',
-            'First-received, timely archived minute bid/ask only; no invented prices or gap filling.',
+            'Genuine first-received history, including delayed inputs with publication delayed accordingly. Only timely minute bid/ask observations may trigger simulated trades; no gap filling.',
             'One minute uses three models; 2..12 use four; no Toto; equal per-quantile capability weights.',
             'First unambiguous bid >= time-aligned P90; not necessarily a fresh crossing from below.',
             'Next-minute ask entry, next-minute bid early exit; depth and actual fills are unverified.',
@@ -265,16 +294,10 @@ def main():
         catalog={'sources':sorted(source_reader.manifest(),key=lambda x:x['key']), 'as_of':a.as_of}
         archive.put('catalog','collector-sources',catalog)
     deadline=time.monotonic()+a.budget_minutes*60
-    source_records=[]; settlements=[]
+    all_sources=[]
     for entry in catalog['sources']:
-        record=source_reader.read(entry); life=record['lifecycle']
-        if life['close_at']<=a.as_of:
-            source_records.append(record)
-            settlements.extend(record['records'].get('btc_settlements',[]))
-    # Preserve every settlement as directional context, including no-trade/empty windows.
-    unique={(s['market_id'],s['first_confirmed_at']):s for s in settlements}
-    settlements=list(unique.values())
-    source_records=sorted(source_records,key=lambda x:(x['lifecycle']['close_at'],x['market']['ticker']))[-a.max_markets:]
+        all_sources.append(source_reader.read(entry))
+    source_records,settlements,source_coverage=select_sources(all_sources,a.as_of,a.max_markets)
     games=[]; last_fee={}
     for raw in source_records:
         ticker=raw['market']['ticker']; last_fee=raw.get('fee_policy') or last_fee
@@ -282,21 +305,26 @@ def main():
         if saved is not None:
             games.append(saved); continue
         if time.monotonic()>=deadline: break
-        source,tape=inputs(raw,provider); records=[]; by_origin={};statuses={}
+        records=[]; by_origin={};statuses={}; input_error=None
+        try:
+            source,tape=inputs(raw,provider)
+        except (ValueError,RuntimeError,KeyError,TypeError) as error:
+            source,tape={},[]; input_error=error
         for n in ORIGINS:
             if time.monotonic()>=deadline: break
             key=ticker+'-n'+str(n); record=archive.get('market',key)
             if record is None:
-                try: record=forecast_origin(raw['market'],n,source,config,archive,provider)
-                except (ValueError,RuntimeError,OSError) as error:
-                    code=str(error)
-                    record={'market':ticker,'history_minutes':n,'status':'failed',
-                        'error_code':code if re.fullmatch('[A-Z][A-Z0-9_]{3,80}',code) else 'MODEL_OR_DATA_FAILURE'}
+                try:
+                    if input_error is not None: raise input_error
+                    record=forecast_origin(raw['market'],n,source,config,archive,provider)
+                except (ValueError,RuntimeError,OSError,KeyError,TypeError) as error:
+                    record=failure_record(ticker,n,error)
                     archive.put('market',key,record)
             records.append(record); statuses[str(n)]=record['status']
             by_origin[str(n)],_=signals_for(record.get('forecasts',[]),tape,settlements,a.as_of)
             print(json.dumps({'event':'archived_interval_origin','series':a.series,'market':ticker,
-                'observed':n,'status':record['status'],'sticky_signals':len(by_origin[str(n)]['p90_sticky'])}),flush=True)
+                'observed':n,'status':record['status'],'error_code':record.get('error_code'),
+                'model':record.get('model'),'sticky_signals':len(by_origin[str(n)]['p90_sticky'])}),flush=True)
         if len(records)!=len(ORIGINS): break
         baseline=simulate(by_origin['2']['p90_sticky'],tape,settlements,as_of=a.as_of,
                           policy='fixed_one',precision='0.0001',multiplier=0)
@@ -307,6 +335,7 @@ def main():
               'source_hash':digest(raw)}
         archive.put('report','game-'+ticker,game); games.append(game)
     report=make_report(config,games,settlements,last_fee,len(source_records),a.as_of)
+    report['coverage'].update(source_coverage)
     if not source_records: raise RuntimeError('NO_ARCHIVED_MARKETS_BEFORE_CUTOFF')
     key,report=save_report(archive,report)
     print(json.dumps({'event':'archive_strategy_report','campaign_id':archive.id,'report_key':key,
