@@ -50,6 +50,27 @@ test("uploaded rows reject invalid targets and dates rather than silently droppi
   assert.equal(resolvePredictionEnd({prediction_end_at:'2026-09-16T12:59:00Z',calendar:'NONE'},'2026-09-16T10:00:00Z','1h').prediction_length,2);
 });
 import { AlpacaError } from "./alpacaClient";
+import { HISTORICAL_VALIDATION_POLICY, publicHistoricalValidation, validateHistoricalValidation } from "./ensembleForecastRoutes";
+
+const validationReport = () => ({policy:HISTORICAL_VALIDATION_POLICY,method:"chronological_holdout",status:"completed",
+  minimum_training_rows:2,training_rows:73,holdout_rows:7,training_end_at:"2026-09-10T00:00:00Z",validation_start_at:"2026-09-11T00:00:00Z",validation_end_at:"2026-09-17T00:00:00Z",
+  metrics:{count:7,point_count:7,mae:1,rmse:1.5,smape:.01,average_wql:.03},evidence:{actuals:[100],predictions:[101]},model_runs:[{internal:true}]});
+test("historical metrics are validated and exposed without private evaluation arrays",()=>{
+  const report=validationReport();validateHistoricalValidation(report);
+  const summary=publicHistoricalValidation(report);
+  assert.equal(summary.evidence,undefined);assert.equal(summary.model_runs,undefined);assert.deepEqual(summary.metrics,report.metrics);
+  const job=publicEnsembleJob('test',{request:{}},{predictions:[],historical_validation:report});
+  assert.deepEqual(job.historical_validation,summary);
+  assert.equal(publicEnsembleJob('legacy',{request:{}},{predictions:[]}).historical_validation,undefined);
+});
+test("validation rejects non-finite scores, impossible sample sizes and a leaking split",()=>{
+  const valid=validationReport();
+  for(const update of [{metrics:{...valid.metrics,mae:NaN}},{metrics:{...valid.metrics,mae:'1'}},{metrics:{...valid.metrics,count:8}},{metrics:{...valid.metrics,smape:3}},
+    {training_rows:1},{holdout_rows:31},{training_end_at:valid.validation_start_at},{status:'training_fit'},{metrics:{...valid.metrics,rmse:-1}}])
+    assert.throws(()=>validateHistoricalValidation({...valid,...update}),/validation_metrics_invalid/);
+  validateHistoricalValidation({policy:HISTORICAL_VALIDATION_POLICY,method:'chronological_holdout',status:'failed',metrics:null});
+  validateHistoricalValidation(undefined);
+});
 test("stock overlays include completed minute closes beside hourly forecasts, without partial bars",async()=>{
   const cutoff=Date.parse('2026-09-16T14:00:00Z'), now=Date.parse('2026-09-16T16:01:30Z');
   const calls:string[]=[];

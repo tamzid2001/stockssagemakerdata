@@ -34,6 +34,7 @@ const APPROVED_MODELS: ModelId[] = ["prophet", "toto", "granite", "chronos", "ti
 const MAX_HISTORY_ROWS = 10_000;
 const INPUT_CHUNK_ROWS = 250;
 const WORKER_SCHEMA_VERSION = "ensemble_forecast_job_v1";
+export const HISTORICAL_VALIDATION_POLICY = "chronological_holdout_v1";
 const observationCache = new Map<string, { until: number; value: Promise<JsonRecord> }>();
 
 export function validateGuestForecastClaim(id: string, cookie: string, job: JsonRecord, now = Date.now()): void {
@@ -554,7 +555,7 @@ function datasetHash(rows: Array<{ timestamp: string; target: number }>, source:
 }
 
 function requestHash(workspaceId: string, sourceHash: string, configuration: JsonRecord): string {
-  return crypto.createHash("sha256").update(JSON.stringify({ workspaceId, sourceHash, configuration, registry: modelRegistry.schemaVersion })).digest("hex");
+  return crypto.createHash("sha256").update(JSON.stringify({ workspaceId, sourceHash, configuration, registry: modelRegistry.schemaVersion, evaluation_policy: HISTORICAL_VALIDATION_POLICY })).digest("hex");
 }
 
 export function approvedModelCheckpoints(configuration: NormalizedConfiguration): Record<ModelId, string | null> {
@@ -660,6 +661,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     result_url: `/api/v1/ensemble-forecasts/${encodeURIComponent(jobId)}`,
     reproduces_forecast_id: data.reproduces_forecast_id || null,
     registry_version: data.registry_version,
+    evaluation_policy: data.evaluation_policy || null,
   };
   if (result) {
     output.predictions = result.predictions;
@@ -669,8 +671,37 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     output.prepared_series_hash = result.prepared_series_hash;
     output.result_hash = result.result_hash;
     output.model_runtime = Array.isArray(result.models) ? result.models : [];
+    if (result.historical_validation) output.historical_validation = publicHistoricalValidation(plain(result.historical_validation));
   }
   return output;
+}
+
+/** Expose scores/provenance, not private holdout arrays or component diagnostics. */
+export function publicHistoricalValidation(report: JsonRecord): JsonRecord {
+  return Object.fromEntries(["policy", "method", "status", "minimum_training_rows", "requested_models", "metrics",
+    "training_rows", "holdout_rows", "training_end_at", "validation_start_at", "validation_end_at", "frequency",
+    "evaluated_at", "prediction_length", "transform", "prepared_series_hash", "result_hash", "actuals_hash",
+    "effective_weights_by_quantile", "runtime_seconds", "error_code"].filter(key => key in report).map(key => [key, report[key]]));
+}
+
+export function validateHistoricalValidation(value: unknown): void {
+  if (value === undefined || value === null) return; // immutable legacy results remain readable
+  const report = plain(value), metrics = plain(report.metrics);
+  const invalid = () => { throw new Error("forecast_validation_metrics_invalid"); };
+  if (report.policy !== HISTORICAL_VALIDATION_POLICY || report.method !== "chronological_holdout" ||
+      !["completed", "insufficient_history", "no_matching_outcomes", "failed"].includes(String(report.status))) invalid();
+  if (report.status !== "completed") { if (report.metrics !== null && report.status !== "no_matching_outcomes") invalid(); return; }
+  const count = Number(metrics.count), pointCount = Number(metrics.point_count), holdout = Number(report.holdout_rows);
+  if (!Number.isInteger(count) || count < 1 || !Number.isInteger(holdout) || holdout < count || holdout > 30 ||
+      !Number.isInteger(pointCount) || pointCount < 0 || pointCount > count ||
+      !Number.isInteger(report.training_rows) || Number(report.training_rows) < Number(report.minimum_training_rows) ||
+      !iso(report.training_end_at) || !iso(report.validation_start_at) || !iso(report.validation_end_at) ||
+      Date.parse(String(report.training_end_at)) >= Date.parse(String(report.validation_start_at)) ||
+      Date.parse(String(report.validation_start_at)) > Date.parse(String(report.validation_end_at))) invalid();
+  for (const key of ["mae", "rmse", "smape", "average_wql"]) {
+    if (metrics[key] !== null && (typeof metrics[key] !== "number" || !Number.isFinite(metrics[key]) || Number(metrics[key]) < 0)) invalid();
+  }
+  if (Number(metrics.smape) > 2 || (pointCount === 0 && ["mae", "rmse", "smape"].some(key => metrics[key] !== null))) invalid();
 }
 
 export function expiredEnsembleJobCode(job: JsonRecord, now = Date.now()): string | null {
@@ -716,7 +747,7 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
     // Recover an old partial completion too: preserve its immutable result.
     if (!existing.exists) transaction.create(resultRef, {
       forecast_id: ref.id, schema_version: WORKER_SCHEMA_VERSION,
-      ...Object.fromEntries(["effective_weights_by_quantile", "models", "model_runs", "transform", "warnings", "failures", "dataset_hash", "prepared_series_hash", "result_hash", "runtime_seconds", "runtime"].map(key => [key, body[key] ?? null])),
+      ...Object.fromEntries(["effective_weights_by_quantile", "models", "model_runs", "transform", "warnings", "failures", "dataset_hash", "prepared_series_hash", "result_hash", "runtime_seconds", "runtime", "historical_validation"].map(key => [key, body[key] ?? null])),
       predictions: validated.predictions, quantiles: validated.quantiles, created_at: completedAt,
     });
     const completed = {status:"completed",completed_at:completedAt,updated_at:completedAt,lease_expires_at:null,warnings:body.warnings || [],progress:{completed_models:Array.isArray(body.models)?body.models.length:0,total_models:Array.isArray(body.models)?body.models.length:0,current_model:null}};
@@ -755,6 +786,7 @@ function validWorkerToken(req: Request): boolean {
 }
 
 export function validateWorkerResult(body: JsonRecord, job: JsonRecord): { quantiles: number[]; predictions: JsonRecord[] } {
+  validateHistoricalValidation(body.historical_validation);
   const requested = normalizeRequestedQuantiles(plain(job.request).quantiles);
   const quantiles = normalizeRequestedQuantiles(body.quantiles);
   if (requested.map(canonicalQuantile).join(",") !== quantiles.map(canonicalQuantile).join(",")) throw new Error("forecast_result_quantiles_invalid");
@@ -934,6 +966,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: normalizedRequest,
+      evaluation_policy: HISTORICAL_VALIDATION_POLICY,
       requested_weights: configuration.requested_weights,
       effective_central_weights: configuration.effective_central_weights,
       source: materialized.source,
@@ -1002,6 +1035,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: original.request,
+      evaluation_policy: original.evaluation_policy || HISTORICAL_VALIDATION_POLICY,
       requested_weights: configuration.requested_weights,
       effective_central_weights: configuration.effective_central_weights,
       source: original.source,
@@ -1011,7 +1045,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       input_timestamp_column: "timestamp",
       input_target_column: "target",
       input_timezone: original.input_timezone || "UTC",
-      request_hash: original.request_hash,
+      request_hash: original.evaluation_policy ? original.request_hash : crypto.createHash("sha256").update(`${original.request_hash}:${HISTORICAL_VALIDATION_POLICY}`).digest("hex"),
       registry_version: original.registry_version,
       model_checkpoints: Object.keys(checkpoints).length ? checkpoints : approvedModelCheckpoints(configuration),
       model_revisions: plain(original.model_revisions),
@@ -1243,6 +1277,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     sendData(res, {
       forecast_id: ref.id,
       request: job.request,
+      evaluation_policy: job.evaluation_policy || null,
       source: job.source,
       dataset_hash: job.dataset_hash,
       model_checkpoints: job.model_checkpoints,
@@ -1264,7 +1299,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     await options.db.runTransaction(async transaction => {
       const snapshot = await transaction.get(ref);
       if (!snapshot.exists || snapshot.data()?.status !== "running") throw new Error("forecast_claim_conflict");
-      transaction.set(ref, { progress: { completed_models: completed, total_models: total, current_model: current || null }, lease_expires_at: new Date(Date.now() + 5 * 60 * 60_000).toISOString(), updated_at: new Date().toISOString() }, { merge: true });
+      transaction.set(ref, { progress: { completed_models: completed, total_models: total, current_model: current || null, phase: body.phase === "historical_validation" ? "historical_validation" : "forecast" }, lease_expires_at: new Date(Date.now() + 5 * 60 * 60_000).toISOString(), updated_at: new Date().toISOString() }, { merge: true });
     });
     sendData(res, { updated: true }, requestId);
   }));

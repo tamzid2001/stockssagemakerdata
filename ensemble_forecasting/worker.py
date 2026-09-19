@@ -17,6 +17,7 @@ from .adapters.mock import MockAdapter
 from .calendars import build_future_timestamps
 from .capabilities import MODEL_REGISTRY, validate_request_capabilities
 from .ensemble import build_ensemble
+from .evaluation import HISTORICAL_VALIDATION_POLICY, evaluate_history
 from .preprocessing import prepare_series
 from .schemas import APPROVED_MODELS, ForecastRequest, ModelId
 
@@ -226,6 +227,11 @@ def execute_job(
             "model_runs": model_runs,
         }
     )
+    if job.get("evaluation_policy") == HISTORICAL_VALIDATION_POLICY:
+        result["historical_validation"] = evaluate_history(
+            job, series, request, execute=execute_job, progress=progress, mock=mock,
+        )
+        result["runtime_seconds"] = time.monotonic() - total_started
     digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     result["result_hash"] = digest
     progress(
