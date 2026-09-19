@@ -179,7 +179,12 @@ function successExample(operationId: string): unknown {
     case "getForecastTrajectories": return { data: [{ ...forecast, probability_history: [{ probability: 0.61, created_at: "2026-08-28T14:30:00.000Z" }, { probability: 0.67, created_at: forecast.created_at }], actual_outcome: null }], meta: successMeta(1) };
     case "getDatasetRelease": return { data: { dataset_version: "quantura-forecast-trajectories-2026-09", schema_version: "1.0.0", generated_at: "2026-09-03T16:00:00.000Z", source_cutoff: "2026-09-03T15:59:59.000Z", record_count: 125, checksum: "sha256:0123456789abcdef", formats: ["jsonl", "csv"] }, meta: successMeta() };
     case "getEnsembleModelCapabilities": return { data: { models: [{ id: "prophet", name: "Meta Prophet", available: true, default_weight: 0.2, quantile_support: { type: "requested" } }, { id: "toto", name: "Toto 2.0", available: true, default_weight: 0.2, quantile_support: { min: 0.1, max: 0.9, interpolation_inside_range: true } }] }, meta: successMeta() };
-    case "createEnsembleForecast": case "reproduceEnsembleForecast": case "getEnsembleForecast": return { data: ensemble, meta: successMeta() };
+    case "createEnsembleForecast": case "reproduceEnsembleForecast": return { data: ensemble, meta: successMeta() };
+    case "getEnsembleForecast": return {data:{...ensemble,status:"completed",progress:{completed_models:1,total_models:1,current_model:null},
+      quantiles:[.1,.5,.9],predictions:[{timestamp:"2026-09-21T00:00:00Z",quantiles:{"0.1":98,"0.5":100,"0.9":102}}],
+      historical_validation:{policy:"chronological_holdout_v1",method:"chronological_holdout",status:"completed",training_rows:39,holdout_rows:1,
+        metrics:{count:1,point_count:1,mae:1.25,rmse:1.25,smape:.012,average_wql:.018}},
+    },meta:successMeta()};
     case "listEnsembleForecastPresets": return { data: [{ id: "preset_01JEXAMPLE", name: "Balanced Ensemble", workspace_id: workspace.id, configuration: { prediction_length: 30, horizon_mode: "trading_sessions", quantiles: [0.01, 0.25, 0.5, 0.75, 0.99] } }], meta: successMeta(1) };
     case "createEnsembleForecastPreset": return { data: { id: "preset_01JEXAMPLE", name: "Balanced Ensemble", workspace_id: workspace.id }, meta: successMeta() };
     case "deleteEnsembleForecastPreset": return { data: { preset_id: "preset_01JEXAMPLE", deleted: true }, meta: successMeta() };
@@ -703,9 +708,29 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
             quantiles: { type: "object", additionalProperties: { type: "number" }, description: "Canonical decimal quantile string to final ensemble value." },
           },
         },
+        HistoricalForecastValidation: {
+          type: "object", required: ["policy", "method", "status", "metrics"],
+          description: "A bounded historical holdout calculated by the worker before job completion. No future outcome is required. Not training fit or a multi-window walk-forward backtest.",
+          properties: {
+            policy: {const:"chronological_holdout_v1"}, method:{const:"chronological_holdout"},
+            status:{type:"string",enum:["completed","insufficient_history","no_matching_outcomes","failed"]},
+            training_rows:{type:"integer",minimum:2},holdout_rows:{type:"integer",minimum:1,maximum:30},
+            training_end_at:{type:"string",format:"date-time"},validation_start_at:{type:"string",format:"date-time"},validation_end_at:{type:"string",format:"date-time"},
+            requested_models:{type:"array",items:{type:"string"}},effective_weights_by_quantile:{type:"object"},
+            metrics:{type:["object","null"],properties:{
+              count:{type:"integer",minimum:0},point_count:{type:"integer",minimum:0},
+              mae:{type:["number","null"],minimum:0},rmse:{type:["number","null"],minimum:0},
+              smape:{type:["number","null"],minimum:0,maximum:2,description:"Ratio, not percent; the UI multiplies by 100. Zero/zero contributes zero."},
+              average_wql:{type:["number","null"],minimum:0,description:"Mean twice-pinball loss divided by total absolute actual values; null for all-zero actuals."},
+            }},
+          },
+          example:{policy:"chronological_holdout_v1",method:"chronological_holdout",status:"completed",training_rows:493,holdout_rows:7,
+            training_end_at:"2026-09-08T20:00:00Z",validation_start_at:"2026-09-09T20:00:00Z",validation_end_at:"2026-09-17T20:00:00Z",
+            metrics:{count:7,point_count:7,mae:1.25,rmse:1.6,smape:0.012,average_wql:0.018}},
+        },
         EnsembleForecastEnvelope: {
           type: "object", required: ["data", "meta"], properties: {
-            data: { type: "object", required: ["forecast_id", "status"], properties: { forecast_id: { type: "string" }, status: { type: "string", enum: ["queued", "running", "completed", "failed"] }, progress: { type: ["object", "null"] }, predictions: { type: "array", items: { $ref: "#/components/schemas/EnsemblePrediction" } }, effective_weights_by_quantile: { type: "object" }, status_url: { type: "string" }, result_url: { type: "string" } } },
+            data: { type: "object", required: ["forecast_id", "status"], properties: { forecast_id: { type: "string" }, status: { type: "string", enum: ["queued", "running", "completed", "failed"] }, progress: { type: ["object", "null"] }, predictions: { type: "array", items: { $ref: "#/components/schemas/EnsemblePrediction" } }, historical_validation:{$ref:"#/components/schemas/HistoricalForecastValidation"}, effective_weights_by_quantile: { type: "object" }, status_url: { type: "string" }, result_url: { type: "string" } } },
             meta: { type: "object", properties: { api_version: { const: "v1" } } },
           },
         },

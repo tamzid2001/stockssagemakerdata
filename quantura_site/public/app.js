@@ -14806,7 +14806,7 @@
     window.clearTimeout(ensembleUiState.observationTimer);
     setEnsembleStatus(status === "queued"
       ? `Queued · Data snapshot → Waiting for worker → Models → Final ensemble. ${hasFullAccount() ? "Saved in My Requests." : "Keep this guest session to return to the result. Sign in to save to your profile."}`
-      : `Running model ${Math.min(completed + 1, total || 1)} of ${total || 1}${current ? `: ${current}` : ""}. ${Number.isFinite(elapsed)?elapsed:0} min since request.`, "working");
+      : `${progress.phase === "historical_validation" ? "Validating against held-out history" : "Forecasting"} · model ${Math.min(completed + 1, total || 1)} of ${total || 1}${current ? `: ${current}` : ""}. ${Number.isFinite(elapsed)?elapsed:0} min since request.`, "working");
     if (ui.ensembleResultMeta) ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id || "")}</span><span><strong>Completed:</strong> ${completed}/${total}</span><span><strong>Downloaded input:</strong> ${escapeHtml(job.input_row_count ?? "Loading")} observed bars</span>`;
     // Never show the previous job's distribution or metrics under a new ID.
     if (ui.ensembleSummary) { ui.ensembleSummary.hidden = true; ui.ensembleSummary.replaceChildren(); }
@@ -15000,7 +15000,7 @@
     if (ui.ensembleResultMeta) {
       const models = Object.entries(job?.models || {}).filter(([, value]) => value?.enabled).map(([id]) => id);
       const participated = (job.model_runtime || []).filter(model=>typeof model === "string" || model.status === "completed").map(model=>typeof model === "string" ? model : model.id);
-      ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id)}</span><span><strong>Requested models:</strong> ${escapeHtml(models.join(", "))}</span><span><strong>Participated:</strong> ${escapeHtml(participated.join(", ") || "See saved runtime metadata")}</span><span><strong>Horizon:</strong> ${escapeHtml(ensembleHorizonLabel(job))}</span><span><strong>Timezone:</strong> ${escapeHtml(ensembleTimeZone())}</span><span><strong>Historical validation:</strong> A separate walk-forward backtest is required. Live metrics below measure only this saved forecast.</span>`;
+      ui.ensembleResultMeta.innerHTML = `<span><strong>Forecast ID:</strong> ${escapeHtml(job.forecast_id)}</span><span><strong>Requested models:</strong> ${escapeHtml(models.join(", "))}</span><span><strong>Participated:</strong> ${escapeHtml(participated.join(", ") || "See saved runtime metadata")}</span><span><strong>Horizon:</strong> ${escapeHtml(ensembleHorizonLabel(job))}</span><span><strong>Timezone:</strong> ${escapeHtml(ensembleTimeZone())}</span>`;
     }
     if (ui.ensembleResultTable) {
       const headers = ["Date", ...quantiles.map(ensembleQuantileLabel)];

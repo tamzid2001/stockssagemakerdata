@@ -47,6 +47,38 @@ After ensembling, deterministic monotonic rearrangement guarantees non-crossing 
 4. The UI or client polls job status.
 5. The completed response returns only final ensemble rows and effective weights by quantile.
 
+## Historical ML metrics at completion
+
+New forecasts include `historical_validation`: MAE, RMSE, sMAPE and average weighted
+quantile loss, computed on already-known historical values. No future outcome is
+required to display these metrics. The worker withholds the most recent **up to
+20% of rows, 30 rows, or the requested horizon, whichever is smallest**, retaining
+the minimum context required by every selected model (at least two training rows).
+For short histories it can withhold one row; insufficient context is reported explicitly.
+It runs the same selected models, weights and quantiles against that holdout with
+strict model success. Only earlier rows reach those models; transformations are
+derived from the training prefix. Exact timestamps (exchange-session dates for
+daily equities) must match. Missing outcomes are never fabricated.
+
+The future forecast still uses **all selected historical inputs**. Validation is a
+separate, bounded inference pass in the existing asynchronous worker, so it adds
+processing time. Progress identifies the historical-validation phase. Results,
+sample sizes, split timestamps, hashes and effective weights are saved with the
+forecast; JSON downloads include the public summary. This is a single historical
+holdout, **not training-fit accuracy or a multi-window walk-forward backtest**.
+
+`historical_validation.status` is `completed`, `insufficient_history`,
+`no_matching_outcomes`, or `failed`. Validation failure does not discard a valid
+future forecast or substitute fewer models. Without P50 the point metrics are
+`null`; wQL is `null` when all matched actual values are zero. sMAPE is a ratio in
+the API (the UI displays a percentage); zero/zero contributes zero.
+
+Older immutable forecasts remain readable. **Reproduce saved configuration**
+creates a new job using the saved input/model configuration with historical
+validation; the original result is untouched. New jobs use a versioned validation
+policy in their cache identity. Existing research collectors and trading workers
+do not silently acquire a second inference pass.
+
 Reproduction creates a new job from the original input snapshot, stored configuration, and pinned model checkpoints while re-evaluating current authorization and license gates.
 
 ## TimesFM licensing
