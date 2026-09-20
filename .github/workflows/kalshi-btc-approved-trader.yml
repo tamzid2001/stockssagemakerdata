@@ -50,7 +50,7 @@ on:
       code_ref:
         type: string
         default: ''
-        description: Internal handoff only; empty uses dispatched commit, otherwise exact approved 40-character SHA.
+        description: Optional exact SHA. Empty live runs use the approved SHA; other modes use the dispatched commit.
 permissions:
   contents: read
   actions: write
@@ -70,7 +70,7 @@ jobs:
       STARTING_CONTRACTS: ${{ inputs.starting_contracts || 1 }}
       RECOVERY_MULTIPLIER: ${{ inputs.recovery_multiplier || 2.5 }}
       MAX_CONTRACTS: ${{ inputs.max_contracts || 100 }}
-      QUANTURA_CODE_SHA: ${{ inputs.code_ref || github.sha }}
+      QUANTURA_CODE_SHA: ${{ inputs.code_ref || (inputs.mode == 'live' && vars.QUANTURA_KALSHI_APPROVED_SHA) || github.sha }}
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
       TOKENIZERS_PARALLELISM: 'false'
@@ -84,9 +84,17 @@ jobs:
         run: echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - name: Validate immutable code reference
         run: '[[ "$QUANTURA_CODE_SHA" =~ ^[a-f0-9]{40}$ ]]'
+      - name: Validate live approval reference
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'live'
+        shell: bash
+        run: |
+          if [[ -z "$QUANTURA_KALSHI_APPROVED_SHA" || "$QUANTURA_CODE_SHA" != "$QUANTURA_KALSHI_APPROVED_SHA" ]]; then
+            echo "::error title=Live approval reference mismatch::Live runs must execute the exact approved SHA. Leave code_ref empty to use QUANTURA_KALSHI_APPROVED_SHA automatically, or approve the explicitly requested SHA first."
+            exit 1
+          fi
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.code_ref || github.sha }}
+          ref: ${{ env.QUANTURA_CODE_SHA }}
           persist-credentials: false
       - uses: actions/setup-python@v6
         with:

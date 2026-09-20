@@ -21,7 +21,10 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert workflow['concurrency']['cancel-in-progress'] is False
     assert workflow['jobs']['worker']['timeout-minutes'] <= 355
     assert workflow['permissions']['contents'] == 'read'
-    assert 'ref: ${{ inputs.code_ref || github.sha }}' in text
+    assert "inputs.code_ref || (inputs.mode == 'live' && vars.QUANTURA_KALSHI_APPROVED_SHA) || github.sha" in text
+    assert 'ref: ${{ env.QUANTURA_CODE_SHA }}' in text
+    assert 'name: Validate live approval reference' in text
+    assert 'Leave code_ref empty to use QUANTURA_KALSHI_APPROVED_SHA automatically' in text
     assert 'code_ref: process.env.QUANTURA_CODE_SHA' in text
     assert 'upload-artifact' not in text and 'git push' not in text
     assert 'QUANTURA_KALSHI_APPROVED_CONFIG' in text and 'QUANTURA_KALSHI_APPROVED_SHA' in text
@@ -33,6 +36,7 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert 'recovery_multiplier: process.env.RECOVERY_MULTIPLIER' in text
     assert 'max_contracts: process.env.MAX_CONTRACTS' in text
     assert workflow['jobs']['worker']['steps'][0]['name'] == 'Record total job budget'
+    assert workflow['jobs']['worker']['steps'][2]['name'] == 'Validate live approval reference'
 
 
 def test_watchdog_disabled_unless_operator_enables_and_no_concurrent_horizons():
