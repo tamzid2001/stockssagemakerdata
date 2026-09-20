@@ -8,6 +8,23 @@ from .store import Store, claim_transition
 from .kalshi_execution import recovery, money
 
 
+SIZING_FIELDS = frozenset({'starting_contracts', 'recovery_multiplier', 'max_contracts'})
+
+
+def approved_reconfiguration(existing, requested, state):
+    """Allow reviewed sizing changes only between complete recovery cycles."""
+    normalized = {**existing, 'starting_contracts': existing.get('starting_contracts', 1),
+        'recovery_multiplier': existing.get('recovery_multiplier', '2.5')}
+    if normalized == requested:
+        return dict(state)
+    changed = {key for key in set(normalized) | set(requested)
+               if normalized.get(key) != requested.get(key)}
+    if (not changed or not changed <= SIZING_FIELDS or state.get('active')
+            or money(state.get('cycle', '0')) != 0):
+        raise RuntimeError('LIVE_CONFIG_CHANGE_REQUIRES_RECOVERY_ZERO')
+    return {**state, 'size': requested['starting_contracts']}
+
+
 class LiveJournal(Store):
     def __init__(self, config, key_id, holder, live):
         # Same credential/subaccount is serialized across ALL forecast timings.
@@ -20,11 +37,15 @@ class LiveJournal(Store):
         @self.fs.transactional
         def update(tx):
             old = self.ref.get(transaction=tx).to_dict() or {}
-            if old and old.get('configuration') != asdict(self.config):
-                raise RuntimeError('LIVE_CONFIG_CHANGE_REQUIRES_REVIEW')
+            requested = asdict(self.config)
+            existing = old.get('configuration')
+            state = old.get('state', {'size': self.config.starting_contracts,
+                'cycle': '0', 'net': '0', 'active': None})
+            if existing:
+                state = approved_reconfiguration(existing, requested, state)
             lease = claim_transition(old.get('lease', {}), self.holder, time.time())
-            tx.set(self.ref, {'lease': lease, 'configuration': asdict(self.config),
-                'paper_only': not self.live, 'state': old.get('state', {'size': 1, 'cycle': '0', 'net': '0', 'active': None}),
+            tx.set(self.ref, {'lease': lease, 'configuration': requested,
+                'paper_only': not self.live, 'state': state,
                 'enabled': old.get('enabled', True)}, merge=True)
             return lease['fence']
         self.fence = self.transact(update)
@@ -88,7 +109,7 @@ class LiveJournal(Store):
             if not state.get('active') or state['active']['intent'] != entry['intent']:
                 raise RuntimeError('ACTIVE_INTENT_MISMATCH')
             if net is not None:
-                state = recovery(state, net)
+                state = recovery(state, net, self.config)
                 day = time.strftime('%Y-%m-%d', time.gmtime())
                 daily = money(state.get('daily_net', '0')) if state.get('day') == day else money(0)
                 state.update(day=day, daily_net=str(daily + money(net)))

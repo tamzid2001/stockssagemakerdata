@@ -32,6 +32,8 @@ class Config:
     history_minutes: int = 1
     subaccount: int = 0
     direction_policy: str = 'provisional_near_close'
+    starting_contracts: int = 1
+    recovery_multiplier: str = '2.5'
     max_contracts: int = 100
     max_order_dollars: str = '100'
     daily_loss_dollars: str = '100'
@@ -42,7 +44,10 @@ class Config:
         if (type(self.history_minutes) is not int or not 1 <= self.history_minutes <= 12
                 or type(self.subaccount) is not int or not 0 <= self.subaccount <= 63
                 or self.direction_policy not in ('confirmed', 'provisional_near_close')
+                or type(self.starting_contracts) is not int or not 1 <= self.starting_contracts <= 100
+                or not 1 < money(self.recovery_multiplier) <= 5
                 or type(self.max_contracts) is not int or not 1 <= self.max_contracts <= 100
+                or self.starting_contracts > self.max_contracts
                 or not 0 < money(self.max_order_dollars) <= 100
                 or not 0 < money(self.daily_loss_dollars) <= 100
                 or not 0 < money(self.max_ask) < 1 or self.version != VERSION):
@@ -82,14 +87,16 @@ def order_payload(ticker, side, quantity, ask, shard, config):
         self_trade_prevention_type='taker_at_cross', cancel_order_on_pause=True)
 
 
-def recovery(state, net):
+def recovery(state, net, config=None):
     """Same whole-contract floor rounding as the reported research; actual net fees."""
+    config = config or Config()
     cycle = money(state.get('cycle', '0')) + money(net)
-    size = int(state.get('size', 1))
+    size = int(state.get('size', config.starting_contracts))
     if cycle >= 0:
-        cycle, size = Decimal(0), 1
+        cycle, size = Decimal(0), config.starting_contracts
     elif money(net) < 0:
-        size = min(100, int((Decimal(size) * Decimal('2.5')).to_integral_value(rounding=ROUND_FLOOR)))
+        size = min(config.max_contracts, int((Decimal(size) * money(config.recovery_multiplier))
+            .to_integral_value(rounding=ROUND_FLOOR)))
     return {**state, 'cycle': str(cycle), 'size': size,
             'net': str(money(state.get('net', '0')) + money(net))}
 

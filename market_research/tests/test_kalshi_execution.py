@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from market_research.kalshi_execution import (Config, KalshiExecution, live_allowed,
     money, order_payload, reconciled_order, recovery)
 from market_research.kalshi_live_state import Trader
+from market_research.kalshi_live_state import approved_reconfiguration
 
 TICKER = 'KXBTC15M-26SEP201215-15'
 
@@ -33,6 +34,8 @@ def credentials(config):
 
 @pytest.mark.parametrize('field,value', [('history_minutes', 0), ('history_minutes', 13),
     ('history_minutes', True), ('subaccount', -1), ('subaccount', 64), ('direction_policy', 'settled_99c'), ('max_contracts', 101),
+    ('starting_contracts', 0), ('starting_contracts', 101), ('recovery_multiplier', '1'),
+    ('recovery_multiplier', '5.1'),
     ('max_order_dollars', 'NaN'), ('daily_loss_dollars', '0'), ('max_ask', '1')])
 def test_strict_config(field, value):
     with pytest.raises(ValueError):
@@ -53,6 +56,8 @@ def test_requested_one_minute_preset_is_not_live_approval():
     assert config.history_minutes == 1
     assert config.subaccount == 0
     assert config.direction_policy == 'provisional_near_close'
+    assert config.starting_contracts == 1
+    assert config.recovery_multiplier == '2.5'
     assert config.max_contracts == 100
     assert not live_allowed(config, True, {})
 
@@ -142,6 +147,32 @@ def test_recovery_until_net_recovers_whole_contracts_and_fixed_cap():
     assert state['size'] == 100 and money(state['cycle']) == -6
     state = recovery(state, '6')
     assert state['size'] == 1 and money(state['cycle']) == 0
+
+
+def test_recovery_uses_approved_start_multiplier_and_cap():
+    config = Config(starting_contracts=2, recovery_multiplier='3', max_contracts=20)
+    state = {'size': 2, 'cycle': '0', 'net': '0'}
+    state = recovery(state, '-1', config)
+    assert state['size'] == 6
+    state = recovery(state, '-1', config)
+    assert state['size'] == 18
+    state = recovery(state, '-1', config)
+    assert state['size'] == 20
+    state = recovery(state, '3', config)
+    assert state['size'] == 2 and money(state['cycle']) == 0
+
+
+def test_sizing_reconfiguration_only_when_recovery_zero_and_flat():
+    old = Config()
+    new = Config(starting_contracts=2, recovery_multiplier='3', max_contracts=80)
+    flat = {'size': 1, 'cycle': '0', 'net': '17.5', 'active': None}
+    assert approved_reconfiguration(old.__dict__, new.__dict__, flat)['size'] == 2
+    with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
+        approved_reconfiguration(old.__dict__, new.__dict__, {**flat, 'cycle': '-1'})
+    with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
+        approved_reconfiguration(old.__dict__, new.__dict__, {**flat, 'active': {'intent': 'open'}})
+    with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
+        approved_reconfiguration(old.__dict__, replace(new, history_minutes=2).__dict__, flat)
 
 
 class MemoryJournal:

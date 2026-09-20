@@ -244,10 +244,14 @@ def main():
     parser.add_argument('--subaccount', type=int, default=0)
     parser.add_argument('--direction-policy', choices=['confirmed', 'provisional_near_close'],
                         default='provisional_near_close')
+    parser.add_argument('--starting-contracts', type=int, default=1)
+    parser.add_argument('--recovery-multiplier', default='2.5')
+    parser.add_argument('--max-contracts', type=int, default=100)
     parser.add_argument('--duration-minutes', type=int, default=300)
     args = parser.parse_args()
     config = Config(history_minutes=args.history_minutes, subaccount=args.subaccount,
-                    direction_policy=args.direction_policy)
+                    direction_policy=args.direction_policy, starting_contracts=args.starting_contracts,
+                    recovery_multiplier=args.recovery_multiplier, max_contracts=args.max_contracts)
     if not 1 <= args.duration_minutes <= 300:
         parser.error('Duration must be 1..300 minutes')
     if args.mode == 'config':

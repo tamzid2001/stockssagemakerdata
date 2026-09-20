@@ -1,5 +1,5 @@
 name: Kalshi BTC Approval-Gated P90 Trader
-run-name: Kalshi BTC execution · ${{ inputs.mode }} · first ${{ inputs.history_minutes }}m
+run-name: Kalshi BTC execution · ${{ inputs.mode }} · first ${{ inputs.history_minutes }}m · ${{ inputs.starting_contracts || 1 }}x${{ inputs.recovery_multiplier || 2.5 }} cap ${{ inputs.max_contracts || 100 }}
 on:
   pull_request:
     paths:
@@ -31,6 +31,18 @@ on:
         options: [provisional_near_close, confirmed]
         default: provisional_near_close
         description: 99c near-close bid is provisional direction only; official settlement always drives P&L and recovery.
+      starting_contracts:
+        type: number
+        default: 1
+        description: Initial whole-contract size (1..100). Change applies only while recovery P&L is zero and no position is active.
+      recovery_multiplier:
+        type: number
+        default: 2.5
+        description: Loss-recovery multiplier (>1..5). Change applies only while recovery P&L is zero and no position is active.
+      max_contracts:
+        type: number
+        default: 100
+        description: Absolute cap (starting size..100). Changes wait for recovery P&L zero; dollar and daily-loss limits still apply.
       continuous:
         type: boolean
         default: false
@@ -55,6 +67,9 @@ jobs:
       HISTORY_MINUTES: ${{ inputs.history_minutes || '1' }}
       SUBACCOUNT: ${{ inputs.subaccount || 0 }}
       DIRECTION_POLICY: ${{ inputs.direction_policy || 'provisional_near_close' }}
+      STARTING_CONTRACTS: ${{ inputs.starting_contracts || 1 }}
+      RECOVERY_MULTIPLIER: ${{ inputs.recovery_multiplier || 2.5 }}
+      MAX_CONTRACTS: ${{ inputs.max_contracts || 100 }}
       QUANTURA_CODE_SHA: ${{ inputs.code_ref || github.sha }}
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
@@ -89,7 +104,7 @@ jobs:
       - name: Offline execution and restart tests
         run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_provisional_direction.py -q
       - name: Display exact configuration for approval (no secrets)
-        run: python -m market_research.kalshi_live_worker --mode config --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY"
+        run: python -m market_research.kalshi_live_worker --mode config --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-contracts "$MAX_CONTRACTS"
       - name: Readiness or explicitly selected worker
         if: github.event_name == 'workflow_dispatch' && inputs.mode != 'verify'
         env:
@@ -101,7 +116,7 @@ jobs:
           HF_HOME: ${{ runner.temp }}/quantura-live-model-cache
           TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
-        run: python -m market_research.kalshi_live_worker --mode "$MODE" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --duration-minutes 300
+        run: python -m market_research.kalshi_live_worker --mode "$MODE" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-contracts "$MAX_CONTRACTS" --duration-minutes 300
       - name: Serialized handoff after successful durable worker exit
         if: success() && inputs.continuous && (inputs.mode == 'observe' || inputs.mode == 'live') && vars.QUANTURA_KALSHI_CONTINUOUS == 'true'
         uses: actions/github-script@v8
@@ -114,5 +129,8 @@ jobs:
               ...context.repo, workflow_id: 'kalshi-btc-approved-trader.yml', ref: context.payload.repository.default_branch,
               inputs: {mode: process.env.CONTINUOUS_MODE, history_minutes: process.env.HISTORY_MINUTES,
                        subaccount: process.env.SUBACCOUNT, direction_policy: process.env.DIRECTION_POLICY,
+                       starting_contracts: process.env.STARTING_CONTRACTS,
+                       recovery_multiplier: process.env.RECOVERY_MULTIPLIER,
+                       max_contracts: process.env.MAX_CONTRACTS,
                        continuous: 'true', code_ref: process.env.QUANTURA_CODE_SHA}
             });

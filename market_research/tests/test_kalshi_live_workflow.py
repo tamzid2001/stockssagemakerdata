@@ -15,6 +15,9 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert inputs['history_minutes']['default'] == '1'
     assert inputs['subaccount']['default'] == 0
     assert inputs['direction_policy']['default'] == 'provisional_near_close'
+    assert inputs['starting_contracts']['default'] == 1
+    assert inputs['recovery_multiplier']['default'] == 2.5
+    assert inputs['max_contracts']['default'] == 100
     assert workflow['concurrency']['cancel-in-progress'] is False
     assert workflow['jobs']['worker']['timeout-minutes'] <= 355
     assert workflow['permissions']['contents'] == 'read'
@@ -26,6 +29,9 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert 'cancel-in-progress: false' in text
     assert 'KALSHI_PRIVATE_KEY' in text and 'echo "$KALSHI_PRIVATE_KEY"' not in text
     assert 'direction_policy: process.env.DIRECTION_POLICY' in text
+    assert 'starting_contracts: process.env.STARTING_CONTRACTS' in text
+    assert 'recovery_multiplier: process.env.RECOVERY_MULTIPLIER' in text
+    assert 'max_contracts: process.env.MAX_CONTRACTS' in text
     assert workflow['jobs']['worker']['steps'][0]['name'] == 'Record total job budget'
 
 
