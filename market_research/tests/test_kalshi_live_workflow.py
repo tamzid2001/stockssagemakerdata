@@ -12,6 +12,9 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert inputs['mode']['default'] == 'verify'
     assert inputs['continuous']['default'] is False
     assert inputs['history_minutes']['options'] == [str(n) for n in range(1,13)]
+    assert inputs['history_minutes']['default'] == '1'
+    assert inputs['subaccount']['default'] == 0
+    assert inputs['direction_policy']['default'] == 'provisional_near_close'
     assert workflow['concurrency']['cancel-in-progress'] is False
     assert workflow['jobs']['worker']['timeout-minutes'] <= 355
     assert workflow['permissions']['contents'] == 'read'
@@ -22,6 +25,8 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert 'QUANTURA_KALSHI_CONTINUOUS' in text
     assert 'cancel-in-progress: false' in text
     assert 'KALSHI_PRIVATE_KEY' in text and 'echo "$KALSHI_PRIVATE_KEY"' not in text
+    assert 'direction_policy: process.env.DIRECTION_POLICY' in text
+    assert workflow['jobs']['worker']['steps'][0]['name'] == 'Record total job budget'
 
 
 def test_watchdog_disabled_unless_operator_enables_and_no_concurrent_horizons():
@@ -31,6 +36,7 @@ def test_watchdog_disabled_unless_operator_enables_and_no_concurrent_horizons():
     assert "LIVE_ENABLED!=='true'" in text
     for status in ('queued', 'in_progress', 'requested', 'waiting', 'pending'):
         assert status in text
+    assert 'direction_policy:direction' in text and 'account<0' in text
 
 
 def test_execution_collections_are_explicitly_private():

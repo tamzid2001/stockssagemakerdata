@@ -17,7 +17,7 @@ import uuid
 import httpx
 
 BASE = 'https://external-api.kalshi.com/trade-api/v2'
-VERSION = 'btc-p90-sticky-hold-live-v1'
+VERSION = 'btc-p90-sticky-hold-live-v2'
 
 
 def money(value):
@@ -29,8 +29,9 @@ def money(value):
 
 @dataclass(frozen=True)
 class Config:
-    history_minutes: int = 2
-    subaccount: int = 1
+    history_minutes: int = 1
+    subaccount: int = 0
+    direction_policy: str = 'provisional_near_close'
     max_contracts: int = 100
     max_order_dollars: str = '100'
     daily_loss_dollars: str = '100'
@@ -39,7 +40,8 @@ class Config:
 
     def __post_init__(self):
         if (type(self.history_minutes) is not int or not 1 <= self.history_minutes <= 12
-                or type(self.subaccount) is not int or not 1 <= self.subaccount <= 63
+                or type(self.subaccount) is not int or not 0 <= self.subaccount <= 63
+                or self.direction_policy not in ('confirmed', 'provisional_near_close')
                 or type(self.max_contracts) is not int or not 1 <= self.max_contracts <= 100
                 or not 0 < money(self.max_order_dollars) <= 100
                 or not 0 < money(self.daily_loss_dollars) <= 100

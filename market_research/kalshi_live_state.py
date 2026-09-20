@@ -32,6 +32,30 @@ class LiveJournal(Store):
     def state(self):
         return self.ref.get().to_dict()['state']
 
+    def direction_snapshots(self):
+        return self.ref.get().to_dict().get('direction_snapshots', [])
+
+    def remember_direction(self, row):
+        # Fenced, bounded handoff context, separate from active intent/P&L state.
+        @self.fs.transactional
+        def update(tx):
+            self.check(tx)
+            root = self.ref.get(transaction=tx).to_dict()
+            rows = root.get('direction_snapshots', [])
+            old = next((r for r in rows if r['market_id'] == row['market_id']), None)
+            if old and old != row:
+                raise RuntimeError('PROVISIONAL_SNAPSHOT_IMMUTABLE')
+            rows = [r for r in rows if r['market_id'] != row['market_id']] + [row]
+            tx.update(self.ref, {'direction_snapshots': sorted(rows, key=lambda r:r['close_at'])[-8:]})
+        self.transact(update)
+
+    def health(self, value):
+        @self.fs.transactional
+        def update(tx):
+            self.check(tx)
+            tx.update(self.ref, {'worker_health': {**value, 'at': time.time(), 'holder': self.holder}})
+        self.transact(update)
+
     def used(self, ticker):
         return self.ref.collection('markets').document(ticker).get().exists
 

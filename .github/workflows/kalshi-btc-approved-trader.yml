@@ -5,6 +5,8 @@ on:
     paths:
       - 'market_research/kalshi_execution.py'
       - 'market_research/kalshi_live_*.py'
+      - 'market_research/kalshi_provisional_direction.py'
+      - 'market_research/tests/test_kalshi_provisional_direction.py'
       - 'market_research/tests/test_kalshi_execution.py'
       - 'market_research/tests/test_kalshi_live_workflow.py'
       - '.github/workflows/kalshi-btc-approved-*.yml'
@@ -18,12 +20,17 @@ on:
       history_minutes:
         type: choice
         options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
-        default: '2'
+        default: '1'
         description: Exact opening minute observations; forecast through minute 15. No Toto.
       subaccount:
         type: number
-        default: 1
-        description: Dedicated, already provisioned Kalshi subaccount 1..63; no other bots/manual trading.
+        default: 0
+        description: 0 is your primary account; 1..63 selects an existing subaccount. Other positions/orders block entry.
+      direction_policy:
+        type: choice
+        options: [provisional_near_close, confirmed]
+        default: provisional_near_close
+        description: 99c near-close bid is provisional direction only; official settlement always drives P&L and recovery.
       continuous:
         type: boolean
         default: false
@@ -45,8 +52,9 @@ jobs:
     environment: quantura-kalshi-live
     env:
       MODE: ${{ inputs.mode || 'verify' }}
-      HISTORY_MINUTES: ${{ inputs.history_minutes || '2' }}
-      SUBACCOUNT: ${{ inputs.subaccount || 1 }}
+      HISTORY_MINUTES: ${{ inputs.history_minutes || '1' }}
+      SUBACCOUNT: ${{ inputs.subaccount || 0 }}
+      DIRECTION_POLICY: ${{ inputs.direction_policy || 'provisional_near_close' }}
       QUANTURA_CODE_SHA: ${{ inputs.code_ref || github.sha }}
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
@@ -57,6 +65,8 @@ jobs:
       QUANTURA_KALSHI_APPROVED_CONFIG: ${{ vars.QUANTURA_KALSHI_APPROVED_CONFIG }}
       QUANTURA_KALSHI_APPROVED_SHA: ${{ vars.QUANTURA_KALSHI_APPROVED_SHA }}
     steps:
+      - name: Record total job budget
+        run: echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - name: Validate immutable code reference
         run: '[[ "$QUANTURA_CODE_SHA" =~ ^[a-f0-9]{40}$ ]]'
       - uses: actions/checkout@v6
@@ -66,8 +76,6 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Record total job budget
-        run: echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - name: Install locked dependencies
         shell: bash
         run: |
@@ -79,9 +87,9 @@ jobs:
             python -m pip install pytest==8.4.2 pyyaml==6.0.2
           fi
       - name: Offline execution and restart tests
-        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py -q
+        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_provisional_direction.py -q
       - name: Display exact configuration for approval (no secrets)
-        run: python -m market_research.kalshi_live_worker --mode config --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT"
+        run: python -m market_research.kalshi_live_worker --mode config --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY"
       - name: Readiness or explicitly selected worker
         if: github.event_name == 'workflow_dispatch' && inputs.mode != 'verify'
         env:
@@ -93,7 +101,7 @@ jobs:
           HF_HOME: ${{ runner.temp }}/quantura-live-model-cache
           TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
-        run: python -m market_research.kalshi_live_worker --mode "$MODE" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --duration-minutes 300
+        run: python -m market_research.kalshi_live_worker --mode "$MODE" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --duration-minutes 300
       - name: Serialized handoff after successful durable worker exit
         if: success() && inputs.continuous && (inputs.mode == 'observe' || inputs.mode == 'live') && vars.QUANTURA_KALSHI_CONTINUOUS == 'true'
         uses: actions/github-script@v8
@@ -105,5 +113,6 @@ jobs:
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'kalshi-btc-approved-trader.yml', ref: context.payload.repository.default_branch,
               inputs: {mode: process.env.CONTINUOUS_MODE, history_minutes: process.env.HISTORY_MINUTES,
-                       subaccount: process.env.SUBACCOUNT, continuous: 'true', code_ref: process.env.QUANTURA_CODE_SHA}
+                       subaccount: process.env.SUBACCOUNT, direction_policy: process.env.DIRECTION_POLICY,
+                       continuous: 'true', code_ref: process.env.QUANTURA_CODE_SHA}
             });

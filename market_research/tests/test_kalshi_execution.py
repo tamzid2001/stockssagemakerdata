@@ -32,7 +32,7 @@ def credentials(config):
 
 
 @pytest.mark.parametrize('field,value', [('history_minutes', 0), ('history_minutes', 13),
-    ('history_minutes', True), ('subaccount', 0), ('subaccount', 64), ('max_contracts', 101),
+    ('history_minutes', True), ('subaccount', -1), ('subaccount', 64), ('direction_policy', 'settled_99c'), ('max_contracts', 101),
     ('max_order_dollars', 'NaN'), ('daily_loss_dollars', '0'), ('max_ask', '1')])
 def test_strict_config(field, value):
     with pytest.raises(ValueError):
@@ -45,7 +45,16 @@ def test_all_approval_gates(config, credentials):
     assert not live_allowed(config, False, env)
     for key in ('QUANTURA_KALSHI_LIVE_ENABLED', 'QUANTURA_KALSHI_APPROVED_CONFIG', 'QUANTURA_KALSHI_APPROVED_SHA'):
         assert not live_allowed(config, True, {**env, key: ''})
-    assert not live_allowed(replace(config, history_minutes=1), True, env)
+    assert not live_allowed(replace(config, history_minutes=2), True, env)
+
+
+def test_requested_one_minute_preset_is_not_live_approval():
+    config = Config()
+    assert config.history_minutes == 1
+    assert config.subaccount == 0
+    assert config.direction_policy == 'provisional_near_close'
+    assert config.max_contracts == 100
+    assert not live_allowed(config, True, {})
 
 
 def test_v2_yes_no_and_stable_single_market_identity(config):
@@ -54,7 +63,7 @@ def test_v2_yes_no_and_stable_single_market_identity(config):
     assert (yes['side'], yes['price']) == ('bid', '0.610000')
     assert (no['side'], no['price']) == ('ask', '0.390000')
     assert yes['client_order_id'] == no['client_order_id']
-    assert yes['exchange_index'] == 7 and yes['subaccount'] == 1
+    assert yes['exchange_index'] == 7 and yes['subaccount'] == 0
     assert yes['count'] == '2.00' and yes['time_in_force'] == 'immediate_or_cancel'
     assert yes['post_only'] is False
 
@@ -95,7 +104,7 @@ def test_paginate_and_do_not_assume_empty_on_error(config, credentials):
     calls = []
     def handler(request):
         calls.append(request)
-        assert request.url.params['subaccount'] == '1'
+        assert request.url.params['subaccount'] == '0'
         return httpx.Response(200, json={'orders': [len(calls)], 'cursor': 'next' if len(calls) == 1 else ''})
     api = KalshiExecution(config, env=env, client=httpx.Client(transport=httpx.MockTransport(handler)))
     assert api.pages('/portfolio/orders', 'orders') == [1, 2]
@@ -117,7 +126,7 @@ def test_partial_and_zero_fill_are_not_full_fills(config):
     intent = order_payload(TICKER, 'yes', 5, '.5', 7, config)
     assert reconciled_order(final_order(intent), intent, 'yes')['filled'] == '1.00'
     assert reconciled_order(final_order(intent, count='0.00'), intent, 'yes')['filled'] == '0.00'
-    for patch in ({'remaining_count_fp': '1'}, {'subaccount_number': 0},
+    for patch in ({'remaining_count_fp': '1'}, {'subaccount_number': 1},
                   {'book_side': 'ask'}, {'outcome_side': 'no'}, {'exchange_index': 0}):
         with pytest.raises(RuntimeError):
             reconciled_order({**final_order(intent), **patch}, intent, 'yes')
@@ -231,6 +240,18 @@ def test_daily_loss_and_foreign_positions_block_entries(rig):
     broker.account = lambda: ([], [{'ticker': 'FOREIGN', 'position_fp': '1'}])
     with pytest.raises(RuntimeError, match='SUBACCOUNT_NOT_FLAT'): trader.enter(signal, quote, now)
     assert not broker.sent
+
+
+def test_99c_provisional_quote_cannot_close_position_or_increase_recovery(rig):
+    trader, broker, journal, signal, quote, now = rig
+    with pytest.raises(RuntimeError): trader.enter(signal, quote, now)
+    broker.order = final_order(broker.sent[0])
+    original = broker.market
+    broker.market = lambda ticker: {**original(ticker), 'yes_bid_dollars':'.99',
+                                    'provisional_winner':'yes', 'result':'yes'}
+    assert trader.reconcile() == 'held_to_settlement'
+    assert journal.state()['net'] == '0' and journal.state()['size'] == 1
+    assert journal.state()['active'] is not None
 
 
 @pytest.mark.parametrize('minutes', range(1, 13))

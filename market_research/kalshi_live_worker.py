@@ -83,7 +83,7 @@ def run(config, mode, duration):
     from .local_store import LocalStore
     from .btc_minute_archive import MinuteCollector
     from .btc_hold_tracking import first_signals, prospective_observations
-    from .btc_sticky_tracking import direction_at
+    from .kalshi_provisional_direction import NearCloseCollector, direction_at, reconciliation
     broker = KalshiExecution(config, requested_live=mode == 'live')
     if mode == 'readiness':
         orders, positions = broker.account()
@@ -108,12 +108,17 @@ def run(config, mode, duration):
     job_started = float(os.environ.get('QUANTURA_JOB_STARTED_AT', time.time()))
     deadline = min(time.time() + duration * 60, job_started + 345 * 60)
     attempts, pairs, pending, archived = {}, {}, {}, set()
-    last_renew = last_reconcile = 0
+    snapshots = {r['market_id']: r for r in journal.direction_snapshots()}
+    reconciled_directions = set()
+    last_renew = last_reconcile = last_health = 0
     try:
         with tempfile.TemporaryDirectory(prefix='kalshi-minute-live-') as directory:
             store = LocalStore(journal.session, journal.holder, directory, capacity_bytes=100*1024*1024)
             collector = MinuteCollector(store, KalshiBTCProvider())
+            near_close = NearCloseCollector(store, KalshiBTCProvider(timeout=1.5, attempts=1))
             collector.start()
+            if config.direction_policy == 'provisional_near_close':
+                near_close.start()
             try:
                 while not stopped and time.time() < deadline:
                     now = int(time.time())
@@ -127,6 +132,27 @@ def run(config, mode, duration):
                     lifecycle = store.values('btc_lifecycle')
                     minute_rows = store.values('btc_minutes')
                     settlements = store.values('btc_settlements')
+                    for row in store.values('btc_provisional_direction'):
+                        if row['close_at'] <= now and row['market_id'] not in snapshots:
+                            # Encrypt first, then checkpoint the small final snapshot. A
+                            # retry reuses the content-addressed object after a crash.
+                            persist_evidence(journal, row['market_id'], {'kind': 'provisional_direction', **row})
+                            journal.remember_direction(row)
+                            snapshots[row['market_id']] = row
+                    for official in settlements:
+                        ticker = official['market_id']
+                        identity = (ticker, official['first_confirmed_at'])
+                        if ticker in snapshots and identity not in reconciled_directions:
+                            persist_evidence(journal, ticker, reconciliation(snapshots[ticker], official))
+                            reconciled_directions.add(identity)
+                    if now - last_health >= 60:
+                        journal.health({'mode': mode, 'orders_enabled': broker.enabled,
+                            'latest_minute_at': max((r['timestamp'] for r in minute_rows), default=None),
+                            'minute_collector': store._get('checkpoints', 'btc_collector_health'),
+                            'direction_collector': store._get('checkpoints', 'btc_provisional_health'),
+                            'forecast_attempts': len(attempts), 'completed_forecast_pairs': len(pairs),
+                            'entry_reconciliation': status, 'boot_at': boot_at})
+                        last_health = now
                     if worker:
                         try:
                             result = result_queue.get_nowait()
@@ -168,7 +194,8 @@ def run(config, mode, duration):
                             signals, _ = first_signals(pairs[ticker], prospective_observations(observations(rows), now), now)
                             if signals:
                                 first = signals[0]
-                                direction = direction_at(settlements, first['signal_received_at'], ticker)
+                                direction = direction_at(settlements, list(snapshots.values()), lifecycle,
+                                    first['signal_received_at'], ticker, opened, config.direction_policy)
                                 agrees = direction and first['contract_id'].endswith(':' + direction['side'])
                                 pending[ticker] = {**first, 'direction': direction, 'agrees': bool(agrees), 'done': False}
                                 persist_evidence(journal, ticker, {'kind': 'first_p90', **pending[ticker]})
@@ -194,6 +221,7 @@ def run(config, mode, duration):
                         raise RuntimeError('LOCAL_EVIDENCE_CAPACITY_REACHED')
                     time.sleep(3)
             finally:
+                near_close.stop()
                 collector.stop()
                 if worker:
                     worker.terminate(); worker.join(timeout=10)
@@ -212,11 +240,14 @@ def run(config, mode, duration):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['config', 'readiness', 'observe', 'live'], default='config')
-    parser.add_argument('--history-minutes', type=int, default=2)
-    parser.add_argument('--subaccount', type=int, default=1)
+    parser.add_argument('--history-minutes', type=int, default=1)
+    parser.add_argument('--subaccount', type=int, default=0)
+    parser.add_argument('--direction-policy', choices=['confirmed', 'provisional_near_close'],
+                        default='provisional_near_close')
     parser.add_argument('--duration-minutes', type=int, default=300)
     args = parser.parse_args()
-    config = Config(history_minutes=args.history_minutes, subaccount=args.subaccount)
+    config = Config(history_minutes=args.history_minutes, subaccount=args.subaccount,
+                    direction_policy=args.direction_policy)
     if not 1 <= args.duration_minutes <= 300:
         parser.error('Duration must be 1..300 minutes')
     if args.mode == 'config':

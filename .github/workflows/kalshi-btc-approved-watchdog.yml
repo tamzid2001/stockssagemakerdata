@@ -19,16 +19,18 @@ jobs:
         env:
           APPROVED_SHA: ${{ vars.QUANTURA_KALSHI_APPROVED_SHA }}
           APPROVED_MODE: ${{ vars.QUANTURA_KALSHI_WATCHDOG_MODE || 'observe' }}
-          HISTORY_MINUTES: ${{ vars.QUANTURA_KALSHI_HISTORY_MINUTES || '2' }}
-          SUBACCOUNT: ${{ vars.QUANTURA_KALSHI_SUBACCOUNT || '1' }}
+          HISTORY_MINUTES: ${{ vars.QUANTURA_KALSHI_HISTORY_MINUTES || '1' }}
+          SUBACCOUNT: ${{ vars.QUANTURA_KALSHI_SUBACCOUNT || '0' }}
+          DIRECTION_POLICY: ${{ vars.QUANTURA_KALSHI_DIRECTION_POLICY || 'provisional_near_close' }}
           LIVE_ENABLED: ${{ vars.QUANTURA_KALSHI_LIVE_ENABLED || 'false' }}
         with:
           script: |
             const mode=process.env.APPROVED_MODE, sha=process.env.APPROVED_SHA;
-            const history=Number(process.env.HISTORY_MINUTES), account=Number(process.env.SUBACCOUNT);
+            const history=Number(process.env.HISTORY_MINUTES), account=Number(process.env.SUBACCOUNT), direction=process.env.DIRECTION_POLICY;
             if(!['observe','live'].includes(mode) || !/^[a-f0-9]{40}$/.test(sha) ||
                !Number.isInteger(history) || history<1 || history>12 ||
-               !Number.isInteger(account) || account<1 || account>63) throw new Error('INVALID_WATCHDOG_CONFIGURATION');
+               !Number.isInteger(account) || account<0 || account>63 ||
+               !['confirmed','provisional_near_close'].includes(direction)) throw new Error('INVALID_WATCHDOG_CONFIGURATION');
             if(mode==='live' && process.env.LIVE_ENABLED!=='true') return;
             const workflow_id='kalshi-btc-approved-trader.yml';
             for(const status of ['queued','in_progress','requested','waiting','pending']) {
@@ -36,4 +38,4 @@ jobs:
               if(data.workflow_runs.length) {core.info('Existing worker/approval/queue; no duplicate dispatch.');return;}
             }
             await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:context.payload.repository.default_branch,
-              inputs:{mode,history_minutes:String(history),subaccount:String(account),continuous:'true',code_ref:sha}});
+              inputs:{mode,history_minutes:String(history),subaccount:String(account),direction_policy:direction,continuous:'true',code_ref:sha}});
