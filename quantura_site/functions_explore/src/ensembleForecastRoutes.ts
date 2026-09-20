@@ -555,7 +555,7 @@ function datasetHash(rows: Array<{ timestamp: string; target: number }>, source:
 }
 
 function requestHash(workspaceId: string, sourceHash: string, configuration: JsonRecord): string {
-  return crypto.createHash("sha256").update(JSON.stringify({ workspaceId, sourceHash, configuration, registry: modelRegistry.schemaVersion, evaluation_policy: HISTORICAL_VALIDATION_POLICY })).digest("hex");
+  return crypto.createHash("sha256").update(JSON.stringify({ workspaceId, sourceHash, configuration, registry: modelRegistry.schemaVersion, evaluation_policy: null })).digest("hex");
 }
 
 export function approvedModelCheckpoints(configuration: NormalizedConfiguration): Record<ModelId, string | null> {
@@ -966,7 +966,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: normalizedRequest,
-      evaluation_policy: HISTORICAL_VALIDATION_POLICY,
+      evaluation_policy: null,
       requested_weights: configuration.requested_weights,
       effective_central_weights: configuration.effective_central_weights,
       source: materialized.source,
@@ -1035,7 +1035,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: original.request,
-      evaluation_policy: original.evaluation_policy || HISTORICAL_VALIDATION_POLICY,
+      evaluation_policy: null,
       requested_weights: configuration.requested_weights,
       effective_central_weights: configuration.effective_central_weights,
       source: original.source,
@@ -1045,7 +1045,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       input_timestamp_column: "timestamp",
       input_target_column: "target",
       input_timezone: original.input_timezone || "UTC",
-      request_hash: original.evaluation_policy ? original.request_hash : crypto.createHash("sha256").update(`${original.request_hash}:${HISTORICAL_VALIDATION_POLICY}`).digest("hex"),
+      request_hash: original.evaluation_policy ? crypto.createHash("sha256").update(`${original.request_hash}:forecast_only_v1`).digest("hex") : original.request_hash,
       registry_version: original.registry_version,
       model_checkpoints: Object.keys(checkpoints).length ? checkpoints : approvedModelCheckpoints(configuration),
       model_revisions: plain(original.model_revisions),
@@ -1277,7 +1277,8 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     sendData(res, {
       forecast_id: ref.id,
       request: job.request,
-      evaluation_policy: job.evaluation_policy || null,
+      // Also suppress the former policy for queued jobs claimed by older workers.
+      evaluation_policy: null,
       source: job.source,
       dataset_hash: job.dataset_hash,
       model_checkpoints: job.model_checkpoints,

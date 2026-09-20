@@ -58,9 +58,9 @@ test('zero denominators and constant outcomes remain unavailable, never NaN/Infi
 test('missing intermediate observations never become invented outcomes',()=>{
   const j=job();j.observations.splice(1,1);assert.equal(compute(j).prospective.count,2);assert.equal(compute(j).prospective.mae,1);
 });
-test('legacy forecast explains how to calculate historical metrics, with live outcomes kept separate',()=>{
+test('forecast metrics use only matching observations without asking for extra inference',()=>{
   const dom=new JSDOM('<section id="metrics"></section>'),host=dom.window.document.getElementById('metrics'),j=job();
-  j.observations=[];render(host,j);assert.match(host.textContent,/Forecast quality/);assert.match(host.textContent,/Reproduce saved configuration/);
+  j.observations=[];render(host,j);assert.match(host.textContent,/Forecast quality/);assert.match(host.textContent,/No additional forecast/);
   assert.doesNotMatch(host.textContent,/Not available/);assert.equal(host.querySelectorAll('dl > div').length,4);
   render(host,job());assert.match(host.textContent,/3 \/ 3 timestamp-matched/);assert.match(host.textContent,/Small validation sample/);
   const help=host.querySelector('button');help.click();assert.equal(help.getAttribute('aria-expanded'),'true');
@@ -70,21 +70,23 @@ test('legacy forecast explains how to calculate historical metrics, with live ou
   assert.equal(dom.window.document.activeElement,host.querySelector('button'));
   assert.doesNotMatch(host.textContent,/Brier|ensemble accuracy|Median absolute error|Forecast bias|WAPE|Directional accuracy|R²|MASE|coverage/i);dom.window.close();
 });
-test('historical validation shows all four numeric cards with no future observations',()=>{
+test('legacy historical validation remains separate from the requested forecast',()=>{
   const dom=new JSDOM('<section></section>'),host=dom.window.document.querySelector('section'),j=job();
   j.observations=[];
   j.historical_validation={status:'completed',holdout_rows:3,training_rows:40,metrics:{count:3,point_count:3,mae:1.25,rmse:2,smape:.05,average_wql:.2}};
   render(host,j);
-  assert.deepEqual([...host.querySelectorAll('dd')].map(el=>el.textContent),['1.25','2','5.00%','0.2']);
-  assert.equal(host.querySelectorAll('dl > div').length,4);
-  assert.match(host.textContent,/Historical validation/);assert.match(host.textContent,/40 earlier training values/);
-  assert.doesNotMatch(host.textContent,/Waiting for|Not available|Choose Reproduce/);
+  assert.deepEqual([...host.querySelectorAll('details dd')].map(el=>el.textContent),['1.25','2','5.00%','0.2']);
+  assert.equal(host.querySelector('details').open,false);
+  assert.match(host.textContent,/separate forecast/);assert.match(host.textContent,/40 earlier training values/);
+  assert.match(host.textContent,/No additional forecast/);
+  assert.doesNotMatch(host.textContent,/Choose Reproduce/);
   dom.window.close();
 });
-test('validation failures, insufficient history and undefined metrics have specific explanations',()=>{
+test('normal forecasts do not request another historical run or invent unmatched metrics',()=>{
   const dom=new JSDOM('<section></section>'),host=dom.window.document.querySelector('section'),j=job();j.observations=[];
-  for(const [status,reason] of [['failed',/could not complete/],['insufficient_history',/Not enough history/],['no_matching_outcomes',/no observed timestamps matched/]]) {
-    j.historical_validation={status,minimum_training_rows:32};render(host,j);assert.match(host.textContent,reason);
+  for(const status of ['failed','insufficient_history','no_matching_outcomes',undefined]) {
+    j.historical_validation=status?{status,minimum_training_rows:32}:undefined;render(host,j);assert.match(host.textContent,/No additional forecast/);
+    assert.doesNotMatch(host.textContent,/Reproduce|retry|withhold validation/i);
     assert.equal(host.querySelectorAll('dd').length,4);assert.ok([...host.querySelectorAll('dd')].every(el=>el.textContent==='—'));
   }
   j.historical_validation={status:'completed',holdout_rows:3,training_rows:40,metrics:{count:3,point_count:0,mae:null,rmse:null,smape:null,average_wql:null}};
