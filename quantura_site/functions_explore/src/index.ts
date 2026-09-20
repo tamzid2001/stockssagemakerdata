@@ -8384,7 +8384,7 @@ ROUTES.get("/screener/data", async (req, res) => {
       dataSource: perps ? "kalshi_perps" : "validated_github_release",
       warnings: current.warnings,
       schemaVersion: dataset.schema_version,
-      signalPolicy: perps ? "Completed trade closes in USD per contract. Forecasts are on demand; no scheduled quantile signals or closing-session alerts." : "Latest completed minute close (including extended hours), historical-close fallback. Before the first forecast session, compare with its first row. Saved closing signals are separate.",
+      signalPolicy: perps ? "Kalshi reference prices normalized to USD per underlying unit; normalized completed trade close fallback. Forecasts are on demand; no scheduled quantile signals or closing-session alerts." : "Latest completed minute close (including extended hours), historical-close fallback. Before the first forecast session, compare with its first row. Saved closing signals are separate.",
     });
   } catch (error: any) {
     const detail = sanitizeText(error?.message || error, 120);

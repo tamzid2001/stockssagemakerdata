@@ -156,6 +156,50 @@ def test_perpetual_short_history_preserves_price_units_and_weekend_dates() -> No
         execute_job({**job, "source": {"type": "ticker"}}, mock=True)
 
 
+def test_recent_signal_search_withholds_next_close_and_walks_cutoffs() -> None:
+    rows = [
+        {"timestamp": f"2026-09-{day:02d}T00:00:00Z", "target": value}
+        for day, value in enumerate([100.0, 100.5, 100.0, 120.0], start=1)
+    ]
+    job = {
+        "source": {"type": "kalshi_perp", "provider": "kalshi_perps"},
+        "dataset_hash": "immutable-full-series",
+        "request": {
+            "analysis_mode": "recent_signal_search", "search_max_cutoffs": 10,
+            "prediction_length": 7, "horizon_mode": "frequency_periods",
+            "frequency": "1D", "calendar": "NONE", "transform": "auto",
+            "quantiles": [0.1, 0.5, 0.9],
+            "models": {"prophet": {"enabled": True, "weight": 1}},
+        },
+        "input": {"rows": rows, "frequency": "1D", "timezone": "UTC"},
+    }
+    result = execute_job(job, mock=True)
+    search = result["recent_signal_search"]
+    assert search["status"] == "found" and search["signal"] == "sell"
+    assert search["cutoffs_examined"] == 1
+    assert search["next_observation"] == {"timestamp": rows[-1]["timestamp"], "price": 120.0}
+    assert result["selected_history"] == rows[:-1]
+    assert result["predictions"][0]["quantiles"]["0.9"] < 120.0
+    assert result["dataset_hash"] == "immutable-full-series"
+
+
+def test_recent_signal_search_is_bounded_when_no_signal_is_found() -> None:
+    rows = [
+        {"timestamp": f"2026-09-{day:02d}T00:00:00Z", "target": 100.0 + day / 100}
+        for day in range(1, 8)
+    ]
+    request = {
+        "analysis_mode": "recent_signal_search", "search_max_cutoffs": 2,
+        "prediction_length": 7, "horizon_mode": "frequency_periods",
+        "frequency": "1D", "calendar": "NONE", "transform": "auto",
+        "quantiles": [0.1, 0.5, 0.9],
+        "models": {"prophet": {"enabled": True, "weight": 1}},
+    }
+    result = execute_job({"source": {"type": "kalshi_perp"}, "request": request, "input": {"rows": rows}}, mock=True)
+    assert result["recent_signal_search"]["status"] == "not_found"
+    assert result["recent_signal_search"]["cutoffs_examined"] == 2
+
+
 def test_monotonic_rearrangement() -> None:
     repaired = monotonic_rearrangement(np.array([[3.0, 1.0], [1.0, 2.0], [2.0, 3.0]]))
     assert repaired.tolist() == [[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]

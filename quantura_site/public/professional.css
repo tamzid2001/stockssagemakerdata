@@ -759,7 +759,9 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .ensemble-advanced-settings, .ensemble-model-fieldset, .ensemble-quantile-fieldset { min-inline-size: 0; max-inline-size: 100%; }
 .ensemble-preset-row .field { flex: 0 1 200px; min-width: 0; width: 100%; }
 #ensemble-custom-quantiles { max-width: 440px; }
-#ensemble-run-button { width: auto; max-width: 100%; justify-self: start; }
+.ensemble-primary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.ensemble-primary-actions .cta { width: auto; max-width: 100%; justify-content: center; }
+.ensemble-signal-search-help { margin: 7px 0 0; max-width: 760px; line-height: 1.45; }
 .market-search-form :is(input, select, button), .ensemble-model-card :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .ensemble-model-card select { width: 100%; text-overflow: ellipsis; }
 @media (min-width: 769px) {
@@ -771,6 +773,8 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
   #ensemble-forecast-form input[type="datetime-local"] { appearance: none; min-inline-size: 0; }
   #ensemble-forecast-form .field:has(input[type="datetime-local"]:not([hidden])),
   #ensemble-forecast-form .field:has(input[type="file"]) { grid-column: 1 / -1; }
+  .ensemble-primary-actions { display: grid; grid-template-columns: 1fr; }
+  .ensemble-primary-actions .cta { width: 100%; }
 }
 .panel[data-panel="forecast"] > .ensemble-forecast-shell { margin-top: 8px; }
 .market-timing { color: var(--success); }

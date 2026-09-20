@@ -254,6 +254,8 @@ function modelSupportsQuantile(modelId: ModelId, quantile: number): boolean {
 }
 
 type NormalizedConfiguration = {
+  analysis_mode: "forecast" | "recent_signal_search";
+  search_max_cutoffs: number | null;
   toto_variant: string;
   prediction_length: number;
   horizon_mode: "trading_sessions" | "calendar_days" | "frequency_periods";
@@ -269,7 +271,15 @@ type NormalizedConfiguration = {
 };
 
 export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey): NormalizedConfiguration {
-  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes"], "configuration");
+  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs"], "configuration");
+  const analysisModeRaw = text(body.analysis_mode || "forecast", 40);
+  if (!new Set(["forecast", "recent_signal_search"]).has(analysisModeRaw)) throw new Error("analysis_mode_unsupported");
+  let searchMaximum: number | null = null;
+  if (analysisModeRaw === "recent_signal_search") {
+    const raw = body.search_max_cutoffs ?? 20;
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > 30) throw new Error("search_max_cutoffs_unsupported");
+    searchMaximum = raw;
+  }
   const totoVariant = body.toto_variant ?? modelRegistry.models.toto.defaultVariant;
   if (typeof totoVariant !== "string" || !modelRegistry.models.toto.variants.some(v => v.id === totoVariant)) throw new Error("toto_variant_unsupported");
   historyCutoffAt(body.history_lag_minutes);
@@ -315,6 +325,8 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
   const centralTotal = central.reduce((sum, modelId) => sum + models[modelId].weight, 0);
   const effectiveCentralWeights = Object.fromEntries(central.map((modelId) => [modelId, models[modelId].weight / centralTotal]));
   return {
+    analysis_mode: analysisModeRaw as NormalizedConfiguration["analysis_mode"],
+    search_max_cutoffs: searchMaximum,
     prediction_length: predictionLength,
     toto_variant: totoVariant,
     horizon_mode: horizonModeRaw as NormalizedConfiguration["horizon_mode"],
@@ -500,7 +512,7 @@ async function materializeSource(
     const history=await kalshiPerps.history({symbol:source.symbol,frequency,limit,end:cutoff});
     return {rows:normalizeSeriesRows(history.rows,"timestamp","close",2,5000),frequency,timezone:"UTC",
       source:{type,provider:"kalshi_perps",symbol:history.symbol,title:history.market.name,frequency,limit,
-        field:"price.close",units:"USD per contract",contract_size:history.market.contract_size,
+        field:"price.close / (contract_size * underlying_multiplier)",provider_field:"price.close",units:"USD per underlying unit",contract_size:history.market.contract_size,
         underlying_multiplier:history.market.underlying_multiplier,provenance:history.metadata,warnings:history.warnings,
         redistribution_status:"review_required"}};
   }
@@ -659,6 +671,8 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     frequency: plain(data.request).frequency,
     calendar: plain(data.request).calendar,
     model_failure_policy: plain(data.request).failure_policy,
+    analysis_mode: plain(data.request).analysis_mode || "forecast",
+    search_max_cutoffs: plain(data.request).search_max_cutoffs || null,
     models: plain(data.request).models,
     toto_variant: plain(data.request).toto_variant,
     model_checkpoints: data.model_checkpoints,
@@ -682,6 +696,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     output.prepared_series_hash = result.prepared_series_hash;
     output.result_hash = result.result_hash;
     output.model_runtime = Array.isArray(result.models) ? result.models : [];
+    if (result.recent_signal_search) output.recent_signal_search = result.recent_signal_search;
     if (result.historical_validation) output.historical_validation = publicHistoricalValidation(plain(result.historical_validation));
   }
   return output;
@@ -759,9 +774,14 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
     if (!existing.exists) transaction.create(resultRef, {
       forecast_id: ref.id, schema_version: WORKER_SCHEMA_VERSION,
       ...Object.fromEntries(["effective_weights_by_quantile", "models", "model_runs", "transform", "warnings", "failures", "dataset_hash", "prepared_series_hash", "result_hash", "runtime_seconds", "runtime", "historical_validation"].map(key => [key, body[key] ?? null])),
-      predictions: validated.predictions, quantiles: validated.quantiles, created_at: completedAt,
+      predictions: validated.predictions, quantiles: validated.quantiles,
+      recent_signal_search: validated.recentSignalSearch || null,
+      selected_history: validated.selectedHistory || null,
+      created_at: completedAt,
     });
-    const completed = {status:"completed",completed_at:completedAt,updated_at:completedAt,lease_expires_at:null,warnings:body.warnings || [],progress:{completed_models:Array.isArray(body.models)?body.models.length:0,total_models:Array.isArray(body.models)?body.models.length:0,current_model:null}};
+    const completed = {status:"completed",completed_at:completedAt,updated_at:completedAt,lease_expires_at:null,warnings:body.warnings || [],
+      ...(validated.recentSignalSearch ? {analysis_cutoff_at:validated.recentSignalSearch.history_cutoff_at} : {}),
+      progress:{completed_models:Array.isArray(body.models)?body.models.length:0,total_models:Array.isArray(body.models)?body.models.length:0,current_model:null}};
     transaction.set(ref, completed, {merge:true});
     if (usageSnap.exists) transaction.set(usage,{active:Math.max(0,Number(usageSnap.data()?.active || 0)-1),updated_at:completedAt},{merge:true});
     const cacheId = crypto.createHash("sha256").update(`${job.workspace_id}:${job.request_hash}`).digest("hex");
@@ -796,7 +816,7 @@ function validWorkerToken(req: Request): boolean {
   return configured.length >= 32 && configured.length === supplied.length && crypto.timingSafeEqual(configured, supplied);
 }
 
-export function validateWorkerResult(body: JsonRecord, job: JsonRecord): { quantiles: number[]; predictions: JsonRecord[] } {
+export function validateWorkerResult(body: JsonRecord, job: JsonRecord): { quantiles: number[]; predictions: JsonRecord[]; recentSignalSearch?: JsonRecord; selectedHistory?: Array<{timestamp:string;target:number}> } {
   validateHistoricalValidation(body.historical_validation);
   const requested = normalizeRequestedQuantiles(plain(job.request).quantiles);
   const quantiles = normalizeRequestedQuantiles(body.quantiles);
@@ -829,7 +849,29 @@ export function validateWorkerResult(body: JsonRecord, job: JsonRecord): { quant
     const total = entries.reduce((sum, [, weight]) => sum + Number(weight), 0);
     if (Math.abs(total - 1) > 1e-5) throw new Error("forecast_result_weights_invalid");
   }
-  return { quantiles, predictions };
+  const mode = text(plain(job.request).analysis_mode || "forecast",40);
+  if (mode !== "recent_signal_search") {
+    if (body.recent_signal_search !== undefined || body.selected_history !== undefined) throw new Error("forecast_result_search_invalid");
+    return { quantiles, predictions };
+  }
+  const search = plain(body.recent_signal_search), next = plain(search.next_observation), thresholds = plain(search.thresholds);
+  const status = text(search.status,20), signal = text(search.signal,20), cutoff = iso(search.history_cutoff_at), nextTimestamp = iso(next.timestamp);
+  const examined = Number(search.cutoffs_examined), maximum = Number(search.max_cutoffs), price = finite(next.price);
+  const historyRowCount=Number(search.history_row_count), expectedHistoryRows=Number(job.input_row_count || 0)-examined;
+  const p10=finite(thresholds.p10),p50=finite(thresholds.p50),p90=finite(thresholds.p90);
+  const firstQuantiles=plain(predictions[0]?.quantiles), requestedMaximum=Number(plain(job.request).search_max_cutoffs || 20);
+  if (!new Set(["found","not_found"]).has(status) || !new Set(["buy","sell","none"]).has(signal) ||
+      (status === "found") !== (signal !== "none") || !Number.isInteger(examined) || examined < 1 ||
+      !Number.isInteger(maximum) || maximum !== requestedMaximum || maximum < examined || maximum > 30 ||
+      !Number.isInteger(historyRowCount) || historyRowCount !== expectedHistoryRows || historyRowCount < 2 || !cutoff || !nextTimestamp || nextTimestamp <= cutoff ||
+      price === null || p10 === null || p50 === null || p90 === null || p10 > p50 || p50 > p90 ||
+      p10 !== finite(firstQuantiles["0.1"]) || p50 !== finite(firstQuantiles["0.5"]) || p90 !== finite(firstQuantiles["0.9"]) ||
+      (signal === "buy" && !(price < p10)) || (signal === "sell" && !(price > p90)) ||
+      (signal === "none" && !(price >= p10 && price <= p90))) throw new Error("forecast_result_search_invalid");
+  const selectedHistory = normalizeSeriesRows(body.selected_history,"timestamp","target",2,500);
+  if (selectedHistory.at(-1)?.timestamp !== cutoff || selectedHistory.length !== Math.min(historyRowCount,500)) throw new Error("forecast_result_search_invalid");
+  return {quantiles,predictions,recentSignalSearch:{status,signal,cutoffs_examined:examined,max_cutoffs:maximum,history_cutoff_at:cutoff,history_row_count:historyRowCount,
+    next_observation:{timestamp:nextTimestamp,price},thresholds:{p10,p50,p90},rule:text(search.rule,240)},selectedHistory};
 }
 
 function internal(options: Options, handler: (req: Request, res: Response, requestId: string) => Promise<void>) {
@@ -913,7 +955,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
 
   router.post("/v1/ensemble-forecasts", wrap(options, async (req, res, principal, requestId) => {
     const body = plain(req.body);
-    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes"], "request");
+    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs"], "request");
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
@@ -923,6 +965,12 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const materialized = await materializeSource(options, principal, workspaceId, body.source, cutoff);
     const calendarBody = materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
     const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(calendarBody, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
+    if (configuration.analysis_mode === "recent_signal_search") {
+      if (body.prediction_end_at || cutoff !== undefined || configuration.prediction_length !== 7 ||
+          ![.1,.5,.9].every(q => configuration.quantiles.includes(q))) {
+        throw new PredictionMarketDataError("recent_signal_search_configuration_invalid", "Recent signal search uses the latest history, a seven-period forecast, and P10/P50/P90.", 422);
+      }
+    }
     if (cutoff !== undefined) Object.assign(materialized.source, { history_lag_minutes: body.history_lag_minutes || 0,
       requested_input_cutoff_at: new Date(cutoff).toISOString(), analysis_mode: "historical_replay" });
     if (body.prediction_end_at) materialized.source.requested_prediction_end_at = iso(body.prediction_end_at);
@@ -941,6 +989,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       calendar: ["prediction_market","kalshi_perp"].includes(text(materialized.source.type)) ? "NONE" : configuration.calendar,
       models: configuration.models,
       toto_variant: configuration.toto_variant,
+      ...(configuration.analysis_mode === "recent_signal_search" ? {analysis_mode:configuration.analysis_mode,search_max_cutoffs:configuration.search_max_cutoffs} : {}),
     };
     const hash = requestHash(workspaceId, sourceHash, normalizedRequest);
     const idempotencyKey = text(req.headers["idempotency-key"], 180);
@@ -1111,7 +1160,10 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     }
     const result = text(data.status, 40) === "completed" ? await options.db.collection(RESULTS).doc(forecastId).get() : null;
     const payload = publicEnsembleJob(forecastId, data, result?.exists ? plain(result.data()) : null);
-    if (result?.exists) payload.history = (await loadInputRows(job.ref, 2)).slice(-500);
+    if (result?.exists) {
+      const resultData=plain(result.data());
+      payload.history = Array.isArray(resultData.selected_history) ? resultData.selected_history : (await loadInputRows(job.ref, 2)).slice(-500);
+    }
     sendData(res, payload, requestId);
   }));
 
@@ -1130,7 +1182,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     if (cached && cached.until > Date.now()) { sendData(res, await cached.value, requestId); return; }
     const load = async (): Promise<JsonRecord> => {
     const source = plain(data.source), config = plain(data.request);
-    const cutoff = Date.parse(text(data.input_cutoff_at) || (await loadInputRows(snap.ref, 2)).at(-1)!.timestamp);
+    const cutoff = Date.parse(text(data.analysis_cutoff_at || data.input_cutoff_at) || (await loadInputRows(snap.ref, 2)).at(-1)!.timestamp);
     const frequency = text(config.frequency, 30);
     let rows: Array<{ timestamp: string; target: number }> = [];
     let availability = "available";

@@ -30,7 +30,7 @@ test("perpetual forecast uses protected durable jobs, USD closes, frequency cale
     const response=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}`,"Content-Type":"application/json"},body:JSON.stringify(request)});
     assert.equal(response.status,202,await response.clone().text());const id=(await response.json()).data.forecast_id;
     const job=(await db.collection("ensemble_forecast_jobs").doc(id).get()).data()!;
-    assert.equal(job.source.type,"kalshi_perp");assert.equal(job.source.units,"USD per contract");assert.equal(job.request.calendar,"NONE");assert.notEqual(job.request.transform,"logit");assert.equal(job.input_row_count,48);assert.equal(job.evaluation_policy,null);
+    assert.equal(job.source.type,"kalshi_perp");assert.equal(job.source.units,"USD per underlying unit");assert.equal(job.request.calendar,"NONE");assert.notEqual(job.request.transform,"logit");assert.equal(job.input_row_count,48);assert.equal(job.evaluation_policy,null);
     assert.equal((await fetch(`${base}/v1/ensemble-forecasts/${id}/observations`,{headers:{Authorization:`Bearer another_${uid}`}})).status,403);
     const invalid=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}`,"Content-Type":"application/json"},body:JSON.stringify({...request,horizon_mode:"trading_sessions"})});
     assert.equal(invalid.status,422);

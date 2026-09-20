@@ -1,0 +1,67 @@
+name: Kalshi perpetual daily backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      minimum_history:
+        description: Minimum daily closes before each cutoff
+        required: true
+        default: "2"
+      max_markets:
+        description: Optional market cap (blank means every active perpetual)
+        required: false
+        default: ""
+      max_origins:
+        description: Optional recent-origin cap per market (blank means every eligible close)
+        required: false
+        default: ""
+      smoke_mode:
+        description: Use real Prophet for publishable results; mock is deterministic workflow validation only
+        required: true
+        type: choice
+        options: [real, mock]
+        default: real
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kalshi-perpetual-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ensemble-forecast.lock
+      - name: Install pinned forecast runtime
+        run: pip install --require-hashes -r requirements-ensemble-forecast.lock
+      - name: Verify backtest and forecast engine
+        run: pytest -q ensemble_forecasting/tests/test_kalshi_perp_backtest.py ensemble_forecasting/tests/test_engine.py
+      - name: Run daily cutoff backtest
+        env:
+          MINIMUM_HISTORY: ${{ inputs.minimum_history }}
+          MAX_MARKETS: ${{ inputs.max_markets }}
+          MAX_ORIGINS: ${{ inputs.max_origins }}
+          SMOKE_MODE: ${{ inputs.smoke_mode }}
+        run: |
+          args=(--output artifacts/kalshi-perpetual-backtest --minimum-history "$MINIMUM_HISTORY")
+          if [[ -n "$MAX_MARKETS" ]]; then args+=(--max-markets "$MAX_MARKETS"); fi
+          if [[ -n "$MAX_ORIGINS" ]]; then args+=(--max-origins "$MAX_ORIGINS"); fi
+          if [[ "$SMOKE_MODE" == "mock" ]]; then args+=(--mock); fi
+          python -m ensemble_forecasting.kalshi_perp_backtest "${args[@]}"
+      - name: Publish run summary
+        run: cat artifacts/kalshi-perpetual-backtest/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Store immutable run artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalshi-perpetual-backtest-${{ github.run_id }}-${{ inputs.smoke_mode }}
+          path: artifacts/kalshi-perpetual-backtest/
+          if-no-files-found: error
+          retention-days: 90

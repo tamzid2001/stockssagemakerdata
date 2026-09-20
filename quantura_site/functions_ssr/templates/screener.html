@@ -70,8 +70,8 @@
             <div class="qs-eyebrow"><span class="qs-live-dot" aria-hidden="true"></span> Stocks &amp; perpetual contracts</div>
             <h1 id="screener-title">Q Screener</h1>
             <p>
-              Compare stock closes with weekly forecast quantiles, or browse Kalshi perpetual trade closes and open an on-demand forecast.
-              Stock signals include extended hours; saved session-closing signals remain separate. Perpetual prices are USD per contract, not underlying spot prices.
+              Compare stock closes with weekly forecast quantiles, or browse Kalshi perpetual prices and open an on-demand forecast.
+              Stock signals include extended hours; saved session-closing signals remain separate. Perpetual reference prices and trade history use the underlying spot scale.
             </p>
           </div>
           <div class="qs-hero-actions">
@@ -111,7 +111,7 @@
             <span id="qs-filter-count">0 active</span>
           </summary>
           <form id="qs-filters" novalidate>
-            <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · weekly ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · trade closes</option></select></label>
+            <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · weekly ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · spot scale</option></select></label>
               <label class="qs-field qs-search-field">
                 <span>Search</span>
                 <div class="qs-input-icon"><i class="iconoir-search" aria-hidden="true"></i><input id="qs-search" name="search" type="search" placeholder="Ticker or company, e.g. PLTR" autocomplete="off" /></div>

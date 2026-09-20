@@ -87,7 +87,8 @@
   function formatPrice(value) {
     const parsed = finite(value);
     if (parsed === null) return "Unavailable";
-    const digits = Math.abs(parsed) < 10 ? 4 : 2;
+    const absolute = Math.abs(parsed);
+    const digits = absolute >= 10 ? 2 : absolute >= 1 ? 4 : absolute >= 0.01 ? 6 : 8;
     return `$${formatNumber(parsed, digits)}`;
   }
 
@@ -288,17 +289,17 @@
     const analysisUrl = suppliedUrl.startsWith("/") && !suppliedUrl.startsWith("//")
       ? suppliedUrl
       : `/forecasting?ticker=${encodeURIComponent(String(row.ticker || ""))}`;
-    const actualStamp = row.actual_price_timestamp ? ` title="Actual close ${escapeHtml(formatDate(row.actual_price_timestamp, true))}"` : "";
+    const actualStamp = row.actual_price_timestamp ? ` title="Observed price ${escapeHtml(formatDate(row.actual_price_timestamp, true))}"` : "";
     return `<tr>
-      <td data-label="Security"><div class="qs-security"><a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>${row.forecast_action === "create" ? "Forecast" : "View forecast"}</a>`:'<small>Weekly forecast not published</small>'}</div></td>
-      <td data-label="Actual" class="qs-mono"${actualStamp}>${escapeHtml(formatPrice(row.actual_price))}<small>${escapeHtml(formatDate(row.actual_price_timestamp,true))}</small><small>${escapeHtml(String(row.quote_session || "historical").replace(/_/g," "))} · ${escapeHtml(row.quote_source || row.data_source || "historical")}</small></td>
-      ${["p01","p10","p25","p50","p75","p90","p99"].map(q=>`<td data-label="${q.toUpperCase()}" class="qs-mono" title="${escapeHtml(current.statistic === "row" ? "Comparison session" : `Horizon ${current.statistic}`)}">${escapeHtml(formatPrice(current.statistic === "row" ? row[q] : row.quantile_stats?.[q]?.[current.statistic]))}</td>`).join("")}
-      <td data-label="Position"><span class="${position[1]}">${escapeHtml(position[0])}</span></td>
-      <td data-label="Distance P10 / P50 / P90"><div class="qs-distance-stack">${distanceView(row.distance_p10_pct)}${distanceView(row.distance_p50_pct)}${distanceView(row.distance_p90_pct)}</div></td>
-      <td data-label="Market cap" class="qs-mono">${escapeHtml(formatCap(row.market_cap, row.is_etf))}</td>
-      <td data-label="Current signal">${signalView(row)}</td>
-      <td data-label="Last saved buy/sell">${savedSignalView(row)}</td>
-      <td data-label="Updated" title="Forecast horizon ends ${escapeHtml(formatDate(row.forecast_date, false))}">${escapeHtml(formatDate(row.last_forecast_update, true))}</td>
+      <td data-label="Security"><div class="qs-security"><a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>${row.forecast_action === "create" ? "Forecast" : "View forecast"}</a>`:'<small>Weekly forecast not published</small>'}<button class="qs-row-toggle" type="button" data-row-toggle aria-expanded="false" aria-label="Show more metrics for ${escapeHtml(row.ticker)}"><span>More metrics</span><i class="iconoir-nav-arrow-down" aria-hidden="true"></i></button></div></td>
+      <td data-label="Actual" class="qs-mono qs-mobile-core"${actualStamp}>${escapeHtml(formatPrice(row.actual_price))}<small>${escapeHtml(formatDate(row.actual_price_timestamp,true))}</small><small>${escapeHtml(String(row.quote_session || "historical").replace(/_/g," "))} · ${escapeHtml(String(row.quote_source || row.data_source || "historical").replace(/_/g," "))}</small></td>
+      ${["p01","p10","p25","p50","p75","p90","p99"].map(q=>`<td data-label="${q.toUpperCase()}" class="qs-mono ${["p10","p50","p90"].includes(q)?"qs-mobile-core":"qs-mobile-detail"}" title="${escapeHtml(current.statistic === "row" ? "Comparison session" : `Horizon ${current.statistic}`)}">${escapeHtml(formatPrice(current.statistic === "row" ? row[q] : row.quantile_stats?.[q]?.[current.statistic]))}</td>`).join("")}
+      <td data-label="Position" class="qs-mobile-detail"><span class="${position[1]}">${escapeHtml(position[0])}</span></td>
+      <td data-label="Distance P10 / P50 / P90" class="qs-mobile-detail"><div class="qs-distance-stack">${distanceView(row.distance_p10_pct)}${distanceView(row.distance_p50_pct)}${distanceView(row.distance_p90_pct)}</div></td>
+      <td data-label="Market cap" class="qs-mono qs-mobile-detail">${escapeHtml(formatCap(row.market_cap, row.is_etf))}</td>
+      <td data-label="Current signal" class="qs-mobile-core">${signalView(row)}</td>
+      <td data-label="Last saved buy/sell" class="qs-mobile-detail">${savedSignalView(row)}</td>
+      <td data-label="Updated" class="qs-mobile-detail" title="Forecast horizon ends ${escapeHtml(formatDate(row.forecast_date, false))}">${escapeHtml(formatDate(row.last_forecast_update, true))}</td>
     </tr>`;
   }
 
@@ -335,10 +336,12 @@
     const weekly=payload.schemaVersion === "quantura-screener-v3";
     const perps=payload.dataSource==="kalshi_perps";
     document.getElementById("qs-engine").textContent=perps ? "Forecast on demand" : weekly ? "Five-model weekly ensemble" : "Prior validated scan";
-    document.getElementById("qs-engine-detail").textContent=perps ? "USD per contract · no scheduled quantiles" : weekly ? "1 session withheld · 7 NYSE sessions · Toto 4M" : "Weekly ensemble scan not published yet";
-    if(perps)refs.metricProcessed.textContent=`${manifest.successfully_processed} closes available · ${manifest.failed} unavailable`;
-    refs.freshness.textContent = `Scan ${formatDate(payload.generatedAt, true)} · latest completed minute close or historical fallback · quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`;
-    refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} securities match the active research filters.`;
+    document.getElementById("qs-engine-detail").textContent=perps ? "USD per underlying unit · reference spot scale" : weekly ? "1 session withheld · 7 NYSE sessions · Toto 4M" : "Weekly ensemble scan not published yet";
+    if(perps)refs.metricProcessed.textContent=`${manifest.successfully_processed} spot references available · ${manifest.failed} unavailable`;
+    refs.freshness.textContent = perps
+      ? `Scan ${formatDate(payload.generatedAt, true)} · Kalshi reference prices normalized by contract exposure, with normalized completed trades as fallback. Quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`
+      : `Scan ${formatDate(payload.generatedAt, true)} · latest completed minute close or historical fallback · quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`;
+    refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} ${perps ? "markets" : "securities"} match the active research filters.`;
     current.page = Number(payload.page || current.page || 1);
     refs.pageLabel.textContent = `Page ${current.page.toLocaleString()} of ${Number(payload.pageCount || 1).toLocaleString()}`;
     refs.previous.disabled = current.page <= 1;
@@ -423,6 +426,14 @@
   refs.next.addEventListener("click", () => {
     current.page += 1;
     load();
+  });
+  refs.tableBody.addEventListener("click", event=>{
+    const button=event.target.closest("[data-row-toggle]");if(!button)return;
+    const row=button.closest("tr"),expanded=!row.classList.contains("is-expanded");
+    row.classList.toggle("is-expanded",expanded);button.setAttribute("aria-expanded",String(expanded));
+    button.querySelector("span").textContent=expanded?"Fewer metrics":"More metrics";
+    button.querySelector("i")?.classList.toggle("iconoir-nav-arrow-up",expanded);
+    button.querySelector("i")?.classList.toggle("iconoir-nav-arrow-down",!expanded);
   });
   refs.export.addEventListener("click", (event) => {
     if (refs.export.getAttribute("aria-disabled") === "true") event.preventDefault();

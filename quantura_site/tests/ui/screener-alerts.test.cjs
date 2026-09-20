@@ -1,6 +1,6 @@
 const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const {JSDOM}=require('jsdom');
 const root=path.resolve(__dirname,'../..');const tick=()=>new Promise(r=>setTimeout(r,0));
-function setup(){const d=new JSDOM(fs.readFileSync(path.join(root,'pages/screener.html'),'utf8'),{url:'https://quantura.studio/screener',runScripts:'outside-only'});d.window.fetch=async()=>({ok:true,json:async()=>({items:[],total:0,page:1,pageCount:1})});const calls=[];d.window.QuanturaScreenerAccount={request:async(p,o)=>{calls.push([p,o]);return {data:[],items:[]};}};d.window.eval(fs.readFileSync(path.join(root,'public/screener.js'),'utf8'));return {d,w:d.window,calls};}
+function setup(payload={items:[],total:0,page:1,pageCount:1}){const d=new JSDOM(fs.readFileSync(path.join(root,'pages/screener.html'),'utf8'),{url:'https://quantura.studio/screener',runScripts:'outside-only'});d.window.fetch=async()=>({ok:true,json:async()=>payload});const calls=[];d.window.QuanturaScreenerAccount={request:async(p,o)=>{calls.push([p,o]);return {data:[],items:[]};}};d.window.eval(fs.readFileSync(path.join(root,'public/screener.js'),'utf8'));return {d,w:d.window,calls};}
 test('saved filters preserve quantile AND rules and email is opt-in',async()=>{
   const {d,w,calls}=setup();await tick();w.document.getElementById('qs-add-rule').click();await tick();
   assert.equal(w.document.getElementById('qs-alert-email').checked,false);
@@ -21,4 +21,12 @@ test('guest errors are visible, saved markup escaped and remove uses own account
 test('shared screener shows seven quantiles, no earnings or obsolete special-signal UI',()=>{
   const {d,w}=setup();const html=w.document.getElementById('qs-filters').textContent;assert.doesNotMatch(html,/Earnings|Special P10|Model bias/);
   assert.ok(w.document.getElementById('qs-statistic'));assert.ok(w.document.getElementById('qs-signal'));d.window.close();
+});
+test('mobile result cards keep core ticker metrics visible and expand one row at a time',async()=>{
+  const row={ticker:'GOLD',company_name:'Gold',actual_price:4381.3,actual_price_timestamp:'2026-09-20T12:00:00Z',p01:70,p10:80,p25:90,p50:100,p75:110,p90:120,p99:130,current_signal:{value:'buy',forecast_date:'2026-09-21'},quantile_position:'below_p10',forecast_view_url:'/forecasting?ticker=GOLD',forecast_action:'view'};
+  const {d,w}=setup({items:[row],total:1,universeCount:1,page:1,pageCount:1,generatedAt:'2026-09-20T12:00:00Z',manifest:{successfully_processed:1,failed:0,coverage_percentage:100}});await tick();
+  const result=w.document.querySelector('#qs-table-body tr'),toggle=result.querySelector('[data-row-toggle]');
+  assert.equal(result.querySelectorAll('.qs-mobile-core').length,5);assert.equal(result.querySelectorAll('.qs-mobile-detail').length,9);
+  assert.equal(toggle.getAttribute('aria-expanded'),'false');toggle.click();assert.equal(result.classList.contains('is-expanded'),true);assert.equal(toggle.getAttribute('aria-expanded'),'true');assert.match(toggle.textContent,/Fewer metrics/);
+  toggle.click();assert.equal(result.classList.contains('is-expanded'),false);assert.match(toggle.textContent,/More metrics/);d.window.close();
 });

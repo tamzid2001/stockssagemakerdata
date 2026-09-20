@@ -141,7 +141,7 @@
                             <div class="field">
                               <label class="label" for="ensemble-source-type">Historical data source</label>
                               <select id="ensemble-source-type" name="source_type">
-                                <option value="ticker">Market ticker</option><option value="kalshi_perp">Kalshi perpetual · USD per contract</option>
+                                <option value="ticker">Market ticker</option><option value="kalshi_perp">Kalshi perpetual · underlying spot scale</option>
                                 <option value="prediction_market">Selected prediction market</option>
                                 <option value="series">Upload your own CSV</option>
                               </select>
@@ -244,7 +244,11 @@
                           </div>
                           </details>
 
-                          <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
+                          <div class="ensemble-primary-actions">
+                            <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
+                            <button id="ensemble-find-signal" class="cta secondary" type="button" title="Walk recent cutoffs backward, forecast the next seven periods, and stop at the first next-close P10/P90 breach"><i class="iconoir-search" aria-hidden="true"></i><span>Find recent high / low</span></button>
+                          </div>
+                          <p class="small muted ensemble-signal-search-help">Uses the configured source and models. Each attempt withholds the next actual close, then classifies buy below P10 or sell above P90. Up to 20 recent cutoffs are checked.</p>
                         </form>
                         <dialog id="ensemble-csv-help" class="ensemble-help-dialog" aria-labelledby="ensemble-csv-help-title">
                           <div class="forecast-section-heading"><h3 id="ensemble-csv-help-title">Forecast your own time series</h3><button id="ensemble-csv-help-close" class="task-chip" type="button">Close</button></div>
@@ -462,7 +466,7 @@
                         <div class="form-grid download-form-grid">
                           <div class="field">
                             <label class="label" for="market-history-source">Data source</label>
-                            <select id="market-history-source" name="source"><option value="kalshi_perps">Kalshi Perpetuals · USD per contract</option>
+                            <select id="market-history-source" name="source"><option value="kalshi_perps">Kalshi Perpetuals · underlying spot scale</option>
                               <option value="auto" selected>Automatic — Alpaca, then Yahoo Finance</option>
                               <option value="alpaca">Alpaca</option>
                               <option value="yahoo">Yahoo Finance</option>
