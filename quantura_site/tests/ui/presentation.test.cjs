@@ -87,6 +87,8 @@ test('Screener uses semantic tokens and contained responsive layouts', () => {
   assert.match(css,/minmax\(min\(100%, 145px\), 1fr\)/);
   assert.match(css,/\.qs-table-wrap \{[^}]*overflow: auto/);
   assert.match(css,/grid-template-columns: minmax\(0, .8fr\) minmax\(0, 1.2fr\)/);
+  assert.match(css,/\.qs-table tr\.is-expanded \.qs-mobile-detail/);
+  assert.match(css,/\.qs-pagination \{[\s\S]*?position: sticky/);
   const html=page('screener.html'); assert.match(html,/<details[^>]+open/);
   assert.match(source('screener-panel-lazy.js'),/if \(!requested\(\)\) return Promise.resolve/);
   assert.match(source('screener-workspace-loader.js'),/copy.querySelector\(".qs-main"\)/);

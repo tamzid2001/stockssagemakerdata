@@ -1,0 +1,158 @@
+name: Kalshi perpetual five-model daily backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      minimum_history:
+        description: Minimum daily closes before each cutoff (five-model minimum is 32)
+        required: true
+        default: "32"
+      max_origins:
+        description: Optional recent-origin cap per market (blank evaluates every eligible close)
+        required: false
+        default: ""
+      smoke_mode:
+        description: Real requires all five pinned weekly-ensemble models; mock only validates workflow mechanics
+        required: true
+        type: choice
+        options: [real, mock]
+        default: real
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kalshi-perpetual-five-model-backtest
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+  MINIMUM_HISTORY: ${{ inputs.minimum_history }}
+  MAX_ORIGINS: ${{ inputs.max_origins }}
+  SMOKE_MODE: ${{ inputs.smoke_mode }}
+
+jobs:
+  prepare:
+    name: Discover active perpetuals
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.markets.outputs.matrix }}
+      count: ${{ steps.markets.outputs.count }}
+    steps:
+      - name: Build immutable active-market matrix
+        id: markets
+        shell: bash
+        run: |
+          payload="$(curl --fail --silent --show-error --retry 3 --retry-all-errors \
+            'https://api.elections.kalshi.com/trade-api/v2/margin/markets')"
+          matrix="$(jq -c '{include: [.markets[] | select(.status == "active") | {ticker: .ticker}]}' <<< "$payload")"
+          count="$(jq '.include | length' <<< "$matrix")"
+          test "$count" -gt 0
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Kalshi perpetual five-model backtest"
+            echo
+            echo "Discovered $count active perpetual markets. Each market is evaluated independently, then combined only after every matrix job succeeds."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  market:
+    name: Backtest ${{ matrix.ticker }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      GRANITE_DEVICE: cpu
+      CUDA_VISIBLE_DEVICES: ''
+      TOKENIZERS_PARALLELISM: 'false'
+    steps:
+      - name: Checkout authoritative code
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-ensemble-forecast.lock
+      - name: Install locked five-model forecast runtime
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements-ensemble-forecast.lock
+          python -c 'from ensemble_forecasting.kalshi_perp_backtest import FIVE_MODEL_IDS, FIVE_MODEL_MINIMUM_HISTORY; assert len(FIVE_MODEL_IDS) == 5 and FIVE_MODEL_MINIMUM_HISTORY == 32'
+      - name: Check production model access and license gates
+        if: inputs.smoke_mode == 'real'
+        run: |
+          test "$TIMESFM_HF_ACCESS_APPROVED" = true
+          test "$TIMESFM_COMMERCIAL_LICENSED" = true
+          test -n "$HF_TOKEN"
+      - name: Verify backtest and forecast engine
+        run: pytest -q ensemble_forecasting/tests/test_kalshi_perp_backtest.py ensemble_forecasting/tests/test_engine.py
+      - name: Run strict daily cutoff five-model backtest
+        shell: bash
+        run: |
+          args=(
+            --output "artifacts/markets/${{ matrix.ticker }}"
+            --market "${{ matrix.ticker }}"
+            --minimum-history "$MINIMUM_HISTORY"
+          )
+          if [[ -n "$MAX_ORIGINS" ]]; then args+=(--max-origins "$MAX_ORIGINS"); fi
+          if [[ "$SMOKE_MODE" == "mock" ]]; then
+            export TIMESFM_HF_ACCESS_APPROVED=true
+            export ALLOW_NONCOMMERCIAL_TIMESFM=true
+            args+=(--mock)
+          fi
+          python -m ensemble_forecasting.kalshi_perp_backtest "${args[@]}"
+      - name: Publish market summary
+        run: cat "artifacts/markets/${{ matrix.ticker }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Store immutable market report
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalshi-perpetual-market-${{ matrix.ticker }}
+          path: artifacts/markets/${{ matrix.ticker }}/
+          if-no-files-found: error
+          retention-days: 2
+
+  aggregate:
+    name: Combine portfolio results
+    needs: [prepare, market]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout authoritative code
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install report dependencies
+        run: python -m pip install --disable-pip-version-check numpy httpx pandas-market-calendars
+      - name: Download every market report
+        uses: actions/download-artifact@v8
+        with:
+          pattern: kalshi-perpetual-market-*
+          path: artifacts/components
+      - name: Validate coverage and combine reports
+        run: |
+          test "$(find artifacts/components -name report.json | wc -l | tr -d ' ')" = "${{ needs.prepare.outputs.count }}"
+          python -m ensemble_forecasting.kalshi_perp_backtest \
+            --combine-dir artifacts/components \
+            --output artifacts/kalshi-perpetual-backtest \
+            --minimum-history "$MINIMUM_HISTORY"
+      - name: Publish portfolio summary
+        run: cat artifacts/kalshi-perpetual-backtest/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Store immutable combined results
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalshi-perpetual-backtest-${{ github.run_id }}-${{ inputs.smoke_mode }}
+          path: artifacts/kalshi-perpetual-backtest/
+          if-no-files-found: error
+          retention-days: 90

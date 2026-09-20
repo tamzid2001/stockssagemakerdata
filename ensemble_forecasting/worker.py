@@ -77,6 +77,108 @@ def adapter_factory(model_id: ModelId, *, mock: bool = False) -> ForecastAdapter
     return factories[model_id]()
 
 
+def _recent_signal_search(
+    job: Mapping[str, Any],
+    *,
+    progress: Callable[[Mapping[str, Any]], None],
+    mock: bool,
+    minimum_history_rows: int,
+) -> dict[str, Any]:
+    """Walk recent immutable cutoffs backward until the next close breaches P10/P90.
+
+    The observation immediately after each cutoff is withheld from inference and
+    used exactly once for classification. Search is bounded because every
+    cutoff reruns the configured models rather than recycling future output.
+    """
+    request = dict(job.get("request") or {})
+    if int(request.get("prediction_length") or 0) != 7:
+        raise ValueError("RECENT_SIGNAL_SEARCH_REQUIRES_SEVEN_STEPS")
+    requested = {round(float(value), 10) for value in request.get("quantiles") or []}
+    if not {0.1, 0.5, 0.9}.issubset(requested):
+        raise ValueError("RECENT_SIGNAL_SEARCH_REQUIRES_P10_P50_P90")
+    try:
+        maximum = int(request.get("search_max_cutoffs", 20))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("RECENT_SIGNAL_SEARCH_LIMIT_INVALID") from exc
+    if maximum < 1 or maximum > 30:
+        raise ValueError("RECENT_SIGNAL_SEARCH_LIMIT_INVALID")
+    source = dict(job.get("input") or {})
+    rows = source.get("rows")
+    if not isinstance(rows, list):
+        raise ValueError("worker input rows are missing")
+    enabled = [
+        model_id for model_id, selection in dict(request.get("models") or {}).items()
+        if isinstance(selection, Mapping) and selection.get("enabled") and float(selection.get("weight") or 0) > 0
+    ]
+    source_type = (job.get("source") or {}).get("type")
+    source_minimum = 2 if source_type in {"prediction_market", "kalshi_perp"} else minimum_history_rows
+    model_minimum = max(
+        [source_minimum]
+        + [int(MODEL_REGISTRY["models"].get(model_id, {}).get("minimumObservedContext") or 2) for model_id in enabled]
+    )
+    if len(rows) <= model_minimum:
+        raise ValueError(f"RECENT_SIGNAL_SEARCH_REQUIRES_{model_minimum + 1}_ROWS")
+    single_request = {key: value for key, value in request.items() if key not in {"analysis_mode", "search_max_cutoffs"}}
+    examined = 0
+    selected: dict[str, Any] | None = None
+    selected_history: list[dict[str, Any]] = []
+    selected_signal = "none"
+    selected_actual: dict[str, Any] | None = None
+    thresholds: dict[str, float] = {}
+    total_started = time.monotonic()
+    oldest_index = max(model_minimum - 1, len(rows) - 1 - maximum)
+    for cutoff_index in range(len(rows) - 2, oldest_index - 1, -1):
+        history = [dict(row) for row in rows[: cutoff_index + 1]]
+        actual = dict(rows[cutoff_index + 1])
+        candidate_job = {
+            **dict(job),
+            "request": single_request,
+            "input": {**source, "rows": history},
+        }
+        candidate = execute_job(
+            candidate_job,
+            progress=progress,
+            mock=mock,
+            minimum_history_rows=model_minimum,
+        )
+        examined += 1
+        first = dict(candidate["predictions"][0])
+        quantiles = dict(first.get("quantiles") or {})
+        lower, median, upper = (float(quantiles[key]) for key in ("0.1", "0.5", "0.9"))
+        observed = float(actual["target"])
+        signal = "buy" if observed < lower else "sell" if observed > upper else "none"
+        selected, selected_history, selected_signal = candidate, history, signal
+        selected_actual = {"timestamp": str(actual["timestamp"]), "price": observed}
+        thresholds = {"p10": lower, "p50": median, "p90": upper}
+        if signal != "none":
+            break
+    if selected is None or selected_actual is None:
+        raise ValueError("RECENT_SIGNAL_SEARCH_NO_ELIGIBLE_CUTOFF")
+    selected["recent_signal_search"] = {
+        "status": "found" if selected_signal != "none" else "not_found",
+        "signal": selected_signal,
+        "cutoffs_examined": examined,
+        "max_cutoffs": maximum,
+        "history_cutoff_at": str(selected_history[-1]["timestamp"]),
+        "history_row_count": len(selected_history),
+        "next_observation": selected_actual,
+        "thresholds": thresholds,
+        "rule": "next observed close below P10 = buy; above P90 = sell; strict boundaries",
+    }
+    # Firestore result documents stay bounded; the count still proves which
+    # prefix was used, while the chart receives the most recent 500 inputs.
+    selected["selected_history"] = selected_history[-500:]
+    selected["runtime_seconds"] = time.monotonic() - total_started
+    selected["warnings"] = list(selected.get("warnings") or []) + [
+        f"Recent signal search examined {examined} strictly out-of-sample cutoff(s); later observations were not passed to inference."
+    ]
+    digest_payload = {key: value for key, value in selected.items() if key != "result_hash"}
+    selected["result_hash"] = hashlib.sha256(
+        json.dumps(digest_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return selected
+
+
 def execute_job(
     job: Mapping[str, Any],
     *,
@@ -89,6 +191,12 @@ def execute_job(
     if type(single_point_research) is not bool or type(minimum_history_rows) is not int or not (1 if single_point_research else 2) <= minimum_history_rows <= 10_000:
         raise ValueError("invalid minimum history rows")
     progress = progress or (lambda _payload: None)
+    if (job.get("request") or {}).get("analysis_mode") == "recent_signal_search":
+        if single_point_research:
+            raise ValueError("RECENT_SIGNAL_SEARCH_CONFIGURATION_INVALID")
+        return _recent_signal_search(
+            job, progress=progress, mock=mock, minimum_history_rows=minimum_history_rows
+        )
     request_payload = dict(job.get("request") or {})
     request_payload["model_checkpoints"] = dict(job.get("model_checkpoints") or {})
     request_payload["model_revisions"] = dict(job.get("model_revisions") or {})

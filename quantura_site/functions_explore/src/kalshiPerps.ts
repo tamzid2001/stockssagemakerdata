@@ -13,6 +13,17 @@ const decimal = (v: unknown): number | null => {
   if ((typeof v !== "string" && typeof v !== "number") || v === "") return null;
   const n = Number(v); return Number.isFinite(n) ? n : null;
 };
+function underlyingUnits(contractSize: unknown, underlyingMultiplier: unknown): number {
+  const size = decimal(contractSize), multiplier = decimal(underlyingMultiplier);
+  if (size === null || multiplier === null || size <= 0 || multiplier <= 0) throw new Error("perp_price_scale_invalid");
+  const units = size * multiplier;
+  if (!Number.isFinite(units) || units <= 0) throw new Error("perp_price_scale_invalid");
+  return units;
+}
+function unitPrice(value: unknown, units: number): number | null {
+  const price = decimal(value);
+  return price === null ? null : Number((price / units).toPrecision(15));
+}
 export function perpTicker(v: unknown): string {
   const ticker = String(v || "").toUpperCase();
   if (!/^KX[A-Z0-9]{1,36}PERP$/.test(ticker)) throw new PredictionMarketDataError("perp_ticker_invalid", "Choose a Kalshi perpetual contract ticker.", 422);
@@ -26,24 +37,35 @@ export function perpFrequency(v: unknown): keyof typeof PERPS_INTERVALS {
 export function normalizePerpMarket(input: unknown) {
   const m = record(input), symbol = perpTicker(m.ticker);
   if (!["active","inactive","closed"].includes(m.status) || typeof m.title !== "string") throw new Error("perp_market_schema_invalid");
+  const contractSize=decimal(m.contract_size), underlyingMultiplier=decimal(m.underlying_multiplier);
+  const units=underlyingUnits(contractSize,underlyingMultiplier), reference=record(m.reference_price);
+  const referenceTimestamp=Number(reference.ts_ms);
   return { resource_type: "perpetual_contract", resource_id: `${PERPS_SOURCE}:${symbol}`, symbol,
     name: `${m.title} perpetual`, source: PERPS_SOURCE, asset_class: "perpetual", exchange: "Kalshi", currency: "USD",
-    unit: "USD per contract (not underlying spot price)", timezone: "UTC", status: m.status,
+    unit: "USD per underlying unit", timezone: "UTC", status: m.status,
     history_available: true, forecast_available: true, available_granularities: Object.keys(PERPS_INTERVALS),
-    contract_size: decimal(m.contract_size), underlying_multiplier: decimal(m.underlying_multiplier),
+    contract_size: contractSize, underlying_multiplier: underlyingMultiplier, underlying_units_per_contract: units,
     provider_asset_class: typeof m.asset_class === "string" ? m.asset_class : null,
-    // Last trade is not necessarily a completed candle. Do not call it a close.
-    last_trade_price: decimal(m.price), redistribution_status: "review_required" };
+    // Kalshi documents reference_price as the underlying reference scaled per
+    // contract. Divide every price by the complete underlying exposure so UI,
+    // downloads and forecasts share one per-underlying-unit price basis.
+    spot_reference_price: unitPrice(reference.price,units),
+    spot_reference_timestamp: Number.isSafeInteger(referenceTimestamp) ? new Date(referenceTimestamp).toISOString() : null,
+    reference_contract_price: decimal(reference.price),
+    // Last trade is not necessarily a completed candle. Preserve it separately.
+    last_trade_price: unitPrice(m.price,units), last_trade_contract_price: decimal(m.price),
+    redistribution_status: "review_required" };
 }
 
-export function normalizePerpCandles(input: unknown, start: number, end: number) {
+export function normalizePerpCandles(input: unknown, start: number, end: number, units=1) {
   if (!Array.isArray(input)) throw new Error("perp_candles_schema_invalid");
+  if (!Number.isFinite(units) || units <= 0) throw new Error("perp_price_scale_invalid");
   const rows = new Map<number, {timestamp:string;open:number|null;high:number|null;low:number|null;close:number;volume:number|null}>();
   for (const value of input) {
     const c = record(value), p = record(c.price), ts = c.end_period_ts, close = decimal(p.close);
     // Never replace null trade closes with previous, bid, ask, mark or spot.
     if (!Number.isSafeInteger(ts) || ts < start || ts > end || close === null || close <= 0) continue;
-    const row = { timestamp: new Date(ts * 1000).toISOString(), open: decimal(p.open), high: decimal(p.high), low: decimal(p.low), close, volume: decimal(c.volume) };
+    const row = { timestamp: new Date(ts * 1000).toISOString(), open: unitPrice(p.open,units), high: unitPrice(p.high,units), low: unitPrice(p.low,units), close: unitPrice(close,units)!, volume: decimal(c.volume) };
     if (rows.has(ts) && JSON.stringify(rows.get(ts)) !== JSON.stringify(row)) throw new Error("perp_candle_conflict");
     rows.set(ts,row);
   }
@@ -109,12 +131,12 @@ export class KalshiPerpsService {
         const params=new URLSearchParams({start_ts:String(from),end_ts:String(cursor),period_interval:String(PERPS_INTERVALS[frequency]),include_latest_before_start:"false"});
         const body=await this.get(`/margin/markets/${encodeURIComponent(symbol)}/candlesticks?${params}`,deadline);
         if(body.ticker!==symbol)throw new Error("perp_history_ticker_mismatch");
-        rows.unshift(...normalizePerpCandles(body.candlesticks,from,cursor));
+        rows.unshift(...normalizePerpCandles(body.candlesticks,from,cursor,market.underlying_units_per_contract));
         cursor=from-1;pages++;
       }
       const unique=[...new Map(rows.map(r=>[r.timestamp,r])).values()].sort((a,b)=>a.timestamp.localeCompare(b.timestamp)).slice(-limit);
       return {provider:PERPS_SOURCE,symbol,frequency,timeframe:frequency,market,rows:unique,count:unique.length,
-        metadata:{field:"price.close",units:"USD per contract",timezone:"UTC",timestamp_convention:"end_period_ts",requested_start:new Date(start*1000).toISOString(),requested_end:new Date(end*1000).toISOString(),
+        metadata:{field:"price.close / (contract_size * underlying_multiplier)",provider_field:"price.close",units:"USD per underlying unit",timezone:"UTC",timestamp_convention:"end_period_ts",requested_start:new Date(start*1000).toISOString(),requested_end:new Date(end*1000).toISOString(),
           contract_size:market.contract_size,underlying_multiplier:market.underlying_multiplier,redistribution_status:"review_required",missing_intervals:"not_filled",requested_limit:limit,pages},
         warnings:unique.length<limit?[`Only ${unique.length} completed trade closes available in the requested range; gaps are not filled.`]:[]};
     });
@@ -130,15 +152,17 @@ export class KalshiPerpsService {
         let row: Awaited<ReturnType<KalshiPerpsService["history"]>>["rows"][number]|undefined;
         let status="available";
         try{row=(await this.history({symbol:m.symbol,frequency:"1min",limit:1})).rows.at(-1);}catch{status="unavailable";}
+        const referenceAvailable=m.spot_reference_price!==null && m.spot_reference_timestamp!==null;
         items.push({ticker:m.symbol,company_name:m.name,asset_class:"perpetual",provider:PERPS_SOURCE,market_status:m.status,
-          actual_price:row?.close??null,actual_price_timestamp:row?.timestamp??null,quote_source:"kalshi_perps_trade_close",quote_session:"perpetual",quote_status:row?status:"unavailable",
+          actual_price:referenceAvailable?m.spot_reference_price:row?.close??null,actual_price_timestamp:referenceAvailable?m.spot_reference_timestamp:row?.timestamp??null,
+          quote_source:referenceAvailable?"kalshi_perps_reference_spot":"kalshi_perps_trade_close_spot_equivalent",quote_session:"perpetual",quote_status:referenceAvailable||row?status:"unavailable",
           contract_size:m.contract_size,underlying_multiplier:m.underlying_multiplier,units:m.unit,signal_status:"Forecast on demand; no scheduled quantiles published",forecast_engine:null,
           forecast_view_url:`/forecasting?panel=forecast&marketSource=kalshi_perps&ticker=${encodeURIComponent(m.symbol)}`,forecast_action:"create",
           p10:null,p50:null,p90:null,redistribution_status:"review_required"});
       }));
       }
       return {schema_version:"kalshi_perps_catalog_v1",scan_id:`perps-${Math.floor(this.now()/60000)}`,scan_date:now.slice(0,10),generated_at:now,items,
-        manifest:{coverage_percentage:markets.length?100*items.filter(r=>r.actual_price!==null).length/markets.length:0,successfully_processed:items.filter(r=>r.actual_price!==null).length,failed:items.filter(r=>r.actual_price===null).length,forecast_engine:"on_demand",warnings:["Perpetual contract prices, not spot prices. No NYSE closing session or scheduled quantile scan is applied."]}};
+        manifest:{coverage_percentage:markets.length?100*items.filter(r=>r.actual_price!==null).length/markets.length:0,successfully_processed:items.filter(r=>r.actual_price!==null).length,failed:items.filter(r=>r.actual_price===null).length,forecast_engine:"on_demand",warnings:["Kalshi reference prices and trade candles are normalized to USD per underlying unit. No NYSE closing session or scheduled quantile scan is applied."]}};
     });
   }
 }
@@ -156,7 +180,7 @@ export function registerKalshiPerpsRoutes(router: Router, service=kalshiPerps) {
       if(p.format==="csv"){
         const keys=["timestamp","open","high","low","close","volume"] as const;
         const csv=[keys.join(","),...result.rows.map(row=>keys.map(k=>row[k]??"").join(","))].join("\r\n");
-        res.set({"Content-Type":"text/csv; charset=utf-8","Content-Disposition":`attachment; filename="${result.symbol}-${result.frequency}-trade-close.csv"`,"X-Data-Provider":PERPS_SOURCE,"X-Price-Unit":"USD per contract","X-Data-Timezone":"UTC"}).send(csv);
+        res.set({"Content-Type":"text/csv; charset=utf-8","Content-Disposition":`attachment; filename="${result.symbol}-${result.frequency}-underlying-price.csv"`,"X-Data-Provider":PERPS_SOURCE,"X-Price-Unit":"USD per underlying unit","X-Data-Timezone":"UTC"}).send(csv);
       }else res.json({ok:true,...result});
     }catch(error){const e=error instanceof PredictionMarketDataError?error:null;res.status(e?.status||502).json({error:e?.code||"perps_history_unavailable",message:e?.message||"Perpetual history is unavailable. No substitute prices were returned."});}
   };

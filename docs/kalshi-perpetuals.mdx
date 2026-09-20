@@ -5,13 +5,13 @@ description: "Search and forecast USD-per-contract history without confusing per
 
 Select **Kalshi Perpetuals** in market search or Q Screener. The provider's catalog includes active, inactive and closed listings when returned by Kalshi. Search in **Any** mode to include inactive listings.
 
-Q Screener shows completed minute trade closes with timestamps and an on-demand **Forecast** action. It does not invent weekly quantiles, NYSE closing signals or stock market capitalization for perpetuals. Scheduled equity forecasts and daily stock alerts remain unchanged; perpetual daily alerts are not currently supported.
+Q Screener shows Kalshi reference prices on an underlying spot-equivalent scale, with normalized completed minute trade closes as fallback, timestamps, and an on-demand **Forecast** action. It does not invent weekly quantiles, NYSE closing signals or stock market capitalization for perpetuals. Scheduled equity forecasts and daily stock alerts remain unchanged; perpetual daily alerts are not currently supported.
 
 ## Price basis
 
-The target is Kalshi's `price.close`, in **USD per contract**. For example, `KXBTCPERP` currently represents 0.0001 BTC per contract. Its price is not the BTC spot quote. Contract size and underlying multiplier are preserved in metadata. These are continuous price series, not YES/NO probabilities. No orders or account access are part of this integration.
+The displayed and forecast target is the **underlying-equivalent price in USD per underlying unit**. Kalshi publishes perpetual trade and reference prices scaled per contract, so Quantura divides them by `contract_size × underlying_multiplier`. For example, a $4.37 `KXGOLDPERP` contract with 0.001 units of exposure is displayed near $4,370 per unit. Raw contract prices, contract size, multiplier, and the conversion basis remain available in metadata for auditability. These are continuous price series, not YES/NO probabilities. No orders or account access are part of this integration.
 
-Only actual completed closes are used. Null closes, synthetic `price.previous` rows, bid/ask substitutes and missing intervals are not filled. Timestamps preserve Kalshi's `end_period_ts` in UTC, including its daily-bar boundary; charts localize their display. Forecasts use calendar/frequency periods, not NYSE sessions.
+Only actual completed closes are used for history, normalized to the same per-underlying-unit scale. The screener prefers Kalshi's current reference price on that scale and falls back to the latest normalized completed trade. Null closes, synthetic `price.previous` rows, bid/ask substitutes and missing intervals are not filled. Timestamps preserve Kalshi's `end_period_ts` in UTC, including its daily-bar boundary; charts localize their display. Forecasts use calendar/frequency periods, not NYSE sessions.
 
 ## Historical downloads
 

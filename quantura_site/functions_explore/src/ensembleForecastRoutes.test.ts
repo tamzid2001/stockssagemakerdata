@@ -421,3 +421,29 @@ test("worker result validation rejects crossed quantiles and invalid effective w
   assert.throws(() => validateWorkerResult({ ...valid, predictions: [{ timestamp: "2026-09-02T00:00:00Z", quantiles: { "0.25": 110, "0.5": 100, "0.75": 90 } }] }, job), /ordering/);
   assert.throws(() => validateWorkerResult({ ...valid, effective_weights_by_quantile: { ...valid.effective_weights_by_quantile, "0.5": { prophet: 0.8 } } }, job), /weights/);
 });
+
+test("recent signal search configuration is explicitly bounded", () => {
+  const config = normalizeEnsembleConfiguration({
+    analysis_mode:"recent_signal_search", search_max_cutoffs:12,
+    prediction_length:7, horizon_mode:"frequency_periods", calendar:"NONE",
+    quantiles:[.1,.5,.9], models:{prophet:{enabled:true,weight:1}},
+  }, "free");
+  assert.equal(config.analysis_mode,"recent_signal_search");
+  assert.equal(config.search_max_cutoffs,12);
+  for (const value of [0,31,1.5,"20"]) assert.throws(() => normalizeEnsembleConfiguration({analysis_mode:"recent_signal_search",search_max_cutoffs:value},"free"),/search_max_cutoffs/);
+  assert.throws(() => normalizeEnsembleConfiguration({analysis_mode:"future_peek"},"free"),/analysis_mode/);
+});
+
+test("recent signal result proves the withheld observation and selected cutoff", () => {
+  const timestamps=Array.from({length:7},(_,index)=>`2026-09-${String(index+5).padStart(2,"0")}T00:00:00Z`);
+  const predictions=timestamps.map((timestamp,index)=>({timestamp,quantiles:{"0.1":90+index,"0.5":100+index,"0.9":110+index}}));
+  const job={input_row_count:4,source:{type:"kalshi_perp"},request:{analysis_mode:"recent_signal_search",prediction_length:7,horizon_mode:"frequency_periods",quantiles:[.1,.5,.9]}};
+  const valid={quantiles:[.1,.5,.9],transform:"none",predictions,effective_weights_by_quantile:{"0.1":{prophet:1},"0.5":{prophet:1},"0.9":{prophet:1}},
+    recent_signal_search:{status:"found",signal:"sell",cutoffs_examined:1,max_cutoffs:20,history_cutoff_at:"2026-09-03T00:00:00Z",history_row_count:3,next_observation:{timestamp:"2026-09-04T00:00:00Z",price:120},thresholds:{p10:90,p50:100,p90:110},rule:"strict boundaries"},
+    selected_history:[{timestamp:"2026-09-01T00:00:00Z",target:99},{timestamp:"2026-09-02T00:00:00Z",target:100},{timestamp:"2026-09-03T00:00:00Z",target:101}]};
+  const output=validateWorkerResult(valid,job);
+  assert.equal(output.recentSignalSearch?.signal,"sell");
+  assert.equal(output.selectedHistory?.length,3);
+  assert.throws(()=>validateWorkerResult({...valid,recent_signal_search:{...valid.recent_signal_search,next_observation:{timestamp:"2026-09-04T00:00:00Z",price:105}}},job),/search_invalid/);
+  assert.throws(()=>validateWorkerResult({...valid,selected_history:[...valid.selected_history,{timestamp:"2026-09-04T00:00:00Z",target:120}]},job),/search_invalid/);
+});

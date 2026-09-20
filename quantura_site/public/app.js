@@ -1731,6 +1731,7 @@
     ensemblePresetName: document.getElementById("ensemble-preset-name"),
     ensembleSavePreset: document.getElementById("ensemble-save-preset"),
     ensembleRunButton: document.getElementById("ensemble-run-button"),
+    ensembleFindSignal: document.getElementById("ensemble-find-signal"),
     ensembleForecastStatus: document.getElementById("ensemble-forecast-status"),
     ensembleForecastResults: document.getElementById("ensemble-forecast-results"),
     ensembleResultState: document.getElementById("ensemble-result-state"),
@@ -14515,6 +14516,7 @@
       else ui.ensembleProgress.value = completed;
     }
     if (ui.ensembleRunButton) { ui.ensembleRunButton.disabled = busy; ui.ensembleRunButton.textContent = busy ? "Forecast in progress…" : "Run forecast"; }
+    if (ui.ensembleFindSignal) { ui.ensembleFindSignal.disabled = busy; ui.ensembleFindSignal.querySelector("span").textContent = busy ? "Forecast in progress…" : "Find recent high / low"; }
     if (ui.ensembleRefreshLatest) ui.ensembleRefreshLatest.disabled = busy;
     if (ui.ensembleRunAgain) ui.ensembleRunAgain.disabled = busy;
     const statusButton = document.getElementById("ensemble-check-status");
@@ -14558,6 +14560,13 @@
 
   const renderEnsembleSignals = (job) => {
     const firstHost = document.getElementById("ensemble-first-row-signal");
+    const search=job.recent_signal_search;
+    if(firstHost && search) {
+      const actual=search.next_observation||{}, thresholds=search.thresholds||{};
+      firstHost.dataset.signal=search.signal||"none";
+      firstHost.innerHTML=`<strong>${search.status === "found" ? `${String(search.signal).toUpperCase()} found` : "No recent P10/P90 breach found"}</strong><p>Cutoff: ${escapeHtml(ensembleLocalTime(search.history_cutoff_at))} · next close: ${escapeHtml(ensembleLocalTime(actual.timestamp))} at ${escapeHtml(Number(actual.price).toLocaleString(undefined,{maximumFractionDigits:6}))}</p><p>P10 ${escapeHtml(Number(thresholds.p10).toLocaleString(undefined,{maximumFractionDigits:6}))} · P50 ${escapeHtml(Number(thresholds.p50).toLocaleString(undefined,{maximumFractionDigits:6}))} · P90 ${escapeHtml(Number(thresholds.p90).toLocaleString(undefined,{maximumFractionDigits:6}))}</p><small>${escapeHtml(search.cutoffs_examined)} of ${escapeHtml(search.max_cutoffs)} recent cutoffs examined. The next close was withheld from each forecast. Research signal only; not an order or fill.</small>`;
+      return;
+    }
     const first = window.QuanturaForecastControls?.firstRowSignal(job);
     if (firstHost && first) {
       firstHost.dataset.signal = first.signal || "waiting";
@@ -14692,9 +14701,11 @@
         ? `Unsupported by the enabled weighted models: ${unsupported.map(ensembleQuantileLabel).join(", ")}.`
         : "Weights are normalized independently for each quantile. Toto and TimesFM never contribute outside P10–P90.";
       if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = ensembleUiState.busy || !normalized.length || Boolean(unsupported.length);
+      if (ui.ensembleFindSignal) ui.ensembleFindSignal.disabled = ensembleUiState.busy || !normalized.length || Boolean(unsupported.length);
     } catch (error) {
       if (ui.ensembleQuantileStatus) ui.ensembleQuantileStatus.textContent = error.message;
       if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = true;
+      if (ui.ensembleFindSignal) ui.ensembleFindSignal.disabled = true;
     }
   };
 
@@ -14889,7 +14900,7 @@
       title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
       margin: { l: mobile?48:62, r: 16, t: 58, b: mobile?175:125, autoexpand:false }, height: mobile?565:490, hovermode: "closest", uirevision: job.forecast_id,
       xaxis: { type: "date", ...(chartRange ? { range: chartRange.map(t=>new Date(t).toISOString()), autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date", standoff: 14 }, automargin:true, rangebreaks:window.QuanturaForecastControls.exchangeDateBreaks(job), tickmode: "array", tickvals: tickTimes.map(t=>new Date(t).toISOString()), ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: false } },
-      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "kalshi_perp" ? "USD per contract" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
+      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "kalshi_perp" ? "USD per underlying unit" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
       legend: { orientation: "h", yref:"container", y:0.01, yanchor:"bottom", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
       shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:plotTimestamp(inputHistory.at(-1)),x1:plotTimestamp(inputHistory.at(-1)),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
@@ -14999,7 +15010,7 @@
     ui.ensembleForecastResults.hidden = false;
     const quantiles = Array.isArray(job?.quantiles) ? job.quantiles.map(Number) : [];
     const predictions = Array.isArray(job?.predictions) ? job.predictions : [];
-    if (ui.ensembleResultState) ui.ensembleResultState.textContent = job.source?.analysis_mode === "historical_replay" ? "Historical replay" : "Completed";
+    if (ui.ensembleResultState) ui.ensembleResultState.textContent = job.analysis_mode === "recent_signal_search" ? "Recent signal search" : job.source?.analysis_mode === "historical_replay" ? "Historical replay" : "Completed";
     if (ui.ensembleResultMeta) {
       const models = Object.entries(job?.models || {}).filter(([, value]) => value?.enabled).map(([id]) => id);
       const participated = (job.model_runtime || []).filter(model=>typeof model === "string" || model.status === "completed").map(model=>typeof model === "string" ? model : model.id);
@@ -15026,7 +15037,8 @@
       const format = value => Number(value).toLocaleString(undefined,{maximumFractionDigits:4});
       const latest = summary.price === undefined ? "" : `Latest downloaded input: ${format(summary.price)} at ${ensembleChartTime(summary.timestamp,ensembleTimeZone())}; closest to the end-of-horizon ${ensembleQuantileLabel(summary.nearest)}. `;
       const implied = summary.probabilityHigher === null || summary.probabilityHigher === undefined ? "" : `Interpolating the forecast distribution suggests approximately ${Math.round(100*summary.probabilityHigher)}% probability of finishing above that input quote over ${ensembleHorizonLabel(job)}. This is model-implied, not a validated win rate or chance of profit. `;
-      ui.ensembleSummary.innerHTML = `<p>${escapeHtml(latest+implied)}</p><p class="muted">${escapeHtml(job.input_row_count || job.history?.length || 0)} observations downloaded before inference. Missing intervals are not fabricated. The vertical marker separates input history from forecast.</p><div class="table-wrap"><table class="data-table"><caption>Average of each forecast column across ${predictions.length} future steps</caption><thead><tr>${quantiles.map(q=>`<th>${escapeHtml(ensembleQuantileLabel(q))}</th>`).join("")}</tr></thead><tbody><tr>${quantiles.map(q=>`<td>${escapeHtml(format(summary.averages[ensembleQuantileKey(q)]))}</td>`).join("")}</tr></tbody></table></div>`;
+      const searchNote=job.recent_signal_search?`${job.recent_signal_search.cutoffs_examined} cutoffs examined from ${job.input_row_count} downloaded observations; ${job.recent_signal_search.history_row_count||job.history?.length||0} observations were eligible at the selected cutoff. `:`${job.input_row_count||job.history?.length||0} observations downloaded before inference. `;
+      ui.ensembleSummary.innerHTML = `<p>${escapeHtml(latest+implied)}</p><p class="muted">${escapeHtml(searchNote)}Missing intervals are not fabricated. The vertical marker separates the selected input history from forecast.</p><div class="table-wrap"><table class="data-table"><caption>Average of each forecast column across ${predictions.length} future steps</caption><thead><tr>${quantiles.map(q=>`<th>${escapeHtml(ensembleQuantileLabel(q))}</th>`).join("")}</tr></thead><tbody><tr>${quantiles.map(q=>`<td>${escapeHtml(format(summary.averages[ensembleQuantileKey(q)]))}</td>`).join("")}</tr></tbody></table></div>`;
     }
     await renderEnsembleChart(job);
     renderEnsembleLiveQuote(job);
@@ -15357,6 +15369,28 @@
         if (input) input.value = String(Number((selection.weight / total).toFixed(6)));
       });
       updateEnsembleWeightsAndSupport();
+    });
+    ui.ensembleFindSignal?.addEventListener("click", async () => {
+      if (ensembleUiState.busy) return;
+      setEnsembleBusy(true);
+      try {
+        await ensureSessionUser({ reason: "ensemble_forecast_requires_session", message: "Sign in to search recent forecast signals." });
+        await loadEnsembleCapabilities();
+        const configured=buildEnsembleRequest();
+        const request={...configured,prediction_length:7,quantiles:[.1,.5,.9],analysis_mode:"recent_signal_search",search_max_cutoffs:20,history_lag_minutes:0};
+        delete request.history_cutoff_at;delete request.prediction_end_at;
+        ensembleUiState.lastRequest=request;
+        setEnsembleStatus("Searching recent cutoffs → withholding the next close → rerunning the configured models until P10 or P90 is breached…","working");
+        const response=await apiRequestJson("/api/v1/ensemble-forecasts",{method:"POST",body:request,headers:{"Idempotency-Key":`recent-signal-${Date.now()}-${createSecureIdChunk(12)}`}});
+        const job=response.data||{};ensembleUiState.forecastId=String(job.forecast_id||"");
+        if(!ensembleUiState.forecastId)throw new Error("Signal search did not return a forecast ID.");
+        history.replaceState({},"",`${window.location.pathname}?panel=forecast&ensembleForecastId=${encodeURIComponent(ensembleUiState.forecastId)}`);
+        if(job.status==="completed")await renderCompletedEnsemble(job);else{renderEnsembleProgress(job);await pollEnsembleForecast(ensembleUiState.forecastId,{immediate:false});}
+        logEvent("ensemble_recent_signal_search_created",{model_count:Object.values(request.models).filter(model=>model.enabled).length,max_cutoffs:request.search_max_cutoffs});
+        await fetchMyRequestsList({force:true});renderMyRequestsPanels();
+      }catch(error){
+        setEnsembleBusy(false);setEnsembleStatus(`${error.message||"Unable to search recent forecast signals."}${error.code?` (${error.code})`:""}`,"error");showToast(error.message||"Unable to search recent signals.","warn");
+      }
     });
     ui.ensembleForecastForm?.addEventListener("submit", async (event) => {
       event.preventDefault();

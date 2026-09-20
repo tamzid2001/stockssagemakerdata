@@ -417,7 +417,7 @@ def test_historical_data_supports_alpaca_yahoo_and_no_start_date():
     assert 'id="options-market-source"' in forecasting
     assert 'id="alpaca-start"' not in forecasting
     assert 'const source = byId("market-history-source")?.value || "auto"' in client
-    assert 'value="kalshi_perps">Kalshi Perpetuals · USD per contract' in forecasting
+    assert 'value="kalshi_perps">Kalshi Perpetuals · underlying spot scale' in forecasting
     assert 'body.source === "kalshi_perps" ? "/api/market-data/perps/history" : "/api/market-data/stocks/history"' in client
 
 
