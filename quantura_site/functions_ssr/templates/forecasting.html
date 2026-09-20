@@ -31,7 +31,7 @@
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest?v=20260909a" />
     <script src="/theme-init.js?v=20260908a"></script>
-    <script defer src="/ui-runtime.js?v=20260908a"></script>
+    <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
     <link rel="stylesheet" href="/styles.css?v=20260817c" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
@@ -46,8 +46,8 @@
     <script defer src="/forecast-controls.js?v=20260919a"></script>
     <script defer src="/forecast-metrics.js?v=20260920-forecast-only"></script>
     <script defer src="/app.js?v=20260824a"></script>
-    <script defer src="/data-integrations.js?v=20260908a"></script>
-    <script defer src="/market-search.js?v=20260916c"></script>
+    <script defer src="/data-integrations.js?v=20260920-perps-jev"></script>
+    <script defer src="/market-search.js?v=20260920-perps-jev"></script>
     <script defer src="/screener-panel-lazy.js?v=20260831a"></script>
 
     <script>
@@ -94,7 +94,7 @@
               <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
               <a class="sidebar-link" href="/historical-data" data-panel-target="news"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
               <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
-	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Q Screener</span></a>
 	          </nav>
 	        </aside>
 
@@ -121,7 +121,7 @@
                     </div>
                     <form id="market-search-form" class="market-search-form">
                       <div class="field"><label class="label" for="market-search-query">Ticker, team, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, Yankees, or paste a Polymarket US / Kalshi link" required /></div>
-                      <div class="field"><label class="label" for="market-search-source">Source</label><select id="market-search-source"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="polymarket_us">Polymarket US</option><option value="kalshi">Kalshi</option></select></div>
+                      <div class="field"><label class="label" for="market-search-source">Source</label><select id="market-search-source"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="polymarket_us">Polymarket US</option><option value="kalshi">Kalshi</option><option value="kalshi_perps">Kalshi Perpetuals</option></select></div>
                       <button class="cta" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Search</span></button>
                     </form>
                     <p id="market-search-status" class="small muted" role="status" aria-live="polite">Stocks, FX, futures, rates, and prediction markets. Type to search.</p>
@@ -141,12 +141,12 @@
                             <div class="field">
                               <label class="label" for="ensemble-source-type">Historical data source</label>
                               <select id="ensemble-source-type" name="source_type">
-                                <option value="ticker">Market ticker</option>
+                                <option value="ticker">Market ticker</option><option value="kalshi_perp">Kalshi perpetual · USD per contract</option>
                                 <option value="prediction_market">Selected prediction market</option>
                                 <option value="series">Upload your own CSV</option>
                               </select>
                             </div>
-                            <div class="field" data-ensemble-source="ticker">
+                            <div class="field" data-ensemble-source="ticker kalshi_perp">
                               <label class="label" for="ensemble-ticker">Ticker</label>
                               <input id="ensemble-ticker" name="ticker" placeholder="AAPL" autocomplete="off" />
                             </div>
@@ -159,7 +159,7 @@
                               <label class="label" for="ensemble-provider">Market-data provider</label>
                               <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
                             </div>
-                            <div class="field" data-ensemble-source="ticker"><label class="label" for="ensemble-ticker-frequency">Observed bars</label><select id="ensemble-ticker-frequency" name="ticker_frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">Minute</option></select></div>
+                            <div class="field" data-ensemble-source="ticker kalshi_perp"><label class="label" for="ensemble-ticker-frequency">Observed bars</label><select id="ensemble-ticker-frequency" name="ticker_frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">Minute</option></select></div>
                             <div class="field" data-ensemble-source="workspace_dataset" hidden>
                               <label class="label" for="ensemble-dataset-id">Workspace dataset ID</label>
                               <input id="ensemble-dataset-id" name="dataset_id" placeholder="Saved Forecast Foundry dataset ID" autocomplete="off" />
@@ -462,7 +462,7 @@
                         <div class="form-grid download-form-grid">
                           <div class="field">
                             <label class="label" for="market-history-source">Data source</label>
-                            <select id="market-history-source" name="source">
+                            <select id="market-history-source" name="source"><option value="kalshi_perps">Kalshi Perpetuals · USD per contract</option>
                               <option value="auto" selected>Automatic — Alpaca, then Yahoo Finance</option>
                               <option value="alpaca">Alpaca</option>
                               <option value="yahoo">Yahoo Finance</option>

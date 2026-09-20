@@ -1,10 +1,12 @@
 import type { Router } from "express";
 import { searchPredictionMarkets, discoverForecastMarkets, resolveMarketLink, gameTiming, PredictionMarketDataError, type PredictionMarketSource } from "./predictionMarketData";
 import { AlpacaClient } from "./alpacaClient";
+import { kalshiPerps } from "./kalshiPerps";
 
 type JsonRecord = Record<string, unknown>;
 
 export const PROVIDER_CAPABILITIES = {
+  kalshi_perps: { label: "Kalshi Perpetuals", assetClasses: ["perpetual"], search: true, history: true, forecasting: ["perpetual"], granularities: ["1min","1h","1D"], redistributionStatus: "review_required" },
   alpaca: {
     label: "Alpaca",
     assetClasses: ["equity", "etf", "option"],
@@ -159,7 +161,7 @@ export function registerMarketSearchRoutes(router: Router): void {
     const requested = text(req.query.source || "auto", 40).toLowerCase();
     const mode = text(req.query.mode || "open", 20);
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
-    if (!["auto", "yahoo", "alpaca", "polymarket_us", "kalshi"].includes(requested) || !["open", "live", "any"].includes(mode)) {
+    if (!["auto", "yahoo", "alpaca", "polymarket_us", "kalshi", "kalshi_perps"].includes(requested) || !["open", "live", "any"].includes(mode)) {
       res.status(422).json({ ok: false, error: "search_filter_invalid", message: "Choose a supported source and market status." }); return;
     }
     if (query.length < 2 && mode !== "live") {
@@ -169,6 +171,9 @@ export function registerMarketSearchRoutes(router: Router): void {
     const groups: Record<string, JsonRecord[]> = {};
     const errors: Record<string, string> = {};
     const tasks: Array<Promise<void>> = [];
+    if (["auto","kalshi_perps"].includes(requested)) tasks.push(kalshiPerps.search(query,limit)
+      .then(rows=>{groups.kalshi_perps=mode==="any"?rows:rows.filter(r=>r.status==="active");})
+      .catch(()=>{errors.kalshi_perps="temporarily_unavailable";}));
     if (mode !== "live" && ["auto", "yahoo"].includes(requested)) {
       tasks.push(searchYahoo(query, limit).then((rows) => { groups.yahoo = rows; }).catch(() => { errors.yahoo = "temporarily_unavailable"; }));
     }

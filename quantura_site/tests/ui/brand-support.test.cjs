@@ -75,6 +75,9 @@ test('support dialog accepts verified guest sessions, safely renders text, filte
   w.AbortController=AbortController;
   w.fetch=async()=>{calls++;return {ok:true,json:async()=>({data:{answer:'<script>not executable</script>',references:[{url:'https://evil.example',title:'Bad'},{url:'https://quantura.studio/contact',title:'Contact'}]}})};};
   w.eval(read('public/support-chat.js')); w.QuanturaSupport.open(w.document.getElementById('help'));
+  assert.equal(w.document.getElementById('support-title').textContent,'Q Support');
+  assert.match(w.document.getElementById('support-privacy').textContent,/TypeSafe \(Jev\)/);
+  assert.doesNotMatch(w.document.getElementById('quantura-support').textContent,/GPT|OpenAI/);
   const form=w.document.querySelector('form'),input=w.document.querySelector('textarea');
   input.value='Where are CSVs?'; form.dispatchEvent(new w.Event('submit',{cancelable:true})); await tick();
   assert.equal(calls,0); assert.match(w.document.querySelector('[role=status]').textContent,/guest session/);

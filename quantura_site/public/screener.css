@@ -442,6 +442,10 @@
   to { transform: rotate(360deg); }
 }
 
+.qs-table-wrap[data-source="kalshi_perps"] .qs-table { min-width: 0; width: 100%; }
+.qs-table-wrap[data-source="kalshi_perps"] .qs-table th:nth-child(n+3),
+.qs-table-wrap[data-source="kalshi_perps"] .qs-table td:nth-child(n+3) { display: none; }
+.qs-table-wrap[data-source="kalshi_perps"] .qs-table td { white-space: normal; }
 .qs-table-wrap {
   max-width: 100%;
   overflow: auto;

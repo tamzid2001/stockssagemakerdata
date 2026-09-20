@@ -739,7 +739,9 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
     },
   };
   addScreenerOpenapi(document);
+  addPerpsSupportOpenapi(document,origin);
   addDocumentationExamples(document);
   return document;
 }
 import { addScreenerOpenapi } from "./screenerOpenapi";
+import { addPerpsSupportOpenapi } from "./perpsSupportOpenapi";

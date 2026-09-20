@@ -10,8 +10,32 @@ import { quanturaExploreApi } from "./index";
 import { scanRequestPage, selectRequestPage } from "./requestPagination";
 import { registerEnsembleForecastRoutes, completeEnsembleJob, publicEnsembleJob, HISTORICAL_VALIDATION_POLICY } from "./ensembleForecastRoutes";
 import { generatePlatformApiKey, hashPlatformApiKey, workspaceMembershipId } from "./apiAccess";
+import { kalshiPerps } from "./kalshiPerps";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+test("perpetual forecast uses protected durable jobs, USD closes, frequency calendar and authorized overlays",{skip:!emulatorAvailable},async()=>{
+  const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`perps-${Date.now()}`),db=firebaseApp.firestore();
+  const uid=`perp_user_${Date.now()}`,oldMode=process.env.QUANTURA_ENSEMBLE_WORKER_MODE,oldClaim=process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM,original=kalshiPerps.history;
+  process.env.QUANTURA_ENSEMBLE_WORKER_MODE="manual";
+  process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM="true";
+  const rows=Array.from({length:48},(_,i)=>({timestamp:new Date(Date.UTC(2026,8,17,i)).toISOString(),close:8+i/100}));
+  kalshiPerps.history=async(input:any)=>({symbol:"KXBTCPERP",frequency:"1h",market:{name:"0.0001 BTC perpetual",contract_size:.0001,underlying_multiplier:1},metadata:{field:"price.close"},warnings:[],rows:input.start?rows.slice(-1):rows} as any);
+  const auth:any={verifyIdToken:async(token:string)=>({uid:token,firebase:{sign_in_provider:"anonymous"}}),getUser:async()=>({disabled:false})};
+  const app=express();app.use(express.json());registerEnsembleForecastRoutes(app,{db,auth,publicOrigin:"https://quantura.studio"});
+  const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));
+  const base=`http://127.0.0.1:${(server.address() as any).port}`;
+  const request={source:{type:"kalshi_perp",symbol:"KXBTCPERP",frequency:"1h",limit:48},prediction_length:2,horizon_mode:"frequency_periods",calendar:"NONE",quantiles:[.1,.5,.9],models:{prophet:{enabled:true,weight:1}}};
+  try{
+    const response=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}`,"Content-Type":"application/json"},body:JSON.stringify(request)});
+    assert.equal(response.status,202,await response.clone().text());const id=(await response.json()).data.forecast_id;
+    const job=(await db.collection("ensemble_forecast_jobs").doc(id).get()).data()!;
+    assert.equal(job.source.type,"kalshi_perp");assert.equal(job.source.units,"USD per contract");assert.equal(job.request.calendar,"NONE");assert.notEqual(job.request.transform,"logit");assert.equal(job.input_row_count,48);assert.equal(job.evaluation_policy,null);
+    assert.equal((await fetch(`${base}/v1/ensemble-forecasts/${id}/observations`,{headers:{Authorization:`Bearer another_${uid}`}})).status,403);
+    const invalid=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}`,"Content-Type":"application/json"},body:JSON.stringify({...request,horizon_mode:"trading_sessions"})});
+    assert.equal(invalid.status,422);
+  }finally{kalshiPerps.history=original;if(oldMode===undefined)delete process.env.QUANTURA_ENSEMBLE_WORKER_MODE;else process.env.QUANTURA_ENSEMBLE_WORKER_MODE=oldMode;if(oldClaim===undefined)delete process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM;else process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM=oldClaim;await new Promise<void>(r=>server.close(()=>r()));await firebaseApp.delete();}
+});
 
 test("historical validation survives durable completion and public serialization", {skip:!emulatorAvailable}, async()=>{
   const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`holdout-${Date.now()}`),db=firebaseApp.firestore();

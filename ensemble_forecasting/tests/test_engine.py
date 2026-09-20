@@ -132,6 +132,30 @@ def test_prediction_market_short_history_uses_bounded_transform() -> None:
         prepare_series([{**row, "target": 2} for row in rows], minimum_rows=2, frequency="1min", transform="logit")
 
 
+def test_perpetual_short_history_preserves_price_units_and_weekend_dates() -> None:
+    job = {
+        "source": {"type": "kalshi_perp", "provider": "kalshi_perps"},
+        "request": {
+            "prediction_length": 2, "horizon_mode": "frequency_periods",
+            "frequency": "1h", "calendar": "NONE", "transform": "auto",
+            "quantiles": [0.1, 0.5, 0.9],
+            "models": {"prophet": {"enabled": True, "weight": 1}},
+        },
+        "input": {"rows": [
+            {"timestamp": "2026-09-19T12:00:00Z", "target": 8.0},
+            {"timestamp": "2026-09-19T13:00:00Z", "target": 8.1},
+        ]},
+    }
+    result = execute_job(job, mock=True)
+    assert [row["timestamp"] for row in result["predictions"]] == [
+        "2026-09-19T14:00:00Z", "2026-09-19T15:00:00Z"]
+    assert all(row["quantiles"]["0.5"] > 1 for row in result["predictions"])
+    with pytest.raises(ValueError, match="price transforms"):
+        execute_job({**job, "request": {**job["request"], "transform": "logit"}}, mock=True)
+    with pytest.raises(ValueError, match="at least 40"):
+        execute_job({**job, "source": {"type": "ticker"}}, mock=True)
+
+
 def test_monotonic_rearrangement() -> None:
     repaired = monotonic_rearrangement(np.array([[3.0, 1.0], [1.0, 2.0], [2.0, 3.0]]))
     assert repaired.tolist() == [[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]
