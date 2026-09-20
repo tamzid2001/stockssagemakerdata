@@ -760,6 +760,7 @@
   }
 
   .qs-table-wrap {
+    max-height: none;
     padding: 10px;
     overflow: visible;
   }
