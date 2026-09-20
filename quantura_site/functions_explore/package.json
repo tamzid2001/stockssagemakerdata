@@ -15,7 +15,7 @@
     "import:csv-archive": "npm run build && node scripts/import-uploaded-csv-archive.cjs"
   },
   "dependencies": {
-    "@aikidosec/firewall": "1.8.37",
+    "@aikidosec/firewall": "1.8.42",
     "@aws-sdk/client-s3": "^3.922.0",
     "@aws-sdk/client-sagemaker": "^3.922.0",
     "@aws-sdk/client-sts": "^3.1116.0",
