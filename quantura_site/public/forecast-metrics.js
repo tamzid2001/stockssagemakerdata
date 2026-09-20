@@ -1,4 +1,4 @@
-/* Historical holdout scores and separate live diagnostics. Never training-fit accuracy. */
+/* Scores for this forecast's timestamp-matched prices. No extra inference. */
 ((root) => {
   "use strict";
   const controls = typeof module !== "undefined" && module.exports ? require("./forecast-controls.js") : root.QuanturaForecastControls;
@@ -82,24 +82,19 @@
       return box;
     };
     const fragment=doc.createDocumentFragment(),heading=element("h3","Forecast quality");heading.id="ensemble-quality-title";fragment.append(heading);
+    if(report.prospective.count || report.retrospective.count) {
+      if(report.prospective.count)fragment.append(section(report.prospective,"This forecast · observed after publication"));
+      if(report.retrospective.count)fragment.append(section(report.retrospective,"This forecast · historical/replay comparison (not live validation)"));
+    } else {
+      fragment.append(section({count:0,point_count:0},"This forecast",
+        "No completed prices match this forecast's prediction timestamps yet. MAE, RMSE, sMAPE and weighted quantile loss need predicted and observed values for the same timestamps. No additional forecast or withheld-history run is performed."));
+    }
     const validation = job.historical_validation;
     if(validation?.status === "completed" && validation.metrics?.count > 0) {
-      fragment.append(section(validation.metrics,"Historical validation",
+      const detail=element("details");detail.append(element("summary","Previously stored historical validation (separate forecast)"));
+      detail.append(section(validation.metrics,"Archived historical validation",
         `${validation.metrics.count} / ${validation.holdout_rows} held-out historical values · ${validation.training_rows} earlier training values · ${validation.metrics.point_count} P50 comparisons`));
-      fragment.append(element("p","Calculated before completion from a recent historical holdout using the selected ensemble. Held-out values were not supplied to the models. Scores are on the original scale, not training-fit scores or a walk-forward backtest. The future forecast uses all selected history.","small muted"));
-    } else {
-      const reasons = {
-        insufficient_history: `Not enough history to withhold validation rows and retain at least ${validation?.minimum_training_rows || 2} training rows for the selected models. Download more history. The future forecast is still available.`,
-        no_matching_outcomes: "Historical validation ran, but no observed timestamps matched its predicted intervals. Missing history is not filled; the future forecast is still available.",
-        failed: "Historical validation could not complete with the selected ensemble. The future forecast succeeded; no reduced-model or invented scores are substituted. Reproduce the saved configuration to retry.",
-      };
-      const reason = reasons[validation?.status] || "Historical validation was not stored for this older forecast. Choose Reproduce saved configuration to calculate it from the same saved history. Existing predictions are not changed.";
-      fragment.append(section({count:0,point_count:0},"Historical validation",reason));
-    }
-    if(report.prospective.count || report.retrospective.count) {
-      const detail=element("details");detail.append(element("summary","Compare this forecast with later observed prices"));
-      if(report.prospective.count)detail.append(section(report.prospective,"Observed after publication"));
-      if(report.retrospective.count)detail.append(section(report.retrospective,"Historical/replay comparison (not live validation)"));
+      detail.append(element("p","These preserved scores came from a separate historical run, not this future forecast. New requests do not repeat that validation.","small muted"));
       fragment.append(detail);
     }
     host.replaceChildren(fragment);

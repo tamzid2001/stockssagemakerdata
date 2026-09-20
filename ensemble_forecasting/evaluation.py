@@ -1,7 +1,7 @@
 """One bounded chronological holdout, separate from the future forecast.
 
 This is historical validation, not training fit or a walk-forward backtest.
-Only jobs carrying the server's versioned policy run the additional inference.
+Explicit offline utility only. Normal forecast jobs never call this module.
 Research collectors/paper traders do not implicitly incur a second model pass.
 """
 from __future__ import annotations

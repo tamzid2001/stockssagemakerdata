@@ -2,9 +2,42 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ensemble_forecasting.evaluation import HISTORICAL_VALIDATION_POLICY, score_predictions
-from ensemble_forecasting.worker import execute_job
+from ensemble_forecasting.evaluation import HISTORICAL_VALIDATION_POLICY, score_predictions, evaluate_history
+from ensemble_forecasting.worker import execute_job as forecast_only
+from ensemble_forecasting.preprocessing import prepare_series
+from ensemble_forecasting.schemas import ForecastRequest
 from ensemble_forecasting.adapters.mock import MockAdapter
+
+
+def execute_job(data, **kwargs):
+    """Test-only explicit offline evaluation, not the production job lifecycle."""
+    result = forecast_only(data, **kwargs)
+    if data.get("evaluation_policy") == HISTORICAL_VALIDATION_POLICY:
+        series = prepare_series(data["input"]["rows"], timestamp_column="timestamp", target_column="target",
+                                frequency=data["input"]["frequency"], transform=data["request"]["transform"],
+                                minimum_rows=kwargs.get("minimum_history_rows", 40))
+        result["historical_validation"] = evaluate_history(
+            data, series, ForecastRequest.from_dict(data["request"]), execute=forecast_only,
+            progress=kwargs.get("progress", lambda _: None), mock=kwargs.get("mock", False))
+    return result
+
+
+def test_public_worker_never_runs_implicit_validation_even_for_legacy_job(monkeypatch):
+    monkeypatch.setenv("TIMESFM_HF_ACCESS_APPROVED", "true")
+    monkeypatch.setenv("TIMESFM_COMMERCIAL_LICENSED", "true")
+    calls = []
+    def factory(name, **_):
+        calls.append(name)
+        return MockAdapter(name)
+    monkeypatch.setattr("ensemble_forecasting.worker.adapter_factory", factory)
+    data = job()
+    data["request"]["models"] = {name: {"enabled": True, "weight": .2} for name in ("prophet", "toto", "granite", "chronos", "timesfm")}
+    progress = []
+    result = forecast_only(data, progress=progress.append)
+    assert calls == ["prophet", "toto", "granite", "chronos", "timesfm"]
+    assert "historical_validation" not in result
+    assert not any(row.get("phase") == "historical_validation" for row in progress)
+    assert len(result["predictions"]) == 7
 
 
 def job(count=80):
