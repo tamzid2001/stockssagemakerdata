@@ -1,0 +1,49 @@
+name: Kalshi BTC Proof-Gated Stale Intent Recovery
+run-name: Kalshi BTC stale intent recovery · ${{ inputs.ticker }}
+on:
+  workflow_dispatch:
+    inputs:
+      ticker:
+        type: string
+        required: true
+        description: Exact currently blocked BTC 15-minute market ticker.
+      subaccount:
+        type: number
+        default: 0
+        description: Existing Kalshi subaccount; 0 is the primary account.
+      confirmation:
+        type: string
+        required: true
+        description: Enter resolve-no-order. This never retries or places an order.
+permissions:
+  contents: read
+concurrency:
+  group: quantura-kalshi-btc-execution-singleton
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: quantura-kalshi-live
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked runtime dependencies
+        run: python -m pip install --require-hashes -r market_research/requirements.lock
+      - name: Reconcile and close only a proven stale no-order intent
+        env:
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_PROD_API_KEY }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          RECOVERY_SUBACCOUNT: ${{ inputs.subaccount || 0 }}
+          RECOVERY_TICKER: ${{ inputs.ticker }}
+          RECOVERY_CONFIRMATION: ${{ inputs.confirmation }}
+        run: >-
+          python -m market_research.kalshi_live_recovery
+          --subaccount "$RECOVERY_SUBACCOUNT"
+          --ticker "$RECOVERY_TICKER"
+          --confirmation "$RECOVERY_CONFIRMATION"

@@ -323,6 +323,47 @@ def test_journal_summary_counts_acknowledgements_rejections_and_settlements(conf
     assert summary['active'] is None
 
 
+def test_stale_recovery_is_read_only_and_requires_complete_exchange_proof(monkeypatch, capsys):
+    import market_research.kalshi_live_recovery as module
+    from market_research.engine import iso
+    now = 1800001200
+    intent = order_payload(TICKER, 'yes', 1, '.5', 7, Config())
+    active = {'ticker': TICKER, 'side': 'yes', 'intent': intent,
+              'created_at': now - 900, 'status': 'delivery_unknown'}
+    events = []
+    class Client:
+        def close(self): events.append('client_closed')
+    class ReadOnlyBroker:
+        def __init__(self, config, requested_live=False):
+            assert requested_live is False
+            self.enabled = False; self.key_id = 'test'; self.client = Client()
+        def market(self, ticker):
+            return {'ticker': ticker, 'close_time': iso(now - 300)}
+        def request(self, method, path):
+            assert (method, path) == ('GET', '/exchange/user_data_timestamp')
+            return {'as_of_time': iso(now)}
+        def find_order(self, intent): return None
+        def pages(self, *args, **kwargs): return []
+        def account(self): return [], []
+    class Journal:
+        def __init__(self, config, key_id, holder, live):
+            assert live is True
+            self.value = {'size': 1, 'cycle': '0', 'net': '0', 'active': active}
+        def claim(self): events.append('claimed')
+        def state(self): return deepcopy(self.value)
+        def finish(self, entry):
+            assert entry['rejection_code'] == module.RECOVERY_CODE
+            self.value['active'] = None; events.append('finished')
+        def public_summary(self): return {'active': None, 'rejected': 1}
+        def release(self): events.append('released')
+    monkeypatch.setattr(module, 'KalshiExecution', ReadOnlyBroker)
+    monkeypatch.setattr(module, 'LiveJournal', Journal)
+    monkeypatch.setattr(module.time, 'time', lambda: now)
+    module.recover(0, TICKER, module.CONFIRMATION)
+    assert events == ['claimed', 'finished', 'released', 'client_closed']
+    assert 'stale_intent_resolved' in capsys.readouterr().out
+
+
 @pytest.mark.parametrize('code', ['KALSHI_HTTP_400', 'KALSHI_HTTP_401',
                                   'KALSHI_HTTP_403', 'KALSHI_HTTP_422'])
 def test_definitive_post_rejection_releases_intent_without_retry(rig, code):

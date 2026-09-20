@@ -33,6 +33,7 @@ def run(subaccount):
             'writes_authorized': broker.enabled, 'journal': journal.public_summary(),
             'resting_order_count': len(orders),
             'open_position_count': sum(1 for p in positions if p.get('position_fp') not in (None, '0', '0.00'))}
+        result['user_data_as_of'] = broker.request('GET', '/exchange/user_data_timestamp').get('as_of_time')
         if active:
             acknowledgement = active.get('acknowledgement') or {}
             order = broker.find_order(active['intent'], acknowledgement.get('order_id'))

@@ -76,6 +76,13 @@ only bounded counts, status and P&L metadata—never credentials, request header
 raw response bodies or client/order identifiers. Use it before intervening in an
 `unknown_delivery_blocked` state.
 
+`kalshi-btc-stale-intent-recovery.yml` is a separate manual repair for a legacy
+unacknowledged intent. It shares the live singleton, has no POST authorization,
+requires the exact ticker plus `resolve-no-order`, waits until after market close,
+requires Kalshi's user-data read timestamp to advance, and refuses recovery if
+any matching order, fill, resting order, or open position exists. It marks that
+one failed intent rejected; it never retries it or changes P&L.
+
 The execution worker is isolated from existing all-14-series collectors, historical studies and paper workflows. Those continue to provide multi-origin statistical comparisons. A live worker runs **one approved origin** at a time; it does not place competing bets for all forecast timings.
 
 ## Operator approval checklist
