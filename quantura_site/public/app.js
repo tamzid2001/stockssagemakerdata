@@ -9582,7 +9582,7 @@
         platform.innerHTML = `
           <strong>Platform</strong>
           <div><a href="/forecasting">Q Forecast</a></div>
-          <div><a href="/screener">Quantitative Screener</a></div>
+          <div><a href="/screener">Q Screener</a></div>
           <div><a href="/forecasts">Quantura Forecasts</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/dashboard">Workspace</a></div>
