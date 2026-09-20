@@ -5,6 +5,7 @@
   if (!root) return;
 
   const refs = {
+    source: document.getElementById("qs-source"),
     search: document.getElementById("qs-search"),
     universe: document.getElementById("qs-universe"),
     marketCap: document.getElementById("qs-market-cap"),
@@ -42,6 +43,7 @@
   };
 
   const defaults = Object.freeze({
+    source: "stocks",
     search: "",
     universe: "all",
     marketCap: "all",
@@ -136,6 +138,7 @@
   function readControls() {
     return {
       ...current,
+      source: refs.source?.value || "stocks",
       search: String(refs.search.value || "").trim(),
       universe: refs.universe.value || "all",
       marketCap: refs.marketCap.value || "all",
@@ -153,6 +156,7 @@
   }
 
   function writeControls(state) {
+    if(refs.source)refs.source.value=state.source || "stocks";
     refs.search.value = state.search || "";
     refs.universe.value = state.universe || "all";
     refs.marketCap.value = state.marketCap || "all";
@@ -162,14 +166,18 @@
     refs.sort.value = state.sort || "ticker";
     refs.direction.value = state.direction || "asc";
     refs.signalChanged.checked = Boolean(state.signalChanged);
+    const perps=state.source==="kalshi_perps";
+    for(const control of [refs.universe,refs.marketCap,refs.signal,refs.signalChanged,refs.statistic,refs.addRule])control.disabled=perps;
     root.querySelectorAll('input[name="position"]').forEach((input) => {
       input.checked = state.positions.includes(input.value);
+      input.disabled = perps;
     });
   }
 
   function parseUrl() {
     const params = new URLSearchParams(window.location.search);
     const allowed = {
+      source: ["stocks","kalshi_perps"],
       universe: ["all", "sp500", "nasdaq", "etf"],
       marketCap: ["all", "mega", "large", "mid", "small", "micro"],
       signal: ["all", "buy", "sell", "neutral", "unavailable"],
@@ -198,6 +206,7 @@
 
   function buildParams(state) {
     const params = new URLSearchParams();
+    if(state.source!=="stocks")params.set("source",state.source);
     if (window.location.pathname === "/forecasting") params.set("panel", "screener");
     if (state.search) params.set("search", state.search);
     if (state.universe !== "all") params.set("universe", state.universe);
@@ -275,13 +284,13 @@
   function rowHtml(row) {
     const memberships = Array.isArray(row.universe_memberships) ? row.universe_memberships : [];
     const position = positionView(row.quantile_position);
-    const suppliedUrl = String(row.analysis_url || "");
+    const suppliedUrl = String(row.analysis_url || row.forecast_view_url || "");
     const analysisUrl = suppliedUrl.startsWith("/") && !suppliedUrl.startsWith("//")
       ? suppliedUrl
       : `/forecasting?ticker=${encodeURIComponent(String(row.ticker || ""))}`;
     const actualStamp = row.actual_price_timestamp ? ` title="Actual close ${escapeHtml(formatDate(row.actual_price_timestamp, true))}"` : "";
     return `<tr>
-      <td data-label="Security"><div class="qs-security"><a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>View forecast</a>`:'<small>Weekly forecast not published</small>'}</div></td>
+      <td data-label="Security"><div class="qs-security"><a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>${row.forecast_action === "create" ? "Forecast" : "View forecast"}</a>`:'<small>Weekly forecast not published</small>'}</div></td>
       <td data-label="Actual" class="qs-mono"${actualStamp}>${escapeHtml(formatPrice(row.actual_price))}<small>${escapeHtml(formatDate(row.actual_price_timestamp,true))}</small><small>${escapeHtml(String(row.quote_session || "historical").replace(/_/g," "))} · ${escapeHtml(row.quote_source || row.data_source || "historical")}</small></td>
       ${["p01","p10","p25","p50","p75","p90","p99"].map(q=>`<td data-label="${q.toUpperCase()}" class="qs-mono" title="${escapeHtml(current.statistic === "row" ? "Comparison session" : `Horizon ${current.statistic}`)}">${escapeHtml(formatPrice(current.statistic === "row" ? row[q] : row.quantile_stats?.[q]?.[current.statistic]))}</td>`).join("")}
       <td data-label="Position"><span class="${position[1]}">${escapeHtml(position[0])}</span></td>
@@ -324,14 +333,17 @@
     refs.metricDate.textContent = formatDate(payload.generatedAt || payload.scanDate, false);
     refs.metricFreshness.textContent = freshnessLabel(payload.generatedAt);
     const weekly=payload.schemaVersion === "quantura-screener-v3";
-    document.getElementById("qs-engine").textContent=weekly ? "Five-model weekly ensemble" : "Prior validated scan";
-    document.getElementById("qs-engine-detail").textContent=weekly ? "1 session withheld · 7 NYSE sessions · Toto 4M" : "Weekly ensemble scan not published yet";
+    const perps=payload.dataSource==="kalshi_perps";
+    document.getElementById("qs-engine").textContent=perps ? "Forecast on demand" : weekly ? "Five-model weekly ensemble" : "Prior validated scan";
+    document.getElementById("qs-engine-detail").textContent=perps ? "USD per contract · no scheduled quantiles" : weekly ? "1 session withheld · 7 NYSE sessions · Toto 4M" : "Weekly ensemble scan not published yet";
+    if(perps)refs.metricProcessed.textContent=`${manifest.successfully_processed} closes available · ${manifest.failed} unavailable`;
     refs.freshness.textContent = `Scan ${formatDate(payload.generatedAt, true)} · latest completed minute close or historical fallback · quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`;
     refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} securities match the active research filters.`;
     current.page = Number(payload.page || current.page || 1);
     refs.pageLabel.textContent = `Page ${current.page.toLocaleString()} of ${Number(payload.pageCount || 1).toLocaleString()}`;
     refs.previous.disabled = current.page <= 1;
     refs.next.disabled = current.page >= Number(payload.pageCount || 1);
+    refs.tableWrap.dataset.source = perps ? "kalshi_perps" : "stocks";
     refs.tableBody.innerHTML = items.map(rowHtml).join("");
     disableExport(false);
     setView(items.length ? "table" : "empty");
@@ -380,7 +392,13 @@
     event.preventDefault();
     load({ resetPage: true });
   });
-  root.addEventListener("change", () => load({ resetPage: true }));
+  root.addEventListener("change", event => {
+    if(event.target===refs.source){current={...defaults,source:refs.source.value,positions:[],quantileRules:[]};writeControls(current);}
+    const perps=refs.source?.value==="kalshi_perps";
+    for(const control of [refs.universe,refs.marketCap,refs.signal,refs.signalChanged,refs.statistic,refs.addRule])control.disabled=perps;
+    root.querySelectorAll('input[name="position"]').forEach(control=>{control.disabled=perps;});
+    load({resetPage:true});
+  });
   refs.addRule.addEventListener("click",()=>{
     current=readControls();if(current.quantileRules.length>=12)return;
     current.quantileRules=[...current.quantileRules,{quantile:"p50",statistic:"avg",operator:"gt",percent:10}];writeControls(current);load({resetPage:true});
@@ -433,6 +451,7 @@
   document.getElementById("qs-save-alert").addEventListener("click",async event=>{
     const button=event.currentTarget;button.disabled=true;alertStatus.textContent="Saving…";
     try{const state=readControls();
+      if(state.source==="kalshi_perps")throw new Error("Daily closing-signal alerts apply to the stock scan. Perpetual forecasts are currently on demand.");
       // Saved responses also carry legacy normalized query fields. Do not send
       // them back as new editable filters when applying and saving a preset.
       const filters=Object.fromEntries(["search","universe","marketCap","minMarketCap","maxMarketCap","signal","signalChanged","quantileRules","positions","sort","direction","statistic"].filter(key=>state[key]!==undefined).map(key=>[key,state[key]]));

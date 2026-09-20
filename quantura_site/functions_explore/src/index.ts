@@ -12,7 +12,8 @@ import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
 import { registerPlatformApiRoutes } from "./platformApiRoutes";
-import { registerSupportChatRoutes, SUPPORT_MODEL, SUPPORT_OUTPUT_SCHEMA } from "./supportChat";
+import { registerSupportChatRoutes } from "./supportChat";
+import { kalshiPerps, registerKalshiPerpsRoutes } from "./kalshiPerps";
 import { authenticatePlatformRequest, requireWorkspacePermission, resolveWorkspaceAccess } from "./apiAccess";
 import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
 import { registerMarketResearchWatchdog } from "./marketResearchWatchdog";
@@ -686,12 +687,8 @@ registerPlatformApiRoutes(ROUTES, {
 registerScreenerAlertRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
 registerSupportChatRoutes(ROUTES, {
   db, auth, publicOrigin: PUBLIC_ORIGIN,
-  complete: async (messages) => (await invokeOpenAiLlm({
-    model: SUPPORT_MODEL, messages, temperature: 0, maxTokens: 1600,
-    allowWebSearch: false, stream: false, background: false,
-    jsonSchema: SUPPORT_OUTPUT_SCHEMA, store: false, workflow: "support_chat",
-  })).text,
 });
+registerKalshiPerpsRoutes(ROUTES);
 
 // Retired public-social and currency endpoints. Keep an explicit response for
 // old clients while ensuring none of the legacy handlers below can execute.
@@ -8363,16 +8360,18 @@ ROUTES.get("/screener/github-history/:workflowRunId/artifacts/:artifactId/downlo
 });
 
 ROUTES.get("/screener/data", async (req, res) => {
+  if(req.query.source && !["stocks","kalshi_perps"].includes(String(req.query.source))) {res.status(422).json({error:"screener_source_invalid"});return;}
+  const perps=req.query.source==="kalshi_perps";
   const parsed = parseQuantScreenerQuery(asPlainObject(req.query));
   if (parsed.errors.length) {
     res.status(400).json({ error: "invalid_screener_query", details: parsed.errors });
     return;
   }
   try {
-    const dataset = await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
-    const current = await screenerMarketService.current(dataset);
+    const dataset = perps ? await kalshiPerps.screener() : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    const current = perps ? {items:dataset.items,warnings:dataset.manifest.warnings} : await screenerMarketService.current(dataset);
     const page = filterSortPaginateRows(current.items, parsed.query);
-    page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...row,forecast_view_url:row.forecast_engine==="quantura_weekly_ensemble_v1"?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
+    page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...row,forecast_view_url:perps ? row.forecast_view_url : row.forecast_engine==="quantura_weekly_ensemble_v1"?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=30");
     res.status(200).json({
       ok: true,
@@ -8382,10 +8381,10 @@ ROUTES.get("/screener/data", async (req, res) => {
       generatedAt: dataset.generated_at,
       manifest: dataset.manifest,
       universeCount: dataset.items.length,
-      dataSource: "validated_github_release",
+      dataSource: perps ? "kalshi_perps" : "validated_github_release",
       warnings: current.warnings,
       schemaVersion: dataset.schema_version,
-      signalPolicy: "Latest completed minute close (including extended hours), historical-close fallback. Before the first forecast session, compare with its first row. Saved closing signals are separate.",
+      signalPolicy: perps ? "Completed trade closes in USD per contract. Forecasts are on demand; no scheduled quantile signals or closing-session alerts." : "Latest completed minute close (including extended hours), historical-close fallback. Before the first forecast session, compare with its first row. Saved closing signals are separate.",
     });
   } catch (error: any) {
     const detail = sanitizeText(error?.message || error, 120);
@@ -8400,11 +8399,13 @@ ROUTES.get("/screener/data", async (req, res) => {
 });
 
 ROUTES.get("/screener/export.csv", async (req, res) => {
+  if(req.query.source && !["stocks","kalshi_perps"].includes(String(req.query.source))) {res.status(422).json({error:"screener_source_invalid"});return;}
   const parsed = parseQuantScreenerQuery(asPlainObject(req.query));
   if (parsed.errors.length) { res.status(400).json({error:"invalid_screener_query",details:parsed.errors}); return; }
   try {
-    const dataset = await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
-    const current = await screenerMarketService.current(dataset);
+    const perps=req.query.source==="kalshi_perps";
+    const dataset = perps ? await kalshiPerps.screener() : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    const current = perps ? {items:dataset.items} : await screenerMarketService.current(dataset);
     const csv = screenerRowsCsv(filterSortPaginateRows(current.items,{...parsed.query,page:1,pageSize:Math.max(1,current.items.length)}).items);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");

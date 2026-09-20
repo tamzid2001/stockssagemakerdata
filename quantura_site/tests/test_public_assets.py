@@ -416,7 +416,9 @@ def test_historical_data_supports_alpaca_yahoo_and_no_start_date():
     assert 'value="yahoo">Yahoo Finance' in forecasting
     assert 'id="options-market-source"' in forecasting
     assert 'id="alpaca-start"' not in forecasting
-    assert 'source: byId("market-history-source")?.value || "auto"' in client
+    assert 'const source = byId("market-history-source")?.value || "auto"' in client
+    assert 'value="kalshi_perps">Kalshi Perpetuals · USD per contract' in forecasting
+    assert 'body.source === "kalshi_perps" ? "/api/market-data/perps/history" : "/api/market-data/stocks/history"' in client
 
 
 def test_notifications_ui_is_archived_without_deleting_delivery_implementation():
@@ -499,7 +501,7 @@ def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
     assert "node.innerHTML = '<a href=\"mailto:hello@quantura.studio\">hello@quantura.studio</a>'" in client
     for marker in [
         ">Q Forecast<",
-        ">Quantitative Screener<",
+        ">Q Screener<",
         ">Quantura Forecasts<",
         ">API reference<",
         ">Developer documentation<",

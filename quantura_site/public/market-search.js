@@ -22,7 +22,7 @@
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
   })[character]);
   const titleCase = (value) => String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const providerLabel = (value) => ({ alpaca: "Alpaca", yahoo: "Yahoo Finance", polymarket_us: "Polymarket US", kalshi: "Kalshi" })[value] || value;
+  const providerLabel = (value) => ({ alpaca: "Alpaca", yahoo: "Yahoo Finance", polymarket_us: "Polymarket US", kalshi: "Kalshi", kalshi_perps:"Kalshi Perpetuals" })[value] || value;
 
   function closeResults() {
     clearTimeout(timer);
@@ -53,7 +53,7 @@
 
   function render(groups, errors) {
     resources.clear();
-    const sections = ["alpaca", "yahoo", "polymarket_us", "kalshi"].flatMap((source) => {
+    const sections = ["alpaca", "yahoo", "polymarket_us", "kalshi", "kalshi_perps"].flatMap((source) => {
       const rows = Array.isArray(groups?.[source]) ? groups[source] : [];
       if (!rows.length && !errors?.[source]) return [];
       const cards = rows.length
@@ -179,7 +179,7 @@
       if (forecastSource) forecastSource.value = source === "alpaca" ? "alpaca" : "yahoo";
       if (assetClass) assetClass.value = button.dataset.assetClass || "equity";
       const sourceType = document.getElementById("ensemble-source-type");
-      if (sourceType) { sourceType.value = "ticker"; sourceType.dispatchEvent(new Event("change", { bubbles: true })); }
+      if (sourceType) { sourceType.value = source === "kalshi_perps" ? "kalshi_perp" : "ticker"; sourceType.dispatchEvent(new Event("change", { bubbles: true })); }
       setPanel("forecast");
       (document.getElementById("ensemble-source-type") || ticker)?.focus({ preventScroll: true });
       (document.getElementById("ensemble-forecast-form") || document.getElementById("forecast-form"))?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -189,7 +189,7 @@
       const historySymbol = document.getElementById("alpaca-symbol");
       const historySource = document.getElementById("market-history-source");
       if (historySymbol) historySymbol.value = symbol;
-      if (historySource) historySource.value = source === "alpaca" ? "alpaca" : "yahoo";
+      if (historySource) { historySource.value = source === "kalshi_perps" ? source : source === "alpaca" ? "alpaca" : "yahoo"; historySource.dispatchEvent(new Event("change",{bubbles:true})); }
       setPanel("news");
       historySymbol?.focus({ preventScroll: true });
       document.getElementById("alpaca-history-form")?.scrollIntoView({ behavior: "smooth", block: "start" });

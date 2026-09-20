@@ -1,0 +1,22 @@
+---
+title: "Q Support"
+description: "Jev-routed, documented help with no generated chat or account actions."
+---
+
+Open **Q Support** in the website corner. Questions are sent to TypeSafe's Jev decision API. Jev selects from curated Quantura help topics; the website returns the matching authored answer and documentation link. It does not generate prose, execute tools, inspect private account records, place trades or change permissions.
+
+Uncertain or account-specific questions route to Contact. The classifier can select the wrong topic: use the human Contact link if the supplied guidance does not resolve your issue. There is no GPT fallback. Numerical forecasts are still produced by the time-series models, not Jev.
+
+`POST /api/support/chat` accepts a bounded alternating `messages` array ending in a user question. The endpoint reuses authenticated sessions (including secure guest sessions) and API keys with `account:read`. Per-user and global quotas protect the paid upstream service.
+
+```json
+{"messages":[{"role":"user","content":"How do I download my workspace CSV?"}]}
+```
+
+Success contains `data.answer`, `data.references`, `data.escalate`, `data.model`, `data.response_mode` (`documented_help`) and `data.knowledge_version`. Errors include 401, 422, 429 and 503. Do not send passwords, API keys or private datasets. Conversations stay in page memory, not localStorage or workspace storage; Clear chat removes that local conversation. Request counts and safe correlation IDs are recorded for abuse prevention.
+
+## Operator configuration
+
+`TYPESAFE_API_KEY` is a server-side secret on the API project and in GitHub Secrets. It must never be shipped in browser JavaScript or committed in configuration files. The integration pins `jev-1.13.0` at `https://api.typesafe.ai/v1/systemone`, uses typed Choice questions, validates the returned selection and probability fields, and forbids redirects. Provider failures return a safe error without logging the question, credential or provider error body.
+
+Reference: [TypeSafe HTTP API](https://docs.typesafe.ai/api).

@@ -9,7 +9,7 @@
   }
   function addMessage(role, text, references = []) {
     const row = element("section", "", `support-message support-message-${role}`);
-    row.append(element("strong", role === "user" ? "You" : "Quantura assistant"), element("p", text));
+    row.append(element("strong", role === "user" ? "You" : "Q Support"), element("p", text));
     if (references.length) {
       const links = element("div", "", "support-references");
       for (const reference of references) {
@@ -38,13 +38,13 @@
       status.textContent = "Initializing a secure guest session. Retry shortly; documentation and Contact remain available below.";
       return;
     }
-    if (/(?:qnt_live_|sk-|hf_|mint_)[A-Za-z0-9_\-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|Bearer\s+\S{20,}/i.test(question)) {
+    if (/(?:qnt_live_|apikey_|xkeysib-|sk-|hf_|mint_)[A-Za-z0-9_\-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|Bearer\s+\S{20,}/i.test(question)) {
       status.textContent = "Please remove credentials before sending. Never share passwords, API keys or private data."; return;
     }
     const turn = generation;
     controller = new AbortController(); const request = controller;
     const timeout = setTimeout(() => request.abort(), 65000);
-    submit.disabled = true; status.textContent = "Preparing an answer…";
+    submit.disabled = true; status.textContent = "Finding documented guidance…";
     const outgoing = [...messages.slice(-8), { role: "user", content: question }];
     const userRowIndex = list.childElementCount;
     addMessage("user", question); input.value = "";
@@ -58,7 +58,7 @@
       if (typeof payload.data?.answer !== "string" || !Array.isArray(payload.data?.references)) throw new Error("The reply could not be displayed. Please retry.");
       messages = [...outgoing, { role: "assistant", content: payload.data.answer }];
       addMessage("assistant", payload.data.answer, payload.data.references);
-      status.textContent = "Answer based on Quantura product guidance. AI can make mistakes.";
+      status.textContent = "Documented Quantura guidance, selected by Jev. Contact support if it does not resolve your question.";
     } catch (error) {
       if (turn !== generation) return;
       status.textContent = error.name === "AbortError" ? "The request timed out. Please retry or contact support." : error.message;
@@ -73,8 +73,8 @@
     dialog.id = "quantura-support"; dialog.setAttribute("aria-labelledby", "support-title");
     dialog.setAttribute("data-cs-mask", ""); dialog.setAttribute("data-cs-exclude", "");
     const header = element("header", "", "support-header");
-    const heading = element("div"); const title = element("h2", "Quantura Support"); title.id = "support-title";
-    heading.append(title, element("p", "AI assistant · GPT-5.6 Luna", "small"));
+    const heading = element("div"); const title = element("h2", "Q Support"); title.id = "support-title";
+    heading.append(title, element("p", "Jev-routed · documented help", "small"));
     const close = element("button", "Close", "cta secondary small"); close.type = "button";
     close.setAttribute("aria-label", "Close support assistant"); close.addEventListener("click", () => dialog.close());
     header.append(heading, close);
@@ -91,7 +91,7 @@
     submit = element("button", "Send question", "cta small"); submit.type = "submit";
     actions.append(clear, submit); form.append(label, input, actions); form.addEventListener("submit", send);
     status = element("p", "", "support-status small"); status.setAttribute("role", "status");
-    const privacy = element("p", "Messages are sent to OpenAI when you press Send. Do not include secrets or private data.", "support-privacy small"); privacy.id = "support-privacy";
+    const privacy = element("p", "Questions are sent to TypeSafe (Jev) when you press Send. Responses are fixed Quantura help text, not generated chat. Do not include secrets or private data.", "support-privacy small"); privacy.id = "support-privacy";
     const footer = element("footer", "", "support-footer");
     for (const [text, href] of [["Documentation", "https://quantura.mintlify.app/"], ["Contact support", "/contact"], ["Privacy", "/privacy"]]) {
       const link = element("a", text); link.href = href; footer.append(link);

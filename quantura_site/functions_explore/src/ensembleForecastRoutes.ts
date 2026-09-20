@@ -12,6 +12,7 @@ import {
 import modelRegistry from "./ensembleModelRegistry.json";
 import { fetchStockHistoryData } from "./marketDataRoutes";
 import { AlpacaError } from "./alpacaClient";
+import { kalshiPerps, perpFrequency } from "./kalshiPerps";
 import { PredictionMarketDataError, predictionForecastHistory, forecastObservationLimit } from "./predictionMarketData";
 import { historySelection } from "./eventHistory";
 import { loadPublishedScreenerDataset } from "./quantScreener";
@@ -477,7 +478,7 @@ export function normalizeEnsemblePreset(body: JsonRecord, plan: PlanKey): JsonRe
   // Presets remain resource-agnostic: retain history controls, never an
   // uploaded dataset, an input array, credentials, or another workspace ID.
   const historyControls: JsonRecord = { history_lag_minutes: body.history_lag_minutes ?? 0 };
-  if (source.type === "prediction_market" || source.type === "ticker") {
+  if (source.type === "prediction_market" || source.type === "ticker" || source.type === "kalshi_perp") {
     historyControls.limit = forecastObservationLimit(source.limit, source.type === "ticker" ? MAX_HISTORY_ROWS : 500);
   }
   if (source.type === "prediction_market") Object.assign(historyControls, historySelection({...source, ...(source.history_phase === "auto" ? {history_phase:"both"} : {})}), source.history_phase === "auto" ? {history_phase:"auto"} : {});
@@ -493,6 +494,16 @@ async function materializeSource(
 ): Promise<{ rows: Array<{ timestamp: string; target: number }>; source: JsonRecord; frequency: string; timezone: string }> {
   const source = plain(sourceValue);
   const type = text(source.type || "ticker", 40);
+  if (type === "kalshi_perp") {
+    assertOnlyKeys(source,["type","symbol","frequency","limit"],"source");
+    const limit=forecastObservationLimit(source.limit),frequency=perpFrequency(source.frequency);
+    const history=await kalshiPerps.history({symbol:source.symbol,frequency,limit,end:cutoff});
+    return {rows:normalizeSeriesRows(history.rows,"timestamp","close",2,5000),frequency,timezone:"UTC",
+      source:{type,provider:"kalshi_perps",symbol:history.symbol,title:history.market.name,frequency,limit,
+        field:"price.close",units:"USD per contract",contract_size:history.market.contract_size,
+        underlying_multiplier:history.market.underlying_multiplier,provenance:history.metadata,warnings:history.warnings,
+        redistribution_status:"review_required"}};
+  }
   if (type === "prediction_market") {
     assertOnlyKeys(source, ["type", "provider", "symbol", "contract_id", "frequency", "history_phase", "history_lookback_minutes", "limit"], "source");
     const limit = forecastObservationLimit(source.limit);
@@ -910,12 +921,14 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     normalizeEnsembleConfiguration(body, access.plan);
     const cutoff = absoluteHistoryCutoff(body);
     const materialized = await materializeSource(options, principal, workspaceId, body.source, cutoff);
-    const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(body, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
+    const calendarBody = materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
+    const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(calendarBody, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
     if (cutoff !== undefined) Object.assign(materialized.source, { history_lag_minutes: body.history_lag_minutes || 0,
       requested_input_cutoff_at: new Date(cutoff).toISOString(), analysis_mode: "historical_replay" });
     if (body.prediction_end_at) materialized.source.requested_prediction_end_at = iso(body.prediction_end_at);
     validateModelHistory(configuration, materialized.rows.length);
     if (materialized.source.type === "prediction_market" && configuration.horizon_mode !== "frequency_periods") throw new PredictionMarketDataError("horizon_mode_unsupported", "Prediction markets use frequency periods, not equity trading sessions.", 422);
+    if (materialized.source.type === "kalshi_perp" && (configuration.horizon_mode !== "frequency_periods" || configuration.transform === "logit")) throw new PredictionMarketDataError("perp_configuration_invalid", "Perpetuals use frequency periods and price transforms, not NYSE sessions or binary probabilities.",422);
     const sourceHash = datasetHash(materialized.rows, materialized.source);
     const normalizedRequest = {
       prediction_length: configuration.prediction_length,
@@ -925,7 +938,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       context_length: configuration.context_length,
       failure_policy: configuration.failure_policy,
       frequency: materialized.frequency,
-      calendar: materialized.source.type === "prediction_market" ? "NONE" : configuration.calendar,
+      calendar: ["prediction_market","kalshi_perp"].includes(text(materialized.source.type)) ? "NONE" : configuration.calendar,
       models: configuration.models,
       toto_variant: configuration.toto_variant,
     };
@@ -1021,7 +1034,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
     requireWorkspacePermission(access, "forecast.create");
     const configuration = normalizeEnsembleConfiguration(plain(original.request), access.plan);
-    const rows = await loadInputRows(originalRef, plain(original.source).type === "prediction_market" ? 2 : 40);
+    const rows = await loadInputRows(originalRef, ["prediction_market","kalshi_perp"].includes(text(plain(original.source).type)) ? 2 : 40);
     validateModelHistory(configuration, rows.length);
     await enforceComputeQuota(options, access.plan, workspaceId);
     const ref = options.db.collection(JOBS).doc();
@@ -1126,6 +1139,9 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     else if (source.type === "prediction_market") {
       const result = await predictionForecastHistory(source.provider as "kalshi" | "polymarket_us", text(source.symbol), text(source.contract_id), frequency, { allowResolved: true, since: cutoff, minimumRows: 0, includeQuotes: true, ...(frequency === "1min" ? {preserveTimestamp:cutoff+60000} : {}) });
       rows = result.rows;
+    } else if (source.type === "kalshi_perp") {
+      const result=await kalshiPerps.history({symbol:source.symbol,frequency,start:cutoff,limit:5000});
+      rows=result.rows.map(row=>({timestamp:row.timestamp,target:row.close}));
     } else if (source.type === "ticker") {
       try {
         // A daily forecast still overlays completed intraday quotes. Never
@@ -1269,7 +1285,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       return data;
     });
     let rows;
-    try { rows = await loadInputRows(ref, plain(job.source).type === "prediction_market" ? 2 : 40); }
+    try { rows = await loadInputRows(ref, ["prediction_market","kalshi_perp"].includes(text(plain(job.source).type)) ? 2 : 40); }
     catch (error) {
       await failEnsembleJob(options, ref, {code:"WORKER_INPUT_UNAVAILABLE",retryable:true});
       throw error;

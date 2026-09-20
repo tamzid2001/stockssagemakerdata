@@ -3,11 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Quantitative Screener | S&amp;P 500 + Nasdaq</title>
+    <title>Q Screener | Stocks &amp; Kalshi Perpetuals</title>
     <meta name="description" content="Screen the current S&amp;P 500, eligible Nasdaq common stocks, and SPY by forecast quantiles, market cap, earnings, and model-derived signals." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura.studio/screener" />
-    <meta property="og:title" content="Quantura Quantitative Screener" />
+    <meta property="og:title" content="Q Screener" />
     <meta property="og:description" content="A high-density market research table for quantile dislocations, earnings, and forecast signals." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura.studio/screener" />
@@ -18,9 +18,9 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
     <link rel="manifest" href="/site.webmanifest?v=20260909a" />
     <script src="/theme-init.js?v=20260908a"></script>
-    <script defer src="/ui-runtime.js?v=20260908a"></script>
+    <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
     <link rel="stylesheet" href="/styles.css?v=20260824s1" />
-    <link rel="stylesheet" href="/screener.css?v=20260824s1" />
+    <link rel="stylesheet" href="/screener.css?v=20260920-perps-jev" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -32,7 +32,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260824s1"></script>
-    <script defer src="/screener.js?v=20260824s1"></script>
+    <script defer src="/screener.js?v=20260920-perps-jev"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -54,7 +54,7 @@
       <aside class="app-sidebar qs-sidebar">
         <nav class="sidebar-nav" aria-label="Research tools">
           <a class="sidebar-link" href="/forecasting"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecasting</span></a>
-          <a class="sidebar-link active" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+          <a class="sidebar-link active" href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Q Screener</span></a>
           <a class="sidebar-link" href="/historical-data"><i class="iconoir-database-export" aria-hidden="true"></i><span>Historical Data</span></a>
           <a class="sidebar-link" href="/options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
           <a class="sidebar-link" href="/forecasting"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Q Forecast</span></a>
@@ -67,11 +67,11 @@
       <div class="qs-main">
         <section class="qs-hero" aria-labelledby="screener-title">
           <div>
-            <div class="qs-eyebrow"><span class="qs-live-dot" aria-hidden="true"></span> Validated scheduled research dataset</div>
-            <h1 id="screener-title">Quantitative Forecast Screener</h1>
+            <div class="qs-eyebrow"><span class="qs-live-dot" aria-hidden="true"></span> Stocks &amp; perpetual contracts</div>
+            <h1 id="screener-title">Q Screener</h1>
             <p>
-              Find forecast dislocations across the current S&amp;P 500, broad eligible Nasdaq common-stock universe, and SPY.
-              Compare the latest available close with forecast quantiles. Current signals include extended hours; saved closing signals remain separate.
+              Compare stock closes with weekly forecast quantiles, or browse Kalshi perpetual trade closes and open an on-demand forecast.
+              Stock signals include extended hours; saved session-closing signals remain separate. Perpetual prices are USD per contract, not underlying spot prices.
             </p>
           </div>
           <div class="qs-hero-actions">
@@ -111,7 +111,7 @@
             <span id="qs-filter-count">0 active</span>
           </summary>
           <form id="qs-filters" novalidate>
-            <div class="qs-filter-grid">
+            <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · weekly ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · trade closes</option></select></label>
               <label class="qs-field qs-search-field">
                 <span>Search</span>
                 <div class="qs-input-icon"><i class="iconoir-search" aria-hidden="true"></i><input id="qs-search" name="search" type="search" placeholder="Ticker or company, e.g. PLTR" autocomplete="off" /></div>
@@ -281,7 +281,7 @@
     <footer class="footer">
       <div class="container footer-grid">
         <div><div class="logo">QUANTURA</div><p class="small">Decision intelligence for market research, forecasting, and execution.</p></div>
-        <div class="small"><strong>Research</strong><div><a href="/forecasting">Forecasting</a></div><div><a href="/screener">Screener</a></div><div><a href="/historical-data">Historical Data</a></div><div><a href="/options">Options</a></div></div>
+        <div class="small"><strong>Research</strong><div><a href="/forecasting">Forecasting</a></div><div><a href="/screener">Q Screener</a></div><div><a href="/historical-data">Historical Data</a></div><div><a href="/options">Options</a></div></div>
         <div class="small"><strong>Legal</strong><div><a href="/terms">Terms</a></div><div><a href="/privacy">Privacy</a></div><div><a href="/disclaimer">Disclaimer</a></div><p class="legal-copy">Quantura provides research software, not brokerage or investment-advisory services.</p></div>
       </div>
       <div class="container small footer-bottom">© 2026 Quantura. All rights reserved.</div>

@@ -98,12 +98,12 @@
     const support = document.createElement("button");
     support.type = "button"; support.className = "support-launcher";
     support.id = "quantura-support-launcher"; support.setAttribute("aria-haspopup", "dialog");
-    support.setAttribute("aria-label", "Open Quantura support assistant");
-    support.textContent = "Help";
+    support.setAttribute("aria-label", "Open Q Support");
+    support.textContent = "Q Support";
     support.addEventListener("click", async () => {
       support.disabled = true;
       try {
-        await loadScript("/support-chat.js?v=20260909a");
+        await loadScript("/support-chat.js?v=20260920-jev");
         window.QuanturaSupport.open(support);
       } catch { support.textContent = "Retry help"; }
       finally { support.disabled = false; }

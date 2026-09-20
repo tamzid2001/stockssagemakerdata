@@ -100,13 +100,20 @@
   }
 
   function stockHistoryBody() {
+    const source = byId("market-history-source")?.value || "auto";
+    const date = byId("alpaca-end")?.value;
+    // The perps endpoint accepts an instant, not an exclusive stock session
+    // date. Today means latest available; older dates include the UTC day.
+    const end = source === "kalshi_perps" && date
+      ? new Date(Math.min(Date.now(), Date.parse(`${date}T23:59:59.999Z`))).toISOString() : date;
     return {
-      source: byId("market-history-source")?.value || "auto",
+      source,
       symbol: byId("alpaca-symbol")?.value.trim().toUpperCase(), timeframe: byId("alpaca-timeframe")?.value,
-      end: byId("alpaca-end")?.value, session: byId("alpaca-session")?.value,
+      end, session: byId("alpaca-session")?.value,
       adjustment: byId("alpaca-adjustment")?.value, feed: byId("alpaca-feed")?.value, limit: byId("alpaca-row-limit")?.value,
     };
   }
+  const historyEndpoint = body => body.source === "kalshi_perps" ? "/api/market-data/perps/history" : "/api/market-data/stocks/history";
   function initHistoricalData() {
     const form = byId("alpaca-history-form");
     if (!form) return;
@@ -119,8 +126,18 @@
     const feedSelect = byId("alpaca-feed");
     const syncSourceControls = () => {
       const yahooOnly = sourceSelect?.value === "yahoo";
+      const perps = sourceSelect?.value === "kalshi_perps";
+      for (const id of ["alpaca-feed","alpaca-session","alpaca-adjustment"]) {
+        const control=byId(id);if(control){control.disabled=perps;control.closest(".field").hidden=perps;}
+      }
+      const interval=byId("alpaca-timeframe");
+      for(const option of interval.options)option.disabled=perps && !["1Min","1Hour","1Day"].includes(option.value);
+      if(interval.selectedOptions[0]?.disabled)interval.value="1Hour";
+      const rowLimit=byId("alpaca-row-limit");
+      for(const option of rowLimit.options)option.disabled=perps && (!Number.isFinite(Number(option.value)) || Number(option.value)>5000);
+      if(rowLimit.selectedOptions[0]?.disabled)rowLimit.value="500";
       if (feedSelect) {
-        feedSelect.disabled = yahooOnly;
+        feedSelect.disabled = yahooOnly || perps;
         feedSelect.title = yahooOnly ? "Yahoo Finance selects its own public chart feed." : "Choose an Alpaca market-data feed.";
       }
     };
@@ -141,7 +158,7 @@
       downloadButton.disabled = true;
       status(historyStatus, "Requesting chronological market bars…");
       try {
-        const payload = await jsonRequest("/api/market-data/stocks/history", { method: "POST", body: JSON.stringify(body) });
+        const payload = await jsonRequest(historyEndpoint(body), { method: "POST", body: JSON.stringify(body) });
         const rows = Array.isArray(payload.rows) ? payload.rows : [];
         table(byId("alpaca-history-preview"), [
           { key: "timestamp", label: "Timestamp" }, { key: "open", label: "Open", render: (row) => number(row.open) },
@@ -150,13 +167,13 @@
           { key: "tradeCount", label: "Trades", render: (row) => number(row.tradeCount, 0) }, { key: "vwap", label: "VWAP", render: (row) => number(row.vwap) },
           { key: "session", label: "Session", render: (row) => String(row.session || "").replaceAll("_", " ") },
         ], rows);
-        const counts = rows.reduce((result, row) => ({ ...result, [row.session]: (result[row.session] || 0) + 1 }), {});
+        const counts = rows.reduce((result, row) => {const key=row.session || (body.source==="kalshi_perps" ? "24/7 · UTC trade bars" : "unspecified");return {...result,[key]:(result[key]||0)+1};}, {});
         byId("alpaca-session-summary").innerHTML = Object.entries(counts).map(([key, value]) => `<div><span>${html(key.replaceAll("_", " "))}</span><strong>${Number(value).toLocaleString()}</strong></div>`).join("") || '<p class="small muted">No session observations.</p>';
         const provider = String(payload.provider || payload.source || "market data");
         const feed = payload.feed ? ` · ${String(payload.feed).toUpperCase()}` : "";
         const fallback = payload.fallbackUsed ? " · automatic fallback used" : "";
         byId("alpaca-preview-summary").textContent = `${Number(payload.count || rows.length).toLocaleString()} ${payload.timeframe} observations · ${provider}${feed} · ${payload.adjustment || "raw"}${fallback} · oldest to newest`;
-        status(historyStatus, `Loaded ${Number(payload.count || rows.length).toLocaleString()} observations from ${provider}.`, "success");
+        status(historyStatus, `Loaded ${Number(payload.count || rows.length).toLocaleString()} observations from ${provider}. ${payload.metadata?.units || ""} ${(payload.warnings || []).join(" ")}`, "success");
         downloadButton.disabled = false;
       } catch (error) {
         byId("alpaca-history-preview").innerHTML = `<div class="error-state">${html(error.message)}</div>`;
@@ -167,7 +184,7 @@
       const body = stockHistoryBody();
       disable(downloadButton, true, "Generating CSV…");
       try {
-        await downloadCsv("/api/market-data/stocks/history", body, `${body.symbol}-${body.timeframe}.csv`);
+        await downloadCsv(historyEndpoint(body), body, `${body.symbol}-${body.timeframe}.csv`);
         status(historyStatus, "CSV generated and downloaded successfully.", "success");
         void window.QuanturaProductivity?.record("historical_data_downloaded", `Historical data downloaded · ${body.symbol}`, { resource_type: "historical_dataset", resource_id: body.symbol });
       } catch (error) { status(historyStatus, error.message, "error"); }
