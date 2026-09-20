@@ -45,6 +45,7 @@ Review findings and disposition:
 2. **Critical YES/NO conversion:** V2 uses a single YES bid/ask book. Buying NO is ASK at `1 - no_price`; never submit NO's economic price as the YES price. Covered by tests.
 3. **Shard funding/routing:** use authoritative market `exchange_index` for orders and balance. Do not assume shard zero, infer it from ticker text, or transfer funds automatically.
 4. **Ambiguous POST:** a timeout, malformed ACK or crash is not evidence that no order exists. Persist a deterministic client ID and intent before POST, reconcile by that exact ID, and never blindly resubmit.
+   Create Order V2 request prices use the documented 2–4 decimal request format; the six-decimal format is response-only. The worker validates and journals the V2 acknowledgement (`order_id`, fill/remaining counts and matching-engine timestamp), then looks up that exact order before falling back to the deterministic client ID. Kalshi account reads can briefly lag a successful write, so an acknowledged-but-not-yet-readable order is reported separately from truly unknown delivery.
 5. **Different account activity:** the existing bot can trade the same BTC markets. Primary-account selection is supported, but unexplained positions/orders block entry. Account reconciliation is not designed to share positions with another bot. Dedicated subaccounts remain supported if independently selected by the operator.
 6. **Reference startup probe actually trades:** not copied. Readiness performs only authenticated GET requests; any later exchange-order validation is a separate operator action.
 7. **State published to Git/artifacts:** not copied. Private small Firestore coordination/journal plus encrypted cloud evidence avoids public account-state commits and the previous Actions artifact quota failure.
@@ -68,6 +69,13 @@ Protocol references:
 - `observe`: real minute collection/ensemble/signals, signed read-only account preflight, intent logging only; does not invent fills or update recovery from simulated outcomes.
 - `live`: requires all independent approval gates below. Only this mode can submit orders.
 
+`kalshi-btc-live-diagnostics.yml` is a separate manually dispatched, read-only
+workflow. It reads the private live journal and performs signed account/order/fill
+GET requests without receiving any live-write approval variables. It reports
+only bounded counts, status and P&L metadata—never credentials, request headers,
+raw response bodies or client/order identifiers. Use it before intervening in an
+`unknown_delivery_blocked` state.
+
 The execution worker is isolated from existing all-14-series collectors, historical studies and paper workflows. Those continue to provide multi-origin statistical comparisons. A live worker runs **one approved origin** at a time; it does not place competing bets for all forecast timings.
 
 ## Operator approval checklist
@@ -89,7 +97,7 @@ The worker runs up to five hours with a total-job deadline of 345 minutes measur
 
 `kalshi_execution_sessions` is explicitly client-denied in Firestore rules. It contains bounded configuration, fenced lease, recovery/current intent, the last eight immutable provisional snapshots, worker health (updated each minute), and one small audit record per traded market. Near-close snapshots and outcome comparisons use the same encrypted evidence store. Raw minute/forecast evidence is AES-GCM encrypted in the existing private Storage bucket under `private-research/kalshi-execution/`. No public URLs, public Git state, or Actions account-data artifacts. Storage/Firestore usage is not free; retention should be reviewed before lengthy operation. SIGTERM/graceful handoff saves remaining tape; hard termination can lose uncheckpointed minute evidence but does not reset durable trade accounting or invent missed signals.
 
-Before any POST, the worker verifies its current lease and the session's `enabled` kill switch. Unknown delivery stops new entries until exact order/account reconciliation. It does not retry with a new client ID. Missing/account-mismatched fields fail closed, not to zero. Authoritative settlement quantities, costs, fees and revenue must agree before recovery changes. An unresolved post requires operator reconciliation, not deleting the journal.
+Before any POST, the worker verifies its current lease and the session's `enabled` kill switch. A definitive HTTP 400/401/403/422 rejection is recorded and releases the rejected intent; it is never reported as successful and is not retried for that market. HTTP 409/429/5xx, transport failures, malformed acknowledgements and crashes remain ambiguous and stop new entries until exact order/account reconciliation. A validated acknowledgement remains blocked from resubmission while Kalshi's read model catches up. Missing/account-mismatched fields fail closed, not to zero. Authoritative settlement quantities, costs, fees and revenue must agree before recovery changes. An unresolved post requires operator reconciliation, not deleting the journal.
 
 Emergency: set `QUANTURA_KALSHI_CONTINUOUS=false` and `QUANTURA_KALSHI_LIVE_ENABLED=false` to prevent new dispatch/approval, and set the active private session's `enabled=false` to block new entries in the running process. Cancel the running Action if necessary. Already submitted IOC fills remain held to settlement; inspect the exchange directly. **This does not liquidate positions or cancel another bot's orders.**
 

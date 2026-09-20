@@ -127,7 +127,8 @@ def run(config, mode, duration):
                         last_renew = now
                     if now - last_reconcile >= 20:
                         status = trader.reconcile()
-                        print(json.dumps({'event': 'execution_heartbeat', 'mode': mode, 'status': status}), flush=True)
+                        print(json.dumps({'event': 'execution_heartbeat', 'mode': mode,
+                            'status': status, **journal.public_summary()}), flush=True)
                         last_reconcile = now
                     lifecycle = store.values('btc_lifecycle')
                     minute_rows = store.values('btc_minutes')
@@ -199,6 +200,11 @@ def run(config, mode, duration):
                                 agrees = direction and first['contract_id'].endswith(':' + direction['side'])
                                 pending[ticker] = {**first, 'direction': direction, 'agrees': bool(agrees), 'done': False}
                                 persist_evidence(journal, ticker, {'kind': 'first_p90', **pending[ticker]})
+                                print(json.dumps({'event': 'signal_decision', 'ticker': ticker,
+                                    'forecast_side': first['contract_id'].rsplit(':', 1)[1],
+                                    'sticky_side': direction.get('side') if direction else None,
+                                    'agrees': bool(agrees), 'signal_at': first['signal_at'],
+                                    'entry_minute': first['signal_at'] + 60}), flush=True)
                         s = pending.get(ticker)
                         if s and not s['done'] and s['agrees']:
                             entry_at = s['signal_at'] + 60
@@ -207,10 +213,19 @@ def run(config, mode, duration):
                                 # Any rejection is terminal for this market's FIRST signal.
                                 s['done'] = True
                                 try:
-                                    trader.enter(s, quote, now)
+                                    entry = trader.enter(s, quote, now)
+                                    acknowledgement = entry.get('acknowledgement', {})
+                                    print(json.dumps({'event': 'entry_acknowledged' if acknowledgement else 'entry_observed',
+                                        'ticker': ticker, 'side': entry['side'],
+                                        'requested_contracts': entry['intent']['count'],
+                                        'acknowledged_fill': acknowledgement.get('acknowledged_fill'),
+                                        'acknowledged_remaining': acknowledgement.get('acknowledged_remaining')}), flush=True)
                                 except (RuntimeError, ValueError, KeyError) as exc:
+                                    code = str(exc) if re.fullmatch(r'[A-Z][A-Z0-9_]{3,80}', str(exc)) else 'EXECUTION_BLOCKED'
                                     persist_evidence(journal, ticker, {'kind': 'entry_blocked', 'error_type': type(exc).__name__,
-                                        'code': str(exc) if re.fullmatch(r'[A-Z][A-Z0-9_]{3,80}', str(exc)) else 'EXECUTION_BLOCKED'})
+                                        'code': code})
+                                    print(json.dumps({'event': 'entry_blocked', 'ticker': ticker,
+                                        'code': code, **journal.public_summary()}), flush=True)
                             elif now > entry_at + 30:
                                 s['done'] = True
                                 persist_evidence(journal, ticker, {'kind': 'missed_entry', 'expected_minute': entry_at})
