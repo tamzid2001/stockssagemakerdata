@@ -64,3 +64,16 @@ def test_live_diagnostic_is_manual_read_only_and_cannot_submit():
     assert 'QUANTURA_KALSHI_APPROVED_CONFIG' not in text
     assert 'QUANTURA_KALSHI_APPROVED_SHA' not in text
     assert 'kalshi_live_worker' not in text
+
+
+def test_stale_recovery_is_manual_proof_gated_and_shares_live_singleton():
+    text = (ROOT / '.github/workflows/kalshi-btc-stale-intent-recovery.yml').read_text()
+    workflow = yaml.safe_load(text)
+    inputs = workflow[True]['workflow_dispatch']['inputs']
+    assert inputs['confirmation']['required'] is True
+    assert workflow['permissions'] == {'contents': 'read'}
+    assert workflow['concurrency']['group'] == 'quantura-kalshi-btc-execution-singleton'
+    assert 'kalshi_live_recovery' in text
+    assert 'QUANTURA_KALSHI_LIVE_ENABLED' not in text
+    assert 'QUANTURA_KALSHI_APPROVED_CONFIG' not in text
+    assert 'RECOVERY_TICKER' in text and '${{ inputs.ticker }}' not in text.split('run: >-', 1)[1]

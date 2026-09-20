@@ -31,4 +31,5 @@ jobs:
           KALSHI_API_KEY_ID: ${{ secrets.KALSHI_PROD_API_KEY }}
           KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: python -m market_research.kalshi_live_diagnostics --subaccount '${{ inputs.subaccount || 0 }}'
+          DIAGNOSTIC_SUBACCOUNT: ${{ inputs.subaccount || 0 }}
+        run: python -m market_research.kalshi_live_diagnostics --subaccount "$DIAGNOSTIC_SUBACCOUNT"
