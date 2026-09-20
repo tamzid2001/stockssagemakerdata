@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 from collections.abc import Callable, Mapping, Sequence
@@ -17,10 +18,69 @@ from typing import Any
 
 import httpx
 
+from scripts.weekly_screener import ENGINE as WEEKLY_ENSEMBLE_ENGINE
+from scripts.weekly_screener import weekly_configuration
+
+from .capabilities import MODEL_REGISTRY
+from .schemas import APPROVED_MODELS
 from .worker import execute_job
 
 KALSHI_ORIGIN = "https://api.elections.kalshi.com/trade-api/v2"
-ForecastFn = Callable[[list[dict[str, Any]], Mapping[str, Any]], list[dict[str, Any]]]
+FIVE_MODEL_IDS = tuple(APPROVED_MODELS)
+FIVE_MODEL_MINIMUM_HISTORY = max(
+    2,
+    *(int(MODEL_REGISTRY["models"][model_id].get("minimumObservedContext") or 2) for model_id in FIVE_MODEL_IDS),
+)
+ForecastFn = Callable[[list[dict[str, Any]], Mapping[str, Any]], Mapping[str, Any]]
+
+
+def five_model_backtest_configuration() -> dict[str, Any]:
+    """Return the pinned weekly ensemble profile on a continuous daily horizon."""
+    weekly = weekly_configuration()
+    return {
+        "prediction_length": 7,
+        "horizon_mode": "frequency_periods",
+        "frequency": "1D",
+        "calendar": "NONE",
+        "quantiles": list(weekly["quantiles"]),
+        "context_length": int(weekly["context_length"]),
+        "transform": str(weekly["transform"]),
+        "failure_policy": "fail",
+        "models": dict(weekly["models"]),
+        "toto_variant": str(weekly["toto_variant"]),
+        "model_checkpoints": dict(weekly["model_checkpoints"]),
+        "model_revisions": dict(weekly["model_revisions"]),
+    }
+
+
+def five_model_configuration_hash() -> str:
+    payload = json.dumps(five_model_backtest_configuration(), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def validate_five_model_result(result: Mapping[str, Any]) -> tuple[list[dict[str, Any]], tuple[str, ...]]:
+    models = result.get("models")
+    failures = result.get("failures")
+    if not isinstance(models, list) or not isinstance(failures, list):
+        raise ValueError("five-model forecast metadata is missing")
+    completed = tuple(
+        str(row.get("id")) for row in models
+        if isinstance(row, Mapping) and row.get("status") == "completed"
+    )
+    if failures or completed != FIVE_MODEL_IDS or len(models) != len(FIVE_MODEL_IDS):
+        raise ValueError("all five weekly-ensemble models must complete at every backtest origin")
+    effective = result.get("effective_weights_by_quantile")
+    for quantile in ("0.1", "0.5", "0.9"):
+        weights = effective.get(quantile) if isinstance(effective, Mapping) else None
+        if not isinstance(weights, Mapping) or set(weights) != set(FIVE_MODEL_IDS) or any(
+            not math.isclose(float(weights[model_id]), 0.2, rel_tol=0, abs_tol=1e-12)
+            for model_id in FIVE_MODEL_IDS
+        ):
+            raise ValueError(f"five-model forecast requires equal effective weights at P{int(float(quantile) * 100)}")
+    predictions = result.get("predictions")
+    if not isinstance(predictions, list) or len(predictions) != 7 or not all(isinstance(row, dict) for row in predictions):
+        raise ValueError("five-model forecast must return exactly seven daily predictions")
+    return predictions, completed
 
 
 def underlying_units(market: Mapping[str, Any]) -> float:
@@ -49,17 +109,20 @@ def normalize_daily_candles(candles: Sequence[Mapping[str, Any]], market: Mappin
 
 
 def worker_forecaster(*, mock: bool = False) -> ForecastFn:
-    def forecast(history: list[dict[str, Any]], market: Mapping[str, Any]) -> list[dict[str, Any]]:
+    config = five_model_backtest_configuration()
+    request = {key: value for key, value in config.items() if key not in {"model_checkpoints", "model_revisions", "toto_variant"}}
+
+    def forecast(history: list[dict[str, Any]], market: Mapping[str, Any]) -> Mapping[str, Any]:
         result = execute_job({
             "source": {"type": "kalshi_perp", "provider": "kalshi_perps", "symbol": market["ticker"]},
-            "request": {
-                "prediction_length": 7, "horizon_mode": "frequency_periods", "frequency": "1D",
-                "calendar": "NONE", "transform": "auto", "quantiles": [0.1, 0.5, 0.9],
-                "models": {"prophet": {"enabled": True, "weight": 1}},
-            },
+            "request": request,
+            "runtime_mode": "test" if mock else "production",
+            "model_checkpoints": config["model_checkpoints"],
+            "model_revisions": config["model_revisions"],
             "input": {"rows": history, "frequency": "1D", "timezone": "UTC"},
-        }, mock=mock, minimum_history_rows=2)
-        return list(result["predictions"])
+        }, mock=mock, minimum_history_rows=FIVE_MODEL_MINIMUM_HISTORY)
+        validate_five_model_result(result)
+        return result
     return forecast
 
 
@@ -79,9 +142,9 @@ def _drawdown(equity: Sequence[float]) -> float:
 
 def evaluate_market(
     market: Mapping[str, Any], rows: Sequence[Mapping[str, Any]], forecast: ForecastFn, *,
-    minimum_history: int = 2, maximum_origins: int | None = None, initial_capital: float = 10_000,
+    minimum_history: int = FIVE_MODEL_MINIMUM_HISTORY, maximum_origins: int | None = None, initial_capital: float = 10_000,
 ) -> dict[str, Any]:
-    if minimum_history < 2 or initial_capital <= 0:
+    if minimum_history < FIVE_MODEL_MINIMUM_HISTORY or initial_capital <= 0:
         raise ValueError("invalid backtest configuration")
     observations = [{"timestamp": str(row["timestamp"]), "target": float(row["target"])} for row in rows]
     origins = list(range(minimum_history - 1, len(observations) - 1))
@@ -90,9 +153,8 @@ def evaluate_market(
     records: list[dict[str, Any]] = []
     for cutoff_index in origins:
         history = [dict(row) for row in observations[:cutoff_index + 1]]
-        predictions = forecast(history, market)
-        if len(predictions) != 7:
-            raise ValueError("forecast must return exactly seven daily predictions")
+        forecast_result = forecast(history, market)
+        predictions, completed_models = validate_five_model_result(forecast_result)
         first = predictions[0]
         actual_index = cutoff_index + 1
         actual = observations[actual_index]
@@ -105,6 +167,8 @@ def evaluate_market(
             "avg_p10": sum(_q(row, "0.1") for row in predictions) / 7,
             "avg_p50": sum(_q(row, "0.5") for row in predictions) / 7,
             "avg_p90": sum(_q(row, "0.9") for row in predictions) / 7,
+            "ensemble_models": ",".join(completed_models),
+            "forecast_result_hash": forecast_result.get("result_hash"),
         })
 
     events = [record for record in records if record["signal"] != "none"]
@@ -211,13 +275,19 @@ def aggregate_reports(reports: Sequence[Mapping[str, Any]], initial_capital: flo
             "trades": sum(len(report["trades"]) for report in reports), "hit_rates": hit_rates}
 
 
-def fetch_markets_and_history(*, days: int = 365, maximum_markets: int | None = None) -> list[tuple[dict[str, Any], list[dict[str, Any]]]]:
+def fetch_markets_and_history(
+    *, days: int = 365, maximum_markets: int | None = None, market_ticker: str | None = None,
+) -> list[tuple[dict[str, Any], list[dict[str, Any]]]]:
     end = int(datetime.now(timezone.utc).timestamp())
     start = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
     with httpx.Client(base_url=KALSHI_ORIGIN, timeout=30, headers={"Accept": "application/json", "User-Agent": "Quantura-Perpetual-Backtest/1.0"}) as client:
         response = client.get("/margin/markets")
         response.raise_for_status()
         markets = [dict(row) for row in response.json().get("markets", []) if row.get("status") == "active"]
+        if market_ticker:
+            markets = [row for row in markets if row.get("ticker") == market_ticker]
+            if not markets:
+                raise ValueError(f"active Kalshi perpetual not found: {market_ticker}")
         if maximum_markets:
             markets = markets[:maximum_markets]
         output = []
@@ -240,7 +310,8 @@ def _write_reports(output: Path, report: dict[str, Any]) -> None:
                 writer = csv.DictWriter(handle, fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
     aggregate = report["aggregate"]
     lines = ["# Kalshi perpetual daily backtest", "", f"Generated: {report['generated_at']}", "",
-             "Prices are normalized to USD per underlying unit. Every origin withholds the next close; no future observation is supplied to forecasting.", "",
+             "Prices are normalized to USD per underlying unit. Every origin withholds the next close; no future observation is supplied to forecasting.",
+             "Every cutoff requires the pinned equal-weight weekly ensemble: Prophet, Toto 4M, Granite, Chronos-2, and TimesFM. A missing model fails the run; weights are never silently renormalized.", "",
              f"- Markets: {aggregate['markets']}", f"- Forecast origins: {aggregate.get('origins_evaluated', 0)}",
              f"- Closed trades: {aggregate.get('trades', 0)}", f"- Profit on equal ${report['methodology']['initial_capital_per_market']:,.0f} allocations: ${aggregate['profit']:,.2f}",
              f"- Portfolio return: {aggregate['return_pct']:.2f}%" if aggregate["return_pct"] is not None else "- Portfolio return: unavailable",
@@ -256,23 +327,77 @@ def _write_reports(output: Path, report: dict[str, Any]) -> None:
     (output / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def combine_component_reports(paths: Sequence[Path], output: Path) -> dict[str, Any]:
+    reports = [json.loads(path.read_text(encoding="utf-8")) for path in sorted(paths)]
+    if not reports:
+        raise ValueError("no component backtest reports found")
+    first = reports[0]
+    identity = (
+        first.get("schema_version"), first.get("mode"),
+        (first.get("methodology") or {}).get("configuration_hash"),
+        (first.get("methodology") or {}).get("minimum_history"),
+        (first.get("methodology") or {}).get("initial_capital_per_market"),
+    )
+    if any((
+        report.get("schema_version"), report.get("mode"),
+        (report.get("methodology") or {}).get("configuration_hash"),
+        (report.get("methodology") or {}).get("minimum_history"),
+        (report.get("methodology") or {}).get("initial_capital_per_market"),
+    ) != identity for report in reports):
+        raise ValueError("component backtest reports do not share one immutable configuration")
+    market_results = [market for report in reports for market in report.get("market_results", [])]
+    symbols = [market.get("symbol") for market in market_results]
+    if len(symbols) != len(set(symbols)):
+        raise ValueError("component backtest reports contain duplicate markets")
+    initial_capital = float(first["methodology"]["initial_capital_per_market"])
+    combined = {
+        **{key: first[key] for key in ("schema_version", "mode", "data_provider", "methodology")},
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "coverage": {
+            "catalog_markets": sum(int(report["coverage"]["catalog_markets"]) for report in reports),
+            "reported_markets": len(market_results),
+            "skipped_for_insufficient_history": sorted({
+                symbol for report in reports for symbol in report["coverage"]["skipped_for_insufficient_history"]
+            }),
+            "component_reports": len(reports),
+        },
+        "aggregate": aggregate_reports(market_results, initial_capital),
+        "market_results": market_results,
+    }
+    _write_reports(output, combined)
+    return combined
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("artifacts/kalshi-perpetual-backtest"))
     parser.add_argument("--days", type=int, default=365)
     parser.add_argument("--max-markets", type=int)
+    parser.add_argument("--market", help="Evaluate one exact active perpetual ticker (used by the Actions matrix).")
     parser.add_argument("--max-origins", type=int)
-    parser.add_argument("--minimum-history", type=int, default=2)
+    parser.add_argument("--minimum-history", type=int, default=FIVE_MODEL_MINIMUM_HISTORY)
     parser.add_argument("--initial-capital", type=float, default=10_000)
     parser.add_argument("--mock", action="store_true", help="Use deterministic test adapters; never use for reported production results.")
+    parser.add_argument("--combine-dir", type=Path, help="Combine per-market report.json files without running inference.")
     args = parser.parse_args()
-    data = fetch_markets_and_history(days=args.days, maximum_markets=args.max_markets)
+    if args.minimum_history < FIVE_MODEL_MINIMUM_HISTORY:
+        parser.error(f"--minimum-history must be at least {FIVE_MODEL_MINIMUM_HISTORY} for the five-model weekly ensemble")
+    if args.combine_dir:
+        paths = [path for path in args.combine_dir.rglob("report.json") if args.output not in path.parents]
+        combined = combine_component_reports(paths, args.output)
+        print(json.dumps({"output": str(args.output), "aggregate": combined["aggregate"], "coverage": combined["coverage"]}, indent=2))
+        return
+    data = fetch_markets_and_history(days=args.days, maximum_markets=args.max_markets, market_ticker=args.market)
     forecast = worker_forecaster(mock=args.mock)
     results = [evaluate_market(market, rows, forecast, minimum_history=args.minimum_history, maximum_origins=args.max_origins, initial_capital=args.initial_capital) for market, rows in data if len(rows) > args.minimum_history]
     report = {
-        "schema_version": "kalshi_perpetual_backtest_v1", "generated_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "mock" if args.mock else "prophet", "data_provider": "Kalshi public margin market data",
-        "methodology": {"frequency": "1D", "prediction_length": 7, "quantiles": [0.1, 0.5, 0.9],
+        "schema_version": "kalshi_perpetual_backtest_v2", "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "five_model_weekly_ensemble_mock" if args.mock else "five_model_weekly_ensemble_real",
+        "data_provider": "Kalshi public margin market data",
+        "methodology": {"frequency": "1D", "prediction_length": 7, "quantiles": five_model_backtest_configuration()["quantiles"],
+            "ensemble_profile": WEEKLY_ENSEMBLE_ENGINE, "models": list(FIVE_MODEL_IDS),
+            "raw_weights": {model_id: 0.2 for model_id in FIVE_MODEL_IDS}, "toto_variant": "4m",
+            "model_failure_policy": "fail", "configuration_hash": five_model_configuration_hash(),
             "signal": "withheld next close < P10 buy; > P90 sell (strict)",
             "target_hits": "next seven completed closes, stopping before the first opposite signal; buy tests average P50/P90, sell tests average P50/P10",
             "trade_exit": "first opposite signal, seven completed closes, or end of available data",

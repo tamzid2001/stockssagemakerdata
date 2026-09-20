@@ -775,8 +775,7 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
       forecast_id: ref.id, schema_version: WORKER_SCHEMA_VERSION,
       ...Object.fromEntries(["effective_weights_by_quantile", "models", "model_runs", "transform", "warnings", "failures", "dataset_hash", "prepared_series_hash", "result_hash", "runtime_seconds", "runtime", "historical_validation"].map(key => [key, body[key] ?? null])),
       predictions: validated.predictions, quantiles: validated.quantiles,
-      recent_signal_search: validated.recentSignalSearch || null,
-      selected_history: validated.selectedHistory || null,
+      ...(validated.recentSignalSearch ? {recent_signal_search:validated.recentSignalSearch,selected_history:validated.selectedHistory} : {}),
       created_at: completedAt,
     });
     const completed = {status:"completed",completed_at:completedAt,updated_at:completedAt,lease_expires_at:null,warnings:body.warnings || [],
