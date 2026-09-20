@@ -76,11 +76,13 @@ def order_payload(ticker, side, quantity, ask, shard, config):
         raise ValueError('ORDER_RISK_LIMIT')
     # V2 is a YES book: buy NO == sell YES at the complementary limit.
     price = p if side == 'yes' else 1 - p
-    if price != price.quantize(Decimal('.000001')):
+    # Create Order V2 accepts 2-4 decimal places. Responses may contain six,
+    # but sending six in a request is outside the documented request contract.
+    if price != price.quantize(Decimal('.0001')):
         raise ValueError('INVALID_PRICE_PRECISION')
     identity = f'{VERSION}:{config.subaccount}:{ticker}'
     return dict(ticker=ticker, side='bid' if side == 'yes' else 'ask',
-        count=f'{quantity:.2f}', price=f'{price:.6f}',
+        count=f'{quantity:.2f}', price=f'{price:.4f}',
         client_order_id=str(uuid.uuid5(uuid.NAMESPACE_URL, identity)),
         exchange_index=shard, subaccount=config.subaccount,
         time_in_force='immediate_or_cancel', post_only=False, reduce_only=False,
@@ -175,7 +177,26 @@ class KalshiExecution:
             raise RuntimeError('INVALID_BALANCE')
         return value
 
-    def find_order(self, intent):
+    def get_order(self, order_id):
+        if not re.fullmatch(r'[A-Za-z0-9-]{8,128}', order_id or ''):
+            raise ValueError('INVALID_ORDER_ID')
+        value = self.request('GET', '/portfolio/orders/' + order_id)
+        order = value.get('order')
+        if not isinstance(order, dict) or order.get('order_id') != order_id:
+            raise RuntimeError('ORDER_LOOKUP_INVALID')
+        return order
+
+    def find_order(self, intent, order_id=None):
+        if order_id:
+            try:
+                return self.get_order(order_id)
+            except RuntimeError as exc:
+                if str(exc) != 'KALSHI_HTTP_404':
+                    raise
+                # Kalshi documents a short delay between a write response and
+                # authenticated read models. Fall back to the deterministic
+                # client ID list lookup, but never infer that absence is safe
+                # to resubmit.
         matches = [o for o in self.pages('/portfolio/orders', 'orders', ticker=intent['ticker'],
                    exchange_index=intent['exchange_index']) if o.get('client_order_id') == intent['client_order_id']]
         if len(matches) > 1:
@@ -185,6 +206,37 @@ class KalshiExecution:
     def submit(self, payload):
         # Caller MUST persist intent and validate current fenced ownership first.
         return self.request('POST', '/portfolio/events/orders', body=payload)
+
+
+def acknowledged_order(response, intent):
+    """Validate and minimize the authoritative Create Order V2 acknowledgement."""
+    if not isinstance(response, dict):
+        raise RuntimeError('ORDER_ACK_INVALID')
+    order_id = response.get('order_id')
+    if not isinstance(order_id, str) or not re.fullmatch(r'[A-Za-z0-9-]{8,128}', order_id):
+        raise RuntimeError('ORDER_ACK_INVALID')
+    client_id = response.get('client_order_id')
+    if client_id is not None and client_id != intent['client_order_id']:
+        raise RuntimeError('ORDER_ACK_IDENTITY_MISMATCH')
+    try:
+        filled = money(response['fill_count'])
+        remaining = money(response['remaining_count'])
+        processed_at = response['ts_ms']
+    except (KeyError, ValueError, TypeError):
+        raise RuntimeError('ORDER_ACK_INVALID') from None
+    requested = money(intent['count'])
+    if (min(filled, remaining) < 0 or filled + remaining > requested
+            or type(processed_at) is not int or processed_at <= 0):
+        raise RuntimeError('ORDER_ACK_INVALID')
+    return {'order_id': order_id, 'client_order_id': intent['client_order_id'],
+            'acknowledged_fill': str(filled), 'acknowledged_remaining': str(remaining),
+            'matching_engine_ts_ms': processed_at}
+
+
+def definitive_rejection(code):
+    """Only errors proving the exchange rejected the request may release intent."""
+    return code in {'KALSHI_HTTP_400', 'KALSHI_HTTP_401', 'KALSHI_HTTP_403',
+                    'KALSHI_HTTP_422'}
 
 
 def reconciled_order(order, intent, economic_side):

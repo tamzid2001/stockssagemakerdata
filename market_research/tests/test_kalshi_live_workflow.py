@@ -52,3 +52,15 @@ def test_watchdog_disabled_unless_operator_enables_and_no_concurrent_horizons():
 def test_execution_collections_are_explicitly_private():
     rules = (ROOT / 'quantura_site/firestore.rules').read_text()
     assert 'match /kalshi_execution_sessions/{document=**} { allow read, write: if false; }' in rules
+
+
+def test_live_diagnostic_is_manual_read_only_and_cannot_submit():
+    text = (ROOT / '.github/workflows/kalshi-btc-live-diagnostics.yml').read_text()
+    workflow = yaml.safe_load(text)
+    assert 'workflow_dispatch' in workflow[True]
+    assert workflow['permissions'] == {'contents': 'read'}
+    assert 'kalshi_live_diagnostics' in text
+    assert 'QUANTURA_KALSHI_LIVE_ENABLED' not in text
+    assert 'QUANTURA_KALSHI_APPROVED_CONFIG' not in text
+    assert 'QUANTURA_KALSHI_APPROVED_SHA' not in text
+    assert 'kalshi_live_worker' not in text

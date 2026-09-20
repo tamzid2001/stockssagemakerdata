@@ -11,6 +11,16 @@ from .kalshi_execution import recovery, money
 SIZING_FIELDS = frozenset({'starting_contracts', 'recovery_multiplier', 'max_contracts'})
 
 
+def empty_stats():
+    return {'intents': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
+            'settled': 0, 'wins': 0, 'losses': 0, 'breakeven': 0,
+            'requested_contracts': '0', 'filled_contracts': '0'}
+
+
+def with_stats(state):
+    return {**state, 'stats': {**empty_stats(), **state.get('stats', {})}}
+
+
 def approved_reconfiguration(existing, requested, state):
     """Allow reviewed sizing changes only between complete recovery cycles."""
     normalized = {**existing, 'starting_contracts': existing.get('starting_contracts', 1),
@@ -39,8 +49,8 @@ class LiveJournal(Store):
             old = self.ref.get(transaction=tx).to_dict() or {}
             requested = asdict(self.config)
             existing = old.get('configuration')
-            state = old.get('state', {'size': self.config.starting_contracts,
-                'cycle': '0', 'net': '0', 'active': None})
+            state = with_stats(old.get('state', {'size': self.config.starting_contracts,
+                'cycle': '0', 'net': '0', 'active': None}))
             if existing:
                 state = approved_reconfiguration(existing, requested, state)
             lease = claim_transition(old.get('lease', {}), self.holder, time.time())
@@ -99,22 +109,76 @@ class LiveJournal(Store):
 
     def begin(self, entry):
         def update(state, previous):
+            state = with_stats(state)
             if state.get('active') or previous:
                 raise RuntimeError('ENTRY_ALREADY_RESERVED')
-            return {**state, 'active': entry}, entry
+            stats = state['stats']
+            stats.update(intents=stats['intents'] + 1,
+                requested_contracts=str(money(stats['requested_contracts']) +
+                                        money(entry['intent']['count'])))
+            return {**state, 'active': entry, 'stats': stats}, entry
         self.change('intent', entry['ticker'], update)
+
+    def acknowledge(self, entry, acknowledgement):
+        def update(state, previous):
+            state = with_stats(state)
+            active = state.get('active')
+            if not active or active['intent'] != entry['intent']:
+                raise RuntimeError('ACTIVE_INTENT_MISMATCH')
+            if active.get('acknowledgement'):
+                if active['acknowledgement'] != acknowledgement:
+                    raise RuntimeError('ORDER_ACK_IMMUTABLE')
+                return state, active
+            active = {**active, 'status': 'acknowledged',
+                      'acknowledgement': acknowledgement}
+            stats = state['stats']
+            stats['acknowledged'] += 1
+            return {**state, 'active': active, 'stats': stats}, active
+        self.change('acknowledged', entry['ticker'], update)
 
     def finish(self, entry, net=None):
         def update(state, previous):
+            state = with_stats(state)
             if not state.get('active') or state['active']['intent'] != entry['intent']:
                 raise RuntimeError('ACTIVE_INTENT_MISMATCH')
+            stats = state['stats']
+            status = entry.get('status')
+            if status == 'rejected':
+                stats['rejected'] += 1
+                stats['last_rejection_code'] = entry.get('rejection_code')
+            elif status == 'unfilled':
+                stats['unfilled'] += 1
+            elif status == 'settled':
+                stats['settled'] += 1
+                stats['filled_contracts'] = str(money(stats['filled_contracts']) +
+                                                money(entry['filled']))
+                value = money(net)
+                stats['wins' if value > 0 else 'losses' if value < 0 else 'breakeven'] += 1
+                stats['last_settlement'] = {'ticker': entry['ticker'], 'side': entry['side'],
+                    'contracts': entry['filled'], 'net_pnl': str(value), 'at': time.time()}
             if net is not None:
                 state = recovery(state, net, self.config)
                 day = time.strftime('%Y-%m-%d', time.gmtime())
                 daily = money(state.get('daily_net', '0')) if state.get('day') == day else money(0)
                 state.update(day=day, daily_net=str(daily + money(net)))
-            return {**state, 'active': None}, entry
+            return {**state, 'active': None, 'stats': stats}, entry
         self.change('closed', entry['ticker'], update)
+
+    def public_summary(self):
+        state = with_stats(self.state())
+        active = state.get('active')
+        safe_active = None
+        if active:
+            acknowledgement = active.get('acknowledgement', {})
+            safe_active = {'ticker': active['ticker'], 'side': active['side'],
+                'status': active.get('status'), 'requested_contracts': active['intent']['count'],
+                'acknowledged_fill': acknowledgement.get('acknowledged_fill'),
+                'acknowledged_remaining': acknowledgement.get('acknowledged_remaining'),
+                'created_at': active.get('created_at')}
+        return {'active': safe_active, 'next_contracts': state.get('size'),
+                'recovery_cycle_pnl': state.get('cycle', '0'),
+                'realized_net_pnl': state.get('net', '0'),
+                'daily_net_pnl': state.get('daily_net', '0'), **state['stats']}
 
     def before_post(self):
         @self.fs.transactional
@@ -172,8 +236,18 @@ class Trader:
         if time.time() > quote['timestamp'] + 30 or time.time() >= signal['market_end'] - 5:
             self.journal.finish({**entry, 'status': 'expired_before_submit'})
             raise RuntimeError('ENTRY_EXPIRED_BEFORE_POST')
-        self.broker.submit(intent)  # No retry, even after a timeout or crash.
-        return entry  # ACK is not authoritative accounting; reconcile via GET.
+        from .kalshi_execution import acknowledged_order, definitive_rejection
+        try:
+            response = self.broker.submit(intent)  # Never retry an ambiguous POST.
+        except RuntimeError as exc:
+            code = str(exc)
+            if definitive_rejection(code):
+                rejected = {**entry, 'status': 'rejected', 'rejection_code': code}
+                self.journal.finish(rejected)
+            raise
+        acknowledgement = acknowledged_order(response, intent)
+        self.journal.acknowledge(entry, acknowledgement)
+        return {**entry, 'status': 'acknowledged', 'acknowledgement': acknowledgement}
 
     def reconcile(self):
         from .kalshi_execution import reconciled_order
@@ -181,9 +255,14 @@ class Trader:
         entry = state.get('active')
         if not entry:
             return 'flat'
-        order = self.broker.find_order(entry['intent'])
+        acknowledgement = entry.get('acknowledgement') or {}
+        order = self.broker.find_order(entry['intent'], acknowledgement.get('order_id'))
         if order is None:
-            return 'unknown_delivery_blocked'  # Never infer that absence proves no order.
+            # An acknowledgement proves acceptance, even if the authenticated
+            # account read model has not caught up yet. A missing acknowledgement
+            # remains ambiguous and must block resubmission.
+            return ('acknowledged_waiting_for_read_model' if acknowledgement
+                    else 'unknown_delivery_blocked')
         fill = reconciled_order(order, entry['intent'], entry['side'])
         if money(fill['filled']) == 0:
             self.journal.finish({**entry, **fill, 'status': 'unfilled'})

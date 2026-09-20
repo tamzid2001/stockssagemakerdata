@@ -10,8 +10,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 from market_research.kalshi_execution import (Config, KalshiExecution, live_allowed,
-    money, order_payload, reconciled_order, recovery)
-from market_research.kalshi_live_state import Trader
+    acknowledged_order, definitive_rejection, money, order_payload,
+    reconciled_order, recovery)
+from market_research.kalshi_live_state import LiveJournal, Trader
 from market_research.kalshi_live_state import approved_reconfiguration
 
 TICKER = 'KXBTC15M-26SEP201215-15'
@@ -65,8 +66,8 @@ def test_requested_one_minute_preset_is_not_live_approval():
 def test_v2_yes_no_and_stable_single_market_identity(config):
     yes = order_payload(TICKER, 'yes', 2, '.61', 7, config)
     no = order_payload(TICKER, 'no', 2, '.61', 7, config)
-    assert (yes['side'], yes['price']) == ('bid', '0.610000')
-    assert (no['side'], no['price']) == ('ask', '0.390000')
+    assert (yes['side'], yes['price']) == ('bid', '0.6100')
+    assert (no['side'], no['price']) == ('ask', '0.3900')
     assert yes['client_order_id'] == no['client_order_id']
     assert yes['exchange_index'] == 7 and yes['subaccount'] == 0
     assert yes['count'] == '2.00' and yes['time_in_force'] == 'immediate_or_cancel'
@@ -97,6 +98,21 @@ def test_signed_get_query_excluded_and_post_not_retried(config, credentials):
     assert len(calls) == 2
 
 
+def test_create_v2_acknowledgement_and_definitive_rejection(config):
+    intent = order_payload(TICKER, 'yes', 2, '.61', 7, config)
+    ack = acknowledged_order({'order_id': '3b23c1c7-f4ef-4f0d-8b9a-9e53c61f1a0d',
+        'client_order_id': intent['client_order_id'], 'fill_count': '1.00',
+        'remaining_count': '1.00', 'ts_ms': 1715793600123}, intent)
+    assert ack['acknowledged_fill'] == '1.00'
+    assert ack['acknowledged_remaining'] == '1.00'
+    for status in (400, 401, 403, 422):
+        assert definitive_rejection(f'KALSHI_HTTP_{status}')
+    for status in (409, 429, 500, 503):
+        assert not definitive_rejection(f'KALSHI_HTTP_{status}')
+    with pytest.raises(RuntimeError, match='ORDER_ACK_IDENTITY_MISMATCH'):
+        acknowledged_order({**ack, 'client_order_id': 'wrong'}, intent)
+
+
 def test_read_only_cannot_submit(config, credentials):
     env, _ = credentials
     api = KalshiExecution(config, env=env)
@@ -116,6 +132,20 @@ def test_paginate_and_do_not_assume_empty_on_error(config, credentials):
     api.request = lambda *a, **k: {}
     with pytest.raises(RuntimeError, match='ACCOUNT_LIST_UNAVAILABLE'):
         api.pages('/portfolio/orders', 'orders')
+
+
+def test_exact_order_lookup_precedes_client_id_fallback(config, credentials):
+    env, _ = credentials
+    order_id = '3b23c1c7-f4ef-4f0d-8b9a-9e53c61f1a0d'
+    calls = []
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(200, json={'order': {'order_id': order_id}})
+    api = KalshiExecution(config, env=env,
+        client=httpx.Client(transport=httpx.MockTransport(handler)))
+    intent = order_payload(TICKER, 'yes', 1, '.5', 7, config)
+    assert api.find_order(intent, order_id)['order_id'] == order_id
+    assert calls == ['/trade-api/v2/portfolio/orders/' + order_id]
 
 
 def final_order(intent, side='yes', count='1.00'):
@@ -187,9 +217,24 @@ class MemoryJournal:
         self.value['active'] = deepcopy(entry); self.records[entry['ticker']] = deepcopy(entry)
     def before_post(self):
         if not self.enabled: raise RuntimeError('LEASE_LOST')
+    def acknowledge(self, entry, acknowledgement):
+        assert self.value['active']['intent'] == entry['intent']
+        self.value['active'] = {**deepcopy(entry), 'status': 'acknowledged',
+            'acknowledgement': deepcopy(acknowledgement)}
+        self.records[entry['ticker']] = deepcopy(self.value['active'])
     def finish(self, entry, net=None):
         if net is not None: self.value = recovery(self.value, net)
         self.value['active'] = None; self.records[entry['ticker']] = deepcopy(entry)
+
+
+class JournalHarness(LiveJournal):
+    def __init__(self, config):
+        self.config = config
+        self.value = {'size': config.starting_contracts, 'cycle': '0', 'net': '0', 'active': None}
+        self.rows = {}
+    def state(self): return deepcopy(self.value)
+    def change(self, event, ticker, update):
+        self.value, self.rows[ticker] = update(deepcopy(self.value), self.rows.get(ticker))
 
 
 class Broker:
@@ -210,7 +255,9 @@ class Broker:
         assert self.journal.value['active']['intent'] == intent
         self.sent.append(intent)
         raise RuntimeError('KALSHI_DELIVERY_OR_RESPONSE_UNKNOWN')
-    def find_order(self, intent): return self.order
+    def find_order(self, intent, order_id=None):
+        self.lookup_order_id = order_id
+        return self.order
     def pages(self, *a, **k):
         return [{'ticker': TICKER, 'exchange_index': 7, 'market_result': 'yes',
                  'yes_count_fp': '1', 'no_count_fp': '0', 'yes_total_cost_dollars': '.5',
@@ -243,6 +290,54 @@ def test_crash_after_post_reconciles_without_resubmitting_and_settles_once(rig):
     assert money(journal.state()['net']) == Decimal('.4825')
     assert restarted.reconcile() == 'flat'
     assert len(broker.sent) == 1
+
+
+def test_success_ack_is_persisted_and_exact_order_id_drives_lookup(rig):
+    trader, broker, journal, signal, quote, now = rig
+    order_id = '3b23c1c7-f4ef-4f0d-8b9a-9e53c61f1a0d'
+    broker.submit = lambda intent: {'order_id': order_id,
+        'client_order_id': intent['client_order_id'], 'fill_count': '0.00',
+        'remaining_count': intent['count'], 'ts_ms': now * 1000}
+    entry = trader.enter(signal, quote, now)
+    assert entry['status'] == 'acknowledged'
+    assert journal.state()['active']['acknowledgement']['order_id'] == order_id
+    assert trader.reconcile() == 'acknowledged_waiting_for_read_model'
+    assert broker.lookup_order_id == order_id
+
+
+def test_journal_summary_counts_acknowledgements_rejections_and_settlements(config):
+    journal = JournalHarness(config)
+    base = {'ticker': TICKER, 'side': 'yes', 'intent': order_payload(TICKER, 'yes', 1, '.5', 7, config),
+            'created_at': 1800000000, 'status': 'delivery_unknown'}
+    ack = {'order_id': '3b23c1c7-f4ef-4f0d-8b9a-9e53c61f1a0d',
+           'client_order_id': base['intent']['client_order_id'], 'acknowledged_fill': '1',
+           'acknowledged_remaining': '0', 'matching_engine_ts_ms': 1800000000000}
+    journal.begin(base)
+    journal.acknowledge(base, ack)
+    journal.finish({**base, 'filled': '1', 'status': 'settled'}, '.4825')
+    summary = journal.public_summary()
+    assert summary['intents'] == summary['acknowledged'] == summary['settled'] == 1
+    assert summary['wins'] == 1 and summary['losses'] == 0
+    assert summary['filled_contracts'] == '1'
+    assert summary['realized_net_pnl'] == '0.4825'
+    assert summary['active'] is None
+
+
+@pytest.mark.parametrize('code', ['KALSHI_HTTP_400', 'KALSHI_HTTP_401',
+                                  'KALSHI_HTTP_403', 'KALSHI_HTTP_422'])
+def test_definitive_post_rejection_releases_intent_without_retry(rig, code):
+    trader, broker, journal, signal, quote, now = rig
+    attempts = []
+    def reject(intent):
+        attempts.append(intent)
+        raise RuntimeError(code)
+    broker.submit = reject
+    with pytest.raises(RuntimeError, match=code):
+        trader.enter(signal, quote, now)
+    assert journal.state()['active'] is None
+    assert journal.records[TICKER]['status'] == 'rejected'
+    assert journal.records[TICKER]['rejection_code'] == code
+    assert len(attempts) == 1
 
 
 def test_expired_quote_and_lost_lease_never_post(rig):
