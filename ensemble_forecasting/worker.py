@@ -108,6 +108,10 @@ def execute_job(
         minimum_history_rows = 2
         if request.transform != "logit":
             raise ValueError("prediction-market jobs require bounded logit forecasting")
+    elif (job.get("source") or {}).get("type") == "kalshi_perp":
+        minimum_history_rows = 2
+        if request.transform == "logit" or request.calendar != "NONE" or request.horizon_mode != "frequency_periods":
+            raise ValueError("perpetual jobs require price transforms and continuous frequency periods")
     rows = source.get("rows")
     if not isinstance(rows, list):
         raise ValueError("worker input rows are missing")
