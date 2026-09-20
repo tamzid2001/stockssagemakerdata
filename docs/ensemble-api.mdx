@@ -47,6 +47,27 @@ After ensembling, deterministic monotonic rearrangement guarantees non-crossing 
 4. The UI or client polls job status.
 5. The completed response returns only final ensemble rows and effective weights by quantile.
 
+## Forecast completion and ML metrics
+
+A request runs **only the requested forecast**, using all selected historical
+inputs. It does not withhold rows, start a second historical forecast, or wait for
+future prices before publishing its result. **Reproduce saved configuration**
+also runs only that forecast. No automatic historical-validation pass is added.
+
+MAE, RMSE, sMAPE and average weighted quantile loss describe this request's
+predictions only when observed prices for the **same prediction timestamps** are
+available. Known historical/replay comparisons and observations after publication
+are labeled separately. Earlier training values cannot be paired with later
+predictions just to produce a score. No missing outcomes or accuracy scores are
+fabricated. Without P50, point-error metrics are undefined; weighted quantile loss
+is undefined when matched actual values are all zero. sMAPE uses a ratio internally
+and displays as a percentage; zero/zero contributes zero.
+
+Older immutable results may retain `historical_validation`, which described a
+**separate** historical forecast. These legacy scores remain available in downloads
+and a collapsed archive section, not as accuracy for the requested future forecast.
+An old queued policy does not cause the current worker to repeat validation.
+
 Reproduction creates a new job from the original input snapshot, stored configuration, and pinned model checkpoints while re-evaluating current authorization and license gates.
 
 ## TimesFM licensing

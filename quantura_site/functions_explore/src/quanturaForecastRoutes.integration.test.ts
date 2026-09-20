@@ -8,10 +8,33 @@ import { registerQuanturaForecastRoutes } from "./quanturaForecastRoutes";
 import { hashForecastApiKey, normalizeForecastDraft } from "./quanturaForecasts";
 import { quanturaExploreApi } from "./index";
 import { scanRequestPage, selectRequestPage } from "./requestPagination";
-import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
+import { registerEnsembleForecastRoutes, completeEnsembleJob, publicEnsembleJob, HISTORICAL_VALIDATION_POLICY } from "./ensembleForecastRoutes";
 import { generatePlatformApiKey, hashPlatformApiKey, workspaceMembershipId } from "./apiAccess";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+test("historical validation survives durable completion and public serialization", {skip:!emulatorAvailable}, async()=>{
+  const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`holdout-${Date.now()}`),db=firebaseApp.firestore();
+  const ref=db.collection("ensemble_forecast_jobs").doc();
+  const job={status:"running",workspace_id:`test_${ref.id}`,dataset_hash:"fixture-input",request_hash:"fixture-policy-versioned",created_at:"2026-09-19T00:00:00Z",
+    evaluation_policy:HISTORICAL_VALIDATION_POLICY,request:{prediction_length:1,quantiles:[.1,.5,.9],horizon_mode:"frequency_periods"}};
+  const historical_validation={policy:HISTORICAL_VALIDATION_POLICY,method:"chronological_holdout",status:"completed",minimum_training_rows:2,
+    training_rows:39,holdout_rows:1,training_end_at:"2026-09-17T00:00:00Z",validation_start_at:"2026-09-18T00:00:00Z",validation_end_at:"2026-09-18T00:00:00Z",
+    metrics:{count:1,point_count:1,mae:1,rmse:1,smape:.01,average_wql:.02},evidence:{actuals:{"2026-09-18T00:00:00Z":100},predictions:[]}};
+  const result={dataset_hash:"fixture-input",result_hash:"fixture-result",quantiles:[.1,.5,.9],predictions:[{timestamp:"2026-09-20T00:00:00Z",quantiles:{"0.1":99,"0.5":100,"0.9":101}}],
+    effective_weights_by_quantile:{"0.1":{prophet:1},"0.5":{prophet:1},"0.9":{prophet:1}},models:[{id:"prophet",status:"completed"}],historical_validation};
+  try {
+    await ref.create(job);
+    const options:any={db};await completeEnsembleJob(options,ref,result);
+    const stored=(await db.collection("ensemble_forecast_results").doc(ref.id).get()).data()!;
+    assert.deepEqual(stored.historical_validation,historical_validation);
+    const publicResult=publicEnsembleJob(ref.id,(await ref.get()).data()!,stored);
+    assert.deepEqual((publicResult.historical_validation as any).metrics,historical_validation.metrics);
+    assert.equal((publicResult.historical_validation as any).evidence,undefined);
+    await completeEnsembleJob(options,ref,result);
+    assert.deepEqual((await db.collection("ensemble_forecast_results").doc(ref.id).get()).data()?.historical_validation,historical_validation);
+  } finally {await firebaseApp.delete();}
+});
 
 test("request history Firestore cursors reach older entries, survive deletion, and isolate users", {skip: !emulatorAvailable}, async()=>{
   const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`request-pages-${Date.now()}`);
@@ -105,14 +128,16 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     assert.equal((await requestIndex.get()).data()?.sourceRef.id,id);
     await requestIndex.set({title:"My custom saved forecast",titleEdited:true},{merge:true});
     const ref = db.collection("ensemble_forecast_jobs").doc(id);
+    assert.equal((await ref.get()).data()?.evaluation_policy,null,"new requests never opt users into a holdout");
     assert.equal((await ref.collection("input_chunks").doc("0000").get()).data()?.rows.length, 40);
     // A server-verified prediction-market fixture exercises the trusted two-bar
     // claim boundary, independently of upstream provider availability in CI.
-    await ref.update({ source: { type: "prediction_market", provider: "kalshi" }, "request.transform": "logit" });
+    await ref.update({ source: { type: "prediction_market", provider: "kalshi" }, "request.transform": "logit", evaluation_policy:HISTORICAL_VALIDATION_POLICY });
     await ref.collection("input_chunks").doc("0000").set({ rows: request.source.rows.slice(-2) });
     const claimed = await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {});
     assert.equal(claimed.status, 200, await claimed.clone().text());
     const job = (await claimed.json()).data;
+    assert.equal(job.evaluation_policy,null,"worker claims never request implicit validation, including legacy queued records");
     assert.equal(job.input.rows.length, 2); assert.equal(job.request.transform, "logit");
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {})).status, 409);
     const result = { quantiles: [.1, .5, .9], predictions: [40, 41].map(i => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), quantiles: { "0.1": .2, "0.5": .4, "0.9": .6 } })), effective_weights_by_quantile: { "0.1": { prophet: 1 }, "0.5": { prophet: 1 }, "0.9": { prophet: 1 } }, models: ["prophet"], model_runs: [], transform: "logit", warnings: [], failures: [], dataset_hash: job.dataset_hash, prepared_series_hash: "fixture", result_hash: "fixture", runtime_seconds: 1, runtime: { test: true } };
@@ -132,6 +157,10 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     assert.equal(downloaded.status, 200); assert.match(await downloaded.text(), /timestamp,q_0.1,q_0.5,q_0.9/);
     const json = await call(`/v1/ensemble-forecasts/${id}/download?format=json`, keys[1]);
     assert.equal((await json.json()).predictions.length, 2);
+    const reproduced = await call(`/v1/ensemble-forecasts/${id}/reproduce`,keys[0],{});
+    assert.equal(reproduced.status,202,await reproduced.clone().text());
+    const reproducedId = (await reproduced.json()).data.forecast_id;
+    assert.equal((await db.collection("ensemble_forecast_jobs").doc(reproducedId).get()).data()?.evaluation_policy,null,"reproduction never repeats the legacy holdout");
     await member.update({ status: "removed" });
     assert.equal((await call(`/v1/ensemble-forecasts/${id}/observations`, keys[1])).status, 403);
     assert.equal((await call(`/v1/ensemble-forecasts/${id}`, keys[1])).status, 403);

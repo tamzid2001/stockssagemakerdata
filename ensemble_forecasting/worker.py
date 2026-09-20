@@ -226,6 +226,9 @@ def execute_job(
             "model_runs": model_runs,
         }
     )
+    # A forecast job runs only the requested horizon. Historical validation is
+    # an explicit offline operation, never a second inference pass here (even
+    # when an older queued record carries an evaluation_policy).
     digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     result["result_hash"] = digest
     progress(

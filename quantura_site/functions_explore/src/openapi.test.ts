@@ -15,6 +15,15 @@ test("OpenAPI local schema references resolve", () => {
   visit(document);
 });
 
+test("forecast API documents historical validation scores separately from future outcomes",()=>{
+  const doc=buildOpenApiDocument() as any;
+  const schema=doc.components.schemas.HistoricalForecastValidation;
+  assert.ok(schema.properties.metrics.properties.average_wql);
+  assert.equal(schema.properties.metrics.properties.smape.maximum,2);
+  assert.equal(doc.components.schemas.EnsembleForecastEnvelope.properties.data.properties.historical_validation.$ref,"#/components/schemas/HistoricalForecastValidation");
+  assert.equal(schema.example.status,'completed');
+});
+
 test("OpenAPI documents workspace and uploaded CSV lifecycle routes", () => {
   const document = buildOpenApiDocument() as any;
   const paths = document.paths || {};
