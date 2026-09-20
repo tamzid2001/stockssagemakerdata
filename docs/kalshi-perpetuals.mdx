@@ -1,0 +1,40 @@
+---
+title: "Kalshi perpetual trade-close data"
+description: "Search and forecast USD-per-contract history without confusing perpetuals with spot assets or binary markets."
+---
+
+Select **Kalshi Perpetuals** in market search or Q Screener. The provider's catalog includes active, inactive and closed listings when returned by Kalshi. Search in **Any** mode to include inactive listings.
+
+Q Screener shows completed minute trade closes with timestamps and an on-demand **Forecast** action. It does not invent weekly quantiles, NYSE closing signals or stock market capitalization for perpetuals. Scheduled equity forecasts and daily stock alerts remain unchanged; perpetual daily alerts are not currently supported.
+
+## Price basis
+
+The target is Kalshi's `price.close`, in **USD per contract**. For example, `KXBTCPERP` currently represents 0.0001 BTC per contract. Its price is not the BTC spot quote. Contract size and underlying multiplier are preserved in metadata. These are continuous price series, not YES/NO probabilities. No orders or account access are part of this integration.
+
+Only actual completed closes are used. Null closes, synthetic `price.previous` rows, bid/ask substitutes and missing intervals are not filled. Timestamps preserve Kalshi's `end_period_ts` in UTC, including its daily-bar boundary; charts localize their display. Forecasts use calendar/frequency periods, not NYSE sessions.
+
+## Historical downloads
+
+```bash
+curl 'https://quantura.studio/api/market-data/perps/history?symbol=KXBTCPERP&frequency=1h&limit=500&format=csv' \
+  --output KXBTCPERP-hourly.csv
+```
+
+Use `format=json` (default) for metadata and warnings. Minute (`1min`), hourly (`1h`) and daily (`1D`) intervals are supported. Optional `start`/`end` are ISO timestamps. Return up to 5,000 rows; split larger downloads into date ranges of no more than 20,000 intervals. The service traverses bounded time windows, not a fabricated pagination cursor. A shorter history is reported as shorter, not padded.
+
+Catalog: `GET /api/market-data/perps/markets`. Downloads: `GET` or `POST /api/market-data/perps/history`. A POST accepts the same fields as JSON. CSV includes original numeric OHLC/volume values; response headers identify provider, UTC and USD-per-contract units. JSON carries the fuller provenance record.
+
+## Asynchronous forecasting
+
+```bash
+curl 'https://quantura.studio/api/v1/ensemble-forecasts' \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"source":{"type":"kalshi_perp","symbol":"KXBTCPERP","frequency":"1h","limit":500},"prediction_length":30,"horizon_mode":"frequency_periods","calendar":"NONE","quantiles":[0.01,0.1,0.25,0.5,0.75,0.9,0.99],"transform":"auto","models":{"prophet":{"enabled":true,"weight":1}}}'
+```
+
+The existing [ensemble job lifecycle](/docs/ensemble-api), scopes, current workspace membership, quotas, immutable inputs and CSV/JSON result downloads apply. Configured models remain selectable; minimum history and license checks are unchanged. Reading observations never runs extra model inference.
+
+## Provider access and rights
+
+The adapter follows [Kalshi's perpetuals OpenAPI](https://docs.kalshi.com/perps_openapi.yaml). The public market-data mirror is used; no Kalshi account key is sent for market discovery or history. Access may be rate-limited or unavailable. Redistribution and commercial data licensing require review of Kalshi's terms; API access is not proof of redistribution rights.

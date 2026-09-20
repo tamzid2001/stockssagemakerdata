@@ -224,6 +224,13 @@ test('primary form builds prediction-market minute and single-model requests wit
     assert.throws(()=>w.build(),/observations/);
   }
   w.document.getElementById('ensemble-history-limit').value='500';
+  w.document.getElementById('ensemble-source-type').value='kalshi_perp';
+  w.document.getElementById('ensemble-ticker').value='KXBTCPERP';
+  w.document.getElementById('ensemble-ticker-frequency').value='1Day';
+  const perp=w.build();assert.equal(perp.source.type,'kalshi_perp');assert.equal(perp.source.symbol,'KXBTCPERP');
+  assert.equal(perp.source.frequency,'1D');assert.equal(perp.calendar,'NONE');assert.equal(perp.horizon_mode,'frequency_periods');assert.notEqual(perp.transform,'logit');
+  assert.equal(w.document.getElementById('ensemble-ticker').closest('.field').hidden,false);
+  assert.equal(w.document.getElementById('ensemble-provider').closest('.field').hidden,true);
   w.document.getElementById('ensemble-source-type').value='prediction_market';
   w.document.getElementById('ensemble-history-lookback').value='-1';assert.throws(()=>w.build(),/duration/);
   d.window.close();

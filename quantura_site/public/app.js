@@ -835,7 +835,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Options",
       sidebar_learn_more: "Forecast guide",
-      sidebar_screener: "Screener",
+      sidebar_screener: "Q Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Multi-model probabilistic forecasting. Configure once, run asynchronously, and download your final ensemble.",
       panel_market_headlines_title: "Top market headlines",
@@ -893,7 +893,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Opciones",
       sidebar_learn_more: "Mas informacion",
-      sidebar_screener: "Screener",
+      sidebar_screener: "Q Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
@@ -951,7 +951,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Options",
       sidebar_learn_more: "En savoir plus",
-      sidebar_screener: "Screener",
+      sidebar_screener: "Q Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
@@ -1009,7 +1009,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Optionen",
       sidebar_learn_more: "Mehr erfahren",
-      sidebar_screener: "Screener",
+      sidebar_screener: "Q Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
@@ -9531,7 +9531,7 @@
     navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Terminal</span></a>
-        ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>`}
+        ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Q Screener</span></a>`}
         <a href="/shop" data-analytics="nav_shop">${icon("shopping-bag")}<span>Shop</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
         <a href="https://quantura.mintlify.app/" data-analytics="nav_developers">${icon("code")}<span>API Docs</span></a>
@@ -14498,6 +14498,7 @@
     const source = job.source || {};
     let selected;
     if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency, history_phase: source.history_phase || "both", history_lookback_minutes: source.history_lookback_minutes || 0, limit: source.limit ?? 500 };
+    else if (source.type === "kalshi_perp") selected = {type:source.type,symbol:source.symbol,frequency:job.frequency,limit:source.limit??500};
     else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500, ...(source.adjustment ? {adjustment:source.adjustment} : {}), ...(source.session ? {session:source.session} : {}), ...(source.feed ? {feed:source.feed} : {}) };
     else if (source.type === "workspace_dataset") selected = { type: source.type, dataset_id: source.dataset_id, timestamp_column: source.timestamp_column || "timestamp", target_column: source.target_column || "target", frequency: job.frequency, timezone: source.timezone || "UTC" };
     else throw new Error("This immutable inline series cannot refresh automatically. Submit an updated dataset.");
@@ -14700,14 +14701,14 @@
   const syncEnsembleSourceFields = () => {
     const type = String((ui.ensembleSourceType || document.getElementById("ensemble-source-type"))?.value || "ticker");
     document.querySelectorAll("[data-ensemble-source]").forEach((field) => {
-      field.hidden = field.dataset.ensembleSource !== type;
+      field.hidden = !field.dataset.ensembleSource.split(" ").includes(type);
     });
     document.querySelectorAll("[data-ensemble-history-count]").forEach(field => {
       field.hidden = type === "workspace_dataset" || type === "series";
       field.querySelector("input").disabled = field.hidden;
     });
     const horizon = document.getElementById("ensemble-horizon-mode");
-    const frequency = type === "ticker" ? document.getElementById("ensemble-ticker-frequency")?.value : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
+    const frequency = ["ticker","kalshi_perp"].includes(type) ? document.getElementById("ensemble-ticker-frequency")?.value : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
     const intraday = type !== "ticker" || frequency !== "1Day";
     if (horizon) {
       horizon.closest(".field").hidden = intraday;
@@ -14738,6 +14739,8 @@
     if (sourceType === "prediction_market" && !selection?.contract_id) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
     const source = sourceType === "series"
       ? { type: "series", name: ensembleUiState.csvName, rows: window.QuanturaForecastControls.csvSeries(ensembleUiState.csvTable || {headers:[],rows:[]}, document.getElementById("ensemble-csv-date").value, document.getElementById("ensemble-csv-target").value), timestamp_column: "timestamp", target_column: "target", frequency: document.getElementById("ensemble-csv-frequency").value, timezone: ensembleTimeZone() }
+      : sourceType === "kalshi_perp"
+      ? {type:"kalshi_perp",symbol:String(data.get("ticker")||"").trim().toUpperCase(),frequency:({"1Day":"1D","1Hour":"1h","1Min":"1min"})[data.get("ticker_frequency")],limit:historyLimit}
       : sourceType === "prediction_market"
       ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")), limit: historyLimit }
       : sourceType === "workspace_dataset"
@@ -14780,7 +14783,7 @@
       ...(cutoffAt ? { history_cutoff_at: cutoffAt } : {}),
       ...(endAt ? { prediction_end_at: endAt } : {}),
       prediction_length: steps,
-      horizon_mode: sourceType === "prediction_market" || sourceType === "series" || (sourceType === "ticker" && source.frequency !== "1Day") ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
+      horizon_mode: ["prediction_market","series","kalshi_perp"].includes(sourceType) || (sourceType === "ticker" && source.frequency !== "1Day") ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
       quantiles: getEnsembleQuantiles(),
       transform: sourceType === "prediction_market" ? "logit" : String(data.get("transform") || "auto"),
       context_length: contextRaw ? Number(contextRaw) : null,
@@ -14886,7 +14889,7 @@
       title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
       margin: { l: mobile?48:62, r: 16, t: 58, b: mobile?175:125, autoexpand:false }, height: mobile?565:490, hovermode: "closest", uirevision: job.forecast_id,
       xaxis: { type: "date", ...(chartRange ? { range: chartRange.map(t=>new Date(t).toISOString()), autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date", standoff: 14 }, automargin:true, rangebreaks:window.QuanturaForecastControls.exchangeDateBreaks(job), tickmode: "array", tickvals: tickTimes.map(t=>new Date(t).toISOString()), ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: false } },
-      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
+      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "kalshi_perp" ? "USD per contract" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
       legend: { orientation: "h", yref:"container", y:0.01, yanchor:"bottom", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
       shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:plotTimestamp(inputHistory.at(-1)),x1:plotTimestamp(inputHistory.at(-1)),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
@@ -14920,8 +14923,8 @@
     ensembleUiState.refreshObservations = null;
     const refreshButton = document.getElementById("ensemble-chart-refresh");
     const label = refreshButton?.querySelector("span") || refreshButton;
-    if (refreshButton) { refreshButton.disabled = false; refreshButton.hidden = !["ticker","prediction_market"].includes(job.source?.type); label.textContent = "Refresh quotes"; }
-    if (!["ticker","prediction_market"].includes(job.source?.type)) return;
+    if (refreshButton) { refreshButton.disabled = false; refreshButton.hidden = !["ticker","prediction_market","kalshi_perp"].includes(job.source?.type); label.textContent = "Refresh quotes"; }
+    if (!["ticker","prediction_market","kalshi_perp"].includes(job.source?.type)) return;
     let inFlight = false, stopped = false;
     const current = () => generation === ensembleUiState.observationGeneration && ensembleUiState.forecastId === job.forecast_id;
     const update = async ({ focusLatest = false } = {}) => {
@@ -14992,7 +14995,7 @@
       models: job.models,
     };
     // Public requests must not contain server-only provenance fields.
-    if (["ticker", "prediction_market", "workspace_dataset"].includes(job.source?.type)) ensembleUiState.lastRequest = { ...refreshedEnsembleRequest(job), history_lag_minutes: job.source?.history_lag_minutes || 0 };
+    if (["ticker", "prediction_market", "workspace_dataset","kalshi_perp"].includes(job.source?.type)) ensembleUiState.lastRequest = { ...refreshedEnsembleRequest(job), history_lag_minutes: job.source?.history_lag_minutes || 0 };
     ui.ensembleForecastResults.hidden = false;
     const quantiles = Array.isArray(job?.quantiles) ? job.quantiles.map(Number) : [];
     const predictions = Array.isArray(job?.predictions) ? job.predictions : [];
@@ -15124,6 +15127,7 @@
       set("ensemble-ticker", configuration.source.symbol);
       set("ensemble-provider", configuration.source.provider);
       if (configuration.source.type === "ticker") set("ensemble-ticker-frequency", configuration.source.frequency);
+      if (configuration.source.type === "kalshi_perp") set("ensemble-ticker-frequency", ({"1D":"1Day","1h":"1Hour","1min":"1Min"})[configuration.source.frequency]);
       if (configuration.source.type === "prediction_market") set("ensemble-market-frequency", configuration.source.frequency);
       set("ensemble-history-phase", configuration.source.history_phase || "both");
       set("ensemble-history-limit", configuration.source.limit ?? 500);
@@ -15323,7 +15327,7 @@
       const row = event.detail.resource;
       if (!row?.contract_id) {
         if (row?.symbol) {
-          ui.ensembleSourceType.value = "ticker";
+          ui.ensembleSourceType.value = row.source === "kalshi_perps" ? "kalshi_perp" : "ticker";
           ui.ensembleTicker.value = row.symbol;
           const provider = document.getElementById("ensemble-provider");
           if (provider) provider.value = ["alpaca", "yahoo"].includes(row.source) ? row.source : "auto";
@@ -15457,6 +15461,12 @@
       } catch (error) { setEnsembleBusy(false); setEnsembleStatus(error.message || "Unable to refresh history.", "error"); }
     });
     const forecastId = String(getQueryParam("ensembleForecastId") || "").trim();
+    if (!forecastId && getQueryParam("marketSource") === "kalshi_perps") {
+      ui.ensembleSourceType.value = "kalshi_perp";
+      ui.ensembleTicker.value = String(getQueryParam("ticker") || "");
+      document.getElementById("ensemble-ticker-frequency").value = "1Hour";
+      syncEnsembleSourceFields();
+    }
     if (forecastId) {
       ensembleUiState.forecastId = forecastId;
       window.setTimeout(() => pollEnsembleForecast(forecastId).catch(() => undefined), 400);
