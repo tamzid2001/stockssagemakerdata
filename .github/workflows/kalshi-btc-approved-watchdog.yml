@@ -1,0 +1,50 @@
+name: Kalshi BTC Approved Trader Watchdog
+on:
+  schedule:
+    - cron: '3,18,33,48 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: quantura-kalshi-approved-watchdog
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: vars.QUANTURA_KALSHI_CONTINUOUS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          APPROVED_SHA: ${{ vars.QUANTURA_KALSHI_APPROVED_SHA }}
+          APPROVED_MODE: ${{ vars.QUANTURA_KALSHI_WATCHDOG_MODE || 'observe' }}
+          HISTORY_MINUTES: ${{ vars.QUANTURA_KALSHI_HISTORY_MINUTES || '1' }}
+          SUBACCOUNT: ${{ vars.QUANTURA_KALSHI_SUBACCOUNT || '0' }}
+          DIRECTION_POLICY: ${{ vars.QUANTURA_KALSHI_DIRECTION_POLICY || 'provisional_near_close' }}
+          STARTING_CONTRACTS: ${{ vars.QUANTURA_KALSHI_STARTING_CONTRACTS || '1' }}
+          RECOVERY_MULTIPLIER: ${{ vars.QUANTURA_KALSHI_RECOVERY_MULTIPLIER || '2.5' }}
+          MAX_CONTRACTS: ${{ vars.QUANTURA_KALSHI_MAX_CONTRACTS || '100' }}
+          LIVE_ENABLED: ${{ vars.QUANTURA_KALSHI_LIVE_ENABLED || 'false' }}
+        with:
+          script: |
+            const mode=process.env.APPROVED_MODE, sha=process.env.APPROVED_SHA;
+            const history=Number(process.env.HISTORY_MINUTES), account=Number(process.env.SUBACCOUNT), direction=process.env.DIRECTION_POLICY;
+            const start=Number(process.env.STARTING_CONTRACTS), multiplier=Number(process.env.RECOVERY_MULTIPLIER), cap=Number(process.env.MAX_CONTRACTS);
+            if(!['observe','live'].includes(mode) || !/^[a-f0-9]{40}$/.test(sha) ||
+               !Number.isInteger(history) || history<1 || history>12 ||
+               !Number.isInteger(account) || account<0 || account>63 ||
+               !Number.isInteger(start) || start<1 || start>100 ||
+               !Number.isFinite(multiplier) || multiplier<=1 || multiplier>5 ||
+               !Number.isInteger(cap) || cap<start || cap>100 ||
+               !['confirmed','provisional_near_close'].includes(direction)) throw new Error('INVALID_WATCHDOG_CONFIGURATION');
+            if(mode==='live' && process.env.LIVE_ENABLED!=='true') return;
+            const workflow_id='kalshi-btc-approved-trader.yml';
+            for(const status of ['queued','in_progress','requested','waiting','pending']) {
+              const {data}=await github.rest.actions.listWorkflowRuns({...context.repo,workflow_id,status,per_page:1});
+              if(data.workflow_runs.length) {core.info('Existing worker/approval/queue; no duplicate dispatch.');return;}
+            }
+            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:context.payload.repository.default_branch,
+              inputs:{mode,history_minutes:String(history),subaccount:String(account),direction_policy:direction,
+                starting_contracts:String(start),recovery_multiplier:String(multiplier),max_contracts:String(cap),
+                continuous:'true',code_ref:sha}});
