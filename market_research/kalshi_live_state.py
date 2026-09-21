@@ -21,6 +21,22 @@ def with_stats(state):
     return {**state, 'stats': {**empty_stats(), **state.get('stats', {})}}
 
 
+SESSION_COUNT_FIELDS = ('intents', 'acknowledged', 'rejected', 'unfilled',
+                        'settled', 'wins', 'losses', 'breakeven')
+SESSION_DECIMAL_FIELDS = ('requested_contracts', 'filled_contracts')
+
+
+def session_statistics(current, baseline):
+    """Return process-local activity without resetting durable risk accounting."""
+    result = {field: int(current.get(field, 0)) - int(baseline.get(field, 0))
+              for field in SESSION_COUNT_FIELDS}
+    result.update({field: str(money(current.get(field, '0')) - money(baseline.get(field, '0')))
+                   for field in SESSION_DECIMAL_FIELDS})
+    result['realized_net_pnl'] = str(money(current.get('realized_net_pnl', '0')) -
+                                     money(baseline.get('realized_net_pnl', '0')))
+    return result
+
+
 def approved_reconfiguration(existing, requested, state):
     """Allow reviewed sizing changes only between complete recovery cycles."""
     normalized = {**existing, 'starting_contracts': existing.get('starting_contracts', 1),
@@ -250,6 +266,7 @@ class Trader:
         return {**entry, 'status': 'acknowledged', 'acknowledgement': acknowledgement}
 
     def reconcile(self):
+        from .engine import stamp
         from .kalshi_execution import reconciled_order
         state = self.journal.state()
         entry = state.get('active')
@@ -272,9 +289,23 @@ class Trader:
             orders, positions = self.broker.account()
             actual = {p['ticker']: money(p['position_fp']) for p in positions if money(p['position_fp']) != 0}
             expected = money(fill['filled']) * (1 if entry['side'] == 'yes' else -1)
-            if orders or actual != {entry['ticker']: expected}:
+            if orders:
                 raise RuntimeError('POSITION_ACCOUNTING_MISMATCH')
-            return 'held_to_settlement'
+            if actual == {entry['ticker']: expected}:
+                return 'held_to_settlement'
+            # Kalshi's portfolio position can disappear after the official
+            # market close before the market and settlement read models expose
+            # the final result. The exact terminal order above proves the fill;
+            # an empty account after close therefore remains blocked on the
+            # durable active entry until authoritative settlement arrives. It
+            # must never be interpreted as flat or eligible for another order.
+            try:
+                close_at = stamp(market['close_time'])
+            except (KeyError, TypeError, ValueError):
+                raise RuntimeError('MARKET_CLOSE_TIME_UNAVAILABLE') from None
+            if time.time() >= close_at and not actual:
+                return 'settlement_accounting_pending'
+            raise RuntimeError('POSITION_ACCOUNTING_MISMATCH')
         settlements = self.broker.pages('/portfolio/settlements', 'settlements', ticker=entry['ticker'])
         rows = [s for s in settlements if s['ticker'] == entry['ticker'] and s.get('exchange_index') == entry['intent']['exchange_index']]
         if not rows:
