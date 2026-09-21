@@ -1312,21 +1312,10 @@ def main() -> None:
             shard_count=args.shards, as_of=args.as_of, maximum_symbols=args.max_symbols
         )
         _write_output("campaign_id", cloud.id)
-        _write_output(
-            "matrix",
-            json.dumps({"shard": list(range(args.shards))}, separators=(",", ":")),
-        )
         return
     cloud = SpyDailyCloud.resume(args.campaign, _code_sha())
     if args.command == "resume":
         _write_output("campaign_id", cloud.id)
-        _write_output(
-            "matrix",
-            json.dumps(
-                {"shard": list(range(int(cloud.configuration["shard_count"])))},
-                separators=(",", ":"),
-            ),
-        )
     elif args.command == "run-shard":
         progress = run_shard(
             cloud,

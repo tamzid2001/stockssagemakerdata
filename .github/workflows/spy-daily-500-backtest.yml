@@ -16,11 +16,6 @@ on:
         description: Optional completed NYSE session YYYY-MM-DD; blank selects the latest completed session
         type: string
         default: ''
-      shard_count:
-        description: Parallel checkpoint shards (immutable after campaign creation)
-        type: choice
-        options: ['16', '8', '32']
-        default: '16'
       max_symbols:
         description: Zero runs every official SPY equity holding plus SPY itself
         type: number
@@ -49,7 +44,6 @@ jobs:
     timeout-minutes: 90
     outputs:
       campaign_id: ${{ steps.study.outputs.campaign_id }}
-      matrix: ${{ steps.study.outputs.matrix }}
       code_sha: ${{ steps.revision.outputs.code_sha }}
     steps:
       - name: Validate immutable identifiers
@@ -97,7 +91,6 @@ jobs:
         env:
           RESUME_CAMPAIGN: ${{ inputs.resume_campaign }}
           AS_OF: ${{ inputs.as_of }}
-          SHARDS: ${{ inputs.shard_count }}
           MAX_SYMBOLS: ${{ inputs.max_symbols }}
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
@@ -109,7 +102,7 @@ jobs:
           if [[ -n "$RESUME_CAMPAIGN" ]]; then
             python -m ensemble_forecasting.spy_daily_backtest resume --campaign "$RESUME_CAMPAIGN"
           else
-            args=(prepare --shards "$SHARDS")
+            args=(prepare --shards 16)
             [[ -z "$AS_OF" ]] || args+=(--as-of "$AS_OF")
             [[ "$MAX_SYMBOLS" == 0 ]] || args+=(--max-symbols "$MAX_SYMBOLS")
             python -m ensemble_forecasting.spy_daily_backtest "${args[@]}"
@@ -121,7 +114,8 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 16
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
@@ -222,7 +216,6 @@ jobs:
         env:
           CAMPAIGN_ID: ${{ needs.prepare.outputs.campaign_id }}
           QUANTURA_CODE_SHA: ${{ needs.prepare.outputs.code_sha }}
-          SHARDS: ${{ inputs.shard_count }}
           MAX_SYMBOLS: ${{ inputs.max_symbols }}
           MAX_NEW_ORIGINS: ${{ inputs.max_new_origins }}
         with:
@@ -238,7 +231,6 @@ jobs:
                 resume_campaign:process.env.CAMPAIGN_ID,
                 code_ref:process.env.QUANTURA_CODE_SHA,
                 as_of: '',
-                shard_count: process.env.SHARDS,
                 max_symbols: process.env.MAX_SYMBOLS,
                 max_new_origins: process.env.MAX_NEW_ORIGINS,
                 continuous: 'true'
