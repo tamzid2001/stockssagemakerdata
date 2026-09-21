@@ -1,4 +1,6 @@
-from market_research.btc_bucket_report import aggregate, price_buckets, recovery_cycles, streaks
+import pytest
+
+from market_research.btc_bucket_report import aggregate, bankroll, price_buckets, recovery_cycles, streaks
 
 
 def trade(price, pnl, at, quantity=1):
@@ -10,6 +12,8 @@ def trade(price, pnl, at, quantity=1):
         "entry_at": at,
         "outcome_confirmed_at": at + 10,
         "market_id": f"m-{at}",
+        "exit_price": 1 if pnl > 0 else 0,
+        "fees": (quantity if pnl > 0 else 0) - price * quantity - pnl,
     }
 
 
@@ -22,6 +26,14 @@ def test_one_cent_buckets_split_winners_and_losers():
     ]
     assert buckets[0]["win_rate"] == .5
     assert buckets[1]["entry_notional"] == 1.02
+
+
+def test_cent_boundary_float_noise_does_not_move_trade_to_lower_bucket():
+    rows = [trade(.57999999999999996, .4, 1), trade(.5799, -.58, 2)]
+    buckets = price_buckets(rows)
+    assert [(r["entry_bucket_cents"], r["wins"], r["losses"]) for r in buckets] == [
+        (57, 0, 1), (58, 1, 0)
+    ]
 
 
 def test_streak_and_recovery_cycle_statistics():
@@ -41,6 +53,30 @@ def test_streak_and_recovery_cycle_statistics():
     assert recovery["wins_to_recover_median"] == 1.5
     assert recovery["distribution"] == {1: 1, 2: 1}
     assert not recovery["open_unrecovered_cycle"]
+    assert recovery["final_consecutive_wins_distribution"] == {1: 1, 2: 1}
+
+
+def test_bankroll_accounts_for_locked_capital_and_settlement_receipts():
+    first = trade(.6, .39, 1)
+    second = trade(.7, -1.42, 2, quantity=2)
+    result = bankroll([first, second])
+    assert result["historical_minimum_initial_cash"] == 2.03
+    assert result["maximum_single_entry_cash_with_fees"] == 1.42
+    assert result["ending_cash_change"] == -1.03
+    # With the second entry after the first settlement, proceeds are reusable.
+    second["entry_at"] = 12
+    second["outcome_confirmed_at"] = 20
+    assert bankroll([first, second])["historical_minimum_initial_cash"] == 1.03
+    # An entry sharing the settlement timestamp must fund itself before credit.
+    second["entry_at"] = 11
+    assert bankroll([first, second])["historical_minimum_initial_cash"] == 2.03
+
+
+def test_bankroll_rejects_inconsistent_pnl():
+    row = trade(.5, .49, 1)
+    row["net_pnl"] = .9
+    with pytest.raises(ValueError, match="TRADE_CASH_FLOW_MISMATCH"):
+        bankroll([row])
 
 
 def test_aggregate_warns_that_origins_overlap():
