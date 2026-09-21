@@ -32,7 +32,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260824s1"></script>
-    <script defer src="/screener.js?v=20260920-perps-jev"></script>
+    <script defer src="/screener.js?v=20260921-cutoff-p99"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -140,6 +140,7 @@
                 <span>Current signal</span>
                 <select id="qs-signal" name="signal">
                   <option value="all">All signals</option>
+                  <option value="cutoff_buy">Buy · input close above first P99</option>
                   <option value="buy">Buy · below P10</option>
                   <option value="sell">Sell · above P90</option>
                   <option value="neutral">Neutral · within P10–P90</option>
@@ -183,12 +184,16 @@
             <fieldset class="qs-quantile-filters">
               <legend>Actual price relative to forecast quantiles</legend>
               <div>
+                <label><input type="checkbox" name="position" value="below-p01" /> Below P01</label>
+                <label><input type="checkbox" name="position" value="above-p01" /> Above P01</label>
                 <label><input type="checkbox" name="position" value="below-p10" /> Below P10</label>
                 <label><input type="checkbox" name="position" value="above-p10" /> Above P10</label>
                 <label><input type="checkbox" name="position" value="below-p50" /> Below P50</label>
                 <label><input type="checkbox" name="position" value="above-p50" /> Above P50</label>
                 <label><input type="checkbox" name="position" value="below-p90" /> Below P90</label>
                 <label><input type="checkbox" name="position" value="above-p90" /> Above P90</label>
+                <label><input type="checkbox" name="position" value="below-p99" /> Below P99</label>
+                <label><input type="checkbox" name="position" value="above-p99" /> Above P99</label>
               </div>
               <p>Conditions combine with AND. For example, Above P50 + Below P90 isolates the P50–P90 range.</p>
             </fieldset>

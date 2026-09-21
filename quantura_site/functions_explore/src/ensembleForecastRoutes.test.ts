@@ -23,6 +23,17 @@ import {
 } from "./ensembleForecastRoutes";
 import {automaticSportsHistoryPhase, eventHistoryRange} from "./eventHistory";
 
+test("explicit single-model and partial multi-model requests never add implicit Prophet", () => {
+  for(const id of ["prophet","chronos","granite","toto"] as const) {
+    const config=normalizeEnsembleConfiguration({models:{[id]:{enabled:true,weight:7}},quantiles:id==="toto"?[.1,.5,.9]:[.01,.5,.99]},"free");
+    assert.deepEqual(Object.keys(config.models).filter(m=>config.models[m as keyof typeof config.models].enabled),[id]);
+    assert.deepEqual(config.effective_central_weights,{[id]:1});
+  }
+  const config=normalizeEnsembleConfiguration({models:{chronos:{enabled:true,weight:2},granite:{enabled:true,weight:6}}},"free");
+  assert.equal(config.models.prophet.enabled,false);assert.deepEqual(config.effective_central_weights,{granite:.75,chronos:.25});
+  assert.throws(()=>normalizeEnsembleConfiguration({models:{toto:{enabled:true,weight:1}},quantiles:[.99]},"free"),/unsupported/);
+});
+
 test("sports auto switches at 32 elapsed in-game minutes, including cutoff replays", () => {
   const start=Date.parse('2026-09-16T20:00:00Z');
   for (const minutes of [-60,0,31.99]) assert.equal(automaticSportsHistoryPhase(start,start+minutes*60000),'both');
@@ -446,4 +457,16 @@ test("recent signal result proves the withheld observation and selected cutoff",
   assert.equal(output.selectedHistory?.length,3);
   assert.throws(()=>validateWorkerResult({...valid,recent_signal_search:{...valid.recent_signal_search,next_observation:{timestamp:"2026-09-04T00:00:00Z",price:105}}},job),/search_invalid/);
   assert.throws(()=>validateWorkerResult({...valid,selected_history:[...valid.selected_history,{timestamp:"2026-09-04T00:00:00Z",target:120}]},job),/search_invalid/);
+});
+
+test("P99 search validates last input close, first row and versioned strict BUY only", () => {
+  const timestamps=Array.from({length:7},(_,i)=>`2026-09-${String(i+5).padStart(2,"0")}T00:00:00Z`);
+  const job={input_row_count:4,source:{type:"kalshi_perp"},request:{analysis_mode:"recent_signal_search",search_signal_rule:"cutoff_above_p99",prediction_length:7,horizon_mode:"frequency_periods",quantiles:[.99]}};
+  const valid={quantiles:[.99],predictions:timestamps.map(timestamp=>({timestamp,quantiles:{"0.99":110}})),effective_weights_by_quantile:{"0.99":{prophet:1}},
+    recent_signal_search:{status:"found",signal:"buy",signal_rule:"cutoff_above_p99",cutoffs_examined:1,max_cutoffs:20,history_cutoff_at:"2026-09-04T00:00:00Z",history_row_count:4,cutoff_observation:{timestamp:"2026-09-04T00:00:00Z",price:120},thresholds:{p99:110}},
+    selected_history:[1,2,3,4].map(i=>({timestamp:`2026-09-0${i}T00:00:00Z`,target:i===4?120:100}))};
+  assert.equal(validateWorkerResult(valid,job).recentSignalSearch?.signal,"buy");
+  for(const change of [{signal:"sell"},{thresholds:{p99:100}},{history_row_count:3},{cutoff_observation:{timestamp:"2026-09-05T00:00:00Z",price:120}},{cutoff_observation:{timestamp:"2026-09-04T00:00:00Z",price:110}}])
+    assert.throws(()=>validateWorkerResult({...valid,recent_signal_search:{...valid.recent_signal_search,...change}},job),/search_invalid/);
+  assert.throws(()=>normalizeEnsembleConfiguration({analysis_mode:"recent_signal_search",search_signal_rule:"sell_below_p01"},"free"),/search_signal_rule_unsupported/);
 });

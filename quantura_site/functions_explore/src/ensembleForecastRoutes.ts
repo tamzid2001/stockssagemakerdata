@@ -256,6 +256,7 @@ function modelSupportsQuantile(modelId: ModelId, quantile: number): boolean {
 type NormalizedConfiguration = {
   analysis_mode: "forecast" | "recent_signal_search";
   search_max_cutoffs: number | null;
+  search_signal_rule: "cutoff_above_p99" | "next_close_p10_p90" | null;
   toto_variant: string;
   prediction_length: number;
   horizon_mode: "trading_sessions" | "calendar_days" | "frequency_periods";
@@ -271,11 +272,15 @@ type NormalizedConfiguration = {
 };
 
 export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey): NormalizedConfiguration {
-  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs"], "configuration");
+  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule"], "configuration");
   const analysisModeRaw = text(body.analysis_mode || "forecast", 40);
   if (!new Set(["forecast", "recent_signal_search"]).has(analysisModeRaw)) throw new Error("analysis_mode_unsupported");
   let searchMaximum: number | null = null;
+  let searchRule: NormalizedConfiguration["search_signal_rule"] = null;
   if (analysisModeRaw === "recent_signal_search") {
+    const rawRule = body.search_signal_rule ?? "cutoff_above_p99";
+    if (rawRule !== "cutoff_above_p99" && rawRule !== "next_close_p10_p90") throw new Error("search_signal_rule_unsupported");
+    searchRule = rawRule;
     const raw = body.search_max_cutoffs ?? 20;
     if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > 30) throw new Error("search_max_cutoffs_unsupported");
     searchMaximum = raw;
@@ -304,7 +309,9 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
   for (const modelId of APPROVED_MODELS) {
     const row = plain(modelsRaw[modelId]);
     assertOnlyKeys(row, ["enabled", "weight"], `${modelId}_configuration`);
-    const enabled = boolean(row.enabled, modelId === "prophet");
+    // Default Prophet only when no model configuration was supplied. An explicit
+    // subset must never silently add a second model.
+    const enabled = boolean(row.enabled, Object.keys(modelsRaw).length === 0 && modelId === "prophet");
     const weight = finite(row.weight ?? (enabled ? (modelRegistry.models as Record<string, any>)[modelId].defaultWeight : 0));
     if (weight === null || weight < 0) throw new Error(`${modelId}_weight_invalid`);
     if (enabled && !planAllowsModel(plan, modelId)) throw new Error(`${modelId}_required_entitlement`);
@@ -327,6 +334,7 @@ export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey):
   return {
     analysis_mode: analysisModeRaw as NormalizedConfiguration["analysis_mode"],
     search_max_cutoffs: searchMaximum,
+    search_signal_rule: searchRule,
     prediction_length: predictionLength,
     toto_variant: totoVariant,
     horizon_mode: horizonModeRaw as NormalizedConfiguration["horizon_mode"],
@@ -673,6 +681,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     model_failure_policy: plain(data.request).failure_policy,
     analysis_mode: plain(data.request).analysis_mode || "forecast",
     search_max_cutoffs: plain(data.request).search_max_cutoffs || null,
+    search_signal_rule: plain(data.request).search_signal_rule || null,
     models: plain(data.request).models,
     toto_variant: plain(data.request).toto_variant,
     model_checkpoints: data.model_checkpoints,
@@ -853,6 +862,24 @@ export function validateWorkerResult(body: JsonRecord, job: JsonRecord): { quant
     if (body.recent_signal_search !== undefined || body.selected_history !== undefined) throw new Error("forecast_result_search_invalid");
     return { quantiles, predictions };
   }
+  if (plain(job.request).search_signal_rule === "cutoff_above_p99") {
+    const search = plain(body.recent_signal_search), actual = plain(search.cutoff_observation);
+    const status = text(search.status,20), signal = text(search.signal,20), cutoff = iso(search.history_cutoff_at);
+    const examined = Number(search.cutoffs_examined), maximum = Number(search.max_cutoffs), historyRowCount = Number(search.history_row_count);
+    const price = finite(actual.price), p99 = finite(plain(search.thresholds).p99);
+    const selectedHistory = normalizeSeriesRows(body.selected_history,"timestamp","target",2,500);
+    const last = selectedHistory.at(-1);
+    if (search.signal_rule !== "cutoff_above_p99" || search.next_observation !== undefined ||
+      !["found","not_found"].includes(status) || !["buy","none"].includes(signal) || (status === "found") !== (signal === "buy") ||
+      !Number.isInteger(examined) || examined < 1 || !Number.isInteger(maximum) || maximum !== Number(plain(job.request).search_max_cutoffs || 20) || maximum < examined || maximum > 30 ||
+      !Number.isInteger(historyRowCount) || historyRowCount !== Number(job.input_row_count) - examined + 1 || historyRowCount < 2 ||
+      !cutoff || iso(actual.timestamp) !== cutoff || last?.timestamp !== cutoff || price === null || last?.target !== price ||
+      selectedHistory.length !== Math.min(historyRowCount,500) || !(Date.parse(String(predictions[0].timestamp)) > Date.parse(cutoff)) ||
+      p99 === null || p99 !== finite(plain(predictions[0].quantiles)["0.99"]) || (signal === "buy") !== (price > p99)) throw new Error("forecast_result_search_invalid");
+    return {quantiles,predictions,selectedHistory,recentSignalSearch:{status,signal,signal_rule:"cutoff_above_p99",cutoffs_examined:examined,max_cutoffs:maximum,
+      history_cutoff_at:cutoff,history_row_count:historyRowCount,cutoff_observation:{timestamp:cutoff,price},thresholds:{p99},
+      rule:"last input close strictly above first predicted P99 = buy; otherwise no signal"}};
+  }
   const search = plain(body.recent_signal_search), next = plain(search.next_observation), thresholds = plain(search.thresholds);
   const status = text(search.status,20), signal = text(search.signal,20), cutoff = iso(search.history_cutoff_at), nextTimestamp = iso(next.timestamp);
   const examined = Number(search.cutoffs_examined), maximum = Number(search.max_cutoffs), price = finite(next.price);
@@ -954,7 +981,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
 
   router.post("/v1/ensemble-forecasts", wrap(options, async (req, res, principal, requestId) => {
     const body = plain(req.body);
-    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs"], "request");
+    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule"], "request");
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
@@ -965,9 +992,10 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const calendarBody = materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
     const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(calendarBody, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
     if (configuration.analysis_mode === "recent_signal_search") {
+      const requiredQuantiles = configuration.search_signal_rule === "cutoff_above_p99" ? [.99] : [.1,.5,.9];
       if (body.prediction_end_at || cutoff !== undefined || configuration.prediction_length !== 7 ||
-          ![.1,.5,.9].every(q => configuration.quantiles.includes(q))) {
-        throw new PredictionMarketDataError("recent_signal_search_configuration_invalid", "Recent signal search uses the latest history, a seven-period forecast, and P10/P50/P90.", 422);
+          !requiredQuantiles.every(q => configuration.quantiles.includes(q))) {
+        throw new PredictionMarketDataError("recent_signal_search_configuration_invalid", "Recent signal search uses the latest history, a seven-period forecast, and the quantiles required by its rule (P99 for cutoff-close BUY).", 422);
       }
     }
     if (cutoff !== undefined) Object.assign(materialized.source, { history_lag_minutes: body.history_lag_minutes || 0,
@@ -988,7 +1016,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       calendar: ["prediction_market","kalshi_perp"].includes(text(materialized.source.type)) ? "NONE" : configuration.calendar,
       models: configuration.models,
       toto_variant: configuration.toto_variant,
-      ...(configuration.analysis_mode === "recent_signal_search" ? {analysis_mode:configuration.analysis_mode,search_max_cutoffs:configuration.search_max_cutoffs} : {}),
+      ...(configuration.analysis_mode === "recent_signal_search" ? {analysis_mode:configuration.analysis_mode,search_max_cutoffs:configuration.search_max_cutoffs,search_signal_rule:configuration.search_signal_rule} : {}),
     };
     const hash = requestHash(workspaceId, sourceHash, normalizedRequest);
     const idempotencyKey = text(req.headers["idempotency-key"], 180);

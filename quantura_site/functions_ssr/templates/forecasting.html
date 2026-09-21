@@ -43,7 +43,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/forecast-controls.js?v=20260919a"></script>
+    <script defer src="/forecast-controls.js?v=20260921-cutoff-p99"></script>
     <script defer src="/forecast-metrics.js?v=20260920-forecast-only"></script>
     <script defer src="/app.js?v=20260824a"></script>
     <script defer src="/data-integrations.js?v=20260920-perps-jev"></script>
@@ -246,7 +246,7 @@
 
                           <div class="ensemble-primary-actions">
                             <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
-                            <button id="ensemble-find-signal" class="cta secondary" type="button" title="Walk recent cutoffs backward, forecast the next seven periods, and stop at the first next-close P10/P90 breach"><i class="iconoir-search" aria-hidden="true"></i><span>Find recent high / low</span></button>
+                            <button id="ensemble-find-signal" class="cta secondary" type="button" title="Search recent cutoffs, newest first: BUY only when the last input close is strictly above the first predicted P99"><i class="iconoir-search" aria-hidden="true"></i><span>Find recent high / low</span></button>
                           </div>
                           <p class="small muted ensemble-signal-search-help">Uses the configured source and models. Each attempt withholds the next actual close, then classifies buy below P10 or sell above P90. Up to 20 recent cutoffs are checked.</p>
                         </form>
@@ -301,7 +301,8 @@
                               </div>
                             </details>
                           </div>
-                          <section id="ensemble-first-row-signal" class="ensemble-first-row-signal" aria-label="First forecast minute signal" aria-live="polite"></section>
+                          <section id="ensemble-cutoff-p99-signal" class="ensemble-first-row-signal" aria-label="Input close versus first predicted P99" aria-live="polite" hidden></section>
+                          <section id="ensemble-first-row-signal" class="ensemble-first-row-signal" aria-label="First forecast row signal" aria-live="polite"></section>
                           <div id="ensemble-forecast-chart" class="chart ensemble-chart" aria-label="Final ensemble forecast chart"></div>
                           <section id="ensemble-live-quote" class="ensemble-live-quote" aria-label="Latest selected-side quote" aria-live="polite"></section>
                           <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>

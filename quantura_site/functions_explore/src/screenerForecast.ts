@@ -1,4 +1,4 @@
-import { gunzipSync } from "node:zlib";
+import { screenerHistory } from "./screenerHistory";
 import type { QuantScreenerDataset } from "./quantScreener";
 import { forecastRows } from "./screenerSignals";
 
@@ -10,13 +10,8 @@ export function screenerForecastSnapshot(dataset: QuantScreenerDataset, ticker: 
   const config=row.forecast_config as Record<string,any>;
   const provenance=row.forecast_provenance as Record<string,any>;
   if(!config || !provenance || provenance.runtime?.mock || forecastRows(row).length!==7)throw new Error("screener_forecast_invalid");
-  const decoded=JSON.parse(gunzipSync(Buffer.from(String(row.forecast_input_gzip),"base64"),{maxOutputLength:100_000}).toString("utf8"));
-  if(!Array.isArray(decoded) || decoded.length<32 || decoded.length>512)throw new Error("screener_history_invalid");
-  let prior="";
-  const history=decoded.map((r:unknown[])=>{
-    if(!Array.isArray(r)||r.length!==2||typeof r[0]!=="string"||!Number.isFinite(Date.parse(r[0]))||r[0]<=prior||typeof r[1]!=="number"||!Number.isFinite(r[1])||r[1]<=0)throw new Error("screener_history_invalid");
-    prior=r[0];return {timestamp:r[0],target:r[1]};
-  });
+  const history=screenerHistory(row.forecast_input_gzip);
+  if(history.length<32)throw new Error("screener_history_invalid");
   const request={prediction_length:7,horizon_mode:"trading_sessions",quantiles:config.quantiles,frequency:"1D",calendar:"NYSE",context_length:config.context_length,
     transform:config.transform,failure_policy:"fail",models:config.models,toto_variant:"4m"};
   const source={type:"ticker",symbol:row.ticker,provider:String(row.price_source).startsWith("alpaca")?"alpaca":"yahoo",field:"close",frequency:"1Day",session:"regular",adjustment:"split",limit:512,daily_timestamp_convention:"session_date",

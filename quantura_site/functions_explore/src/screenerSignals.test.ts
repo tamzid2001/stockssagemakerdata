@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { gzipSync } from "node:zlib";
 import { advanceClosingSignal, decorateScreenerRow, finalizedClosingSignal, ScreenerQuote } from "./screenerSignals";
 import { parseQuantScreenerQuery, rowMatchesQuery, QuantScreenerRow } from "./quantScreener";
 
@@ -8,6 +9,28 @@ const row: QuantScreenerRow = { ticker: "PLTR", actual_price: 100, actual_price_
   forecast_rows: [{date:"2026-09-21",timestamp:"2026-09-21T00:00:00Z",session_open:"2026-09-21T13:30:00Z",session_close:"2026-09-21T20:00:00Z",p10:95,p50:110,p90:125}],
   quantile_stats: {p50:{min:105,avg:115,max:130}} };
 const quote: ScreenerQuote = {price:90,timestamp:"2026-09-18T23:59:00Z",session:"after_hours",source:"alpaca_iex_minute_close"};
+test("cutoff BUY uses only immutable final input close and first P99, strict and split-safe", () => {
+  const makeRow = (price:number): QuantScreenerRow => ({...row,actual_price:999,
+    forecast_input_gzip:gzipSync(JSON.stringify([["2026-09-16T00:00:00Z",100],["2026-09-17T00:00:00Z",price]])).toString("base64"),
+    history_cutoff_at:"2026-09-17T00:00:00Z",
+    forecast_rows:[{...(row.forecast_rows as any[])[0],p99:130},{...(row.forecast_rows as any[])[0],date:"2026-09-22",p99:999}]});
+  for(const [price,value] of [[131,"buy"],[130,"neutral"],[129,"neutral"]] as const) {
+    const result=decorateScreenerRow(makeRow(price),{...quote,price:2000},{},now);
+    assert.equal((result.cutoff_p99_signal as any).value,value);
+    assert.equal((result.cutoff_p99_signal as any).price,price);
+    assert.equal((result.cutoff_p99_signal as any).p99,130);
+    const filter=parseQuantScreenerQuery({signal:"cutoff_buy"});
+    assert.deepEqual(filter.errors,[]);assert.equal(rowMatchesQuery(result,filter.query),value==="buy");
+  }
+  for(const invalid of [{forecast_input_gzip:"invalid"},{split_status:"unverified"},{split_status:"requires_refresh"},{history_cutoff_at:"2026-09-16T00:00:00Z"},{forecast_rows:row.forecast_rows}])
+    assert.equal(decorateScreenerRow({...makeRow(131),...invalid},quote,{},now).cutoff_p99_signal,null);
+});
+test("tail position filters use quotes but do not create a sell-below-P01 signal", () => {
+  for(const position of ["above-p99","below-p99","above-p01","below-p01"]) {
+    const {query,errors}=parseQuantScreenerQuery({position});assert.deepEqual(errors,[]);
+    assert.equal(rowMatchesQuery({ticker:"X",actual_price:position.startsWith("above")?200:1,p01:10,p99:100},query),true);
+  }
+});
 test("before next trading day use newer after-hours completed minute against first forecast row", () => {
   const result=decorateScreenerRow(row,quote,{},now);
   assert.equal(result.signal,"buy"); assert.equal(result.actual_price,90); assert.equal(result.forecast_comparison_date,"2026-09-21");

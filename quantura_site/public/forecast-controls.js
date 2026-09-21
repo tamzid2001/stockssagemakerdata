@@ -74,6 +74,13 @@
       return { timestamp, target };
     });
   }
+  function cutoffP99Signal(job) {
+    const last = job.history?.at(-1), first = job.predictions?.[0];
+    const price = last?.target, p99 = first?.quantiles?.["0.99"];
+    if (![price,p99].every(v => typeof v === "number" && Number.isFinite(v)) ||
+        !(Date.parse(last?.timestamp) < Date.parse(first?.timestamp))) return {status:"unavailable", signal:null};
+    return {status:"available",signal:price > p99 ? "buy" : "none",price,p99,cutoffTimestamp:last.timestamp,forecastTimestamp:first.timestamp};
+  }
   function firstRowSignal(job, now = Date.now()) {
     const first = job.predictions?.[0];
     const timestamp = Date.parse(first?.timestamp);
@@ -164,7 +171,7 @@
     }
     return closed.length?[{values:closed,dvalue:86400_000}]:[];
   }
-  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowSignal, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
+  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowSignal, cutoffP99Signal, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);
