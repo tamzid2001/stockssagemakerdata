@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from decimal import Decimal, ROUND_FLOOR
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import json
 import math
 import os
@@ -38,6 +38,10 @@ def _cent_bucket(price: object) -> int:
     value = Decimal(str(price))
     if not value.is_finite() or not Decimal("0") < value < Decimal("1"):
         raise ValueError("INVALID_ENTRY_PRICE")
+    # cost / quantity in saved replay rows can introduce binary float noise
+    # (e.g. 0.58 becomes 0.57999999999999996). Preserve sub-cent prices while
+    # removing noise far below the exchange's recorded price precision.
+    value = value.quantize(Decimal("0.000000001"))
     return int((value * 100).to_integral_value(rounding=ROUND_FLOOR))
 
 
@@ -88,7 +92,7 @@ def recovery_cycles(trades: list[dict]) -> dict:
 
     active = False
     pnl = 0.0
-    wins = losses = trade_count = 0
+    wins = losses = trade_count = consecutive_wins = 0
     completed: list[dict] = []
     for trade in _ordered_closed(trades):
         net = trade["net_pnl"]
@@ -97,11 +101,12 @@ def recovery_cycles(trades: list[dict]) -> dict:
                 continue
             active = True
             pnl = 0.0
-            wins = losses = trade_count = 0
+            wins = losses = trade_count = consecutive_wins = 0
         pnl += net
         trade_count += 1
         wins += net > 0
         losses += net < 0
+        consecutive_wins = consecutive_wins + 1 if net > 0 else 0
         if pnl >= -1e-10:
             completed.append(
                 {
@@ -109,6 +114,7 @@ def recovery_cycles(trades: list[dict]) -> dict:
                     "losses_in_cycle": losses,
                     "trades_in_cycle": trade_count,
                     "ending_pnl": round(pnl, 6),
+                    "final_consecutive_wins": consecutive_wins,
                 }
             )
             active = False
@@ -125,6 +131,60 @@ def recovery_cycles(trades: list[dict]) -> dict:
         "wins_to_recover_min": min(win_counts) if win_counts else None,
         "wins_to_recover_max": max(win_counts) if win_counts else None,
         "distribution": dict(sorted(Counter(win_counts).items())),
+        "final_consecutive_wins_distribution": dict(sorted(Counter(
+            row["final_consecutive_wins"] for row in completed
+        ).items())),
+    }
+
+
+def bankroll(trades: list[dict]) -> dict:
+    """Cash required to replay this sequence from its recorded starting point.
+
+    Debit ask cost and recorded entry fees at entry; credit settlement proceeds
+    only at the recorded outcome confirmation. Ties debit before credit, matching
+    the simulation's strictly-before settlement recognition. This is a sample
+    funding requirement, not a guarantee for a future losing sequence.
+    """
+    events = []
+    maximum_entry = Decimal(0)
+    maximum_quantity = Decimal(0)
+    for index, trade in enumerate(_ordered_closed(trades)):
+        price = Decimal(str(trade["entry_price"]))
+        quantity = Decimal(str(trade["quantity"]))
+        fees = Decimal(str(trade.get("fees", 0)))
+        payout_price = Decimal(str(trade["exit_price"]))
+        entered = int(trade["entry_at"])
+        confirmed = int(trade["outcome_confirmed_at"])
+        if not fees.is_finite() or fees < 0 or payout_price not in (0, 1) or confirmed < entered:
+            raise ValueError("INVALID_SETTLEMENT_CASH_FLOW")
+        debit = price * quantity + fees
+        payout = quantity * payout_price
+        if abs(payout - debit - Decimal(str(trade["net_pnl"]))) > Decimal("0.000001"):
+            raise ValueError("TRADE_CASH_FLOW_MISMATCH")
+        events.extend(((entered, 0, index, -debit), (confirmed, 1, index, payout)))
+        maximum_entry = max(maximum_entry, debit)
+        maximum_quantity = max(maximum_quantity, quantity)
+    cash = low = peak = drawdown = Decimal(0)
+    for _, _, _, change in sorted(events):
+        cash += change
+        low = min(low, cash)
+        peak = max(peak, cash)
+        drawdown = max(drawdown, peak - cash)
+
+    def cents(value):
+        # Epsilon removes binary-float serialization noise at exact-cent bounds.
+        return float(value.quantize(Decimal("0.000000001")).quantize(
+            Decimal("0.01"), rounding=ROUND_CEILING
+        ))
+
+    return {
+        "historical_minimum_initial_cash": cents(-low),
+        "maximum_single_entry_cash_with_fees": cents(maximum_entry),
+        "maximum_cash_drawdown_including_locked_positions": cents(drawdown),
+        "maximum_contracts": float(maximum_quantity),
+        "ending_cash_change": round(float(cash), 6),
+        "assumptions": "USD; profits reinvested; recorded fees; settlement credited at recorded confirmation; no extra execution buffer",
+        "scope": "Closed trades in this origin only; not a guaranteed minimum for future trading",
     }
 
 
@@ -186,6 +246,7 @@ def summarize_origin(origin: int, scenario: dict) -> dict:
         "net_pnl": round(sum(row["net_pnl"] for row in ordered), 6),
         **streaks(ordered),
         "recovery": recovery_cycles(ordered),
+        "bankroll": bankroll(ordered),
         "price_buckets": price_buckets(ordered),
     }
 
@@ -194,7 +255,7 @@ def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: s
     origins = [summarize_origin(origin, origin_scenarios[origin]) for origin in sorted(origin_scenarios)]
     combined = [trade for origin in sorted(origin_scenarios) for trade in origin_scenarios[origin]["trades"]]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "paper_only": True,
         "campaign_id": campaign_id,
         "report_key": report_key,
@@ -236,7 +297,13 @@ def load(campaign_id: str, report_key: str) -> dict:
         scenarios[int(origin)] = full["p90_sticky"]["recover_cycle"]
     if set(scenarios) != set(range(1, 13)):
         raise ValueError("ALL_MINUTE_ORIGINS_REQUIRED")
-    return aggregate(scenarios, campaign_id, report_key)
+    result = aggregate(scenarios, campaign_id, report_key)
+    result["coverage"] = compact.get("coverage", {})
+    result["as_of"] = compact.get("as_of")
+    result["complete"] = compact.get("complete")
+    result["fee_policy"] = compact.get("fee_policy")
+    result["limitations"] = compact.get("limitations", [])
+    return result
 
 
 def markdown(report: dict) -> str:
