@@ -15,7 +15,7 @@ import signal
 import tempfile
 import time
 
-from .kalshi_execution import Config, KalshiExecution
+from .kalshi_execution import Config, KalshiExecution, money
 from .kalshi_live_state import LiveJournal, Trader, session_statistics
 
 
@@ -112,6 +112,7 @@ def run(config, mode, duration):
     snapshots = {r['market_id']: r for r in journal.direction_snapshots()}
     reconciled_directions = set()
     last_renew = last_reconcile = last_health = 0
+    status = 'starting'
     try:
         with tempfile.TemporaryDirectory(prefix='kalshi-minute-live-') as directory:
             store = LocalStore(journal.session, journal.holder, directory, capacity_bytes=100*1024*1024)
@@ -126,7 +127,11 @@ def run(config, mode, duration):
                     if now - last_renew >= 25:
                         journal.renew()
                         last_renew = now
-                    if now - last_reconcile >= 20:
+                    # A proven zero-fill IOC is retried at roughly one-second
+                    # cadence. Each cycle still authenticates the exact prior
+                    # order before a uniquely identified replacement is sent.
+                    interval = 1 if status.startswith('retry_') else 20
+                    if now - last_reconcile >= interval:
                         status = trader.reconcile()
                         summary = journal.public_summary()
                         print(json.dumps({'event': 'execution_heartbeat', 'mode': mode,
@@ -219,10 +224,15 @@ def run(config, mode, duration):
                                 try:
                                     entry = trader.enter(s, quote, now)
                                     acknowledgement = entry.get('acknowledgement', {})
-                                    print(json.dumps({'event': 'entry_acknowledged' if acknowledgement else 'entry_observed',
+                                    acknowledged_fill = acknowledgement.get('acknowledged_fill')
+                                    print(json.dumps({'event': 'entry_order_acknowledged' if acknowledgement else 'entry_observed',
                                         'ticker': ticker, 'side': entry['side'],
                                         'requested_contracts': entry['intent']['count'],
-                                        'acknowledged_fill': acknowledgement.get('acknowledged_fill'),
+                                        'attempt': entry.get('attempt', 0),
+                                        'acknowledgement_state': ('zero_fill_pending_reconciliation'
+                                            if acknowledged_fill is not None and money(acknowledged_fill) == 0
+                                            else 'fill_reported'),
+                                        'acknowledged_fill': acknowledged_fill,
                                         'acknowledged_remaining': acknowledgement.get('acknowledged_remaining')}), flush=True)
                                 except (RuntimeError, ValueError, KeyError) as exc:
                                     code = str(exc) if re.fullmatch(r'[A-Z][A-Z0-9_]{3,80}', str(exc)) else 'EXECUTION_BLOCKED'
@@ -238,7 +248,7 @@ def run(config, mode, duration):
                             archived.add(ticker)
                     if store.at_capacity:
                         raise RuntimeError('LOCAL_EVIDENCE_CAPACITY_REACHED')
-                    time.sleep(3)
+                    time.sleep(1 if status.startswith('retry_') else 3)
             finally:
                 near_close.stop()
                 collector.stop()
