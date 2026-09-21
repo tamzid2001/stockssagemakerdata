@@ -10,6 +10,18 @@ export class EmailDeliveryError extends Error {
 export type BrevoReply = { status: number; messageId?: string; code?: string };
 export type BrevoTransport = (payload: Record<string, unknown>) => Promise<BrevoReply>;
 
+/** Validate the complete server-only delivery configuration without sending. */
+export function isBrevoEmailConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  const sender = env.BREVO_SENDER_EMAIL?.trim() || "";
+  if (env.NOTIFICATION_EMAIL_PROVIDER !== "brevo" || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(sender)) return false;
+  try {
+    createBrevoTransport(env);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** No global proxy: only this fixed HTTPS endpoint is allowed through Fixie. */
 export function createBrevoTransport(env: NodeJS.ProcessEnv = process.env): BrevoTransport {
   const apiKey = env.BREVO_API_KEY?.trim();

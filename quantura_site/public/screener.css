@@ -936,4 +936,7 @@
 .qs-saved-list li { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); }
 .qs-saved-list li>span { flex:1 1 200px; min-width:0; overflow-wrap:anywhere; }
 .qs-saved-list small { display:block; margin-top:4px; color:var(--muted-foreground,var(--muted)); }
+.qs-alert-icon { display:grid; flex:0 0 30px; width:30px; height:30px; place-items:center; border:1px solid var(--border); border-radius:9px; color:var(--accent-foreground); background:var(--accent); }
+.qs-inbox-title { display:flex; align-items:center; gap:7px; }
+#qs-alert-summary { color:var(--muted-foreground); font-size:.76rem; font-weight:600; }
 .qs-inbox-title { font-size:16px; margin:16px 0 8px; }

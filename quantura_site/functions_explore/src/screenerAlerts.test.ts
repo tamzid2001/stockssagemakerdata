@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseSavedAlert, requireAlertAccount, closingRows, digestMatches, buildScreenerDigest } from "./screenerAlerts";
+import { parseSavedAlert, requireAlertAccount, closingRows, digestMatches, buildScreenerDigest, runScreenerDigests } from "./screenerAlerts";
 import { PLATFORM_API_SCOPES, type ApiPrincipal } from "./apiAccess";
 
 const principal:ApiPrincipal={userId:"owner",tokenId:null,tokenName:"web",tokenScopes:[...PLATFORM_API_SCOPES],plan:"free",authMethod:"firebase_session"};
@@ -32,4 +32,29 @@ test("email HTML is escaped, bounded, idempotent and links to controls",()=>{
   const email=buildScreenerDigest("owner",date,matches,"https://quantura.studio");
   assert.ok(!email.html.includes("<img"));assert.ok(email.html.includes("&lt;img"));assert.ok(email.html.includes("/screener#saved-alerts"));
   assert.equal(email.id,buildScreenerDigest("owner",date,matches,"https://quantura.studio").id);
+});
+
+function digestHarness(users:number){
+  const records=new Map<string,any>();
+  const snapshot=(ref:any)=>({id:ref.id,ref,exists:records.has(ref.path),data:()=>structuredClone(records.get(ref.path))});
+  const ref=(path:string):any=>({path,id:path.split("/").at(-1),get:async()=>snapshot(ref(path)),set:async(value:any,options?:any)=>records.set(path,options?.merge?{...(records.get(path)||{}),...structuredClone(value)}:structuredClone(value)),collection:(name:string)=>collection(`${path}/${name}`)});
+  const collection=(path:string):any=>({
+    path,doc:(id:string)=>ref(`${path}/${id}`),orderBy(){return query(path);},
+  });
+  const query=(path:string,after="",maximum=100):any=>({
+    orderBy(){return this;},limit(value:number){return query(path,after,value);},startAfter(value:string){return query(path,value,maximum);},
+    async get(){const prefix=`${path}/`;const docs=[...records.keys()].filter(key=>key.startsWith(prefix)&&!key.slice(prefix.length).includes("/")).map(key=>ref(key)).filter(item=>item.id>after).sort((a,b)=>a.id.localeCompare(b.id)).slice(0,maximum).map(snapshot);return {docs,size:docs.length,empty:docs.length===0};},
+  });
+  const db:any={collection,runTransaction:async(fn:any)=>fn({get:(item:any)=>item.get(),set:(item:any,value:any,options?:any)=>item.set(value,options),create:(item:any,value:any)=>{if(records.has(item.path))throw new Error("already_exists");records.set(item.path,structuredClone(value));},update:(item:any,value:any)=>item.set(value,{merge:true})})};
+  for(let index=0;index<users;index++)records.set(`screener_saved_alerts/user-${String(index).padStart(2,"0")}`,{alerts:{only:parseSavedAlert(input)}});
+  return {db,records,auth:{getUser:async(uid:string)=>({uid,email:`${uid}@example.com`,emailVerified:true,disabled:false})}};
+}
+
+test("one daily invocation pages across every saved-filter account and records inbox/evaluation state",async()=>{
+  const {db,records,auth}=digestHarness(12);
+  const result=await runScreenerDigests({db,auth:auth as any,publicOrigin:"https://quantura.studio"},{scan_id:"scan-1"} as any,[row],Date.parse(date+"T20:06:00Z"));
+  assert.deepEqual({processed:result.processed,done:result.done,emails:result.emails},{processed:12,done:true,emails:0});
+  assert.equal([...records.keys()].filter(key=>key.startsWith("screener_daily_digests/")).length,12);
+  assert.equal([...records.keys()].filter(key=>key.includes("/items/")).length,12);
+  for(let index=0;index<12;index++)assert.equal(records.get(`screener_saved_alerts/user-${String(index).padStart(2,"0")}`).last_evaluation.matched_filters,1);
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BrevoNotificationMailer, createBrevoTransport, emailIdempotencyKey, fixieBillingWindow, type EmailDeliveryLedger } from "./brevoEmail";
+import { BrevoNotificationMailer, createBrevoTransport, emailIdempotencyKey, fixieBillingWindow, isBrevoEmailConfigured, type EmailDeliveryLedger } from "./brevoEmail";
 
 const email = { id: "user-digest-2026-09-19", to: "test@example.com", subject: "Saved filter matches", text: "Test", html: "<p>Test</p>" };
 const env = { BREVO_SENDER_EMAIL: "hello@example.com" };
@@ -11,6 +11,11 @@ test("Fixie is mandatory and an arbitrary proxy is rejected", () => {
   for (const FIXIE_URL of ["", "https://attacker.example", "http://user:secret@usefixie.com.evil.test", "http://user:secret@proxy.usefixie.com?secret=bad"]) {
     assert.throws(() => createBrevoTransport({ FIXIE_URL, BREVO_API_KEY: "test-only" }), /email_configuration/);
   }
+});
+test("email availability requires the complete Brevo and approved Fixie configuration", () => {
+  assert.equal(isBrevoEmailConfigured({}), false);
+  assert.equal(isBrevoEmailConfigured({NOTIFICATION_EMAIL_PROVIDER:"brevo",BREVO_SENDER_EMAIL:"alerts@example.com",BREVO_API_KEY:"key",FIXIE_URL:"http://user:pass@criterium.usefixie.com:80"}), true);
+  assert.equal(isBrevoEmailConfigured({NOTIFICATION_EMAIL_PROVIDER:"brevo",BREVO_SENDER_EMAIL:"alerts@example.com",BREVO_API_KEY:"key",FIXIE_URL:"http://user:pass@example.com:80"}), false);
 });
 test("billing period follows the integration reset, not calendar month", () => {
   assert.equal(fixieBillingWindow(new Date("2026-10-18T23:59:59Z")), "2026-09-19");
