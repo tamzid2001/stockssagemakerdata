@@ -311,6 +311,7 @@ def test_workflow_is_continuous_pinned_and_real_only():
         Path(".github/workflows/spy-daily-500-backtest.yml").read_text()
     )
     assert workflow["jobs"]["worker"]["timeout-minutes"] == 350
+    assert workflow["jobs"]["worker"]["strategy"]["matrix"]["shard"] == list(range(16))
     assert workflow["concurrency"]["cancel-in-progress"] is False
     worker_steps = workflow["jobs"]["worker"]["steps"]
     run = next(
