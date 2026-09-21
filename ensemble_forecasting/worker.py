@@ -84,18 +84,17 @@ def _recent_signal_search(
     mock: bool,
     minimum_history_rows: int,
 ) -> dict[str, Any]:
-    """Walk recent immutable cutoffs backward until the next close breaches P10/P90.
-
-    The observation immediately after each cutoff is withheld from inference and
-    used exactly once for classification. Search is bounded because every
-    cutoff reruns the configured models rather than recycling future output.
-    """
+    """Search immutable input cutoffs. Preserve the rule of previously saved jobs."""
     request = dict(job.get("request") or {})
+    rule = request.get("search_signal_rule", "next_close_p10_p90")
+    if rule not in {"cutoff_above_p99", "next_close_p10_p90"}:
+        raise ValueError("RECENT_SIGNAL_SEARCH_RULE_INVALID")
+    cutoff_rule = rule == "cutoff_above_p99"
     if int(request.get("prediction_length") or 0) != 7:
         raise ValueError("RECENT_SIGNAL_SEARCH_REQUIRES_SEVEN_STEPS")
     requested = {round(float(value), 10) for value in request.get("quantiles") or []}
-    if not {0.1, 0.5, 0.9}.issubset(requested):
-        raise ValueError("RECENT_SIGNAL_SEARCH_REQUIRES_P10_P50_P90")
+    if not ({0.99} if cutoff_rule else {0.1, 0.5, 0.9}).issubset(requested):
+        raise ValueError("RECENT_SIGNAL_SEARCH_QUANTILES_REQUIRED")
     try:
         maximum = int(request.get("search_max_cutoffs", 20))
     except (TypeError, ValueError) as exc:
@@ -116,9 +115,10 @@ def _recent_signal_search(
         [source_minimum]
         + [int(MODEL_REGISTRY["models"].get(model_id, {}).get("minimumObservedContext") or 2) for model_id in enabled]
     )
-    if len(rows) <= model_minimum:
-        raise ValueError(f"RECENT_SIGNAL_SEARCH_REQUIRES_{model_minimum + 1}_ROWS")
-    single_request = {key: value for key, value in request.items() if key not in {"analysis_mode", "search_max_cutoffs"}}
+    minimum = model_minimum if cutoff_rule else model_minimum + 1
+    if len(rows) < minimum:
+        raise ValueError(f"RECENT_SIGNAL_SEARCH_REQUIRES_{minimum}_ROWS")
+    single_request = {key: value for key, value in request.items() if key not in {"analysis_mode", "search_max_cutoffs", "search_signal_rule"}}
     examined = 0
     selected: dict[str, Any] | None = None
     selected_history: list[dict[str, Any]] = []
@@ -126,10 +126,11 @@ def _recent_signal_search(
     selected_actual: dict[str, Any] | None = None
     thresholds: dict[str, float] = {}
     total_started = time.monotonic()
-    oldest_index = max(model_minimum - 1, len(rows) - 1 - maximum)
-    for cutoff_index in range(len(rows) - 2, oldest_index - 1, -1):
+    newest_index = len(rows) - (1 if cutoff_rule else 2)
+    oldest_index = max(model_minimum - 1, newest_index - maximum + 1)
+    for cutoff_index in range(newest_index, oldest_index - 1, -1):
         history = [dict(row) for row in rows[: cutoff_index + 1]]
-        actual = dict(rows[cutoff_index + 1])
+        actual = dict(rows[cutoff_index if cutoff_rule else cutoff_index + 1])
         candidate_job = {
             **dict(job),
             "request": single_request,
@@ -144,12 +145,17 @@ def _recent_signal_search(
         examined += 1
         first = dict(candidate["predictions"][0])
         quantiles = dict(first.get("quantiles") or {})
-        lower, median, upper = (float(quantiles[key]) for key in ("0.1", "0.5", "0.9"))
         observed = float(actual["target"])
-        signal = "buy" if observed < lower else "sell" if observed > upper else "none"
+        if cutoff_rule:
+            p99 = float(quantiles["0.99"])
+            signal = "buy" if observed > p99 else "none"
+            thresholds = {"p99": p99}
+        else:
+            lower, median, upper = (float(quantiles[key]) for key in ("0.1", "0.5", "0.9"))
+            signal = "buy" if observed < lower else "sell" if observed > upper else "none"
+            thresholds = {"p10": lower, "p50": median, "p90": upper}
         selected, selected_history, selected_signal = candidate, history, signal
         selected_actual = {"timestamp": str(actual["timestamp"]), "price": observed}
-        thresholds = {"p10": lower, "p50": median, "p90": upper}
         if signal != "none":
             break
     if selected is None or selected_actual is None:
@@ -161,16 +167,17 @@ def _recent_signal_search(
         "max_cutoffs": maximum,
         "history_cutoff_at": str(selected_history[-1]["timestamp"]),
         "history_row_count": len(selected_history),
-        "next_observation": selected_actual,
+        "cutoff_observation" if cutoff_rule else "next_observation": selected_actual,
         "thresholds": thresholds,
-        "rule": "next observed close below P10 = buy; above P90 = sell; strict boundaries",
+        "signal_rule": rule,
+        "rule": "last input close strictly above first predicted P99 = buy; otherwise no signal" if cutoff_rule else "next observed close below P10 = buy; above P90 = sell; strict boundaries",
     }
     # Firestore result documents stay bounded; the count still proves which
     # prefix was used, while the chart receives the most recent 500 inputs.
     selected["selected_history"] = selected_history[-500:]
     selected["runtime_seconds"] = time.monotonic() - total_started
     selected["warnings"] = list(selected.get("warnings") or []) + [
-        f"Recent signal search examined {examined} strictly out-of-sample cutoff(s); later observations were not passed to inference."
+        f"Recent signal search examined {examined} cutoff(s); later observations were not passed to inference. This is a signal search, not a performance backtest."
     ]
     digest_payload = {key: value for key, value in selected.items() if key != "result_hash"}
     selected["result_hash"] = hashlib.sha256(

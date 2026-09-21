@@ -200,6 +200,51 @@ def test_recent_signal_search_is_bounded_when_no_signal_is_found() -> None:
     assert result["recent_signal_search"]["cutoffs_examined"] == 2
 
 
+@pytest.mark.parametrize("close,expected", [(131.0, "buy"), (130.0, "none"), (129.0, "none")])
+def test_p99_search_uses_last_input_not_withheld_quote(monkeypatch, close, expected) -> None:
+    from ensemble_forecasting import worker
+    rows = [{"timestamp": f"2026-09-0{i}T00:00:00Z", "target": value} for i, value in enumerate([100., 999., close], 1)]
+    seen = []
+
+    def forecast(job, **kwargs):
+        seen.append(job["input"]["rows"])
+        assert "search_signal_rule" not in job["request"]
+        return {"predictions": [{"timestamp": "2026-09-04T00:00:00Z", "quantiles": {"0.99": 130.}}]}
+
+    monkeypatch.setattr(worker, "execute_job", forecast)
+    job = {"source": {"type": "kalshi_perp"}, "input": {"rows": rows}, "request": {
+        "analysis_mode": "recent_signal_search", "search_signal_rule": "cutoff_above_p99", "search_max_cutoffs": 1,
+        "prediction_length": 7, "quantiles": [.99], "models": {"chronos": {"enabled": True, "weight": 1}}}}
+    result = worker._recent_signal_search(job, progress=lambda _: None, mock=True, minimum_history_rows=2)
+    search = result["recent_signal_search"]
+    assert search["signal"] == expected
+    assert search["cutoff_observation"] == {"timestamp": rows[-1]["timestamp"], "price": close}
+    assert search["history_row_count"] == 3
+    assert "next_observation" not in search
+    assert seen == [rows]
+
+
+def test_p99_search_walks_back_from_latest_without_future_input(monkeypatch) -> None:
+    from ensemble_forecasting import worker
+    rows = [{"timestamp": f"2026-09-0{i}T00:00:00Z", "target": value} for i, value in enumerate([100., 131., 90.], 1)]
+    seen = []
+
+    def forecast(job, **kwargs):
+        history = job["input"]["rows"]
+        seen.append(history)
+        return {"predictions": [{"timestamp": f"2026-09-0{len(history)+1}T00:00:00Z", "quantiles": {"0.99": 130.}}]}
+
+    monkeypatch.setattr(worker, "execute_job", forecast)
+    job = {"source": {"type": "kalshi_perp"}, "input": {"rows": rows}, "request": {
+        "search_signal_rule": "cutoff_above_p99", "search_max_cutoffs": 20,
+        "prediction_length": 7, "quantiles": [.99], "models": {"chronos": {"enabled": True, "weight": 1}}}}
+    result = worker._recent_signal_search(job, progress=lambda _: None, mock=True, minimum_history_rows=2)
+    assert seen == [rows, rows[:-1]]
+    assert result["recent_signal_search"]["signal"] == "buy"
+    assert result["recent_signal_search"]["cutoffs_examined"] == 2
+    assert result["selected_history"] == rows[:-1]
+
+
 def test_monotonic_rearrangement() -> None:
     repaired = monotonic_rearrangement(np.array([[3.0, 1.0], [1.0, 2.0], [2.0, 3.0]]))
     assert repaired.tolist() == [[1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]

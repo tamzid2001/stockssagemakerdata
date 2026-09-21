@@ -1,4 +1,5 @@
 import type { QuantScreenerRow } from "./quantScreener";
+import { screenerCutoff } from "./screenerHistory";
 
 export type ScreenerForecastRow = { date: string; timestamp: string; session_open: string; session_close: string; p10: number; p50: number; p90: number; [key: string]: unknown };
 export type ScreenerQuote = { price: number; timestamp: string; source: string; session?: string };
@@ -27,9 +28,15 @@ export function decorateScreenerRow(row: QuantScreenerRow, quote?: ScreenerQuote
   const date = selected ? selected.source === "historical_daily_close" ? selected.timestamp.slice(0,10) : newYorkDate(selected.timestamp) : "";
   const forecast = rows.find(r => r.date === date) || (date && date < rows[0]?.date ? rows[0] : undefined);
   const splitMismatch = row.split_status === "requires_refresh" || row.split_status === "unverified";
+  const cutoff = screenerCutoff(row.forecast_input_gzip);
+  const first = rows[0];
+  const cutoffSignal = !splitMismatch && cutoff && first && typeof first.p99 === "number" && Number.isFinite(first.p99) && first.p99 >= first.p90 &&
+    Date.parse(cutoff.timestamp) < Date.parse(first.timestamp) && (!row.history_cutoff_at || Date.parse(String(row.history_cutoff_at)) === Date.parse(cutoff.timestamp))
+    ? {value: cutoff.target > first.p99 ? "buy" : "neutral", price: cutoff.target, quote_timestamp: cutoff.timestamp,
+      forecast_date: first.date, p99: first.p99, rule: "cutoff_close_above_first_p99"} : null;
   const signal = forecast && selected && !splitMismatch ? signalForQuote(forecast, selected) : null;
   const levels = forecast || rows[0];
-  const output: QuantScreenerRow = { ...row, ...saved, current_signal: signal, signal: signal?.value || "unavailable",
+  const output: QuantScreenerRow = { ...row, ...saved, cutoff_p99_signal: cutoffSignal, current_signal: signal, signal: signal?.value || "unavailable",
     signal_status: splitMismatch ? "split_basis_requires_verification" : signal ? "provisional" : "forecast_row_unavailable",
     actual_price: selected?.price ?? null, actual_price_timestamp: selected?.timestamp ?? null, quote_source: selected?.source || "unavailable",
     quote_session: selected?.session || "historical", forecast_comparison_date: forecast?.date || null,

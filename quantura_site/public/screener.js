@@ -183,7 +183,7 @@
       source: ["stocks","kalshi_perps"],
       universe: ["all", "sp500", "nasdaq", "etf"],
       marketCap: ["all", "mega", "large", "mid", "small", "micro"],
-      signal: ["all", "buy", "sell", "neutral", "unavailable"],
+      signal: ["all", "buy", "sell", "neutral", "unavailable", "cutoff_buy"],
       statistic: ["row", "min", "max", "avg"],
       direction: ["asc", "desc"],
     };
@@ -200,7 +200,7 @@
       const rules=JSON.parse(params.get("quantileRules") || "[]");
       if(Array.isArray(rules)) state.quantileRules=rules.slice(0,12).filter(rule => rule && ["p01","p10","p25","p50","p75","p90","p99"].includes(rule.quantile) && ["min","max","avg"].includes(rule.statistic) && ["gt","gte","lt","lte"].includes(rule.operator) && Number.isFinite(rule.percent));
     } catch { state.quantileRules=[]; }
-    const validPositions = new Set(["below-p10", "above-p10", "below-p50", "above-p50", "below-p90", "above-p90"]);
+    const validPositions = new Set(["below-p01", "above-p01", "below-p10", "above-p10", "below-p50", "above-p50", "below-p90", "above-p90", "below-p99", "above-p99"]);
     state.positions = String(params.get("position") || "").split(",").filter((value) => validPositions.has(value));
     const page = Number(params.get("page"));
     state.page = Number.isInteger(page) && page > 0 ? page : 1;
@@ -260,9 +260,11 @@
 
   function signalView(row) {
     const signal = row.current_signal;
-    if (!signal) return `<span class="qs-muted-cell">Unavailable</span><small>${escapeHtml(row.signal_status || "No comparable forecast row")}</small>`;
+    const cutoff = row.cutoff_p99_signal;
+    const cutoffView = cutoff?.value === "buy" ? `<div class="qs-signal-stack"><span class="qs-badge qs-position-below">Buy · cutoff above P99</span><small>Input close ${escapeHtml(formatNumber(cutoff.price))} &gt; first P99 ${escapeHtml(formatNumber(cutoff.p99))}</small><small>${escapeHtml(formatDate(cutoff.quote_timestamp,false))} → ${escapeHtml(formatDate(cutoff.forecast_date,false))}</small></div>` : "";
+    if (!signal) return cutoffView || `<span class="qs-muted-cell">Unavailable</span><small>${escapeHtml(row.signal_status || "No comparable forecast row")}</small>`;
     const cls = signal.value === "buy" ? "qs-position-below" : signal.value === "sell" ? "qs-position-above" : "";
-    return `<div class="qs-signal-stack"><span class="qs-badge ${cls}">${escapeHtml(signal.value)} · current</span><small>Forecast ${escapeHtml(formatDate(signal.forecast_date,false))}</small>${row.signal_comparison === "before_first_forecast_session" ? '<small>First forecast session not started</small>' : ""}</div>`;
+    return `${cutoffView}<div class="qs-signal-stack"><span class="qs-badge ${cls}">${escapeHtml(signal.value)} · current P10/P90</span><small>Forecast ${escapeHtml(formatDate(signal.forecast_date,false))}</small>${row.signal_comparison === "before_first_forecast_session" ? '<small>First forecast session not started</small>' : ""}</div>`;
   }
 
   function savedSignalView(row) {

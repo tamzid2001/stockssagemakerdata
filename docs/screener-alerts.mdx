@@ -21,6 +21,18 @@ Historical-close fallback and comparison dates are labeled. Only the actual
 exchange closing minute is saved as the closing signal, respecting early closes
 and holidays. Previous non-neutral signals remain separate.
 
+**Buy · input close above first P99** is a separate, immutable-input rule:
+the last close used to produce that forecast must be strictly greater than
+P99 on its first predicted row. Equality is not a buy. The badge shows both
+values and comparison dates; it never substitutes a live/after-hours quote or
+the average P99. Missing input/P99 or an invalidated split basis withholds the
+signal. No Sell-below-P01 rule is added.
+
+Select this rule with the signal filter (`signal=cutoff_buy`). Above/below P01
+and P99 position filters are also available; those compare the current quote
+with the displayed row and are distinct from the frozen input-close buy rule.
+CSV exports retain the cutoff signal, cutoff close/time and first predicted P99.
+
 ## Save filters and receive matches
 
 Use any combination of minimum, maximum or average P01/P10/P25/P50/P75/P90/P99

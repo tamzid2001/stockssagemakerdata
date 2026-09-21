@@ -35,6 +35,35 @@ At least one model must be enabled and at least one enabled weight must be posit
 
 ## Quantile support
 
+### Buy above the first predicted P99
+
+Q Forecast and Q Screener show **Buy · input close above first P99** when the
+last historical close actually used as input is strictly greater than P99 on
+the first predicted row. Equality produces no signal. This rule does not use
+the current streaming quote, a withheld observation, or the average P99 across
+the horizon. Missing P99/input evidence means unavailable, not an assumed buy.
+There is no Sell-below-P01 rule. Existing first-future-quote P10/P90 annotations
+are separate and remain explicitly labelled.
+
+In Q Screener, select **Buy · input close above first P99** (`signal=cutoff_buy`).
+The above/below P01 and P99 position filters instead compare the current quote
+with the displayed forecast row, just like the existing P10/P50/P90 filters.
+
+**Find recent high / low** now searches recent input cutoffs newest first for
+this buy rule. It forecasts seven periods at each cutoff, uses only data at or
+before that cutoff, and stops at the first qualifying result or the bounded
+attempt limit. This is signal discovery, not evidence of strategy performance.
+API requests use `analysis_mode: "recent_signal_search"`,
+`search_signal_rule: "cutoff_above_p99"`, `prediction_length: 7`, and include
+`0.99` in `quantiles`. `search_max_cutoffs` defaults to 20 (maximum 30).
+The result includes `cutoff_observation`, first-row `thresholds.p99`, the
+selected history and the number of cutoffs examined. Older saved searches
+retain their original, separately versioned P10/P90 rule.
+
+Select at least one positive-weight model capable of P99 (Prophet, Granite or
+Chronos) for this search. Ordinary single-model forecasts using Toto or TimesFM
+remain supported with quantiles inside P10–P90; those models cannot supply P99.
+
 Prophet, Granite, and Chronos participate in requested tail quantiles when supported by their runtime. Toto and TimesFM provide native P10 through P90 quantiles and may interpolate only inside that interval. Quantura never extrapolates P01 or P99 from those bounded heads.
 
 After ensembling, deterministic monotonic rearrangement guarantees non-crossing requested quantiles.

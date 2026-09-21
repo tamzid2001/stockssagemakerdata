@@ -14516,8 +14516,10 @@
       if (completed === null) ui.ensembleProgress.removeAttribute("value");
       else ui.ensembleProgress.value = completed;
     }
-    if (ui.ensembleRunButton) { ui.ensembleRunButton.disabled = busy; ui.ensembleRunButton.textContent = busy ? "Forecast in progress…" : "Run forecast"; }
-    if (ui.ensembleFindSignal) { ui.ensembleFindSignal.disabled = busy; ui.ensembleFindSignal.querySelector("span").textContent = busy ? "Forecast in progress…" : "Find recent high / low"; }
+    const searching = busy && ensembleUiState.busyAction === "search";
+    if (ui.ensembleRunButton) { ui.ensembleRunButton.disabled = busy; ui.ensembleRunButton.textContent = busy && !searching ? "Forecast in progress…" : "Run forecast"; }
+    if (ui.ensembleFindSignal) { ui.ensembleFindSignal.disabled = busy; ui.ensembleFindSignal.querySelector("span").textContent = searching ? "Searching recent cutoffs…" : "Find recent high / low"; }
+    if (!busy) ensembleUiState.busyAction = null;
     if (ui.ensembleRefreshLatest) ui.ensembleRefreshLatest.disabled = busy;
     if (ui.ensembleRunAgain) ui.ensembleRunAgain.disabled = busy;
     const statusButton = document.getElementById("ensemble-check-status");
@@ -14561,7 +14563,20 @@
 
   const renderEnsembleSignals = (job) => {
     const firstHost = document.getElementById("ensemble-first-row-signal");
+    const cutoffHost = document.getElementById("ensemble-cutoff-p99-signal");
+    const cutoff = window.QuanturaForecastControls?.cutoffP99Signal?.(job);
+    if (cutoffHost) {
+      cutoffHost.hidden = cutoff?.status !== "available" || job.recent_signal_search?.signal_rule === "cutoff_above_p99";
+      cutoffHost.dataset.signal = cutoff?.signal || "none";
+      cutoffHost.innerHTML = cutoff?.status === "available" ? `<strong>${cutoff.signal === "buy" ? "BUY · input close above first P99" : "No Buy-above-P99 signal"}</strong><p>Last input close ${escapeHtml(cutoff.price.toLocaleString(undefined,{maximumFractionDigits:6}))} at ${escapeHtml(ensembleLocalTime(cutoff.cutoffTimestamp))} · first P99 ${escapeHtml(cutoff.p99.toLocaleString(undefined,{maximumFractionDigits:6}))} at ${escapeHtml(ensembleLocalTime(cutoff.forecastTimestamp))}.</p><small>Strictly greater than P99; equality is not a signal. Uses the saved input close, not a live quote or a forecast average. Research signal only.</small>` : "";
+    }
     const search=job.recent_signal_search;
+    if(firstHost && search?.signal_rule === "cutoff_above_p99") {
+      const actual=search.cutoff_observation||{}, p99=search.thresholds?.p99;
+      firstHost.dataset.signal=search.signal||"none";
+      firstHost.innerHTML=`<strong>${search.status === "found" ? "BUY · input close above first P99" : "No recent Buy-above-P99 signal found"}</strong><p>Last input close ${escapeHtml(Number(actual.price).toLocaleString(undefined,{maximumFractionDigits:6}))} at ${escapeHtml(ensembleLocalTime(actual.timestamp))} · first predicted P99 ${escapeHtml(Number(p99).toLocaleString(undefined,{maximumFractionDigits:6}))}.</p><small>${escapeHtml(search.cutoffs_examined)} of ${escapeHtml(search.max_cutoffs)} cutoffs examined, newest first. Last input close must be strictly greater than first P99. No sell rule. Research signal only; not a performance backtest or an order.</small>`;
+      return;
+    }
     if(firstHost && search) {
       const actual=search.next_observation||{}, thresholds=search.thresholds||{};
       firstHost.dataset.signal=search.signal||"none";
@@ -14827,6 +14842,7 @@
     if (ui.ensembleSummary) { ui.ensembleSummary.hidden = true; ui.ensembleSummary.replaceChildren(); }
     document.getElementById("ensemble-live-quote")?.replaceChildren();
     document.getElementById("ensemble-first-row-signal")?.replaceChildren();
+    document.getElementById("ensemble-cutoff-p99-signal")?.replaceChildren();
     document.getElementById("ensemble-crossing-signals")?.replaceChildren();
     if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = "";
     if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = "";
@@ -15373,15 +15389,16 @@
     });
     ui.ensembleFindSignal?.addEventListener("click", async () => {
       if (ensembleUiState.busy) return;
+      ensembleUiState.busyAction="search";
       setEnsembleBusy(true);
       try {
         await ensureSessionUser({ reason: "ensemble_forecast_requires_session", message: "Sign in to search recent forecast signals." });
         await loadEnsembleCapabilities();
         const configured=buildEnsembleRequest();
-        const request={...configured,prediction_length:7,quantiles:[.1,.5,.9],analysis_mode:"recent_signal_search",search_max_cutoffs:20,history_lag_minutes:0};
+        const request={...configured,prediction_length:7,quantiles:Array.from(new Set([...configured.quantiles,.99])).sort((a,b)=>a-b),analysis_mode:"recent_signal_search",search_signal_rule:"cutoff_above_p99",search_max_cutoffs:20,history_lag_minutes:0};
         delete request.history_cutoff_at;delete request.prediction_end_at;
         ensembleUiState.lastRequest=request;
-        setEnsembleStatus("Searching recent cutoffs → withholding the next close → rerunning the configured models until P10 or P90 is breached…","working");
+        setEnsembleStatus("Searching recent cutoffs, newest first → forecasting seven periods → checking last input close > first predicted P99…","working");
         const response=await apiRequestJson("/api/v1/ensemble-forecasts",{method:"POST",body:request,headers:{"Idempotency-Key":`recent-signal-${Date.now()}-${createSecureIdChunk(12)}`}});
         const job=response.data||{};ensembleUiState.forecastId=String(job.forecast_id||"");
         if(!ensembleUiState.forecastId)throw new Error("Signal search did not return a forecast ID.");
@@ -15396,6 +15413,7 @@
     ui.ensembleForecastForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (ensembleUiState.busy) return;
+      ensembleUiState.busyAction="forecast";
       setEnsembleBusy(true);
       try {
         await ensureSessionUser({ reason: "ensemble_forecast_requires_session", message: "Sign in to run an ensemble forecast." });

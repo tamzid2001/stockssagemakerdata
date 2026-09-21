@@ -33,6 +33,17 @@ test('shared screener shows seven quantiles, no earnings or obsolete special-sig
   const {d,w}=setup();const html=w.document.getElementById('qs-filters').textContent;assert.doesNotMatch(html,/Earnings|Special P10|Model bias/);
   assert.ok(w.document.getElementById('qs-statistic'));assert.ok(w.document.getElementById('qs-signal'));d.window.close();
 });
+test('cutoff P99 BUY is visible and can be saved without changing current-quote signals',async()=>{
+  const row={ticker:'PLTR',actual_price:100,p99:130,cutoff_p99_signal:{value:'buy',price:131,p99:130,quote_timestamp:'2026-09-17',forecast_date:'2026-09-21'},current_signal:{value:'neutral',forecast_date:'2026-09-21'}};
+  const {d,w,calls}=setup({items:[row],total:1,page:1,pageCount:1});await tick();
+  assert.match(w.document.getElementById('qs-table-body').textContent,/Buy · cutoff above P99/);
+  assert.match(w.document.getElementById('qs-table-body').textContent,/neutral · current P10\/P90/);
+  w.document.getElementById('qs-signal').value='cutoff_buy';w.document.getElementById('qs-signal').dispatchEvent(new w.Event('change',{bubbles:true}));
+  w.document.getElementById('qs-alert-name').value='P99 cutoff buy';w.document.getElementById('qs-save-alert').click();await tick();await tick();
+  assert.equal(calls.find(c=>c[1]?.method==='POST')[1].body.filters.signal,'cutoff_buy');
+  for(const value of ['above-p99','below-p99','above-p01','below-p01'])assert.ok(w.document.querySelector(`[name="position"][value="${value}"]`));
+  d.window.close();
+});
 test('mobile result cards keep core ticker metrics visible and expand one row at a time',async()=>{
   const row={ticker:'GOLD',company_name:'Gold',actual_price:4381.3,actual_price_timestamp:'2026-09-20T12:00:00Z',p01:70,p10:80,p25:90,p50:100,p75:110,p90:120,p99:130,current_signal:{value:'buy',forecast_date:'2026-09-21'},quantile_position:'below_p10',forecast_view_url:'/forecasting?ticker=GOLD',forecast_action:'view'};
   const {d,w}=setup({items:[row],total:1,universeCount:1,page:1,pageCount:1,generatedAt:'2026-09-20T12:00:00Z',manifest:{successfully_processed:1,failed:0,coverage_percentage:100}});await tick();
