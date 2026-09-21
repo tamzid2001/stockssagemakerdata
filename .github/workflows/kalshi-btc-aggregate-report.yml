@@ -1,0 +1,57 @@
+name: Kalshi BTC Encrypted Replay Aggregate Report
+run-name: BTC safe aggregate · ${{ inputs.campaign_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      campaign_id:
+        type: string
+        required: true
+        description: Exact immutable p90 campaign identifier
+      report_key:
+        type: string
+        required: true
+        description: Exact immutable compact report identifier
+
+permissions:
+  contents: read
+
+concurrency:
+  group: btc-safe-aggregate-${{ inputs.campaign_id }}-${{ inputs.report_key }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate report reader
+        run: |
+          python -m pip install pytest==8.4.2 cryptography==50.0.1 firebase-admin==7.1.0
+          python -m pytest -q market_research/tests/test_btc_bucket_report.py
+      - name: Read encrypted replay and write aggregates only
+        env:
+          CAMPAIGN_ID: ${{ inputs.campaign_id }}
+          REPORT_KEY: ${{ inputs.report_key }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: |
+          [[ "$CAMPAIGN_ID" =~ ^p90-[a-f0-9]{24}$ ]] || exit 1
+          [[ "$REPORT_KEY" =~ ^report-[a-f0-9]{32}$ ]] || exit 1
+          python -m market_research.btc_bucket_report \
+            --campaign-id "$CAMPAIGN_ID" \
+            --report-key "$REPORT_KEY" \
+            --output "$RUNNER_TEMP/btc-safe-aggregate.json"
+      - name: Upload sanitized aggregate
+        uses: actions/upload-artifact@v7
+        with:
+          name: btc-safe-aggregate-${{ github.run_id }}
+          path: ${{ runner.temp }}/btc-safe-aggregate.json
+          retention-days: 7
+          compression-level: 9
