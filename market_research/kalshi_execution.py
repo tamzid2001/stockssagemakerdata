@@ -66,10 +66,11 @@ def live_allowed(config, requested, env=None):
         and env.get('QUANTURA_KALSHI_APPROVED_SHA') == env.get('QUANTURA_CODE_SHA'))
 
 
-def order_payload(ticker, side, quantity, ask, shard, config):
+def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
     if (not re.fullmatch(r'KXBTC15M-[A-Z0-9-]+', ticker) or side not in ('yes', 'no')
             or type(quantity) is not int or not 1 <= quantity <= config.max_contracts
-            or type(shard) is not int or shard < 0):
+            or type(shard) is not int or shard < 0
+            or type(attempt) is not int or not 0 <= attempt <= 1000):
         raise ValueError('INVALID_ORDER_INTENT')
     p = money(ask)
     if not 0 < p <= money(config.max_ask) or p * quantity > money(config.max_order_dollars):
@@ -81,6 +82,8 @@ def order_payload(ticker, side, quantity, ask, shard, config):
     if price != price.quantize(Decimal('.0001')):
         raise ValueError('INVALID_PRICE_PRECISION')
     identity = f'{VERSION}:{config.subaccount}:{ticker}'
+    if attempt:
+        identity += f':retry:{attempt}'
     return dict(ticker=ticker, side='bid' if side == 'yes' else 'ask',
         count=f'{quantity:.2f}', price=f'{price:.4f}',
         client_order_id=str(uuid.uuid5(uuid.NAMESPACE_URL, identity)),

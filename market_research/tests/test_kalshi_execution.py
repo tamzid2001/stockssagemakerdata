@@ -72,6 +72,9 @@ def test_v2_yes_no_and_stable_single_market_identity(config):
     assert yes['exchange_index'] == 7 and yes['subaccount'] == 0
     assert yes['count'] == '2.00' and yes['time_in_force'] == 'immediate_or_cancel'
     assert yes['post_only'] is False
+    retry = order_payload(TICKER, 'yes', 2, '.61', 7, config, attempt=1)
+    assert retry['client_order_id'] != yes['client_order_id']
+    assert retry == order_payload(TICKER, 'yes', 2, '.61', 7, config, attempt=1)
 
 
 @pytest.mark.parametrize('quantity,ask,shard', [(101, '.5', 0), (1.5, '.5', 0), (True, '.5', 0),
@@ -222,6 +225,12 @@ class MemoryJournal:
         self.value['active'] = {**deepcopy(entry), 'status': 'acknowledged',
             'acknowledgement': deepcopy(acknowledgement)}
         self.records[entry['ticker']] = deepcopy(self.value['active'])
+    def retry(self, completed, entry):
+        assert self.value['active']['intent'] == completed['intent']
+        assert completed['status'] == 'unfilled' and money(completed['filled']) == 0
+        assert entry['attempt'] == self.value['active'].get('attempt', 0) + 1
+        self.value['active'] = deepcopy(entry)
+        self.records[entry['ticker']] = deepcopy(entry)
     def finish(self, entry, net=None):
         if net is not None: self.value = recovery(self.value, net)
         self.value['active'] = None; self.records[entry['ticker']] = deepcopy(entry)
@@ -244,12 +253,15 @@ class Broker:
         self.order = None
         self.settled = False
     def account(self):
-        return [], ([{'ticker': TICKER, 'position_fp': '1'}] if self.order and not self.settled else [])
+        filled = money(self.order.get('fill_count_fp', '0')) if self.order else money(0)
+        return [], ([{'ticker': TICKER, 'position_fp': str(filled)}]
+                    if filled and not self.settled else [])
     def market(self, ticker):
         from market_research.engine import iso
         return {'ticker': ticker, 'exchange_index': 7, 'market_type': 'binary',
             'status': 'settled' if self.settled else 'active', 'result': 'yes' if self.settled else '',
-            'open_time': iso(self.opened), 'close_time': iso(self.opened+900)}
+            'open_time': iso(self.opened), 'close_time': iso(self.opened+900),
+            'yes_ask_dollars': '.5000', 'no_ask_dollars': '.5000'}
     def balance(self, shard): return Decimal(1000)
     def submit(self, intent):
         assert self.journal.value['active']['intent'] == intent
@@ -344,6 +356,62 @@ def test_success_ack_is_persisted_and_exact_order_id_drives_lookup(rig):
     assert broker.lookup_order_id == order_id
 
 
+def test_authoritative_zero_fill_retries_until_a_fill_with_fresh_quotes(rig):
+    trader, broker, journal, signal, quote, now = rig
+    signal['agrees'] = True
+    with pytest.raises(RuntimeError, match='DELIVERY_OR_RESPONSE_UNKNOWN'):
+        trader.enter(signal, quote, now)
+    first = broker.sent[0]
+    broker.order = final_order(first, count='0.00')
+    sequence = 0
+    def acknowledge(intent):
+        nonlocal sequence
+        sequence += 1
+        assert journal.value['active']['intent'] == intent
+        broker.sent.append(intent)
+        return {'order_id': f'3b23c1c7-f4ef-4f0d-8b9a-9e53c61f{sequence:04d}',
+                'client_order_id': intent['client_order_id'], 'fill_count': '0.00',
+                'remaining_count': '0.00', 'ts_ms': now * 1000 + sequence}
+    broker.submit = acknowledge
+
+    assert trader.reconcile() == 'retry_acknowledged'
+    second = broker.sent[-1]
+    assert second['client_order_id'] != first['client_order_id']
+    assert journal.state()['active']['attempt'] == 1
+    broker.order = final_order(second, count='0.00')
+    assert trader.reconcile() == 'retry_acknowledged'
+    third = broker.sent[-1]
+    assert len({row['client_order_id'] for row in broker.sent}) == 3
+    assert journal.state()['active']['attempt'] == 2
+
+    broker.order = final_order(third, count='1.00')
+    assert trader.reconcile() == 'held_to_settlement'
+    assert len(broker.sent) == 3
+
+
+def test_zero_fill_waits_for_safe_executable_quote_then_retries(rig):
+    trader, broker, journal, signal, quote, now = rig
+    signal['agrees'] = True
+    with pytest.raises(RuntimeError):
+        trader.enter(signal, quote, now)
+    broker.order = final_order(broker.sent[0], count='0.00')
+    original_market = broker.market
+    broker.market = lambda ticker: {**original_market(ticker), 'yes_ask_dollars': '1.0000'}
+    assert trader.reconcile() == 'retry_waiting_for_executable_quote'
+    assert journal.state()['active'] is not None and len(broker.sent) == 1
+
+
+def test_zero_fill_does_not_retry_after_market_closes(rig):
+    trader, broker, journal, signal, quote, now = rig
+    signal['agrees'] = True
+    with pytest.raises(RuntimeError):
+        trader.enter(signal, quote, now)
+    broker.order = final_order(broker.sent[0], count='0.00')
+    broker.settled = True
+    assert trader.reconcile() == 'unfilled'
+    assert journal.state()['active'] is None and len(broker.sent) == 1
+
+
 def test_journal_summary_counts_acknowledgements_rejections_and_settlements(config):
     journal = JournalHarness(config)
     base = {'ticker': TICKER, 'side': 'yes', 'intent': order_payload(TICKER, 'yes', 1, '.5', 7, config),
@@ -362,8 +430,32 @@ def test_journal_summary_counts_acknowledgements_rejections_and_settlements(conf
     assert summary['active'] is None
 
 
+def test_journal_retry_atomically_counts_no_fill_and_reserves_unique_attempt(config):
+    journal = JournalHarness(config)
+    first = {'ticker': TICKER, 'side': 'yes',
+             'intent': order_payload(TICKER, 'yes', 1, '.5', 7, config),
+             'signal': {'agrees': True}, 'quote': {'yes_ask': '.5'},
+             'attempt': 0, 'created_at': 1800000000, 'status': 'delivery_unknown'}
+    ack = {'order_id': '3b23c1c7-f4ef-4f0d-8b9a-9e53c61f0000',
+           'client_order_id': first['intent']['client_order_id'],
+           'acknowledged_fill': '0', 'acknowledged_remaining': '0',
+           'matching_engine_ts_ms': 1800000000000}
+    journal.begin(first)
+    journal.acknowledge(first, ack)
+    retry = {**first, 'attempt': 1, 'intent': order_payload(
+        TICKER, 'yes', 1, '.5', 7, config, attempt=1),
+        'status': 'delivery_unknown'}
+    journal.retry({**first, 'filled': '0', 'status': 'unfilled'}, retry)
+    summary = journal.public_summary()
+    assert summary['intents'] == 2 and summary['retries'] == 1 and summary['unfilled'] == 1
+    assert summary['requested_contracts'] == '2.00'
+    assert summary['active']['attempt'] == 1
+    assert journal.rows[TICKER]['attempt_history'][0]['status'] == 'unfilled'
+
+
 def test_session_statistics_start_fresh_without_resetting_lifetime_state():
     baseline = {'intents': 3, 'acknowledged': 3, 'rejected': 1, 'unfilled': 1,
+                'retries': 0,
                 'settled': 1, 'wins': 1, 'losses': 0, 'breakeven': 0,
                 'requested_contracts': '3.00', 'filled_contracts': '1.00',
                 'realized_net_pnl': '.2368'}
@@ -371,12 +463,12 @@ def test_session_statistics_start_fresh_without_resetting_lifetime_state():
                'wins': 2, 'requested_contracts': '4.00',
                'filled_contracts': '2.00', 'realized_net_pnl': '.4736'}
     assert session_statistics(baseline, baseline) == {
-        'intents': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
+        'intents': 0, 'retries': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
         'settled': 0, 'wins': 0, 'losses': 0, 'breakeven': 0,
         'requested_contracts': '0.00', 'filled_contracts': '0.00',
         'realized_net_pnl': '0.0000'}
     assert session_statistics(current, baseline) == {
-        'intents': 1, 'acknowledged': 1, 'rejected': 0, 'unfilled': 0,
+        'intents': 1, 'retries': 0, 'acknowledged': 1, 'rejected': 0, 'unfilled': 0,
         'settled': 1, 'wins': 1, 'losses': 0, 'breakeven': 0,
         'requested_contracts': '1.00', 'filled_contracts': '1.00',
         'realized_net_pnl': '0.2368'}

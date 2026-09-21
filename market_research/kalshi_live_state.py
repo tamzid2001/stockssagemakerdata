@@ -1,5 +1,6 @@
 """Private, fenced, bounded execution journal; never public Git or artifacts."""
 from dataclasses import asdict
+from decimal import InvalidOperation
 import hashlib
 import json
 import time
@@ -12,7 +13,7 @@ SIZING_FIELDS = frozenset({'starting_contracts', 'recovery_multiplier', 'max_con
 
 
 def empty_stats():
-    return {'intents': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
+    return {'intents': 0, 'retries': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
             'settled': 0, 'wins': 0, 'losses': 0, 'breakeven': 0,
             'requested_contracts': '0', 'filled_contracts': '0'}
 
@@ -21,7 +22,7 @@ def with_stats(state):
     return {**state, 'stats': {**empty_stats(), **state.get('stats', {})}}
 
 
-SESSION_COUNT_FIELDS = ('intents', 'acknowledged', 'rejected', 'unfilled',
+SESSION_COUNT_FIELDS = ('intents', 'retries', 'acknowledged', 'rejected', 'unfilled',
                         'settled', 'wins', 'losses', 'breakeven')
 SESSION_DECIMAL_FIELDS = ('requested_contracts', 'filled_contracts')
 
@@ -114,7 +115,7 @@ class LiveJournal(Store):
             market_ref = self.ref.collection('markets').document(ticker)
             previous = market_ref.get(transaction=tx)
             state, row = update(root['state'], previous.to_dict() if previous.exists else None)
-            if event == 'intent' and root.get('enabled') is not True:
+            if event in ('intent', 'retry_intent') and root.get('enabled') is not True:
                 raise RuntimeError('LIVE_KILL_SWITCH_DISABLED')
             if len(json.dumps(state)) > 60000 or len(json.dumps(row)) > 60000:
                 raise ValueError('BOUNDED_EXECUTION_STATE_REQUIRED')
@@ -152,6 +153,32 @@ class LiveJournal(Store):
             return {**state, 'active': active, 'stats': stats}, active
         self.change('acknowledged', entry['ticker'], update)
 
+    def retry(self, completed, entry):
+        """Atomically close a proven zero-fill IOC and reserve its next attempt."""
+        def update(state, previous):
+            state = with_stats(state)
+            active = state.get('active')
+            if (not active or active['intent'] != completed['intent']
+                    or completed.get('status') != 'unfilled'
+                    or money(completed.get('filled', '-1')) != 0
+                    or entry.get('attempt') != active.get('attempt', 0) + 1):
+                raise RuntimeError('RETRY_INTENT_MISMATCH')
+            stats = state['stats']
+            stats.update(unfilled=stats['unfilled'] + 1,
+                retries=stats['retries'] + 1,
+                intents=stats['intents'] + 1,
+                requested_contracts=str(money(stats['requested_contracts']) +
+                                        money(entry['intent']['count'])))
+            history = list((previous or {}).get('attempt_history', []))[-31:]
+            acknowledgement = active.get('acknowledgement', {})
+            history.append({'attempt': active.get('attempt', 0),
+                'client_order_id': active['intent']['client_order_id'],
+                'order_id': acknowledgement.get('order_id'), 'status': 'unfilled',
+                'filled': completed['filled'], 'at': time.time()})
+            return {**state, 'active': entry, 'stats': stats}, {
+                **entry, 'attempt_history': history}
+        self.change('retry_intent', entry['ticker'], update)
+
     def finish(self, entry, net=None):
         def update(state, previous):
             state = with_stats(state)
@@ -188,6 +215,8 @@ class LiveJournal(Store):
             acknowledgement = active.get('acknowledgement', {})
             safe_active = {'ticker': active['ticker'], 'side': active['side'],
                 'status': active.get('status'), 'requested_contracts': active['intent']['count'],
+                'attempt': active.get('attempt', 0),
+                'limit_ask': active.get('quote', {}).get(active['side'] + '_ask'),
                 'acknowledged_fill': acknowledgement.get('acknowledged_fill'),
                 'acknowledged_remaining': acknowledgement.get('acknowledged_remaining'),
                 'created_at': active.get('created_at')}
@@ -240,6 +269,7 @@ class Trader:
             raise RuntimeError('INSUFFICIENT_SHARD_FUNDS')
         entry = {'ticker': signal['market_id'], 'side': side, 'intent': intent,
                  'signal': signal, 'quote': quote, 'created_at': now,
+                 'attempt': 0,
                  'status': 'delivery_unknown' if self.broker.enabled else 'observed_no_order'}
         # Crash after this commit never permits resubmission of the intent.
         if time.time() > quote['timestamp'] + 30 or time.time() >= signal['market_end'] - 5:
@@ -265,6 +295,71 @@ class Trader:
         self.journal.acknowledge(entry, acknowledgement)
         return {**entry, 'status': 'acknowledged', 'acknowledgement': acknowledgement}
 
+    def retry_unfilled(self, entry, fill):
+        """Retry only an authoritatively zero-filled IOC with a fresh live ask."""
+        from .engine import stamp
+        from .kalshi_execution import acknowledged_order, definitive_rejection, order_payload
+        completed = {**entry, **fill, 'status': 'unfilled'}
+        market = self.broker.market(entry['ticker'])
+        now = time.time()
+        try:
+            close_at = stamp(market['close_time'])
+        except (KeyError, TypeError, ValueError):
+            raise RuntimeError('MARKET_CLOSE_TIME_UNAVAILABLE') from None
+        signal = entry.get('signal', {})
+        if (signal.get('agrees') is not True or market.get('status') != 'active'
+                or market.get('market_type') != 'binary' or now >= close_at - 5):
+            self.journal.finish(completed)
+            return 'unfilled'
+        try:
+            opened_at = stamp(market['open_time'])
+        except (KeyError, TypeError, ValueError):
+            raise RuntimeError('MARKET_OPEN_TIME_UNAVAILABLE') from None
+        if close_at != signal.get('market_end') or close_at - opened_at != 900:
+            raise RuntimeError('MARKET_CLOSE_TIME_CHANGED')
+        orders, positions = self.broker.account()
+        if orders or any(money(p['position_fp']) != 0 for p in positions):
+            raise RuntimeError('RETRY_ACCOUNT_NOT_FLAT')
+        side = entry['side']
+        try:
+            ask = money(market[side + '_ask_dollars'])
+        except (KeyError, TypeError, ValueError, InvalidOperation):
+            raise RuntimeError('EXECUTABLE_QUOTE_UNAVAILABLE') from None
+        quantity = int(money(entry['intent']['count']))
+        attempt = int(entry.get('attempt', 0)) + 1
+        try:
+            intent = order_payload(entry['ticker'], side, quantity, ask,
+                                   market['exchange_index'], self.config, attempt=attempt)
+        except ValueError as exc:
+            if str(exc) == 'ORDER_RISK_LIMIT':
+                return 'retry_waiting_for_executable_quote'
+            raise
+        if self.broker.balance(market['exchange_index']) < quantity * (ask + money('.07')):
+            raise RuntimeError('INSUFFICIENT_SHARD_FUNDS')
+        quote = {'timestamp': int(now), 'received_at': now, 'timely': True,
+                 side + '_ask': str(ask), 'source': 'authoritative_market_retry'}
+        retry = {'ticker': entry['ticker'], 'side': side, 'intent': intent,
+                 'signal': signal, 'quote': quote, 'created_at': now,
+                 'attempt': attempt, 'status': 'delivery_unknown'}
+        # This transaction both accounts for the prior no-fill and reserves the
+        # next unique client order ID. A crash cannot cause a duplicate POST.
+        self.journal.retry(completed, retry)
+        self.journal.before_post()
+        if time.time() >= close_at - 5:
+            self.journal.finish({**retry, 'status': 'expired_before_submit'})
+            return 'retry_expired_before_submit'
+        try:
+            response = self.broker.submit(intent)
+        except RuntimeError as exc:
+            code = str(exc)
+            if definitive_rejection(code):
+                self.journal.finish({**retry, 'status': 'rejected',
+                                     'rejection_code': code})
+            raise
+        acknowledgement = acknowledged_order(response, intent)
+        self.journal.acknowledge(retry, acknowledgement)
+        return 'retry_acknowledged'
+
     def reconcile(self):
         from .engine import stamp
         from .kalshi_execution import reconciled_order
@@ -282,8 +377,7 @@ class Trader:
                     else 'unknown_delivery_blocked')
         fill = reconciled_order(order, entry['intent'], entry['side'])
         if money(fill['filled']) == 0:
-            self.journal.finish({**entry, **fill, 'status': 'unfilled'})
-            return 'unfilled'
+            return self.retry_unfilled(entry, fill)
         market = self.broker.market(entry['ticker'])
         if market.get('status') not in ('settled', 'finalized') or market.get('result') not in ('yes', 'no'):
             orders, positions = self.broker.account()
