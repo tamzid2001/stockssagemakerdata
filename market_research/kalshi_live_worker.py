@@ -16,7 +16,7 @@ import tempfile
 import time
 
 from .kalshi_execution import Config, KalshiExecution
-from .kalshi_live_state import LiveJournal, Trader
+from .kalshi_live_state import LiveJournal, Trader, session_statistics
 
 
 def forecast_pair(market, minutes, rows, output):
@@ -93,6 +93,7 @@ def run(config, mode, duration):
         return
     journal = LiveJournal(config, broker.key_id, os.environ.get('GITHUB_RUN_ID', 'local'), broker.enabled)
     journal.claim()
+    session_baseline = journal.public_summary()
     trader = Trader(config, broker, journal)
     stopped = False
     def stop(*_):
@@ -127,8 +128,11 @@ def run(config, mode, duration):
                         last_renew = now
                     if now - last_reconcile >= 20:
                         status = trader.reconcile()
+                        summary = journal.public_summary()
                         print(json.dumps({'event': 'execution_heartbeat', 'mode': mode,
-                            'status': status, **journal.public_summary()}), flush=True)
+                            'status': status, 'worker_started_at': boot_at,
+                            'session_stats': session_statistics(summary, session_baseline),
+                            **summary}), flush=True)
                         last_reconcile = now
                     lifecycle = store.values('btc_lifecycle')
                     minute_rows = store.values('btc_minutes')

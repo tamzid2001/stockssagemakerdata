@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from market_research.kalshi_execution import (Config, KalshiExecution, live_allowed,
     acknowledged_order, definitive_rejection, money, order_payload,
     reconciled_order, recovery)
-from market_research.kalshi_live_state import LiveJournal, Trader
+from market_research.kalshi_live_state import LiveJournal, Trader, session_statistics
 from market_research.kalshi_live_state import approved_reconfiguration
 
 TICKER = 'KXBTC15M-26SEP201215-15'
@@ -292,6 +292,45 @@ def test_crash_after_post_reconciles_without_resubmitting_and_settles_once(rig):
     assert len(broker.sent) == 1
 
 
+def test_closed_market_position_read_lag_waits_for_authoritative_settlement(rig):
+    trader, broker, journal, signal, quote, now = rig
+    with pytest.raises(RuntimeError):
+        trader.enter(signal, quote, now)
+    broker.order = final_order(broker.sent[0])
+    original_market = broker.market
+    from market_research.engine import iso
+    official = {'settled': False}
+    broker.market = lambda ticker: ({**original_market(ticker),
+        'close_time': iso(now - 1), 'status': 'settled', 'result': 'yes'}
+        if official['settled'] else {**original_market(ticker), 'close_time': iso(now - 1)})
+    broker.account = lambda: ([], [])
+
+    assert trader.reconcile() == 'settlement_accounting_pending'
+    assert journal.state()['active'] is not None
+    assert journal.state()['net'] == '0'
+    official['settled'] = True
+    assert trader.reconcile() == 'settled'
+    assert journal.state()['active'] is None
+    assert money(journal.state()['net']) == Decimal('.4825')
+
+
+def test_missing_or_foreign_position_still_fails_before_or_after_close(rig):
+    trader, broker, journal, signal, quote, now = rig
+    with pytest.raises(RuntimeError):
+        trader.enter(signal, quote, now)
+    broker.order = final_order(broker.sent[0])
+    broker.account = lambda: ([], [])
+    with pytest.raises(RuntimeError, match='POSITION_ACCOUNTING_MISMATCH'):
+        trader.reconcile()
+
+    original_market = broker.market
+    from market_research.engine import iso
+    broker.market = lambda ticker: {**original_market(ticker), 'close_time': iso(now - 1)}
+    broker.account = lambda: ([], [{'ticker': 'FOREIGN', 'position_fp': '1'}])
+    with pytest.raises(RuntimeError, match='POSITION_ACCOUNTING_MISMATCH'):
+        trader.reconcile()
+
+
 def test_success_ack_is_persisted_and_exact_order_id_drives_lookup(rig):
     trader, broker, journal, signal, quote, now = rig
     order_id = '3b23c1c7-f4ef-4f0d-8b9a-9e53c61f1a0d'
@@ -321,6 +360,26 @@ def test_journal_summary_counts_acknowledgements_rejections_and_settlements(conf
     assert summary['filled_contracts'] == '1'
     assert summary['realized_net_pnl'] == '0.4825'
     assert summary['active'] is None
+
+
+def test_session_statistics_start_fresh_without_resetting_lifetime_state():
+    baseline = {'intents': 3, 'acknowledged': 3, 'rejected': 1, 'unfilled': 1,
+                'settled': 1, 'wins': 1, 'losses': 0, 'breakeven': 0,
+                'requested_contracts': '3.00', 'filled_contracts': '1.00',
+                'realized_net_pnl': '.2368'}
+    current = {**baseline, 'intents': 4, 'acknowledged': 4, 'settled': 2,
+               'wins': 2, 'requested_contracts': '4.00',
+               'filled_contracts': '2.00', 'realized_net_pnl': '.4736'}
+    assert session_statistics(baseline, baseline) == {
+        'intents': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
+        'settled': 0, 'wins': 0, 'losses': 0, 'breakeven': 0,
+        'requested_contracts': '0.00', 'filled_contracts': '0.00',
+        'realized_net_pnl': '0.0000'}
+    assert session_statistics(current, baseline) == {
+        'intents': 1, 'acknowledged': 1, 'rejected': 0, 'unfilled': 0,
+        'settled': 1, 'wins': 1, 'losses': 0, 'breakeven': 0,
+        'requested_contracts': '1.00', 'filled_contracts': '1.00',
+        'realized_net_pnl': '0.2368'}
 
 
 def test_stale_recovery_is_read_only_and_requires_complete_exchange_proof(monkeypatch, capsys):
