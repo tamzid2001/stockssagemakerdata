@@ -62,6 +62,8 @@
   let searchTimer = null;
   let lastPersistedUrl = `${window.location.pathname}${window.location.search}`;
   let savedAlerts = [];
+  let savedAlertsMeta = {};
+  let alertPanelLoading = null;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -451,13 +453,36 @@
   load();
 
   const alertStatus=document.getElementById("qs-alert-status");
+  const alertSummary=document.getElementById("qs-alert-summary");
+  const savedAlertPanel=document.getElementById("saved-alerts");
   const accountRequest=(path,options)=>{
     if(!window.QuanturaScreenerAccount)throw new Error("Account tools are still loading. Try again shortly.");
     return window.QuanturaScreenerAccount.request(path,options);
   };
+  const evaluationStatus=(meta)=>{
+    const evaluation=meta?.last_evaluation;
+    if(!evaluation?.date)return "Active filters are evaluated after the next finalized stock-market close.";
+    const day=formatDate(evaluation.date,false);
+    const matches=Number(evaluation.matched_rows||0);
+    const email=String(evaluation.email_status||"");
+    const delivery=email==="accepted"?" Daily email accepted by the provider.":email.startsWith("email_")||email==="not_configured"?" Inbox delivery completed; email delivery needs attention.":"";
+    return matches?`${matches.toLocaleString()} matching securities on ${day}.${delivery}`:`No matches on ${day}; the filters remain active.`;
+  };
+  const renderSavedAlerts=()=>{
+    document.getElementById("qs-saved-list").innerHTML=savedAlerts.length?savedAlerts.map(a=>`<li><i class="iconoir-bell-notification qs-alert-icon" aria-hidden="true"></i><span><strong>${escapeHtml(a.name)}</strong><small>Active · ${a.email?"Inbox + email":"Inbox only"}</small></span><button type="button" class="cta secondary" data-apply-alert="${escapeHtml(a.id)}"><i class="iconoir-filter-list" aria-hidden="true"></i>Apply</button><button type="button" class="cta secondary" data-remove-alert="${escapeHtml(a.id)}" aria-label="Remove ${escapeHtml(a.name)} and stop its alerts"><i class="iconoir-trash" aria-hidden="true"></i>Remove</button></li>`).join(""):"<li><i class=\"iconoir-bell-off qs-alert-icon\" aria-hidden=\"true\"></i><span><strong>No saved filters yet.</strong><small>Configure the screener, then save the current filters.</small></span></li>";
+    if(alertSummary)alertSummary.textContent=`${savedAlerts.length} of ${Number(savedAlertsMeta.maximum||10)} active`;
+  };
   async function loadSavedAlerts(){
-    const payload=await accountRequest("/api/v1/me/screener-alerts");savedAlerts=payload.data||[];
-    document.getElementById("qs-saved-list").innerHTML=savedAlerts.length?savedAlerts.map(a=>`<li><span><strong>${escapeHtml(a.name)}</strong><small>${a.email?"Inbox + email":"Inbox only"}</small></span><button type="button" class="cta secondary" data-apply-alert="${escapeHtml(a.id)}">Apply</button><button type="button" class="cta secondary" data-remove-alert="${escapeHtml(a.id)}" aria-label="Remove ${escapeHtml(a.name)} and stop its alerts">Remove</button></li>`).join(""):"<li>No saved filters yet.</li>";
+    const payload=await accountRequest("/api/v1/me/screener-alerts");savedAlerts=payload.data||[];savedAlertsMeta=payload.meta||{};renderSavedAlerts();
+  }
+  async function loadAlertInbox(){
+    const inbox=await accountRequest("/api/notifications/items?category=screener&limit=20");
+    document.getElementById("qs-alert-inbox").innerHTML=inbox.items?.length?inbox.items.map(item=>`<li><i class="iconoir-inbox qs-alert-icon" aria-hidden="true"></i><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.body)}</small><small>${escapeHtml(new Date(item.createdAtMs).toLocaleString())}</small></span></li>`).join(""):`<li><i class="iconoir-inbox qs-alert-icon" aria-hidden="true"></i><span><strong>No matching notifications yet.</strong><small>${escapeHtml(evaluationStatus(savedAlertsMeta))}</small></span></li>`;
+  }
+  async function refreshAlertPanel({announce=true}={}){
+    if(alertPanelLoading)return alertPanelLoading;
+    alertPanelLoading=(async()=>{await loadSavedAlerts();await loadAlertInbox();if(announce)alertStatus.textContent=`Saved filters and inbox updated. ${evaluationStatus(savedAlertsMeta)}`;})().finally(()=>{alertPanelLoading=null;});
+    return alertPanelLoading;
   }
   document.getElementById("qs-save-alert").addEventListener("click",async event=>{
     const button=event.currentTarget;button.disabled=true;alertStatus.textContent="Saving…";
@@ -467,13 +492,12 @@
       // them back as new editable filters when applying and saving a preset.
       const filters=Object.fromEntries(["search","universe","marketCap","minMarketCap","maxMarketCap","signal","signalChanged","quantileRules","positions","sort","direction","statistic"].filter(key=>state[key]!==undefined).map(key=>[key,state[key]]));
       await accountRequest("/api/v1/me/screener-alerts",{method:"POST",body:{name:document.getElementById("qs-alert-name").value,filters,email:document.getElementById("qs-alert-email").checked}});
-      await loadSavedAlerts();alertStatus.textContent="Saved. Matching closing results will appear once per trading day.";
+      await refreshAlertPanel({announce:false});alertStatus.textContent="Saved. Matching finalized closing results will appear once per trading day.";
     }catch(error){alertStatus.textContent=error.message;}finally{button.disabled=false;}
   });
   document.getElementById("qs-load-alerts").addEventListener("click",async event=>{
     const button=event.currentTarget;button.disabled=true;alertStatus.textContent="Loading…";
-    try{await loadSavedAlerts();const inbox=await accountRequest("/api/notifications/items?limit=20");
-      document.getElementById("qs-alert-inbox").innerHTML=inbox.items?.length?inbox.items.map(item=>`<li><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.body)}</small><small>${escapeHtml(new Date(item.createdAtMs).toLocaleString())}</small></span></li>`).join(""):"<li>No notifications yet.</li>";alertStatus.textContent="Saved filters and inbox updated.";
+    try{await refreshAlertPanel();
     }catch(error){alertStatus.textContent=error.message;}finally{button.disabled=false;}
   });
   document.getElementById("qs-saved-list").addEventListener("click",async event=>{
@@ -481,6 +505,12 @@
     if(apply){const a=savedAlerts.find(s=>s.id===apply.dataset.applyAlert);if(a){current={...defaults,...a.filters,positions:[...a.filters.positions],page:1};writeControls(current);load();alertStatus.textContent=`Applied ${a.name}.`;}}
     if(remove){remove.disabled=true;try{await accountRequest(`/api/v1/me/screener-alerts/${remove.dataset.removeAlert}`,{method:"DELETE"});await loadSavedAlerts();alertStatus.textContent="Removed. This filter will no longer send notifications.";}catch(error){alertStatus.textContent=error.message;remove.disabled=false;}}
   });
-  if(window.location.hash==="#saved-alerts")document.getElementById("saved-alerts").open=true;
-  window.addEventListener("hashchange",()=>{if(window.location.hash==="#saved-alerts")document.getElementById("saved-alerts").open=true;});
+  const openSavedAlerts=()=>{savedAlertPanel.open=true;refreshAlertPanel({announce:false}).catch(error=>{alertStatus.textContent=error.message;if(alertSummary)alertSummary.textContent="Sign in to load";});};
+  if(window.location.hash==="#saved-alerts")openSavedAlerts();
+  window.addEventListener("hashchange",()=>{if(window.location.hash==="#saved-alerts")openSavedAlerts();});
+  savedAlertPanel.addEventListener("toggle",()=>{if(savedAlertPanel.open&&!savedAlerts.length)refreshAlertPanel({announce:false}).catch(error=>{alertStatus.textContent=error.message;if(alertSummary)alertSummary.textContent="Sign in to load";});});
+  window.addEventListener("load",()=>{
+    const auth=window.firebase?.auth?.();
+    auth?.onAuthStateChanged(user=>{if(user&&!user.isAnonymous)window.setTimeout(()=>refreshAlertPanel({announce:false}).catch(()=>{}),150);else if(alertSummary)alertSummary.textContent="Sign in to activate";});
+  },{once:true});
 })();

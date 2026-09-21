@@ -42,7 +42,7 @@
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
           <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
@@ -82,18 +82,18 @@
         </section>
 
         <details class="qs-filter-panel" id="saved-alerts">
-          <summary>Saved filters &amp; daily notifications</summary>
+          <summary><span><i class="iconoir-bell-notification" aria-hidden="true"></i>Saved filters &amp; daily notifications</span><span id="qs-alert-summary">Account required</span></summary>
           <div class="qs-saved-content">
             <p class="small">Save the current filters to your account. Matching finalized exchange closes appear in your inbox once per trading day. Email is optional and requires a verified email address.</p>
             <div class="qs-saved-toolbar">
               <label class="qs-field"><span>Filter name</span><input id="qs-alert-name" maxlength="80" placeholder="Weekly value opportunities" /></label>
               <label><input id="qs-alert-email" type="checkbox" /> Daily email when matched</label>
               <button class="cta" id="qs-save-alert" type="button"><i class="iconoir-bookmark" aria-hidden="true"></i>Save current filters</button>
-              <button class="cta secondary" id="qs-load-alerts" type="button">Refresh saved filters &amp; inbox</button>
+              <button class="cta secondary" id="qs-load-alerts" type="button"><i class="iconoir-refresh" aria-hidden="true"></i>Refresh alerts</button>
             </div>
             <p class="small" id="qs-alert-status" role="status" aria-live="polite"></p>
             <ul id="qs-saved-list" class="qs-saved-list" aria-label="Saved filters"></ul>
-            <h2 class="qs-inbox-title">Notification inbox</h2>
+            <h2 class="qs-inbox-title"><i class="iconoir-inbox" aria-hidden="true"></i>Notification inbox</h2>
             <ul id="qs-alert-inbox" class="qs-saved-list" aria-label="Recent notifications"></ul>
             <p class="small muted">Maximum 10 saved filters. One daily email combines matching email-enabled filters. Delivery is subject to the shared email allowance; in-app notifications remain available. Remove a saved filter to stop its alerts.</p>
           </div>

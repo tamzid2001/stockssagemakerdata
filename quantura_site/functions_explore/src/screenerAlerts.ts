@@ -2,13 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Router, Request, Response } from "express";
 import type admin from "firebase-admin";
 import { authenticatePlatformRequest, requireScope, type ApiPrincipal } from "./apiAccess";
-import { BrevoNotificationMailer, FirestoreEmailDeliveryLedger, type NotificationEmail } from "./brevoEmail";
+import { BrevoNotificationMailer, FirestoreEmailDeliveryLedger, isBrevoEmailConfigured, type NotificationEmail } from "./brevoEmail";
 import { parseQuantScreenerQuery, rowMatchesQuery, type QuantScreenerDataset, type QuantScreenerQuery, type QuantScreenerRow } from "./quantScreener";
 import { forecastRows, newYorkDate, type SavedScreenerSignal } from "./screenerSignals";
 
 type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string };
 export type SavedScreenerAlert = { id:string; name:string; filters:QuantScreenerQuery; email:boolean; created_at:string };
 const COLLECTION = "screener_saved_alerts";
+const DIGEST_PAGE_SIZE = 10;
+const DIGEST_MAX_USERS_PER_RUN = 50;
 const hash = (s:string) => createHash("sha256").update(s).digest("hex");
 const escape = (s:unknown) => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
 
@@ -62,7 +64,9 @@ export function registerScreenerAlertRoutes(router:Router,options:Options):void 
       res.status(status).json({error:{code,message:code==="EMAIL_VERIFICATION_REQUIRED"?"Verify your account email before enabling email notifications.":code==="ACCOUNT_REQUIRED"?"Sign in to save filters and receive notifications.":"The saved-filter request could not be completed.",request_id:id}});}
   };
   router.get("/v1/me/screener-alerts",handle(false,async(_req,res,p)=>{
-    const snap=await options.db.collection(COLLECTION).doc(p.userId).get();res.json({data:Object.values(snap.data()?.alerts||{}),meta:{maximum:10,email_configured:process.env.NOTIFICATION_EMAIL_PROVIDER==="brevo"}});
+    const snap=await options.db.collection(COLLECTION).doc(p.userId).get();const data=snap.data()||{};
+    const alerts=(Object.values(data.alerts||{}) as SavedScreenerAlert[]).sort((a,b)=>String(a.created_at||"").localeCompare(String(b.created_at||"")));
+    res.json({data:alerts,meta:{maximum:10,email_configured:isBrevoEmailConfigured(),last_evaluation:data.last_evaluation||null}});
   }));
   router.post("/v1/me/screener-alerts",handle(true,async(req,res,p)=>{
     const alert=parseSavedAlert(req.body);const user=await options.auth.getUser(p.userId);
@@ -91,31 +95,42 @@ export async function runScreenerDigests(options:Options,dataset:QuantScreenerDa
   const sweep=options.db.collection("screener_alert_sweeps").doc(date);const holder=randomUUID();
   const claimed=await options.db.runTransaction(async tx=>{const s=(await tx.get(sweep)).data()||{};if(s.done||Number(s.expires||0)>now)return null;tx.set(sweep,{...s,holder,expires:now+240_000});return {cursor:String(s.cursor||"")};});
   if(!claimed)return {status:"already_running_or_complete",processed:0};
-  let query=options.db.collection(COLLECTION).orderBy("__name__").limit(5);if(claimed.cursor)query=query.startAfter(claimed.cursor);
-  const docs=await query.get();const mailer=new BrevoNotificationMailer(new FirestoreEmailDeliveryLedger(options.db));let processed=0,emails=0,unavailable=0;
-  for(const doc of docs.docs){
-    const daily=options.db.collection("screener_daily_digests").doc(hash(`${date}:${doc.id}`));
-    if(!(await daily.get()).exists){
-      const user=await options.auth.getUser(doc.id).catch(()=>null);
-      const alerts=Object.values(doc.data().alerts||{}) as SavedScreenerAlert[];
-      const matches=user&&!user.disabled?digestMatches(alerts,rows,date):[];
-      if(matches.length){
-        const content=buildScreenerDigest(doc.id,date,matches,options.publicOrigin);
-        const inbox=options.db.collection("notifications").doc(doc.id).collection("items").doc(hash(content.id));
-        await options.db.runTransaction(async tx=>{if(!(await tx.get(inbox)).exists)tx.create(inbox,{category:"screener",title:content.subject,body:content.text,deepLink:"/screener#saved-alerts",read:false,hidden:false,createdAt:adminTimestamp(now),metadata:{scan_id:dataset.scan_id,date,matched_filters:matches.length}});});
-        const emailMatches=matches.filter(m=>m.alert.email);let delivery="not_requested";
-        if(emailMatches.length&&user?.emailVerified&&user.email){
-          if(process.env.NOTIFICATION_EMAIL_PROVIDER!=="brevo")delivery="not_configured";
-          else try{await mailer.send({...buildScreenerDigest(doc.id,date,emailMatches,options.publicOrigin),to:user.email});delivery="accepted";emails++;}
-          catch(error){delivery=String((error as Error).message);if(!/^email_[a-z_]+$/.test(delivery))delivery="email_delivery_unknown";unavailable++;}
+  const mailer=new BrevoNotificationMailer(new FirestoreEmailDeliveryLedger(options.db));const emailConfigured=isBrevoEmailConfigured();
+  let processed=0,emails=0,unavailable=0,cursor=claimed.cursor,done=false;
+  while(processed<DIGEST_MAX_USERS_PER_RUN&&!done){
+    let query=options.db.collection(COLLECTION).orderBy("__name__").limit(DIGEST_PAGE_SIZE);if(cursor)query=query.startAfter(cursor);
+    const docs=await query.get();
+    await Promise.all(docs.docs.map(async doc=>{
+      const daily=options.db.collection("screener_daily_digests").doc(hash(`${date}:${doc.id}`));
+      if(!(await daily.get()).exists){
+        const user=await options.auth.getUser(doc.id).catch(()=>null);
+        const alerts=Object.values(doc.data().alerts||{}) as SavedScreenerAlert[];
+        const matches=user&&!user.disabled?digestMatches(alerts,rows,date):[];
+        let delivery="no_matches";
+        if(matches.length){
+          const content=buildScreenerDigest(doc.id,date,matches,options.publicOrigin);
+          const inbox=options.db.collection("notifications").doc(doc.id).collection("items").doc(hash(content.id));
+          await options.db.runTransaction(async tx=>{if(!(await tx.get(inbox)).exists)tx.create(inbox,{category:"screener",title:content.subject,body:content.text,deepLink:"/screener#saved-alerts",read:false,hidden:false,createdAt:adminTimestamp(now),metadata:{scan_id:dataset.scan_id,date,matched_filters:matches.length}});});
+          const emailMatches=matches.filter(m=>m.alert.email);delivery="not_requested";
+          if(emailMatches.length&&user?.emailVerified&&user.email){
+            if(!emailConfigured)delivery="not_configured";
+            else try{await mailer.send({...buildScreenerDigest(doc.id,date,emailMatches,options.publicOrigin),to:user.email});delivery="accepted";emails++;}
+            catch(error){delivery=String((error as Error).message);if(!/^email_[a-z_]+$/.test(delivery))delivery="email_delivery_unknown";unavailable++;}
+          }
         }
-        await daily.set({date,created_at:new Date().toISOString(),matched_filters:matches.length,email_status:delivery,scan_id:dataset.scan_id});
-      }else await daily.set({date,created_at:new Date().toISOString(),matched_filters:0,email_status:"no_matches"});
-    }
-    processed++;
+        const evaluation={date,evaluated_at:new Date(now).toISOString(),matched_filters:matches.length,matched_rows:new Set(matches.flatMap(match=>match.rows.map(row=>row.ticker))).size,email_status:delivery,scan_id:dataset.scan_id};
+        await daily.set({date,created_at:new Date(now).toISOString(),matched_filters:evaluation.matched_filters,matched_rows:evaluation.matched_rows,email_status:delivery,scan_id:dataset.scan_id});
+        await doc.ref.set({last_evaluation:evaluation,updated_at:new Date(now).toISOString()},{merge:true});
+      }
+    }));
+    processed+=docs.size;
+    cursor=docs.docs.at(-1)?.id||cursor;
+    done=docs.size<DIGEST_PAGE_SIZE;
+    await options.db.runTransaction(async tx=>{const s=(await tx.get(sweep)).data()||{};if(s.holder!==holder)throw new Error("SWEEP_LEASE_LOST");tx.update(sweep,{cursor,done,expires:done?0:Date.now()+240_000,updated_at:new Date().toISOString()});});
+    if(!docs.size)done=true;
   }
-  await options.db.runTransaction(async tx=>{const s=(await tx.get(sweep)).data()||{};if(s.holder!==holder)throw new Error("SWEEP_LEASE_LOST");tx.update(sweep,{cursor:docs.docs.at(-1)?.id||claimed.cursor,done:docs.size<5,expires:0});});
-  return {status:"processed",processed,emails,unavailable,finalized_rows:rows.length};
+  if(!done)await options.db.runTransaction(async tx=>{const s=(await tx.get(sweep)).data()||{};if(s.holder!==holder)throw new Error("SWEEP_LEASE_LOST");tx.update(sweep,{expires:0,holder:null,updated_at:new Date().toISOString()});});
+  return {status:"processed",processed,emails,unavailable,finalized_rows:rows.length,done};
 }
 
 // Existing inbox API orders by Firestore Timestamp, not an ISO-string field.

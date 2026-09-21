@@ -18,6 +18,17 @@ test('guest errors are visible, saved markup escaped and remove uses own account
   const resaved=calls.find(c=>c[1]?.method==='POST')[1].body.filters;assert.equal(resaved.search,'TEST');assert.equal('bias' in resaved,false);assert.equal('earnings' in resaved,false);assert.equal('specialP10' in resaved,false);
   w.document.querySelector('[data-remove-alert]').click();await tick();assert.ok(calls.some(c=>c[1]?.method==='DELETE'));d.window.close();
 });
+test('saved alerts and the screener-only inbox expose icons and evaluation status',async()=>{
+  const {d,w,calls}=setup();
+  w.QuanturaScreenerAccount.request=async(p)=>{calls.push([p]);return p.includes('notifications')?{items:[]}:{data:[{id:'b'.repeat(24),name:'Close signal',email:true,filters:{positions:[]}}],meta:{maximum:10,email_configured:true,last_evaluation:{date:'2026-09-18',matched_rows:0,email_status:'no_matches'}}};};
+  w.document.getElementById('qs-load-alerts').click();await tick();await tick();
+  assert.ok(w.document.querySelector('#saved-alerts summary .iconoir-bell-notification'));
+  assert.ok(w.document.querySelector('#qs-saved-list .qs-alert-icon'));
+  assert.match(w.document.getElementById('qs-alert-summary').textContent,/1 of 10 active/);
+  assert.match(w.document.getElementById('qs-alert-inbox').textContent,/No matches on/);
+  assert.ok(calls.some(([path])=>path==='/api/notifications/items?category=screener&limit=20'));
+  d.window.close();
+});
 test('shared screener shows seven quantiles, no earnings or obsolete special-signal UI',()=>{
   const {d,w}=setup();const html=w.document.getElementById('qs-filters').textContent;assert.doesNotMatch(html,/Earnings|Special P10|Model bias/);
   assert.ok(w.document.getElementById('qs-statistic'));assert.ok(w.document.getElementById('qs-signal'));d.window.close();

@@ -9535,6 +9535,7 @@
         ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Q Screener</span></a>`}
         <a href="/shop" data-analytics="nav_shop">${icon("shopping-bag")}<span>Shop</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
+        <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
         <a href="https://quantura.mintlify.app/" data-analytics="nav_developers">${icon("code")}<span>API Docs</span></a>
       `;
     });
@@ -14428,7 +14429,7 @@
   // Reuse the application's Firebase/session bridge; never expose ID tokens.
   window.QuanturaScreenerAccount = {
     request: (path, options) => {
-      if (!/^\/api\/v1\/me\/screener-alerts(?:\/[a-f0-9]{24})?$/.test(path) && path !== "/api/notifications/items?limit=20") throw new Error("Unsupported screener account operation.");
+      if (!/^\/api\/v1\/me\/screener-alerts(?:\/[a-f0-9]{24})?$/.test(path) && path !== "/api/notifications/items?category=screener&limit=20") throw new Error("Unsupported screener account operation.");
       if (!hasFullAccount()) throw new Error("Sign in to save filters and view notifications.");
       return apiRequestJson(path, options);
     },

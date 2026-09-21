@@ -33,12 +33,14 @@ test('Persistence failure fails closed instead of overwriting an existing accoun
   const f=fixture(), ensure=create(f.auth, Promise.reject(new Error('storage blocked')));
   await assert.rejects(ensure(), /storage blocked/); assert.equal(f.calls(), 0);
 });
-test('Profile removes archived cloud/notification controls; navigation keeps Terminal and Shop', () => {
+test('Profile removes archived cloud/notification controls; navigation keeps Terminal, Shop and About', () => {
   const {JSDOM}=require('jsdom');
   const html=fs.readFileSync(require('node:path').join(__dirname,'../../pages/dashboard.html'),'utf8');
   const doc=new JSDOM(html).window.document;
   assert.equal(doc.querySelector('#profile .aws-integration-card, #profile .forecast-alert-settings-card, #profile .security-summary'),null);
   assert.ok(doc.querySelector('.header .nav-links a[href="/shop"]'));
+  assert.ok(doc.querySelector('.header .nav-links a[href="/about"]'));
   assert.equal(doc.querySelector('.header .nav-links a[href="/forecasting"]').textContent,'Terminal');
-  assert.match(source.slice(source.indexOf('  const normalizeTopNavigation'),source.indexOf('  const normalizeFooterSocialLinks')),/nav_shop/);
+  const normalized=source.slice(source.indexOf('  const normalizeTopNavigation'),source.indexOf('  const normalizeFooterSocialLinks'));
+  assert.match(normalized,/nav_shop/);assert.match(normalized,/nav_about/);
 });

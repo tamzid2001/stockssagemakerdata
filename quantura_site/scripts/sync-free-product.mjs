@@ -21,7 +21,7 @@ for (const filename of await walk(path.join(root, "pages"))) {
     const loc = dom.nodeLocation(node); if (loc) edits.push({ start: loc.startOffset, end: loc.endOffset, text });
   };
   const sidebar = Boolean(doc.querySelector(".app-sidebar"));
-  for (const nav of doc.querySelectorAll(".header .nav-links")) replace(nav, `<nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a>${sidebar ? "" : '<a href="/screener">Q Screener</a>'}<a href="/shop">Shop</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>`);
+  for (const nav of doc.querySelectorAll(".header .nav-links")) replace(nav, `<nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a>${sidebar ? "" : '<a href="/screener">Q Screener</a>'}<a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>`);
   for (const node of doc.querySelectorAll('.aws-integration-card, .forecast-alert-settings-card, #profile .security-summary')) replace(node);
   for (const title of doc.querySelectorAll('#profile .section-title h2')) replace(title, '<h2>Profile</h2>');
   for (const note of doc.querySelectorAll('#profile .section-title p')) replace(note, '<p class="small">Manage your private account details and saved research.</p>');
