@@ -62,3 +62,11 @@ test('old routes map to Q Download; no pricing/model/forecast API behavior is re
   assert.match(source('app.js'),/provider.value = "auto"/);
   assert.match(source('q-terminal.css'),/z-index:120/);
 });
+test('screener navigation uses one Q Forecast and one unified Q Download',()=>{
+  const d=new JSDOM(fs.readFileSync(path.join(root,'pages/screener.html'),'utf8'));
+  const links=[...d.window.document.querySelectorAll('.sidebar-nav a')];
+  assert.equal(links.filter(a=>a.getAttribute('href')==='/forecasting').length,1);
+  assert.equal(links.filter(a=>a.getAttribute('href')==='/forecasting?panel=download').length,1);
+  assert.equal(links.some(a=>['/options','/historical-data','/sports-forecasting'].includes(a.getAttribute('href'))),false);
+  d.window.close();
+});
