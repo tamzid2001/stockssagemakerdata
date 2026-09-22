@@ -6,7 +6,7 @@ import { forecastRows } from "./screenerSignals";
 export function screenerForecastSnapshot(dataset: QuantScreenerDataset, ticker: string, scanId: string) {
   if(scanId !== dataset.scan_id)throw new Error("screener_forecast_not_found");
   const row=dataset.items.find(r=>r.ticker === ticker.toUpperCase());
-  if(!row || row.forecast_engine!=="quantura_weekly_ensemble_v1" || row.status!=="success")throw new Error("screener_forecast_not_found");
+  if(!row || !["quantura_weekly_ensemble_v1","quantura_weekly_ensemble_v2"].includes(String(row.forecast_engine)) || row.status!=="success")throw new Error("screener_forecast_not_found");
   const config=row.forecast_config as Record<string,any>;
   const provenance=row.forecast_provenance as Record<string,any>;
   if(!config || !provenance || provenance.runtime?.mock || forecastRows(row).length!==7)throw new Error("screener_forecast_invalid");
@@ -15,7 +15,7 @@ export function screenerForecastSnapshot(dataset: QuantScreenerDataset, ticker: 
   const request={prediction_length:7,horizon_mode:"trading_sessions",quantiles:config.quantiles,frequency:"1D",calendar:"NYSE",context_length:config.context_length,
     transform:config.transform,failure_policy:"fail",models:config.models,toto_variant:"4m"};
   const source={type:"ticker",symbol:row.ticker,provider:String(row.price_source).startsWith("alpaca")?"alpaca":"yahoo",field:"close",frequency:"1Day",session:"regular",adjustment:"split",limit:512,daily_timestamp_convention:"session_date",
-    input_cutoff_at:history.at(-1)!.timestamp,history_cutoff_at:history.at(-1)!.timestamp,history_lag_sessions:1,
+    input_cutoff_at:history.at(-1)!.timestamp,history_cutoff_at:history.at(-1)!.timestamp,history_lag_sessions:config.history_lag_sessions??1,
     scan_id:dataset.scan_id,forecast_engine:row.forecast_engine};
   const predictions=forecastRows(row).map(r=>({timestamp:r.timestamp,quantiles:Object.fromEntries((config.quantiles as number[]).map(q=>[String(q),r[`p${String(Math.round(q*100)).padStart(2,"0")}`]]))}));
   const result={...provenance,predictions,quantiles:config.quantiles,effective_weights_by_quantile:row.effective_weights_by_quantile,models:row.forecast_models,transform:config.transform,dataset_hash:row.dataset_hash};

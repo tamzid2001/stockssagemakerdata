@@ -1,72 +1,58 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gzipSync } from "node:zlib";
-import { advanceClosingSignal, decorateScreenerRow, finalizedClosingSignal, ScreenerQuote } from "./screenerSignals";
-import { parseQuantScreenerQuery, rowMatchesQuery, QuantScreenerRow } from "./quantScreener";
-
-const now = Date.parse("2026-09-19T16:00:00Z");
-const row: QuantScreenerRow = { ticker: "PLTR", actual_price: 100, actual_price_timestamp: "2026-09-18T00:00:00Z", last_forecast_update: "2026-09-18T01:00:00Z",
-  forecast_rows: [{date:"2026-09-21",timestamp:"2026-09-21T00:00:00Z",session_open:"2026-09-21T13:30:00Z",session_close:"2026-09-21T20:00:00Z",p10:95,p50:110,p90:125}],
-  quantile_stats: {p50:{min:105,avg:115,max:130}} };
-const quote: ScreenerQuote = {price:90,timestamp:"2026-09-18T23:59:00Z",session:"after_hours",source:"alpaca_iex_minute_close"};
-test("cutoff BUY uses only immutable final input close and first P99, strict and split-safe", () => {
-  const makeRow = (price:number): QuantScreenerRow => ({...row,actual_price:999,
-    forecast_input_gzip:gzipSync(JSON.stringify([["2026-09-16T00:00:00Z",100],["2026-09-17T00:00:00Z",price]])).toString("base64"),
-    history_cutoff_at:"2026-09-17T00:00:00Z",
-    forecast_rows:[{...(row.forecast_rows as any[])[0],p99:130},{...(row.forecast_rows as any[])[0],date:"2026-09-22",p99:999}]});
-  for(const [price,value] of [[131,"buy"],[130,"neutral"],[129,"neutral"]] as const) {
-    const result=decorateScreenerRow(makeRow(price),{...quote,price:2000},{},now);
-    assert.equal((result.cutoff_p99_signal as any).value,value);
-    assert.equal((result.cutoff_p99_signal as any).price,price);
-    assert.equal((result.cutoff_p99_signal as any).p99,130);
-    const filter=parseQuantScreenerQuery({signal:"cutoff_buy"});
-    assert.deepEqual(filter.errors,[]);assert.equal(rowMatchesQuery(result,filter.query),value==="buy");
-  }
-  for(const invalid of [{forecast_input_gzip:"invalid"},{split_status:"unverified"},{split_status:"requires_refresh"},{history_cutoff_at:"2026-09-16T00:00:00Z"},{forecast_rows:row.forecast_rows}])
-    assert.equal(decorateScreenerRow({...makeRow(131),...invalid},quote,{},now).cutoff_p99_signal,null);
+import {gzipSync} from "node:zlib";
+import {advanceClosingSignal,decorateScreenerRow} from "./screenerSignals";
+import {parseQuantScreenerQuery,rowMatchesQuery,QuantScreenerRow} from "./quantScreener";
+const now=Date.parse("2026-09-30T21:00:00Z");
+const makeRow=(price=131):QuantScreenerRow=>({
+  ticker:"TEST",status:"success",actual_price:price,actual_price_timestamp:"2026-09-18T00:00:00Z",
+  history_cutoff_at:"2026-09-18T00:00:00Z",daily_close_at:"2026-09-18T20:00:00Z",last_forecast_update:"2026-09-18T22:00:00Z",
+  forecast_engine:"quantura_weekly_ensemble_v2",forecast_config:{history_lag_sessions:0,toto_variant:"4m",
+    models:Object.fromEntries(["prophet","toto","granite","chronos","timesfm"].map(n=>[n,{enabled:true,weight:.2}]))},
+  forecast_input_gzip:gzipSync(JSON.stringify([["2026-09-17T00:00:00Z",100],["2026-09-18T00:00:00Z",price]])).toString("base64"),
+  forecast_rows:[21,22,23,24,25,28,29].map((d,i)=>({date:`2026-09-${d}`,timestamp:`2026-09-${d}T00:00:00Z`,session_open:`2026-09-${d}T13:30:00Z`,session_close:`2026-09-${d}T20:00:00Z`,p01:70,p10:80,p25:90,p50:100,p75:110,p90:120,p99:130+i})),
+  quantile_stats:{p50:{min:100,avg:160,max:180}}
 });
-test("tail position filters use quotes but do not create a sell-below-P01 signal", () => {
-  for(const position of ["above-p99","below-p99","above-p01","below-p01"]) {
+test("Buy is strictly latest input daily close > FIRST P99; target is LAST P99",()=>{
+  for(const [price,value] of [[131,"buy"],[130,"none"],[129,"none"],[1,"none"]] as const){
+    const result=decorateScreenerRow(makeRow(price),{price:2000,timestamp:"2026-09-30T20:30:00Z",source:"after_hours"},{},now);
+    assert.equal(result.signal,value);assert.equal(result.actual_price,price);
+    assert.equal(result.buy_price_target,value==="buy"?136:null);
+    assert.equal(result.quote_source,"split_adjusted_daily_close");
+    assert.equal(result.actual_price_timestamp,"2026-09-18T20:00:00Z");
+    assert.equal(rowMatchesQuery(result,parseQuantScreenerQuery({signal:"buy"}).query),value==="buy");
+  }
+});
+test("old policy, wrong split basis, mismatched input, missing rows or late price cannot produce Buy",()=>{
+  for(const invalid of [
+    {forecast_engine:"quantura_weekly_ensemble_v1"},{forecast_input_gzip:"invalid"},{split_status:"unverified"},{split_status:"requires_refresh"},
+    {history_cutoff_at:"2026-09-17T00:00:00Z"},{actual_price:999},{actual_price_timestamp:"2026-09-19T00:00:00Z"},{daily_close_at:"2026-10-01T20:00:00Z"},
+    {forecast_rows:(makeRow().forecast_rows as any[]).slice(1)},{forecast_config:{...makeRow().forecast_config as any,history_lag_sessions:1}},
+    {forecast_config:{...makeRow().forecast_config as any,toto_variant:"313m"}}
+  ])assert.equal(decorateScreenerRow({...makeRow(),...invalid},undefined,{},now).current_signal,null);
+});
+test("no Sell/Neutral selector; prior cutoff_buy URLs remain an alias",()=>{
+  for(const signal of ["sell","neutral","unavailable"])assert.ok(parseQuantScreenerQuery({signal}).errors.length);
+  assert.equal(parseQuantScreenerQuery({signal:"cutoff_buy"}).query.signal,"buy");
+});
+test("latest Buy persists across non-buy days, is idempotent, and cannot regress",()=>{
+  const buy=decorateScreenerRow(makeRow(),undefined,{},now).current_signal as any;
+  const first=advanceClosingSignal({},buy);
+  assert.equal(first.last_buy_signal?.input_date,"2026-09-18");
+  assert.equal(advanceClosingSignal(first,buy),first);
+  const next=advanceClosingSignal(first,{...buy,value:"neutral",input_date:"2026-09-21"});
+  assert.deepEqual(next.last_buy_signal,first.last_buy_signal);
+  const second=advanceClosingSignal(next,{...buy,input_date:"2026-09-22",price_target:140});
+  assert.equal(second.last_buy_signal?.price_target,140);assert.deepEqual(second.previous_buy_signal,first.last_buy_signal);
+  assert.equal(advanceClosingSignal(second,buy),second);
+});
+test("min/max/avg and tail-position filters remain independent of Buy rule",()=>{
+  for(const position of ["above-p99","below-p99","above-p01","below-p01"]){
     const {query,errors}=parseQuantScreenerQuery({position});assert.deepEqual(errors,[]);
     assert.equal(rowMatchesQuery({ticker:"X",actual_price:position.startsWith("above")?200:1,p01:10,p99:100},query),true);
   }
-});
-test("before next trading day use newer after-hours completed minute against first forecast row", () => {
-  const result=decorateScreenerRow(row,quote,{},now);
-  assert.equal(result.signal,"buy"); assert.equal(result.actual_price,90); assert.equal(result.forecast_comparison_date,"2026-09-21");
-  assert.equal(result.signal_comparison,"before_first_forecast_session"); assert.equal(result.quote_session,"after_hours");
-});
-test("fallback to historical close; invalid, older and uncompleted minutes cannot replace it", () => {
-  for(const next of [undefined,{...quote,price:NaN},{...quote,timestamp:"invalid"},{...quote,timestamp:"2026-09-17T20:00:00Z"},{...quote,timestamp:new Date(now-10_000).toISOString()}]) {
-    const result=decorateScreenerRow(row,next,{},now);
-    assert.equal(result.actual_price,100); assert.equal(result.signal,"neutral"); assert.equal(result.quote_source,"historical_daily_close");
-  }
-});
-test("strict lower/upper comparisons; equality neutral, not an invented crossing", () => {
-  for(const [price,signal] of [[94,"buy"],[95,"neutral"],[125,"neutral"],[126,"sell"]] as const)
-    assert.equal(decorateScreenerRow(row,{...quote,price},{},now).signal,signal);
-});
-test("expired forecast and unverified split basis do not fabricate neutral or signals", () => {
-  assert.equal(decorateScreenerRow(row,{...quote,timestamp:"2026-09-22T16:00:00Z"},{},Date.parse("2026-09-22T17:00:00Z")).signal,"unavailable");
-  assert.equal(decorateScreenerRow({...row,split_status:"requires_refresh"},quote,{},now).signal,"unavailable");
-});
-test("finalize only last completed exchange minute, respecting early close and forecast creation time", () => {
-  const session={...(row.forecast_rows as any[])[0],date:"2026-11-27",session_close:"2026-11-27T18:00:00Z"};
-  const early={...row,forecast_rows:[session]}; const last={...quote,timestamp:"2026-11-27T17:59:00Z"}; const closed=Date.parse("2026-11-27T18:01:00Z");
-  assert.equal(finalizedClosingSignal(early,last,closed)?.value,"buy");
-  assert.equal(finalizedClosingSignal(early,{...last,timestamp:"2026-11-27T18:01:00Z"},closed),null);
-  assert.equal(finalizedClosingSignal({...early,last_forecast_update:"2026-11-27T18:00:00Z"},last,closed),null);
-});
-test("provisional after-hours signal never changes saved EOD or previous signal", () => {
-  const saved={closing_signal:{...decorateScreenerRow(row,quote,{},now).current_signal as any,provisional:false},last_non_neutral_signal:{...decorateScreenerRow(row,quote,{},now).current_signal as any,provisional:false}};
-  const next=decorateScreenerRow(row,{...quote,price:130},saved,now);
-  assert.equal(next.signal,"sell");assert.deepEqual(next.last_non_neutral_signal,saved.last_non_neutral_signal);
-  assert.deepEqual(advanceClosingSignal(saved,next.current_signal as any),saved);
-});
-test("min/max/avg rules use current quote as denominator and combine with current signal", () => {
-  const result=decorateScreenerRow(row,quote,{},now);
+  const result=decorateScreenerRow(makeRow(),undefined,{},now);
   const parsed=parseQuantScreenerQuery({signal:"buy",quantileRules:JSON.stringify([{quantile:"p50",statistic:"avg",operator:"gt",percent:20}])});
   assert.deepEqual(parsed.errors,[]);assert.equal(rowMatchesQuery(result,parsed.query),true);
-  assert.equal(rowMatchesQuery({...result,actual_price:110},parsed.query),false);
-  assert.notEqual(parseQuantScreenerQuery({quantileRules:'[{"quantile":"bad"}]'}).errors.length,0);
+  assert.equal(rowMatchesQuery({...result,actual_price:150},parsed.query),false);
 });

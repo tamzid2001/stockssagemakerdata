@@ -18,12 +18,12 @@ test("no arbitrary recipient, mutable owner or unsupported filters accepted",()=
   for(const body of [{...input,email:"true"},{...input,to:"another@example.com"},{...input,user_id:"victim"},{...input,filters:{bad:1}},{...input,name:""},{...input,filters:{quantileRules:[{quantile:"p50",statistic:"avg",operator:"gt",percent:NaN}]}}]) assert.throws(()=>parseSavedAlert(body),/INVALID/);
 });
 const date="2026-09-18";
-const signal={value:"buy",price:80,quote_timestamp:date+"T19:59:00Z",forecast_date:date,p10:90,p90:120,source:"alpaca_iex_minute_close",provisional:false};
-const row={ticker:"TEST",actual_price:150,signal:"sell",forecast_rows:[{date,timestamp:date+"T00:00:00Z",session_open:date+"T13:30:00Z",session_close:date+"T20:00:00Z",p10:90,p50:100,p90:120}],closing_signal:signal,quantile_stats:{p50:{avg:100}}};
+const signal={value:"buy",price:80,quote_timestamp:date+"T19:59:00Z",forecast_date:"2026-09-21",input_date:date,rule:"daily_close_above_first_p99_v2",p10:90,p90:120,source:"alpaca_iex_minute_close",provisional:false};
+const row={ticker:"TEST",actual_price:150,signal:"sell",forecast_rows:[{date:"2026-09-21",timestamp:"2026-09-21"+"T00:00:00Z",session_open:date+"T13:30:00Z",session_close:date+"T20:00:00Z",p10:90,p50:100,p90:120}],daily_evaluation:signal,quantile_stats:{p50:{avg:100}}};
 test("digest uses finalized close rather than after-hours price and excludes stale/provisional closes",()=>{
   const rows=closingRows([row],date);assert.equal(rows[0].actual_price,80);assert.equal(rows[0].signal,"buy");
   assert.equal(closingRows([row],"2026-09-21").length,0);
-  assert.equal(closingRows([{...row,closing_signal:{...signal,provisional:true}}],date).length,0);
+  assert.equal(closingRows([{...row,daily_evaluation:{...signal,provisional:true}}],date).length,0);
   assert.equal(closingRows([{...row,split_status:"requires_refresh"}],date).length,0);
   assert.equal(digestMatches([parseSavedAlert(input)],rows,date).length,1);
 });

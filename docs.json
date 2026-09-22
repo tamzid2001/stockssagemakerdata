@@ -8,7 +8,7 @@
     "dark": "/favicon/quantura-logo-dark.svg",
     "href": "https://quantura.studio"
   },
-  "description": "Build with Quantura Forecast (Q Forecast), ensemble quantiles, collaborator-aware workspaces, the Uploaded CSV API, and licensed datasets.",
+  "description": "Build with Quantura Forecast (Q Forecast), ensemble quantiles, Q Search, Q Download, workspaces and provider-backed datasets.",
   "colors": {
     "primary": "#0B1526",
     "light": "#3AB5A2",
@@ -48,7 +48,8 @@
               "docs/authentication",
               "docs/workspaces",
               "docs/workspace-collaboration",
-              "docs/uploaded-csv-api",
+              "docs/q-search",
+              "docs/q-download",
               "docs/ensemble-api",
               "docs/screener-alerts",
               "docs/kalshi-perpetuals",

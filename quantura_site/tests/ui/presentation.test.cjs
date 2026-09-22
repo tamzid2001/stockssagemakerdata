@@ -132,10 +132,11 @@ test('stock forecast/history selection closes the overlay and keeps the selected
     const button=results.querySelector(`[data-market-action="${action}"]`);
     button.dispatchEvent(new w.Event('pointerdown',{bubbles:true}));assert.equal(results.hidden,false,'inside pointerdown must not swallow selection');
     button.click();assert.equal(results.hidden,true);
-    assert.equal(w.document.getElementById(action==='forecast'?'ensemble-ticker':'alpaca-symbol').value,'PLTR');
-    assert.equal(w.document.getElementById(action==='forecast'?'ensemble-provider':'market-history-source').value,'alpaca');
+    assert.equal(w.QuanturaMarketSelection.symbol,'PLTR');
+    assert.equal(w.QuanturaMarketSelection.source,'alpaca');
+    assert.equal(w.document.getElementById('ensemble-provider').value,'auto');
   }
-  assert.deepEqual(panels,['forecast','news']);d.window.close();
+  assert.deepEqual(panels,['forecast','download']);d.window.close();
 });
 
 test('outside pointer/click, keyboard focus and Escape dismiss search without swallowing forecast controls', async()=>{
@@ -175,7 +176,7 @@ test('live moneylines browse without a search term and select the exact side for
   w.__quanturaSetPanel=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.addEventListener('quantura:market-selected',event=>selections.push(event.detail));
   const contract={source:'polymarket_us',contractId:'side-b',side:'short',eventTitle:'A vs B'};
-  w.fetch=async url=>{request=url;return {ok:true,json:async()=>({count:1,groups:{polymarket_us:[{resource_type:'prediction_market_contract',resource_id:'polymarket_us:side-b',source:'polymarket_us',symbol:'game',contract_id:'side-b',outcome:'B',name:'B · A vs B',status:'open',timing:'live',contract}]}})};};
+  w.fetch=async url=>{request=url;return {ok:true,json:async()=>({count:1,groups:{polymarket_us:[{resource_type:'prediction_market_contract',resource_id:'polymarket_us:side-b',source:'polymarket_us',symbol:'game',forecast_available:true,contract_id:'side-b',outcome:'B',name:'B · A vs B',status:'open',timing:'live',contract}]}})};};
   w.eval(source('market-search.js'));w.document.querySelector('[data-market-mode="live"]').click();await tick();
   assert.match(request,/mode=live/);assert.equal(w.document.getElementById('market-search-query').required,false);
   w.document.querySelector('[data-market-action="prediction-forecast"]').click();
@@ -427,7 +428,7 @@ test('market selection configures the primary ensemble, including dataset-to-tic
   const d=dom(page('forecasting.html')); const w=d.window; const document=w.document;
   w.HTMLElement.prototype.scrollIntoView=()=>{};
   let panel=''; w.__quanturaSetPanel=value=>{panel=value;};
-  w.fetch=async()=>({ok:true,json:async()=>({count:1,groups:{yahoo:[{symbol:'TEST',name:'Test equity',asset_class:'equity',source:'yahoo',forecast_available:true}]}})});
+  w.fetch=async()=>({ok:true,json:async()=>({count:1,groups:{yahoo:[{resource_id:'yahoo:TEST',symbol:'TEST',name:'Test equity',asset_class:'equity',source:'yahoo',forecast_available:true}]}})});
   document.getElementById('ensemble-source-type').value='workspace_dataset';
   let changes=0;document.getElementById('ensemble-source-type').addEventListener('change',()=>changes++);
   w.eval(source('market-search.js'));
@@ -435,7 +436,7 @@ test('market selection configures the primary ensemble, including dataset-to-tic
   document.getElementById('market-search-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();
   document.querySelector('[data-market-action="forecast"]').click();
   assert.equal(document.getElementById('ensemble-ticker').value,'TEST');
-  assert.equal(document.getElementById('ensemble-provider').value,'yahoo');
+  assert.equal(document.getElementById('ensemble-provider').value,'auto');
   assert.equal(document.getElementById('ensemble-source-type').value,'ticker');
   assert.equal(changes,1);assert.equal(panel,'forecast');d.window.close();
 });

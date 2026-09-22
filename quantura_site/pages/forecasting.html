@@ -33,6 +33,7 @@
     <script src="/theme-init.js?v=20260908a"></script>
     <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
     <link rel="stylesheet" href="/styles.css?v=20260817c" />
+    <link rel="stylesheet" href="/q-terminal.css?v=20260921-q-search" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -46,8 +47,9 @@
     <script defer src="/forecast-controls.js?v=20260921-cutoff-p99"></script>
     <script defer src="/forecast-metrics.js?v=20260920-forecast-only"></script>
     <script defer src="/app.js?v=20260824a"></script>
-    <script defer src="/data-integrations.js?v=20260920-perps-jev"></script>
-    <script defer src="/market-search.js?v=20260920-perps-jev"></script>
+    <script defer src="/q-market.js?v=20260921-q-search"></script>
+    <script defer src="/q-download.js?v=20260921-q-search"></script>
+    <script defer src="/market-search.js?v=20260921-q-search"></script>
     <script defer src="/screener-panel-lazy.js?v=20260831a"></script>
 
     <script>
@@ -90,10 +92,7 @@
 	          <div class="sidebar-card workspace-sidebar-switcher"><label class="small" for="forecast-workspace-select"><strong>Workspace</strong></label><select id="forecast-workspace-select" data-workspace-select><option>Sign in to load</option></select><a class="cta secondary small" href="/collaboration"><i class="iconoir-settings" aria-hidden="true"></i><span>Workspace settings</span></a></div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Q Forecast</span></a>
-
-              <a class="sidebar-link" href="/sports-forecasting" data-panel-target="sports-autopilot"><i class="iconoir-trophy" aria-hidden="true"></i><span>Sports Forecasting</span></a>
-              <a class="sidebar-link" href="/historical-data" data-panel-target="news"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
-              <a class="sidebar-link" href="/options" data-panel-target="options"><i class="iconoir-numbered-list-left" aria-hidden="true"></i><span>Options</span></a>
+              <a class="sidebar-link" href="/historical-data" data-panel-target="download"><i class="iconoir-download" aria-hidden="true"></i><span>Q Download</span></a>
 	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Q Screener</span></a>
 	          </nav>
 	        </aside>
@@ -116,15 +115,16 @@
 	            <div class="container">
 	              <section class="market-search-workspace" aria-labelledby="market-search-title">
                     <div class="market-search-heading">
-                      <h2 id="market-search-title">Select a market</h2>
-                      <div class="market-mode-controls" role="group" aria-label="Market discovery"><button type="button" class="task-chip" data-market-mode="open" aria-pressed="true">Markets</button><button type="button" class="task-chip" data-market-mode="live" aria-pressed="false">Live moneylines</button><button type="button" class="task-chip" data-market-mode="any" aria-pressed="false">Include historical</button></div>
+                      <h2 id="market-search-title">Q Search</h2><span class="small muted">Source · Auto</span>
+                      <div class="market-mode-controls" role="group" aria-label="Market discovery"><button type="button" class="task-chip" data-market-mode="open" aria-pressed="true">Markets</button><button type="button" class="task-chip" data-market-mode="live" aria-pressed="false">Live games</button><button type="button" class="task-chip" data-market-mode="any" aria-pressed="false">Include historical</button></div>
                     </div>
                     <form id="market-search-form" class="market-search-form">
-                      <div class="field"><label class="label" for="market-search-query">Ticker, team, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, Yankees, or paste a Polymarket US / Kalshi link" required /></div>
-                      <div class="field"><label class="label" for="market-search-source">Source</label><select id="market-search-source"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="polymarket_us">Polymarket US</option><option value="kalshi">Kalshi</option><option value="kalshi_perps">Kalshi Perpetuals</option></select></div>
+                      <div class="field"><label class="label" for="market-search-query">Ticker, company, team, prop, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, Yankees, or paste a Polymarket US / Kalshi link" required /></div>
+                      <input id="market-search-source" type="hidden" value="auto" />
                       <button class="cta" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Search</span></button>
                     </form>
-                    <p id="market-search-status" class="small muted" role="status" aria-live="polite">Stocks, FX, futures, rates, and prediction markets. Type to search.</p>
+                    <p id="market-search-status" class="small muted" role="status" aria-live="polite">Search every supported source. Open an event to browse moneylines, spreads, totals, and player props.</p>
+                    <div id="q-selected-market" class="q-selected-market" aria-live="polite">Choose a market above, or <button class="cta secondary small" type="button" id="q-upload-csv"><i class="iconoir-upload" aria-hidden="true"></i>Upload CSV</button></div>
                     <div id="market-search-results" class="market-search-results" role="region" aria-label="Market search results" hidden></div>
                   </section>
 		              <div class="studio-layout is-main-hidden" data-panels data-panel-router="terminal">
@@ -138,7 +138,7 @@
                       <div class="ensemble-forecast-body">
                         <form id="ensemble-forecast-form">
                           <div class="form-grid">
-                            <div class="field">
+                            <div class="field q-identity-compat">
                               <label class="label" for="ensemble-source-type">Historical data source</label>
                               <select id="ensemble-source-type" name="source_type">
                                 <option value="ticker">Market ticker</option><option value="kalshi_perp">Kalshi perpetual · underlying spot scale</option>
@@ -146,7 +146,7 @@
                                 <option value="series">Upload your own CSV</option>
                               </select>
                             </div>
-                            <div class="field" data-ensemble-source="ticker kalshi_perp">
+                            <div class="field q-identity-compat" data-ensemble-source="ticker kalshi_perp">
                               <label class="label" for="ensemble-ticker">Ticker</label>
                               <input id="ensemble-ticker" name="ticker" placeholder="AAPL" autocomplete="off" />
                             </div>
@@ -155,7 +155,7 @@
                             <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-phase">Game history</label><select id="ensemble-history-phase" name="history_phase"><option value="auto">Auto · in-game only after 32 min</option><option value="both">Pregame + in-game</option><option value="in_game">In-game only</option><option value="pregame">Pregame only</option></select><small class="muted">Auto uses pregame + in-game before 32 elapsed game minutes. Flat observed prices are allowed.</small></div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-lookback">History time window</label><div class="ensemble-duration-control"><input id="ensemble-history-lookback" name="history_lookback" type="number" min="0" max="129600" step="1" value="0" aria-label="History lookback amount" /><select id="ensemble-history-lookback-unit" name="history_lookback_unit" aria-label="History lookback unit"><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><small class="muted">0 = no extra time restriction. In-game + 60 minutes uses only the latest hour of play.</small></div>
                             <div class="field" data-ensemble-history-count><label class="label" for="ensemble-history-limit">Last N observations</label><input id="ensemble-history-limit" name="history_limit" type="number" min="2" max="500" step="1" value="500" required /><small class="muted">Up to N real bars before the cutoff, after any history filters. Missing intervals are not filled. Model minimums still apply.</small></div>
-                            <div class="field" data-ensemble-source="ticker">
+                            <div class="field q-identity-compat" data-ensemble-source="ticker">
                               <label class="label" for="ensemble-provider">Market-data provider</label>
                               <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
                             </div>
@@ -350,216 +350,35 @@
 
 
 
-                  <section class="panel hidden" data-panel="sports-autopilot" id="sports-autopilot">
-                    <div class="container prediction-market-hub" id="prediction-market-hub">
-                      <div class="section-title prediction-market-heading">
-                        <div>
-                          <div class="eyebrow">Polymarket US + Kalshi</div>
-                          <h2>Prediction Market Historical Data</h2>
-                          <p>Discover real sports contracts, inspect historical probabilities, and export provider-native, normalized, or SageMaker Canvas-ready time series.</p>
-                        </div>
-                        <button class="cta secondary small" id="pm-test-sources" type="button"><i class="iconoir-network" aria-hidden="true"></i><span>Test sources</span></button>
+                  <section class="panel hidden q-download" data-panel="download" aria-labelledby="q-download-title">
+                    <div class="panel-header"><h2 id="q-download-title">Q Download</h2><p class="small muted">Real provider observations. Preview and export the same snapshot.</p></div>
+                    <div id="qd-selection" class="q-selected-market">Choose a market with Q Search.</div>
+                    <div id="qd-basket" class="q-download-basket" aria-label="Selected outcomes"></div>
+                    <form id="q-download-form">
+                      <div class="q-toolbar">
+                        <div class="field"><label for="qd-kind">Dataset</label><select id="qd-kind"><option value="history">Price history</option><option value="options">Options on this underlying</option></select></div>
+                        <div class="field"><label for="qd-range">Window</label><select id="qd-range"><option value="latest">Latest observations</option><option value="dates">Date range</option></select></div>
+                        <div class="field"><label for="qd-frequency">Interval</label><select id="qd-frequency"><option value="1Min">Minute</option><option value="1Hour">Hourly</option><option value="1Day" selected>Daily</option></select></div>
+                        <div class="field" data-qd-latest><label for="qd-limit">Up to N per outcome</label><select id="qd-limit"><option>500</option><option>1000</option><option>2000</option><option>50000</option></select></div>
+                        <div class="field" data-qd-dates hidden><label for="qd-start">Start · local time</label><input id="qd-start" type="datetime-local" /></div>
+                        <div class="field"><label for="qd-end">Through · local time</label><input id="qd-end" type="datetime-local" /><small id="qd-timezone" class="muted"></small></div>
                       </div>
-
-                      <div class="prediction-provider-grid" aria-label="Provider connection status">
-                        <article class="provider-status-card" id="pm-status-polymarket"><span>Polymarket US</span><strong>Checking discovery…</strong></article>
-                        <article class="provider-status-card" id="pm-status-kalshi"><span>Kalshi</span><strong>Checking discovery…</strong></article>
+                      <div id="qd-options" hidden>
+                        <div class="q-toolbar"><div class="field"><label for="qd-expiration">Expiration</label><select id="qd-expiration"><option value="">Choose an underlying above</option></select></div><div class="field"><label for="qd-option-type">Option type</label><select id="qd-option-type"><option value="">Calls + puts</option><option value="call">Calls</option><option value="put">Puts</option></select></div></div>
+                        <p id="qd-option-status" class="small muted" role="status"></p><div id="qd-option-chain" class="responsive-table-wrap" aria-label="Option contracts"></div>
                       </div>
-                      <div class="integration-status" id="pm-provider-status" role="status" aria-live="polite">Choose a source to begin.</div>
-                      <div class="market-link-toolbar"><div class="field"><label class="label" for="pm-market-link">Download from a market link</label><input id="pm-market-link" type="url" maxlength="2048" placeholder="Paste a Polymarket US or Kalshi market/event link" /></div><button id="pm-resolve-link" class="cta secondary" type="button">Find contracts</button></div>
-
-                      <form id="prediction-market-form" autocomplete="off">
-                        <section class="workflow-step-card" aria-labelledby="pm-step-source-title">
-                          <div class="workflow-step-number" aria-hidden="true">1</div>
-                          <div class="workflow-step-body">
-                            <div class="workflow-step-heading"><div><h3 id="pm-step-source-title">Select data source</h3><p>Provider-specific controls appear only when the provider supports them.</p></div></div>
-                            <div class="provider-choice" role="radiogroup" aria-label="Prediction market source">
-                              <label><input type="radio" name="pm-source" value="polymarket_us" checked /><span><strong>Polymarket US</strong><small>Public sports discovery and price-history observations</small></span></label>
-                              <label><input type="radio" name="pm-source" value="kalshi" /><span><strong>Kalshi</strong><small>Sports events, trades, and supported market candles</small></span></label>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section class="workflow-step-card" aria-labelledby="pm-step-find-title">
-                          <div class="workflow-step-number" aria-hidden="true">2</div>
-                          <div class="workflow-step-body">
-                            <div class="workflow-step-heading"><div><h3 id="pm-step-find-title">Find sports markets</h3><p>Categories come from the selected provider; unsupported sports are never fabricated.</p></div><button class="cta secondary small" id="pm-find-markets" type="button"><i class="iconoir-search" aria-hidden="true"></i><span>Find markets</span></button></div>
-                            <div class="form-grid prediction-market-filters">
-                              <div class="field"><label class="label" for="pm-category">Sport / league</label><select id="pm-category" required><option value="">Loading categories…</option></select></div>
-                              <div class="field"><label class="label" for="pm-search">Search</label><input id="pm-search" type="search" placeholder="Team, event, market, or ticker" /></div>
-                              <div class="field"><label class="label" for="pm-status">Status</label><select id="pm-status"><option value="open" selected>Open</option><option value="upcoming">Upcoming</option><option value="closed">Closed</option><option value="settled">Settled</option><option value="any">Any status</option></select></div>
-                              <div class="field"><label class="label" for="pm-event-from">Event date from</label><input id="pm-event-from" type="date" /></div>
-                              <div class="field"><label class="label" for="pm-event-to">Event date to</label><input id="pm-event-to" type="date" /></div>
-                            </div>
-                            <div class="market-list-toolbar"><strong id="pm-market-count">No markets loaded</strong><span id="pm-selected-count">0 selected</span></div>
-                            <div id="pm-market-list" class="prediction-market-list"><div class="empty-state">Choose a sport, then find available contracts.</div></div>
-                            <div class="market-pagination"><button class="cta secondary small" id="pm-previous-page" type="button" disabled>Previous</button><span id="pm-page-label">Page 1</span><button class="cta secondary small" id="pm-next-page" type="button" disabled>Next</button></div>
-                          </div>
-                        </section>
-
-                        <section class="workflow-step-card" aria-labelledby="pm-step-history-title">
-                          <div class="workflow-step-number" aria-hidden="true">3</div>
-                          <div class="workflow-step-body">
-                            <div class="workflow-step-heading"><div><h3 id="pm-step-history-title">Configure historical data</h3><p>Fixed intervals use the last observed value in each UTC bucket. Missing values are never filled unless you explicitly choose forward fill.</p></div></div>
-                            <div class="form-grid prediction-history-settings">
-                              <div class="field"><label class="label" for="pm-history-start">History start</label><input id="pm-history-start" type="datetime-local" required /></div>
-                              <div class="field"><label class="label" for="pm-history-end">History end</label><input id="pm-history-end" type="datetime-local" required /></div>
-                              <div class="field"><label class="label" for="pm-history-cutoff">Quick end-time cutoff</label><select id="pm-history-cutoff"><option value="">Use chosen end time</option><option value="0">Now</option><option value="15">15 minutes ago</option><option value="30">30 minutes ago</option><option value="60">60 minutes ago</option></select><span class="small muted">Updates the end time above; the selected interval and date range still apply.</span></div>
-                              <div class="field"><label class="label" for="pm-frequency">Frequency</label><select id="pm-frequency"><option value="raw">Raw observations / trades</option><option value="1m" selected>1 minute</option><option value="5m">5 minutes</option><option value="15m">15 minutes</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="1d">Daily</option><option value="final">Final observation</option></select></div>
-                              <div class="field"><label class="label" for="pm-missing">Missing intervals</label><select id="pm-missing"><option value="leave" selected>Leave missing</option><option value="forward_fill">Forward fill after first observation</option><option value="drop">Drop rows missing target</option></select></div>
-                            </div>
-                            <div class="field"><label class="label" for="pm-history-phase">Game history</label><select id="pm-history-phase"><option value="both">Pregame + in-game</option><option value="pregame">Pregame only</option><option value="in_game">In-game only</option></select><small class="muted">Actual provider quotes only. Repeated quotes are not individual trades.</small></div>
-                          </div>
-                        </section>
-
-                        <section class="workflow-step-card" aria-labelledby="pm-step-format-title">
-                          <div class="workflow-step-number" aria-hidden="true">4</div>
-                          <div class="workflow-step-body">
-                            <div class="workflow-step-heading"><div><h3 id="pm-step-format-title">Choose dataset format</h3><p>Canvas exports use stable provider-prefixed item IDs, UTC timestamps, and a decimal 0–1 target.</p></div></div>
-                            <div class="format-choice" role="radiogroup" aria-label="Dataset format">
-                              <label><input type="radio" name="pm-mode" value="raw" /><span><strong>Raw provider data</strong><small>Useful original provider fields</small></span></label>
-                              <label><input type="radio" name="pm-mode" value="normalized" checked /><span><strong>Normalized data</strong><small>One cross-provider schema</small></span></label>
-                              <label><input type="radio" name="pm-mode" value="canvas" /><span><strong>SageMaker Canvas ready</strong><small>item_id, timestamp, target + selected covariates</small></span></label>
-                            </div>
-                            <div id="pm-canvas-options" class="canvas-options hidden">
-                              <div class="field"><label class="label" for="pm-target">Forecast target</label><select id="pm-target"><option value="price">Market price / probability</option><option value="bid">Bid</option><option value="ask">Ask</option><option value="midpoint">Bid/ask midpoint</option></select></div>
-                              <fieldset><legend>Additional features</legend><div class="feature-checkbox-grid">
-                                <label><input type="checkbox" name="pm-feature" value="source" checked /> Source</label><label><input type="checkbox" name="pm-feature" value="sport" checked /> Sport</label><label><input type="checkbox" name="pm-feature" value="league" checked /> League</label><label><input type="checkbox" name="pm-feature" value="event_start" checked /> Event start</label><label><input type="checkbox" name="pm-feature" value="minutes_to_event" checked /> Minutes to event</label><label><input type="checkbox" name="pm-feature" value="bid" /> Bid</label><label><input type="checkbox" name="pm-feature" value="ask" /> Ask</label><label><input type="checkbox" name="pm-feature" value="spread" /> Spread</label><label><input type="checkbox" name="pm-feature" value="volume" /> Volume</label><label><input type="checkbox" name="pm-feature" value="open_interest" /> Open interest</label><label><input type="checkbox" name="pm-feature" value="status" /> Status</label><label><input type="checkbox" name="pm-feature" value="outcome" /> Outcome</label>
-                              </div></fieldset>
-                            </div>
-                          </div>
-                        </section>
-
-                        <section class="workflow-step-card" aria-labelledby="pm-step-preview-title">
-                          <div class="workflow-step-number" aria-hidden="true">5</div>
-                          <div class="workflow-step-body">
-                            <div class="workflow-step-heading"><div><h3 id="pm-step-preview-title">Preview and validate</h3><p>Review the actual schema, row counts, target range, and leakage checks before generating a file.</p></div><button class="cta" id="pm-preview-button" type="submit"><i class="iconoir-eye" aria-hidden="true"></i><span>Preview dataset</span></button></div>
-                            <div id="pm-preview-summary" class="dataset-summary-grid"><div class="empty-state">Select contracts and preview a dataset.</div></div>
-                            <div id="pm-validation" class="dataset-validation hidden" aria-live="polite"></div>
-                            <div id="pm-preview-table" class="responsive-table-wrap"><div class="empty-state">Preview rows will appear here.</div></div>
-                          </div>
-                        </section>
-
-                        <section class="workflow-step-card" aria-labelledby="pm-step-download-title">
-                          <div class="workflow-step-number" aria-hidden="true">6</div>
-                          <div class="workflow-step-body">
-                            <div class="workflow-step-heading"><div><h3 id="pm-step-download-title">Download</h3><p>Downloads contain the full validated selection; the browser preview is intentionally limited.</p></div></div>
-                            <div class="hero-actions workflow-actions"><button class="cta" id="pm-download-csv" type="button" disabled><i class="iconoir-download" aria-hidden="true"></i><span>Download CSV</span></button><button class="cta secondary" id="pm-download-json" type="button" disabled><i class="iconoir-download" aria-hidden="true"></i><span>Download JSON</span></button><a class="cta secondary" href="/research"><i class="iconoir-cloud" aria-hidden="true"></i><span>Open SageMaker workflow</span></a></div>
-                          </div>
-                        </section>
-                      </form>
-                    </div>
-                  </section>
-
-                  <section class="panel hidden" data-panel="news">
-                    <div class="panel-header">
-                      <h2>Historical Data Download</h2>
-                      <p class="small">Choose Alpaca or Yahoo Finance, preview genuine equity bars, and download a chronological CSV. Automatic mode falls back to Yahoo when Alpaca is unavailable.</p>
-                    </div>
-                    <div class="content-grid">
-                      <form id="alpaca-history-form" class="card download-form-card" autocomplete="off">
-                        <div class="card-head">
-                          <div>
-                            <h3>Historical Market Data</h3>
-                            <p class="small muted download-form-subcopy">Choose a source, symbol, timeframe, latest-row count, session coverage, and adjustment.</p>
-                          </div>
-                        </div>
-                        <div class="form-grid download-form-grid">
-                          <div class="field">
-                            <label class="label" for="market-history-source">Data source</label>
-                            <select id="market-history-source" name="source"><option value="kalshi_perps">Kalshi Perpetuals · underlying spot scale</option>
-                              <option value="auto" selected>Automatic — Alpaca, then Yahoo Finance</option>
-                              <option value="alpaca">Alpaca</option>
-                              <option value="yahoo">Yahoo Finance</option>
-                            </select>
-                          </div>
-                          <div class="field">
-                            <label class="label" for="alpaca-symbol">Symbol</label>
-                            <input id="alpaca-symbol" name="symbol" type="text" value="AAPL" pattern="[A-Za-z0-9^][A-Za-z0-9.^=\-]{0,23}" required />
-                          </div>
-                          <div class="field">
-                            <label class="label" for="alpaca-timeframe">Timeframe</label>
-                            <select id="alpaca-timeframe" name="timeframe">
-                              <option value="1Min">1 minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option><option value="30Min">30 minutes</option><option value="1Hour">1 hour</option><option value="1Day" selected>1 day</option>
-                            </select>
-                          </div>
-                          <div class="field">
-                            <label class="label" for="alpaca-end">End date</label>
-                            <input id="alpaca-end" name="end" type="date" required />
-                          </div>
-                          <div class="field">
-                            <label class="label" for="alpaca-row-limit">Observations</label>
-                            <select id="alpaca-row-limit" name="limit">
-                              <option value="500" selected>Latest 500 prices</option>
-                              <option value="1000">Latest 1,000 prices</option>
-                              <option value="1500">Latest 1,500 prices</option>
-                              <option value="2000">Latest 2,000 prices</option>
-                              <option value="all">All available prices</option>
-                            </select>
-                          </div>
-                          <div class="field"><label class="label" for="alpaca-session">Trading sessions</label><select id="alpaca-session"><option value="regular">Regular hours only</option><option value="extended" selected>All observations returned by the feed</option></select></div>
-                          <div class="field"><label class="label" for="alpaca-adjustment">Adjustment</label><select id="alpaca-adjustment"><option value="raw">Raw</option><option value="split">Split</option><option value="dividend">Dividend</option><option value="all">All corporate actions</option></select></div>
-                          <div class="field"><label class="label" for="alpaca-feed">Data feed</label><select id="alpaca-feed"><option value="iex" selected>IEX</option><option value="sip">SIP (subscription required)</option><option value="boats">BOATS overnight</option><option value="otc">OTC (entitlement required)</option></select></div>
-                          <div class="field"><label class="label">Asset type</label><input value="US equity" disabled aria-label="Asset type" /><div class="small muted">Options history is available in the Options section.</div></div>
-                        </div>
-                        <div class="download-form-actions">
-                          <button class="cta" type="submit"><i class="iconoir-database" aria-hidden="true"></i><span>Load Data</span></button>
-                          <button class="cta secondary" id="alpaca-download" type="button" disabled><i class="iconoir-download" aria-hidden="true"></i><span>Download CSV</span></button>
-                          <p class="small" id="alpaca-history-status" role="status" aria-live="polite">Checking market-data sources…</p>
-                        </div>
-                      </form>
-                      <div class="card download-guidance-card">
-                        <h3>Session coverage</h3>
-                        <p class="small">Intraday results label sessions when the provider supplies sufficient timestamps. Alpaca supports entitled IEX/SIP/overnight feeds; Yahoo Finance is a best-effort fallback and does not expose trade count or VWAP.</p>
-                        <div id="alpaca-session-summary" class="metadata-list"><p class="small muted">Load data to see session counts.</p></div>
-                      </div>
-                    </div>
-                    <div class="results-panel data-results-panel"><div class="card-head"><div><h3>Data preview</h3><p class="small muted" id="alpaca-preview-summary">No data loaded.</p></div></div><div id="alpaca-history-preview" class="responsive-table-wrap"><div class="empty-state">Choose a source, symbol, and row count, then load data.</div></div></div>
-                  </section>
-
-                  <section class="panel hidden" data-panel="options">
-                    <div class="panel-header">
-                      <h2>Options</h2>
-                      <p class="small">Choose Alpaca or Yahoo Finance, inspect a live options chain, select a call or put contract, then preview, chart, and download available historical bars.</p>
-                    </div>
-                    <form id="alpaca-options-form" class="card" autocomplete="off">
-                      <div class="form-grid">
-                        <div class="field"><label class="label" for="options-market-source">Data source</label><select id="options-market-source"><option value="auto" selected>Automatic — Alpaca, then Yahoo Finance</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select></div>
-                        <div class="field">
-                          <label class="label" for="alpaca-options-underlying">Underlying ticker</label>
-                          <input id="alpaca-options-underlying" value="AAPL" required />
-                        </div>
-                        <div class="field">
-                          <label class="label" for="alpaca-options-expiration">Expiration</label>
-                          <select id="alpaca-options-expiration" required disabled><option value="">Expirations load automatically</option></select>
-                        </div>
-                        <div class="field"><label class="label" for="alpaca-options-type">Contract type</label><select id="alpaca-options-type"><option value="call">Calls</option><option value="put">Puts</option></select></div>
-                        <div class="field"><label class="label" for="alpaca-options-feed">Alpaca snapshot feed</label><select id="alpaca-options-feed"><option value="indicative">Indicative</option><option value="opra">OPRA (subscription required)</option></select><div class="small muted">Yahoo Finance chooses its public feed and does not supply Greeks.</div></div>
-                      </div>
-                      <div class="hero-actions workflow-actions">
-                        <button class="cta secondary" id="alpaca-options-expirations" type="button">Refresh expirations</button>
-                        <button class="cta" type="submit">Load options chain</button>
-                      </div>
-                      <p id="alpaca-options-status" class="small muted" role="status" aria-live="polite">Available expirations load automatically for a valid ticker.</p>
+                      <details class="q-download-advanced"><summary>Export settings</summary><div class="q-toolbar">
+                        <div class="field" data-qd-stock><label for="qd-session">Trading session</label><select id="qd-session"><option value="regular">Regular</option><option value="extended">Extended</option></select></div>
+                        <div class="field" data-qd-stock><label for="qd-adjustment">Corporate actions</label><select id="qd-adjustment"><option value="split">Split adjusted</option><option value="all">Splits + dividends</option><option value="raw">Raw</option></select></div>
+                        <div class="field" data-qd-prediction hidden><label for="qd-phase">Game history</label><select id="qd-phase"><option value="auto">Auto · in-game after 32 min</option><option value="both">Pregame + in-game</option><option value="pregame">Pregame only</option><option value="in_game">In-game only</option></select></div>
+                        <div class="field" data-qd-prediction hidden><label for="qd-layout">Dataset layout</label><select id="qd-layout"><option value="normalized">Normalized</option><option value="raw">Provider fields</option><option value="canvas">SageMaker Canvas</option></select></div>
+                        <div class="field" data-qd-prediction hidden><label for="qd-target">Price field</label><select id="qd-target"><option value="price">Price</option><option value="bid">Bid</option><option value="ask">Ask</option><option value="midpoint">Midpoint</option></select></div>
+                        <div class="field" data-qd-prediction hidden><label for="qd-missing">Missing intervals</label><select id="qd-missing"><option value="leave">Leave gaps</option><option value="drop">Drop missing</option><option value="forward_fill">Forward fill · marked</option></select></div>
+                      </div><p class="small muted">Retention depends on the provider. Missing bars stay missing unless you choose forward fill. Exports identify the provider and contract; timestamps use UTC.</p></details>
+                      <div class="q-toolbar q-download-actions"><button type="submit" class="cta" id="qd-preview"><i class="iconoir-eye" aria-hidden="true"></i>Preview</button><button type="button" class="cta secondary" id="qd-cancel" hidden>Cancel</button><button type="button" class="cta secondary" id="qd-csv" disabled><i class="iconoir-download" aria-hidden="true"></i>CSV</button><button type="button" class="cta secondary" id="qd-json" disabled><i class="iconoir-download" aria-hidden="true"></i>JSON</button></div>
                     </form>
-                    <div class="results-panel options-chain-panel"><div class="card-head"><div><h3>Options chain</h3><p class="small muted">Choose a contract by clicking its row or focusing the row and pressing Enter or Space.</p></div></div><div id="alpaca-options-chain" class="responsive-table-wrap"><div class="empty-state">No contracts loaded.</div></div></div>
-                    <form id="alpaca-option-history-form" class="card" autocomplete="off">
-                      <h3>Selected contract history</h3>
-                      <div class="selected-contract" id="alpaca-selected-contract">No contract selected.</div>
-                      <input id="alpaca-option-contract" type="hidden" />
-                      <div class="form-grid">
-                        <div class="field"><label class="label" for="alpaca-option-start">Start date</label><input id="alpaca-option-start" type="date" required /></div>
-                        <div class="field"><label class="label" for="alpaca-option-end">End date</label><input id="alpaca-option-end" type="date" required /></div>
-                        <div class="field"><label class="label" for="alpaca-option-timeframe">Timeframe</label><select id="alpaca-option-timeframe"><option value="1Min">1 minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option><option value="30Min">30 minutes</option><option value="1Hour">1 hour</option><option value="1Day">1 day</option></select></div>
-                        <div class="field"><label class="label" for="alpaca-option-row-limit">Observations</label><select id="alpaca-option-row-limit"><option value="500">Latest 500</option><option value="1000">Latest 1,000</option><option value="1500">Latest 1,500</option><option value="2000">Latest 2,000</option><option value="all">All available</option></select></div>
-                        </div>
-                      <div class="hero-actions workflow-actions"><button class="cta" type="submit" disabled id="alpaca-option-load-history">Load history</button><button class="cta secondary" type="button" id="alpaca-option-download" disabled>Download CSV</button></div>
-                      <p id="alpaca-option-history-status" class="small muted" role="status" aria-live="polite">Select a contract from the chain.</p>
-                    </form>
-                    <div class="results-panel data-results-panel">
-                      <div id="alpaca-option-history-chart" class="chart integration-chart" aria-label="Option contract historical price chart"></div>
-                      <div id="alpaca-option-history-preview" class="responsive-table-wrap"><div class="empty-state">No contract history loaded.</div></div>
-                    </div>
+                    <p id="qd-status" class="small muted" role="status" aria-live="polite">Select a market to begin. Downloads never run a forecast.</p>
+                    <div id="qd-preview-table" class="responsive-table-wrap" aria-label="Historical data preview"></div>
                   </section>
                   <section class="panel hidden" data-panel="screener">
                     <div id="forecasting-screener-workspace" aria-live="polite">

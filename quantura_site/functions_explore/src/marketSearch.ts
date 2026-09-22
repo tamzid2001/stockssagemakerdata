@@ -2,6 +2,9 @@ import type { Router } from "express";
 import { searchPredictionMarkets, discoverForecastMarkets, resolveMarketLink, gameTiming, PredictionMarketDataError, type PredictionMarketSource } from "./predictionMarketData";
 import { AlpacaClient } from "./alpacaClient";
 import { kalshiPerps } from "./kalshiPerps";
+import { contractGroup, eventMarketPage } from "./qSearchEvents";
+import { rankVerifiedCandidates } from "./qSearchRanking";
+import rateLimit from "express-rate-limit";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -125,6 +128,9 @@ export function predictionResult(source: PredictionMarketSource, contract: any):
     history_available: true,
     forecast_available: true,
     event_id: contract.eventId,
+    event_slug: contract.eventSlug || null,
+    market_group: contractGroup(contract),
+    market_title: contract.marketTitle,
     market_id: contract.marketId,
     contract_id: contract.contractId,
     sport: contract.sport,
@@ -139,7 +145,19 @@ export function predictionResult(source: PredictionMarketSource, contract: any):
   };
 }
 
-export function registerMarketSearchRoutes(router: Router): void {
+export function registerMarketSearchRoutes(router: Router, options: {db?:FirebaseFirestore.Firestore} = {}): void {
+  router.use("/market-search", rateLimit({windowMs:60_000,limit:60,standardHeaders:true,legacyHeaders:false,validate:{trustProxy:false},message:{ok:false,error:"search_rate_limited",message:"Please wait before searching again."}}));
+  router.get("/market-search/event", async (req,res)=>{
+    try {
+      const page=await eventMarketPage(String(req.query.source||""),String(req.query.event_id||""),String(req.query.cursor||""));
+      res.setHeader("Cache-Control","public, max-age=30");
+      const {contracts,...metadata}=page;
+      res.json({ok:true,...metadata,count:contracts.length,groups:{[page.source]:contracts.map(c=>predictionResult(c.source,c))}});
+    } catch(error) {
+      const safe=error instanceof PredictionMarketDataError?error:new PredictionMarketDataError("event_unavailable","Unable to load event markets. Please retry.",502);
+      res.status(safe.status).json({ok:false,error:safe.code,message:safe.message});
+    }
+  });
   router.get("/market-search/resolve", async (req, res) => {
     try {
       const rows = await resolveMarketLink(req.query.url);
@@ -182,12 +200,14 @@ export function registerMarketSearchRoutes(router: Router): void {
     }
     for (const source of ["polymarket_us", "kalshi"] as PredictionMarketSource[]) {
       if (requested !== "auto" && requested !== source) continue;
-      tasks.push((mode === "any" ? searchPredictionMarkets(source, query, limit) : discoverForecastMarkets(source, query, mode as "live" | "open"))
+      tasks.push((mode === "any" ? searchPredictionMarkets(source, query, limit) : discoverForecastMarkets(source, query, mode as "live" | "open", true))
         .then((rows) => { groups[source] = rows.filter(row => !query || [row.eventTitle, row.marketTitle, row.outcome, row.providerSymbol, row.league].join(" ").toLowerCase().includes(query.toLowerCase())).slice(0, limit).map((row) => predictionResult(source, row)); })
         .catch(() => { errors[source] = "temporarily_unavailable"; }));
     }
     await Promise.all(tasks);
     const results = Object.values(groups).flat();
+    const recommended = req.query.rank === "true" ? await rankVerifiedCandidates(query, results, {...options,ip:req.ip}) : null;
+    if (recommended) for (const rows of Object.values(groups)) rows.sort((a,b)=>Number(b.resource_id===recommended)-Number(a.resource_id===recommended));
     res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
     res.status(200).json({ ok: true, query, count: results.length, groups, errors, capabilities: PROVIDER_CAPABILITIES, coverage: "Bounded provider discovery, not exhaustive coverage. Paste an event link for exact lookup. Kalshi in-progress is inferred from official start time and open status, not a live score feed." });
   });

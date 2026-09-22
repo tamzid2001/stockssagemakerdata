@@ -68,7 +68,7 @@ export async function fetchStockHistoryData(body: Record<string, unknown>): Prom
     result = await yahoo.getStockBars(input);
   } else if (source === "alpaca") {
     result = await alpaca.getStockBars(input);
-  } else if (/[=^]/.test(String(input.symbol || ""))) {
+  } else if (/[=^]|\.(?:[C-Z]|[A-Z]{2,})$|-(?:USD|EUR|GBP|JPY|USDT)$/i.test(String(input.symbol || ""))) {
     provider = "yahoo";
     fallbackUsed = true;
     result = await yahoo.getStockBars(input);

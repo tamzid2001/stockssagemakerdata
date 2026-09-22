@@ -13,7 +13,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 QUANTILES = (0.01, 0.10, 0.25, 0.50, 0.75, 0.90, 0.99)
 QUANTILE_NAMES = ("p01", "p10", "p25", "p50", "p75", "p90", "p99")
-ENGINE = "quantura_weekly_ensemble_v1"
+ENGINE = "quantura_weekly_ensemble_v2"
 
 
 def weekly_configuration() -> dict[str, Any]:
@@ -24,7 +24,7 @@ def weekly_configuration() -> dict[str, Any]:
         "prediction_length": 7, "horizon_mode": "trading_sessions", "frequency": "1D", "calendar": "NYSE",
         "quantiles": list(QUANTILES), "context_length": 512, "transform": "log", "model_failure_policy": "fail",
         "models": {name: {"enabled": True, "weight": 0.2} for name in models},
-        "toto_variant": "4m", "history_lag_sessions": 1, "adjustment": "split",
+        "toto_variant": "4m", "history_lag_sessions": 0, "adjustment": "split",
         "model_checkpoints": {name: (toto if name == "toto" else model).get("checkpoint") for name, model in models.items()},
         "model_revisions": {name: (toto if name == "toto" else model)["checkpointRevision"] for name, model in models.items() if (toto if name == "toto" else model).get("checkpointRevision")},
     }
@@ -56,8 +56,9 @@ def build_weekly_forecast(history: Sequence[Mapping[str, Any]], *, now: dt.datet
     from ensemble_forecasting.worker import execute_job
     now = now or dt.datetime.now(dt.timezone.utc)
     complete = completed_history(history, now)
-    # Withhold one actual completed exchange session, not 24 elapsed hours.
-    training = complete[:-1][-512:]
+    # Include the latest completed daily close. Partial sessions were excluded
+    # above; no one-day lag and no intraday quote substitution.
+    training = complete[-512:]
     if len(training) < 32:
         return None
     config = weekly_configuration()
@@ -82,7 +83,9 @@ def build_weekly_forecast(history: Sequence[Mapping[str, Any]], *, now: dt.datet
             "forecast_date": rows[-1]["date"], "last_forecast_update": now.isoformat(),
             "forecast_engine": ENGINE, "forecast_history_points": len(training),
             "forecast_config": config, "forecast_config_hash": configuration_hash(),
-            "history_cutoff_at": training[-1]["timestamp"], "withheld_session": complete[-1]["timestamp"][:10],
+            "history_cutoff_at": training[-1]["timestamp"], "withheld_session": None,
+            "daily_close_at": session_schedule(training[-1]["timestamp"][:10], training[-1]["timestamp"][:10])[0]["close"],
+            "buy_price_target": rows[-1]["p99"], "signal_policy": "daily_close_above_first_p99_v2",
             "forecast_models": result["models"], "effective_weights_by_quantile": result["effective_weights_by_quantile"],
             "dataset_hash": result["dataset_hash"],
             "forecast_input_gzip": base64.b64encode(gzip.compress(json.dumps([[r["timestamp"], r["close"]] for r in training], separators=(",", ":")).encode(), mtime=0)).decode(),

@@ -24,7 +24,7 @@ test("forecast API documents historical validation scores separately from future
   assert.equal(schema.example.status,'completed');
 });
 
-test("OpenAPI documents workspace and uploaded CSV lifecycle routes", () => {
+test("OpenAPI documents workspaces but excludes uploaded CSV discovery", () => {
   const document = buildOpenApiDocument() as any;
   const paths = document.paths || {};
   [
@@ -32,16 +32,9 @@ test("OpenAPI documents workspace and uploaded CSV lifecycle routes", () => {
     "/workspaces/{workspace_id}",
     "/workspaces/{workspace_id}/collaborators",
     "/workspaces/{workspace_id}/collaborators/{collaborator_id}",
-    "/uploads/csv",
-    "/uploads/csv/{csv_id}",
-    "/uploads/csv/{csv_id}/download",
-    "/uploads/csv/{csv_id}/move",
-    "/uploads/csv/{csv_id}/copy",
-    "/uploads/csv/bulk-move",
-    "/uploads/csv/bulk-copy",
   ].forEach((path) => assert.ok(paths[path], `missing ${path}`));
   assert.equal(paths["/workspaces"].post["x-quantura-scope"], "workspaces:write");
-  assert.equal(paths["/uploads/csv"].post["x-quantura-scope"], "datasets:write");
+  assert.ok(!Object.keys(paths).some(path=>path.includes("/uploads/csv")));
 });
 
 test("Mintlify MCP exposes only the approved read-only allowlist", () => {
@@ -53,10 +46,12 @@ test("Mintlify MCP exposes only the approved read-only allowlist", () => {
     });
   });
   assert.deepEqual(tools.sort((a, b) => a.name.localeCompare(b.name)), [
+    { method: "get", name: "quantura_browse_event_markets" },
     { method: "get", name: "quantura_get_my_access" },
-    { method: "get", name: "quantura_get_uploaded_csv" },
-    { method: "get", name: "quantura_list_uploaded_csvs" },
+    { method: "get", name: "quantura_get_search_capabilities" },
     { method: "get", name: "quantura_list_workspaces" },
+    { method: "get", name: "quantura_resolve_market_link" },
+    { method: "get", name: "quantura_search_markets" },
   ]);
 });
 

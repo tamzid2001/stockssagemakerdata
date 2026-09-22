@@ -24,13 +24,16 @@ def test_real_shared_math_with_mock_adapters_in_tests_only(monkeypatch):
     monkeypatch.setenv("TIMESFM_HF_ACCESS_APPROVED", "true")
     monkeypatch.setenv("TIMESFM_COMMERCIAL_LICENSED", "true")
     result=build_weekly_forecast(history(),now=NOW,execute=functools.partial(execute_job,mock=True))
-    assert result["history_cutoff_at"].startswith("2026-09-04")
-    assert result["withheld_session"] == "2026-09-08"
+    assert result["history_cutoff_at"].startswith("2026-09-08")
+    assert result["withheld_session"] is None
     assert len(result["rows"]) == 7
-    assert result["rows"][0]["date"] == "2026-09-08"
+    assert result["rows"][0]["date"] == "2026-09-09"
     assert set(result["effective_weights_by_quantile"]["0.01"]) == {"prophet","granite","chronos"}
     assert len(result["effective_weights_by_quantile"]["0.5"]) == 5
     assert result["forecast_config"]["toto_variant"] == "4m"
+    assert result["forecast_config"]["history_lag_sessions"] == 0
+    assert result["buy_price_target"] == result["rows"][-1]["p99"]
+    assert dt.datetime.fromisoformat(result["daily_close_at"]) == dt.datetime(2026,9,8,20,tzinfo=dt.timezone.utc)
     restored=json.loads(gzip.decompress(base64.b64decode(result["forecast_input_gzip"])))
     assert restored[-1][0] == result["history_cutoff_at"]
     assert len(restored) == result["forecast_history_points"]

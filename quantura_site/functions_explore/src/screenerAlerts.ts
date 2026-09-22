@@ -37,11 +37,11 @@ export function parseSavedAlert(body:unknown, now=new Date().toISOString()):Save
 export function closingRows(items:QuantScreenerRow[], date:string):QuantScreenerRow[] {
   return items.flatMap(row=>{
     const state=row as QuantScreenerRow & SavedScreenerSignal;
-    const signal=state.closing_signal;
-    const levels=forecastRows(row).find(r=>r.date===date);
-    if(!signal || signal.provisional || signal.forecast_date!==date || !levels || row.split_status==="requires_refresh")return [];
-    const prior=signal.value==="neutral" ? state.last_non_neutral_signal : state.previous_non_neutral_signal;
-    return [{...row,...levels,actual_price:signal.price,actual_price_timestamp:signal.quote_timestamp,signal:signal.value,last_non_neutral_signal:prior}];
+    const signal=state.daily_evaluation;
+    const levels=forecastRows(row)[0];
+    if(!signal || signal.provisional || signal.input_date!==date || signal.rule!=="daily_close_above_first_p99_v2" || !levels || row.split_status==="requires_refresh")return [];
+    const prior=state.last_buy_signal;
+    return [{...row,...levels,actual_price:signal.price,actual_price_timestamp:signal.quote_timestamp,signal:signal.value==="buy"?"buy":"none",last_buy_signal:prior}];
   });
 }
 export function digestMatches(alerts:SavedScreenerAlert[], rows:QuantScreenerRow[], date:string) {
@@ -50,7 +50,7 @@ export function digestMatches(alerts:SavedScreenerAlert[], rows:QuantScreenerRow
 export function buildScreenerDigest(uid:string,date:string,matches:ReturnType<typeof digestMatches>,origin:string):Omit<NotificationEmail,"to"> {
   const lines=matches.map(m=>`${m.alert.name}: ${m.rows.length} matches — ${m.rows.slice(0,30).map(r=>`${r.ticker} (${r.signal})`).join(", ")}${m.rows.length>30?"; more in screener":""}`);
   const url=origin+"/screener#saved-alerts";
-  const text=[`Your Quantura closing screener matches · ${date}`,...lines,"Signals use finalized exchange minute closes; they are not recommendations or guaranteed outcomes.",`Review filters or stop notifications: ${url}`].join("\n\n");
+  const text=[`Your Quantura closing screener matches · ${date}`,...lines,"Signals compare the latest completed daily input close with the first future P99; they are not recommendations or guaranteed outcomes.",`Review filters or stop notifications: ${url}`].join("\n\n");
   return {id:`screener-digest-${uid}-${date}`,subject:`Quantura screener matches · ${date}`,text,
     html:`<!doctype html><html><body style="font-family:Arial,sans-serif;color:#17202a;background:#f4f6f8;padding:20px"><main style="max-width:600px;margin:auto;background:#fff;padding:24px;border-radius:12px"><h1 style="font-size:20px">Your closing screener matches</h1><p>${escape(date)} · Finalized exchange closes</p>${lines.map(l=>`<p>${escape(l)}</p>`).join("")}<p><a href="${escape(url)}">View saved filters / stop notifications</a></p><p style="font-size:13px">Model-derived signals are not recommendations or guaranteed outcomes.</p></main></body></html>`};
 }
@@ -88,11 +88,13 @@ export function registerScreenerAlertRoutes(router:Router,options:Options):void 
 
 /** Bounded resumable daily sweep. One durable digest/user/day; no arbitrary recipients. */
 export async function runScreenerDigests(options:Options,dataset:QuantScreenerDataset,items:QuantScreenerRow[],now=Date.now()) {
-  const date=newYorkDate(new Date(now).toISOString());
-  const ends=items.flatMap(r=>forecastRows(r).filter(f=>f.date===date).map(f=>Date.parse(f.session_close)));
-  if(!ends.length || now<Math.max(...ends)+5*60_000)return {status:"waiting_for_exchange_close",processed:0};
-  const rows=closingRows(items,date);if(!rows.length)return {status:"closing_quotes_unavailable",processed:0};
-  const sweep=options.db.collection("screener_alert_sweeps").doc(date);const holder=randomUUID();
+  // Inference can finish after midnight. Evaluate the input trading date, not the worker's calendar date.
+  const dates=items.map(r=>(r.daily_evaluation as SavedScreenerSignal["daily_evaluation"])?.input_date).filter((d):d is string=>Boolean(d)).sort();
+  const date=dates.at(-1);
+  if(!date)return {status:"waiting_for_daily_publication",processed:0};
+  const rows=closingRows(items,date);
+  if(!rows.length || rows.some(r=>Date.parse(String(r.actual_price_timestamp))>now))return {status:"daily_close_unavailable",processed:0};
+  const sweep=options.db.collection("screener_alert_sweeps").doc("daily-p99-"+date);const holder=randomUUID();
   const claimed=await options.db.runTransaction(async tx=>{const s=(await tx.get(sweep)).data()||{};if(s.done||Number(s.expires||0)>now)return null;tx.set(sweep,{...s,holder,expires:now+240_000});return {cursor:String(s.cursor||"")};});
   if(!claimed)return {status:"already_running_or_complete",processed:0};
   const mailer=new BrevoNotificationMailer(new FirestoreEmailDeliveryLedger(options.db));const emailConfigured=isBrevoEmailConfigured();

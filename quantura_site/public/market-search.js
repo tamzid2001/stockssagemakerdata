@@ -1,211 +1,106 @@
 (() => {
   "use strict";
-
-  const form = document.getElementById("market-search-form");
-  const queryInput = document.getElementById("market-search-query");
-  const sourceInput = document.getElementById("market-search-source");
-  const status = document.getElementById("market-search-status");
-  const results = document.getElementById("market-search-results");
-  if (!form || !queryInput || !sourceInput || !status || !results) return;
-  let timer;
-  let controller;
-  let requestSequence = 0;
-  let mode = "open";
-  const resources = new Map();
-  const cache = new Map();
-  const workspace = form.closest(".market-search-workspace") || form.parentElement;
-  queryInput.setAttribute("aria-controls", "market-search-results");
-  queryInput.setAttribute("aria-describedby", "market-search-status");
-  queryInput.maxLength = 2048;
-
-  const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
-  })[character]);
-  const titleCase = (value) => String(value || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const providerLabel = (value) => ({ alpaca: "Alpaca", yahoo: "Yahoo Finance", polymarket_us: "Polymarket US", kalshi: "Kalshi", kalshi_perps:"Kalshi Perpetuals" })[value] || value;
-
-  function closeResults() {
-    clearTimeout(timer);
-    timer = undefined;
-    controller?.abort();
-    controller = undefined;
-    ++requestSequence;
-    results.hidden = true;
-    results.removeAttribute("aria-busy");
+  const form=document.getElementById("market-search-form"),queryInput=document.getElementById("market-search-query"),status=document.getElementById("market-search-status"),results=document.getElementById("market-search-results");
+  if(!form||!queryInput||!status||!results)return;
+  const workspace=form.closest(".market-search-workspace")||form.parentElement;
+  const resources=new Map(),cache=new Map();let timer,controller,sequence=0,mode="open",eventView=null,lastGroups={},lastErrors={};
+  const escapeHtml=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
+  const providerLabel=s=>({alpaca:"Alpaca",yahoo:"Yahoo Finance",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
+  queryInput.setAttribute("aria-controls","market-search-results");queryInput.setAttribute("aria-describedby","market-search-status");queryInput.setAttribute("aria-expanded","false");queryInput.maxLength=2048;
+  function closeResults(){clearTimeout(timer);controller?.abort();controller=null;++sequence;results.hidden=true;results.removeAttribute("aria-busy");queryInput.setAttribute("aria-expanded","false");}
+  const outside=e=>{if(!workspace.contains(e.target))closeResults();};
+  document.addEventListener("pointerdown",outside,true);document.addEventListener("click",outside,true);document.addEventListener("focusin",outside);
+  window.addEventListener("quantura:panel-changed",closeResults);
+  workspace.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();closeResults();queryInput.focus();}});
+  function setPanel(panel){if(window.__quanturaSetPanel)window.__quanturaSetPanel(panel);else window.location.href=`/forecasting?panel=${encodeURIComponent(panel)}`;}
+  function eventId(row){return row.source==="polymarket_us"?row.event_slug:row.event_id;}
+  function card(row){
+    resources.set(row.resource_id,row);const prediction=row.resource_type==="prediction_market_contract";
+    const forecast=row.forecast_available&&!['closed','settled'].includes(row.status);
+    return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}"><div class="market-search-result-main"><div class="market-search-result-symbol">${escapeHtml(prediction?row.outcome||row.side:row.symbol)}</div><div><strong>${escapeHtml(row.market_title||row.name||row.symbol)}</strong><div class="small muted">${escapeHtml([prediction?row.contract?.eventTitle:null,row.symbol,providerLabel(row.source),row.exchange,row.market_group,row.side,row.timing||row.status,row.unit].filter(Boolean).join(" · "))}</div></div></div><div class="market-search-result-actions">
+      ${forecast?`<button class="cta small" type="button" data-market-action="${prediction?'prediction-forecast':'forecast'}">Forecast</button>`:""}
+      <button class="cta secondary small" type="button" data-market-action="${prediction?'prediction-download':'history'}">Download history</button>
+      ${prediction?`<button class="cta secondary small" type="button" data-market-action="add-download">+ Export outcome</button>${eventId(row)?'<button class="cta secondary small" type="button" data-market-action="event">All event markets</button>':''}`:["equity","etf"].includes(row.asset_class)?'<button class="cta secondary small" type="button" data-market-action="options">Options</button>':''}
+      </div></article>`;
   }
-  // Do not prevent the outside interaction: it must still reach the forecast
-  // controls. Capture pointer events for mouse/touch and clicks for AT users.
-  const dismissOutside = event => { if (!workspace.contains(event.target)) closeResults(); };
-  document.addEventListener("pointerdown", dismissOutside, true);
-  document.addEventListener("click", dismissOutside, true);
-  document.addEventListener("focusin", dismissOutside);
-  workspace.addEventListener("keydown", event => {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    closeResults();
-    queryInput.focus();
-  });
-
-  function setPanel(panel) {
-    if (typeof window.__quanturaSetPanel === "function") window.__quanturaSetPanel(panel);
-    else window.location.href = `/forecasting?panel=${encodeURIComponent(panel)}`;
+  function show(){results.hidden=false;queryInput.setAttribute("aria-expanded","true");}
+  function render(groups,errors={}){
+    resources.clear();show();
+    results.innerHTML=Object.entries(groups).filter(([,rows])=>rows.length).map(([source,rows])=>`<section class="market-search-group"><h3>${escapeHtml(providerLabel(source))}</h3>${rows.map(card).join("")}</section>`).join("")+Object.keys(errors).map(s=>`<p class="notice small">${escapeHtml(providerLabel(s))}: temporarily unavailable.</p>`).join("");
+    if(!results.innerHTML)results.innerHTML='<div class="empty-state">No supported market matched this search. Try a ticker or an exact event link.</div>';
   }
-
-  function render(groups, errors) {
-    resources.clear();
-    const sections = ["alpaca", "yahoo", "polymarket_us", "kalshi", "kalshi_perps"].flatMap((source) => {
-      const rows = Array.isArray(groups?.[source]) ? groups[source] : [];
-      if (!rows.length && !errors?.[source]) return [];
-      const cards = rows.length
-        ? rows.map((row) => {
-            const prediction = row.resource_type === "prediction_market_contract";
-            resources.set(row.resource_id, row);
-            return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}">
-              <div class="market-search-result-main">
-                <div class="market-search-result-symbol">${escapeHtml(prediction ? row.outcome || row.side : row.symbol || "Market")}</div>
-                <div><strong title="${escapeHtml(row.name || row.symbol || "Supported market")}">${escapeHtml(row.name || row.symbol || "Supported market")}</strong><div class="small muted">${escapeHtml(prediction ? [row.contract?.sport, row.contract?.league].filter(Boolean).join(" · ") || "Prediction market" : titleCase(row.asset_class))} · ${escapeHtml(providerLabel(row.source))}${row.exchange && row.exchange !== providerLabel(row.source) ? ` · ${escapeHtml(row.exchange)}` : ""}${row.currency ? ` · ${escapeHtml(row.currency)}` : ""}${row.status ? ` · ${escapeHtml(titleCase(row.status))}` : ""}</div>${row.unit ? `<div class="small muted">${escapeHtml(row.unit)}</div>` : ""}</div>
-              </div>
-              <div class="hero-actions market-search-result-actions">
-                ${prediction
-                  ? `<span class="market-timing small">${escapeHtml(row.timing === "live" ? "LIVE" : row.timing === "in_progress" ? "Started · open" : titleCase(row.timing || row.status))}</span>${!["closed", "settled"].includes(row.status) ? '<button class="cta small" type="button" data-market-action="prediction-forecast">Select for forecast</button>' : ""}<button class="cta secondary small" type="button" data-market-action="prediction-download">Download history</button>`
-                  : `${row.forecast_available ? `<button class="cta small" type="button" data-market-action="forecast" data-symbol="${escapeHtml(row.symbol)}" data-source="${escapeHtml(row.source)}" data-asset-class="${escapeHtml(row.asset_class)}">Forecast</button>` : ""}<button class="cta secondary small" type="button" data-market-action="history" data-symbol="${escapeHtml(row.symbol)}" data-source="${escapeHtml(row.source)}">Historical data</button>`}
-              </div>
-            </article>`;
-          }).join("")
-        : `<div class="notice small">${escapeHtml(providerLabel(source))} is ${escapeHtml(String(errors[source]).replaceAll("_", " "))}.</div>`;
-      return [`<section class="market-search-group"><h3>${escapeHtml(providerLabel(source))}</h3>${cards}</section>`];
-    });
-    results.hidden = false;
-    results.innerHTML = sections.length ? sections.join("") : '<div class="empty-state">No supported market matched this search.</div>';
+  async function get(url,signal){
+    const saved=cache.get(url);if(saved&&Date.now()-saved.at<60000)return saved.payload;
+    const response=await fetch(url,{headers:{Accept:"application/json"},signal}),payload=await response.json();
+    if(!response.ok)throw Error(payload.message||"Search is temporarily unavailable.");
+    cache.set(url,{at:Date.now(),payload});if(cache.size>20)cache.delete(cache.keys().next().value);return payload;
   }
-
-  async function search() {
-    clearTimeout(timer);
-    controller?.abort();
-    const sequence = ++requestSequence;
-    const query = String(queryInput.value || "").trim();
-    if (query.length < 2 && mode !== "live") {
-      results.hidden = true;
-      status.textContent = "Enter at least two characters to search markets.";
-      results.removeAttribute("aria-busy");
-      return;
-    }
-    controller = new AbortController();
-    status.textContent = "Searching configured providers…";
-    results.setAttribute("aria-busy", "true");
-    try {
-      const link = /^https?:\/\//i.test(query);
-      const params = new URLSearchParams(link ? { url: query } : { q: query, source: String(sourceInput.value || "auto"), limit: "20", mode });
-      const endpoint = link ? "/api/market-search/resolve" : "/api/market-search";
-      const key = `${endpoint}?${params.toString()}`;
-      const cached = cache.get(key);
-      let payload = cached && Date.now() - cached.time < 60000 ? cached.payload : null;
-      if (!payload) {
-        const response = await fetch(key, { headers: { Accept: "application/json" }, signal: controller.signal });
-        payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.message || "Market search is temporarily unavailable. Try again.");
-        cache.set(key, { time: Date.now(), payload });
-        if (cache.size > 20) cache.delete(cache.keys().next().value);
-      }
-      if (sequence !== requestSequence) return;
-      render(payload.groups || {}, payload.errors || {});
-      status.textContent = `${Number(payload.count || 0).toLocaleString()} results · Choose a team/side. ${payload.coverage || "↓ to explore, Escape to close."}`;
-    } catch (error) {
-      if (error.name === "AbortError" || sequence !== requestSequence) return;
-      results.hidden = false;
-      results.innerHTML = '<div class="empty-state">Search is temporarily unavailable. Try a provider-specific workflow.</div>';
-      status.textContent = error?.message || "Market search failed.";
-    } finally {
-      if (sequence === requestSequence) results.removeAttribute("aria-busy");
-    }
+  async function search(rank=false){
+    clearTimeout(timer);controller?.abort();const run=++sequence,query=queryInput.value.trim();eventView=null;
+    if(query.length<2&&mode!=="live"){closeResults();status.textContent="Enter at least two characters to search markets.";return;}
+    controller=new AbortController();results.setAttribute("aria-busy","true");status.textContent="Searching configured providers…";
+    try{
+      const link=/^https?:\/\//i.test(query);
+      const params=new URLSearchParams(link?{url:query}:{q:query,source:"auto",limit:"20",mode,...(rank&&/\s/.test(query)?{rank:"true"}:{})});
+      const payload=await get(`${link?'/api/market-search/resolve':'/api/market-search'}?${params}`,controller.signal);if(run!==sequence)return;
+      lastGroups=payload.groups||{};lastErrors=payload.errors||{};render(lastGroups,lastErrors);
+      status.textContent=`${Number(payload.count||0).toLocaleString()} results · Choose the exact outcome. ${payload.coverage||"Arrow keys to explore; Escape to close."}`;
+      if(link){const first=Object.values(lastGroups).flat().find(r=>eventId(r));if(first)void openEvent(first.source,eventId(first));}
+    }catch(error){if(error.name!=="AbortError"&&run===sequence){show();results.innerHTML='<div class="empty-state">Unable to search. Retry or paste an exact provider event link.</div>';status.textContent=error.message;}}
+    finally{if(run===sequence)results.removeAttribute("aria-busy");}
   }
-
-  form.addEventListener("submit", (event) => { event.preventDefault(); void search(); });
-  queryInput.addEventListener("input", () => {
-    controller?.abort(); ++requestSequence; clearTimeout(timer);
-    timer = setTimeout(search, 300);
+  function renderEvent(){
+    const v=eventView;if(!v)return;resources.clear();show();
+    const rows=[...v.rows.values()],groups=[...new Set(rows.map(r=>r.market_group||"Other markets"))];
+    results.innerHTML=`<div class="q-event-toolbar"><button type="button" class="cta secondary small" data-market-action="back">← Results</button><strong>${escapeHtml(v.title)}</strong><span class="small">${rows.length} outcomes loaded</span><input type="search" id="q-event-filter" aria-label="Filter loaded event markets" placeholder="Filter loaded props, players, lines" value="${escapeHtml(v.filter||'')}" /></div>
+      ${v.related.length?`<details class="q-event-group"><summary>Related market groups (${v.related.length})</summary><div class="q-event-groups">${v.related.map(r=>`<button class="task-chip" type="button" data-market-action="related" data-event-id="${escapeHtml(r.event_id)}">${escapeHtml(r.group)} · ${escapeHtml(r.label)}</button>`).join('')}</div></details>`:''}
+      <p class="small muted">${escapeHtml(v.coverage||'')} ${v.relatedComplete===false?'Related-event discovery is partial; retry for more groups.':''}</p>
+      ${groups.map(group=>`<details class="q-event-group" open><summary>${escapeHtml(group)} (${rows.filter(r=>(r.market_group||'Other markets')===group).length})</summary>${rows.filter(r=>(r.market_group||'Other markets')===group).map(card).join('')}</details>`).join('')}
+      ${v.next?'<button class="cta secondary small" type="button" data-market-action="more">Load more event outcomes</button>':'<p class="small muted">All pages for this branch loaded. Other related branches open separately.</p>'}`;
+    filterEvent(v.filter||'');
+  }
+  function filterEvent(text){if(eventView)eventView.filter=text;for(const el of results.querySelectorAll('[data-market-resource]'))el.hidden=!el.textContent.toLowerCase().includes(text.toLowerCase());}
+  async function openEvent(source,id,more=false){
+    controller?.abort();controller=new AbortController();const run=++sequence;
+    if(!more)eventView={source,id,title:id,rows:new Map(),related:[],next:null,filter:""};
+    const v=eventView;status.textContent="Loading provider-verified event markets…";results.setAttribute("aria-busy","true");
+    try{
+      const params=new URLSearchParams({source,event_id:id,...(more&&v.next?{cursor:v.next}:{})});
+      const payload=await get(`/api/market-search/event?${params}`,controller.signal);if(run!==sequence)return;
+      for(const row of Object.values(payload.groups||{}).flat())v.rows.set(row.resource_id,row);
+      v.title=payload.title||id;v.related=payload.related_events||[];v.relatedComplete=payload.related_complete;v.next=payload.next_cursor;v.coverage=payload.coverage;renderEvent();
+      status.textContent=`${v.rows.size} outcomes loaded · ${providerLabel(source)}. ${v.next?'More pages are available.':'Branch loaded.'} Choose a specific line and side.`;
+    }catch(error){if(error.name!=="AbortError"&&run===sequence)status.textContent=error.message;}
+    finally{if(run===sequence)results.removeAttribute("aria-busy");}
+  }
+  form.addEventListener("submit",event=>{event.preventDefault();void search(true);});
+  queryInput.addEventListener("input",()=>{controller?.abort();++sequence;clearTimeout(timer);timer=setTimeout(()=>search(),300);});
+  document.querySelectorAll("[data-market-mode]").forEach(button=>button.addEventListener("click",()=>{mode=button.dataset.marketMode;document.querySelectorAll("[data-market-mode]").forEach(b=>b.setAttribute("aria-pressed",String(b===button)));queryInput.required=mode!=="live";void search();}));
+  queryInput.addEventListener("keydown",event=>{if(event.key==="ArrowDown"&&!results.hidden){event.preventDefault();results.querySelector('[data-market-action]')?.focus();}});
+  results.addEventListener("input",event=>{if(event.target.id==="q-event-filter")filterEvent(event.target.value);});
+  results.addEventListener("keydown",event=>{
+    if(!["ArrowDown","ArrowUp","Home","End"].includes(event.key)||event.target.tagName==="INPUT")return;
+    const buttons=[...results.querySelectorAll('[data-market-action]')].filter(b=>!b.closest('[hidden]')),index=buttons.indexOf(document.activeElement);if(index<0)return;
+    event.preventDefault();if(event.key==="ArrowUp"&&index===0){queryInput.focus();return;}buttons[event.key==="Home"?0:event.key==="End"?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==="ArrowDown"?1:-1)))]?.focus();
   });
-  sourceInput.addEventListener("change", () => void search());
-  document.querySelectorAll("[data-market-mode]").forEach(button => button.addEventListener("click", () => {
-    mode = button.dataset.marketMode;
-    document.querySelectorAll("[data-market-mode]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
-    queryInput.required = mode !== "live";
-    if (mode === "live" && ["alpaca", "yahoo"].includes(sourceInput.value)) sourceInput.value = "auto";
-    void search();
-  }));
-  queryInput.addEventListener("keydown", event => {
-    if (event.key === "ArrowDown" && !results.hidden) {
-      const first = results.querySelector("[data-market-action]");
-      if (first) { event.preventDefault(); first.focus(); }
+  results.addEventListener("click",event=>{
+    const button=event.target.closest('[data-market-action]');if(!button)return;
+    const action=button.dataset.marketAction,row=resources.get(button.closest('[data-market-resource]')?.dataset.marketResource);
+    if(action==="back"){closeResults();eventView=null;render(lastGroups,lastErrors);return;}
+    if(action==="more"&&eventView){void openEvent(eventView.source,eventView.id,true);return;}
+    if(action==="related"&&eventView){void openEvent(eventView.source,button.dataset.eventId);return;}
+    if(action==="event"&&row){void openEvent(row.source,eventId(row));return;}
+    if(!row)return;
+    const intent=action.includes("forecast")?"forecast":action==="options"?"options":action==="add-download"?"add-download":"download";
+    if(intent!=="add-download")closeResults();
+    window.QuanturaMarketSelection=row;
+    if(intent==="forecast"){
+      const source=document.getElementById("ensemble-source-type"),ticker=document.getElementById("ensemble-ticker"),provider=document.getElementById("ensemble-provider");
+      if(ticker)ticker.value=row.symbol;if(provider)provider.value="auto";
+      if(source){source.value=row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new Event("change",{bubbles:true}));}
     }
-  });
-  results.addEventListener("keydown", event => {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-    const buttons = [...results.querySelectorAll("[data-market-action]")];
-    const index = buttons.indexOf(document.activeElement);
-    if (index < 0) return;
-    event.preventDefault();
-    if (event.key === "ArrowUp" && index === 0) { queryInput.focus(); return; }
-    const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : Math.max(0, Math.min(buttons.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)));
-    buttons[next]?.focus();
-  });
-
-  results.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-market-action]");
-    if (!button) return;
-    const action = button.dataset.marketAction;
-    // Close for every resource/action, not only prediction-market selections.
-    // Do this before panel changes or focus transitions can start another task.
-    closeResults();
-    if (action === "prediction-forecast" || action === "prediction-download") {
-      const row = resources.get(button.closest("[data-market-resource]")?.dataset.marketResource);
-      if (!row?.contract) return;
-      const download = action === "prediction-download";
-      if (!download) window.QuanturaMarketSelection = row;
-      setPanel(download ? "sports-autopilot" : "forecast");
-      window.dispatchEvent(new CustomEvent("quantura:market-selected", { detail: { resource: row, intent: download ? "download" : "forecast" } }));
-      status.textContent = `Selected ${row.outcome} · ${row.contract.eventTitle || row.name} · ${providerLabel(row.source)}.`;
-      document.getElementById(download ? "prediction-market-hub" : "ensemble-forecast-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    const symbol = String(button.dataset.symbol || "").trim();
-    const source = String(button.dataset.source || "auto").trim();
-    if (action === "forecast") {
-      window.QuanturaMarketSelection = null;
-      const ticker = document.getElementById("ensemble-ticker") || document.getElementById("forecast-ticker");
-      const forecastSource = document.getElementById("ensemble-provider") || document.getElementById("forecast-source");
-      const assetClass = document.getElementById("forecast-asset-class");
-      if (ticker) ticker.value = symbol;
-      if (forecastSource) forecastSource.value = source === "alpaca" ? "alpaca" : "yahoo";
-      if (assetClass) assetClass.value = button.dataset.assetClass || "equity";
-      const sourceType = document.getElementById("ensemble-source-type");
-      if (sourceType) { sourceType.value = source === "kalshi_perps" ? "kalshi_perp" : "ticker"; sourceType.dispatchEvent(new Event("change", { bubbles: true })); }
-      setPanel("forecast");
-      (document.getElementById("ensemble-source-type") || ticker)?.focus({ preventScroll: true });
-      (document.getElementById("ensemble-forecast-form") || document.getElementById("forecast-form"))?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    if (action === "history") {
-      const historySymbol = document.getElementById("alpaca-symbol");
-      const historySource = document.getElementById("market-history-source");
-      if (historySymbol) historySymbol.value = symbol;
-      if (historySource) { historySource.value = source === "kalshi_perps" ? source : source === "alpaca" ? "alpaca" : "yahoo"; historySource.dispatchEvent(new Event("change",{bubbles:true})); }
-      setPanel("news");
-      historySymbol?.focus({ preventScroll: true });
-      document.getElementById("alpaca-history-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    if (action === "prediction") {
-      const provider = source === "kalshi" ? "kalshi" : "polymarket_us";
-      const radio = document.querySelector(`input[name="pm-source"][value="${provider}"]`);
-      if (radio) {
-        radio.checked = true;
-        radio.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      const search = document.getElementById("pm-search");
-      if (search) search.value = button.dataset.query || "";
-      setPanel("sports-autopilot");
-      document.getElementById("prediction-market-hub")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if(intent!=="add-download")setPanel(intent==="forecast"?"forecast":"download");
+    window.dispatchEvent(new CustomEvent("quantura:market-selected",{detail:{resource:row,intent}}));
+    status.textContent=`Selected ${row.outcome||row.symbol} · ${row.market_title||row.name} · ${providerLabel(row.source)}${intent==='add-download'?' · Added to Q Download.':''}.`;
   });
 })();

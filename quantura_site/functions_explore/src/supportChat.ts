@@ -3,6 +3,7 @@ import type { Router } from "express";
 import type admin from "firebase-admin";
 import { requireScope } from "./apiAccess";
 import { withPlatformAccess } from "./platformApiRoutes";
+import { requestJev } from "./jevClient";
 
 export const SUPPORT_MODEL = "jev-1.13.0";
 export const SUPPORT_VERSION = "q-support-2026-09-20";
@@ -59,13 +60,7 @@ export function parseSupportAnswer(value: unknown) {
 }
 
 export async function classifySupport(messages: ReturnType<typeof parseSupportMessages>, request = fetch, key = process.env.TYPESAFE_API_KEY) {
-  if (!key) throw new Error("support_configuration_unavailable");
-  const response = await request("https://api.typesafe.ai/v1/systemone", {
-    method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify(supportDecisionRequest(messages)), signal: AbortSignal.timeout(15_000), redirect: "error",
-  });
-  if (!response.ok) throw new Error("support_provider_unavailable");
-  return response.json();
+  return requestJev(supportDecisionRequest(messages), {request, key});
 }
 
 function budget(value: string | undefined, fallback: number, max: number): number {

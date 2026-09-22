@@ -32,7 +32,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260824s1"></script>
-    <script defer src="/screener.js?v=20260921-cutoff-p99"></script>
+    <script defer src="/screener.js?v=20260921-daily-p99"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -71,7 +71,7 @@
             <h1 id="screener-title">Q Screener</h1>
             <p>
               Compare stock closes with weekly forecast quantiles, or browse Kalshi perpetual prices and open an on-demand forecast.
-              Stock signals include extended hours; saved session-closing signals remain separate. Perpetual reference prices and trade history use the underlying spot scale.
+              Stock Buy signals use the latest completed daily close; no intraday price tracking. Perpetual reference prices and trade history use the underlying spot scale.
             </p>
           </div>
           <div class="qs-hero-actions">
@@ -111,7 +111,7 @@
             <span id="qs-filter-count">0 active</span>
           </summary>
           <form id="qs-filters" novalidate>
-            <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · weekly ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · spot scale</option></select></label>
+            <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · daily 7-session ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · spot scale</option></select></label>
               <label class="qs-field qs-search-field">
                 <span>Search</span>
                 <div class="qs-input-icon"><i class="iconoir-search" aria-hidden="true"></i><input id="qs-search" name="search" type="search" placeholder="Ticker or company, e.g. PLTR" autocomplete="off" /></div>
@@ -137,14 +137,10 @@
                 </select>
               </label>
               <label class="qs-field">
-                <span>Current signal</span>
+                <span>Buy signal</span>
                 <select id="qs-signal" name="signal">
-                  <option value="all">All signals</option>
-                  <option value="cutoff_buy">Buy · input close above first P99</option>
-                  <option value="buy">Buy · below P10</option>
-                  <option value="sell">Sell · above P90</option>
-                  <option value="neutral">Neutral · within P10–P90</option>
-                  <option value="unavailable">Unavailable</option>
+                  <option value="all">All stocks</option>
+                  <option value="buy">Buy · close above first P99</option>
                 </select>
               </label>
               <label class="qs-field">
@@ -206,7 +202,7 @@
             </fieldset>
 
             <div class="qs-filter-footer">
-              <label class="qs-signal-toggle"><input id="qs-signal-changed" name="signalChanged" type="checkbox" /><span>Opposite to last saved buy/sell signal</span></label>
+              <input id="qs-signal-changed" type="hidden" value="false" />
               <button class="cta secondary small" id="qs-clear" type="button"><i class="iconoir-erase" aria-hidden="true"></i>Clear filters</button>
             </div>
           </form>
@@ -250,8 +246,8 @@
                   <th scope="col">Quantile position</th>
                   <th scope="col">Distance %<span>P10 / P50 / P90</span></th>
                   <th scope="col">Market cap</th>
-                  <th scope="col">Current signal</th>
-                  <th scope="col">Last saved buy/sell</th>
+                  <th scope="col">Buy signal</th>
+                  <th scope="col">Last Buy</th>
                   <th scope="col">Updated</th>
                 </tr>
               </thead>
@@ -269,15 +265,15 @@
         <section class="qs-methodology">
           <article>
             <h2>How to read this screener</h2>
-            <p>Buy means the latest completed minute close is below P10; sell means it is above P90; otherwise neutral. Extended-hours bars are eligible. If no newer bar is available, the historical close is used. Before the first forecast session arrives, its first row is the comparison; the row date is always shown.</p>
+            <p>Buy means the latest completed daily input close is strictly above the first future P99. The price target is the final P99 in the seven-trading-session forecast. This is a model-derived research rule, not a recommendation or guaranteed gain.</p>
           </article>
           <article>
-            <h3>Current versus closing signals</h3>
-            <p>Current signals are provisional, not trade instructions. Saved closing signals use the final observed minute of an exchange session (normally 4 pm New York time; earlier on early-close days). After-hours movement never changes that record. No closing signal is backfilled using a forecast generated after the close.</p>
+            <h3>Daily five-model ensemble</h3>
+            <p>Buy signals are provisional, not trade instructions. Saved closing signals use the final observed minute of an exchange session (normally 4 pm New York time; earlier on early-close days). After-hours movement never changes that record. No closing signal is backfilled using a forecast generated after the close.</p>
           </article>
           <article>
             <h3>Freshness and gaps</h3>
-            <p>Quote time, source, and forecast date are explicit. Missing quotes and expired forecast rows are not fabricated. Splits that invalidate a forecast require a new scan. The prior validated dataset remains published until the next scan passes its coverage checks.</p>
+            <p>Input date and forecast dates are explicit. Daily prices are split-adjusted. The prior validated dataset stays available while a new scan runs; older-policy forecasts do not receive new Buy labels.</p>
           </article>
         </section>
       </div>

@@ -1,6 +1,14 @@
 # Q Search and Q Download
 
-Status: implementation plan, not a claim of deployed functionality.
+Status: implemented in the release branch; deployment is verified separately.
+
+Recovery: tag `backup/pre-q-search-download-20260921` preserves pre-change code.
+Use a reviewed forward revert; never reset main or restore older databases.
+Existing CSV endpoints and stored datasets remain compatible.
+
+Scope: one Auto selector, bounded Jev ranking, paginated provider event branches,
+one snapshot-based download tab. Discovery is not exhaustive. The daily
+screener uses latest close > first P99; target is final P99.
 Audited baseline: main at `9ec9fd8`, 21 September 2026.
 
 ## Product decision

@@ -1,0 +1,30 @@
+---
+title: "Q Download"
+description: "Preview and export the same verified market-history snapshot."
+---
+
+Select a market in **Q Search**, then **Q Download**. Choose latest N
+observations or a local-time date range, interval and **Preview**.
+CSV/JSON export that exact snapshot; changing settings invalidates it.
+
+- **Stocks:** Auto provider, split-adjusted by default, regular/extended sessions.
+- **Options:** select the actual expiration and contract; coverage varies.
+- **Event contracts:** up to 25 outcomes from one provider; IDs distinguish every side.
+- **Perpetuals:** prices use underlying units, not binary probabilities.
+
+Event history supports pregame, in-game, both or Auto. Auto switches to in-game
+after 32 elapsed game minutes when the provider verifies start time.
+Missing rows are not invented. Exports use UTC; form dates use your device timezone.
+
+```bash
+curl -X POST https://quantura.studio/api/market-data/stocks/history \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"AAPL","source":"auto","timeframe":"1Day","limit":500,"adjustment":"split","format":"json"}'
+```
+
+The response identifies the actual provider and rows. Use `format: "csv"`
+for a direct CSV attachment. Cancel preview to stop waiting.
+
+**Upload CSV** still forecasts your own series. Existing authenticated
+workspace-file clients remain supported; those operations are no longer
+published in docs or MCP discovery.

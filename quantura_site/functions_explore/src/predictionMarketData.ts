@@ -40,6 +40,7 @@ export type PredictionMarketContract = {
   sport: string;
   league: string;
   eventId: string;
+  eventSlug?: string;
   marketId: string;
   contractId: string;
   providerSymbol: string;
@@ -121,6 +122,8 @@ export type PredictionMarketDataset = {
   pregameOnly: boolean;
   history_phase?: "both" | "pregame" | "in_game";
   history_lookback_minutes?: number;
+  history_phase_by_contract?: Record<string, string>;
+  history_phase_policy?: string;
   headers: string[];
   rows: Array<Record<string, Primitive>>;
   previewRows: Array<Record<string, Primitive>>;
@@ -354,6 +357,7 @@ export function normalizePolymarketEvents(
           sport: category.sport,
           league: category.label,
           eventId,
+          eventSlug: text(event.slug, 220) || undefined,
           marketId,
           contractId,
           providerSymbol,
@@ -1142,7 +1146,8 @@ export async function prepareDataset(body: JsonRecord): Promise<PredictionMarket
   const target = targetField(body.target || "price");
   const missing = missingMode(body.missing || "leave");
   let selection: HistorySelection;
-  try { selection = historySelection(body, true); }
+  const autoPhase = body.history_phase === "auto";
+  try { selection = historySelection(autoPhase ? {...body,history_phase:"both"} : body, true); }
   catch (error) { throw new PredictionMarketDataError((error as Error).message, "Choose pregame, in-game, or both and a lookback of 0–129600 minutes.", 422); }
   const pregameOnly = selection.history_phase === "pregame";
   const contracts = asArray(body.contracts).map((item) => selectedContract(item, source));
@@ -1150,13 +1155,16 @@ export async function prepareDataset(body: JsonRecord): Promise<PredictionMarket
   if (contracts.length > MAX_SELECTED_CONTRACTS) throw new PredictionMarketDataError("too_many_contracts", `Select no more than ${MAX_SELECTED_CONTRACTS} contracts per export.`, 413);
   const { startMs, endMs } = timeRange(body);
   const allRows: NormalizedPredictionObservation[] = [];
+  const phases: Record<string,string> = {};
   for (const suppliedContract of contracts) {
     const contract = source === "kalshi" ? await resolveKalshiContract(suppliedContract)
       : (await resolveMarketIdentifier(source, suppliedContract.providerSymbol, "market")).find(c => c.contractId === suppliedContract.contractId);
     if (!contract) throw new PredictionMarketDataError("contract_not_found", "Select a side belonging to this market.", 422);
     if (pregameOnly && !contract.eventStart) throw new PredictionMarketDataError("event_start_unavailable", "Pregame history requires a provider-confirmed event start. Choose full history for this contract.", 422);
     let range;
-    try { range = eventHistoryRange(startMs, endMs, Date.parse(contract.eventStart || ""), selection); }
+    const contractSelection = autoPhase ? {...selection,history_phase:automaticSportsHistoryPhase(Date.parse(contract.eventStart || ""),endMs)} : selection;
+    phases[contract.contractId] = contractSelection.history_phase;
+    try { range = eventHistoryRange(startMs, endMs, Date.parse(contract.eventStart || ""), contractSelection); }
     catch (_error) { throw new PredictionMarketDataError("event_start_unavailable", "This phase requires a provider-confirmed game start. Select both phases instead.", 422); }
     const contractStart = range.start, contractEnd = range.end;
     if (contractEnd <= contractStart) continue;
@@ -1184,7 +1192,7 @@ export async function prepareDataset(body: JsonRecord): Promise<PredictionMarket
     historyPhase: selection.history_phase,
     features: asArray(body.features).map((item) => text(item, 60)),
   });
-  return { ...dataset, ...selection };
+  return { ...dataset, ...selection, history_phase_by_contract:phases, history_phase_policy:autoPhase?"auto":selection.history_phase };
 }
 
 export async function resolveKalshiContract(selected: PredictionMarketContract): Promise<PredictionMarketContract> {
@@ -1282,8 +1290,8 @@ export async function resolveMarketLink(value: unknown): Promise<PredictionMarke
 
 const liveSearchPending = new Map<string, Promise<PredictionMarketContract[]>>();
 /** Bounded, shared server metadata cache; no full history in browser autocomplete. */
-export async function discoverForecastMarkets(source: PredictionMarketSource, query: string, mode: "live" | "open" | "any" = "open"): Promise<PredictionMarketContract[]> {
-  const key = `forecast-discovery:${source}:${mode}:${source === "kalshi" ? query.toLowerCase() : ""}`;
+export async function discoverForecastMarkets(source: PredictionMarketSource, query: string, mode: "live" | "open" | "any" = "open", includeOtherMarkets = false): Promise<PredictionMarketContract[]> {
+  const key = `forecast-discovery:${source}:${mode}:${includeOtherMarkets}:${source === "kalshi" ? query.toLowerCase() : ""}`;
   const existing = cached<PredictionMarketContract[]>(key);
   if (existing) return existing;
   if (liveSearchPending.has(key)) return liveSearchPending.get(key)!;
@@ -1296,7 +1304,7 @@ export async function discoverForecastMarkets(source: PredictionMarketSource, qu
       contracts = asArray(payload.events).map(asRecord).filter((e): e is JsonRecord => !!e).flatMap(polymarketEventContracts);
     } else {
       const index = await kalshiSeriesIndex();
-      const series = [...index.tagsBySeries.keys()].filter(id => isKalshiGameSeries(id))
+      const series = [...index.tagsBySeries.keys()].filter(id => includeOtherMarkets || isKalshiGameSeries(id))
         .sort((a, b) => {
           const score = (id: string) => `${id} ${(index.tagsBySeries.get(id) || []).join(" ")}`.toLowerCase().includes(query.toLowerCase()) ? -1 : /MLB|NFL|NBA|NHL|WNBA/.test(id) ? 0 : 1;
           return score(a) - score(b) || a.localeCompare(b);
@@ -1306,7 +1314,7 @@ export async function discoverForecastMarkets(source: PredictionMarketSource, qu
       contracts = pages.flatMap(page => page.status === "fulfilled" ? asArray(page.value.payload.events).map(asRecord).filter((e): e is JsonRecord => !!e)
         .flatMap(event => normalizeKalshiEvent({ event, milestones: page.value.payload.milestones }, "Sports")) : []);
     }
-    const output = contracts.filter(c => isMoneyline(c) && (mode !== "live" || ["live", "in_progress"].includes(gameTiming(c))))
+    const output = contracts.filter(c => (includeOtherMarkets || isMoneyline(c)) && (mode !== "live" || ["live", "in_progress"].includes(gameTiming(c))))
       .sort((a, b) => Number(["live", "in_progress"].includes(gameTiming(b))) - Number(["live", "in_progress"].includes(gameTiming(a))));
     return remember(key, output, 30_000);
   })();
@@ -1664,7 +1672,7 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
       if (format === "json") {
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}.json"`);
-        res.status(200).send(JSON.stringify({ metadata: { source: dataset.source, mode: dataset.mode, frequency: dataset.frequency, target: dataset.target, history_phase: dataset.history_phase, history_lookback_minutes: dataset.history_lookback_minutes, validation: dataset.validation }, rows: dataset.rows }, null, 2));
+        res.status(200).send(JSON.stringify({ metadata: { source: dataset.source, mode: dataset.mode, frequency: dataset.frequency, target: dataset.target, history_phase: dataset.history_phase, history_phase_policy: dataset.history_phase_policy, history_phase_by_contract: dataset.history_phase_by_contract, history_lookback_minutes: dataset.history_lookback_minutes, validation: dataset.validation }, rows: dataset.rows }, null, 2));
         return;
       }
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
