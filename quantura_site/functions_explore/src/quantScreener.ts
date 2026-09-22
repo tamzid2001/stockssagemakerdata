@@ -24,7 +24,7 @@ export type QuantScreenerDataset = {
 };
 
 export type QuantScreenerQuery = {
-  signal?: "all" | "buy" | "sell" | "neutral" | "unavailable" | "cutoff_buy";
+  signal?: "all" | "buy" | "cutoff_buy";
   signalChanged?: boolean;
   quantileRules?: Array<{ quantile: string; statistic: "min" | "max" | "avg"; operator: "gt" | "gte" | "lt" | "lte"; percent: number }>;
   search: string;
@@ -98,7 +98,7 @@ function normalizeEnum<T extends string>(value: unknown, allowed: readonly T[], 
 export function parseQuantScreenerQuery(raw: Record<string, unknown>): { query: QuantScreenerQuery; errors: string[] } {
   const errors: string[] = [];
   const signal = firstValue(raw.signal).toLowerCase();
-  if (signal && !["all", "buy", "sell", "neutral", "unavailable", "cutoff_buy", "1", "true", "yes", "active"].includes(signal)) errors.push("Invalid signal filter.");
+  if (signal && !["all", "buy", "cutoff_buy", "1", "true", "yes", "active"].includes(signal)) errors.push("Invalid signal filter.");
   let quantileRules: NonNullable<QuantScreenerQuery["quantileRules"]> = [];
   if (raw.quantileRules) {
     try {
@@ -146,7 +146,7 @@ export function parseQuantScreenerQuery(raw: Record<string, unknown>): { query: 
 
   return {
     query: {
-      signal: ["buy", "sell", "neutral", "unavailable", "cutoff_buy"].includes(signal) ? signal as QuantScreenerQuery["signal"] : "all",
+      signal: ["buy", "cutoff_buy"].includes(signal) ? "buy" : "all",
       signalChanged: ["true", "1"].includes(firstValue(raw.signalChanged)),
       quantileRules,
       search,
@@ -350,13 +350,14 @@ export async function loadPublishedScreenerCsv(owner: string, repo: string): Pro
 /** Export the same filtered quote/signal snapshot, with formula-safe text fields. */
 export function screenerRowsCsv(rows: QuantScreenerRow[]): string {
   const levels=["p01","p10","p25","p50","p75","p90","p99"];
-  const keys=["ticker","company_name","actual_price","actual_price_timestamp","quote_source","quote_session","signal","forecast_comparison_date","cutoff_p99_signal","cutoff_close","cutoff_timestamp","first_predicted_p99","saved_closing_signal","saved_closing_date","previous_signal","previous_signal_date",...levels,...levels.flatMap(q=>["min","max","avg"].map(s=>`${q}_${s}`)),"last_forecast_update","forecast_engine","split_status"];
+  const keys=["ticker","company_name","actual_price","actual_price_timestamp","quote_source","quote_session","signal","forecast_comparison_date","cutoff_p99_signal","cutoff_close","cutoff_timestamp","first_predicted_p99","buy_price_target","buy_target_date","last_buy_date","last_buy_close","last_buy_target","saved_closing_signal","saved_closing_date","previous_signal","previous_signal_date",...levels,...levels.flatMap(q=>["min","max","avg"].map(s=>`${q}_${s}`)),"last_forecast_update","forecast_engine","split_status"];
   const cell=(value:unknown)=>{let text=String(value??"");if(typeof value!=="number" && /^[\s]*[=+@-]/.test(text))text=`'${text}`;return `"${text.replace(/"/g,'""')}"`;};
   return [keys.join(","),...rows.map(row=>{
     const closing=row.closing_signal as Record<string,unknown>|undefined;
     const previous=row.last_non_neutral_signal as Record<string,unknown>|undefined;
     const cutoff=row.cutoff_p99_signal as Record<string,unknown>|null;
-    const values:Record<string,unknown>={...row,cutoff_p99_signal:cutoff?.value,cutoff_close:cutoff?.price,cutoff_timestamp:cutoff?.quote_timestamp,first_predicted_p99:cutoff?.p99,saved_closing_signal:closing?.value,saved_closing_date:closing?.forecast_date,previous_signal:previous?.value,previous_signal_date:previous?.forecast_date};
+    const buy=row.last_buy_signal as Record<string,unknown>|undefined;
+    const values:Record<string,unknown>={...row,last_buy_date:buy?.input_date,last_buy_close:buy?.price,last_buy_target:buy?.price_target,cutoff_p99_signal:cutoff?.value,cutoff_close:cutoff?.price,cutoff_timestamp:cutoff?.quote_timestamp,first_predicted_p99:cutoff?.p99,saved_closing_signal:closing?.value,saved_closing_date:closing?.forecast_date,previous_signal:previous?.value,previous_signal_date:previous?.forecast_date};
     for(const q of levels)for(const stat of ["min","max","avg"])values[`${q}_${stat}`]=(row.quantile_stats as Record<string,Record<string,unknown>>|undefined)?.[q]?.[stat];
     return keys.map(k=>cell(values[k])).join(",");
   })].join("\r\n")+"\r\n";

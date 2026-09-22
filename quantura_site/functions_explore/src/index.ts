@@ -659,7 +659,7 @@ const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
 registerMarketDataRoutes(ROUTES);
-registerMarketSearchRoutes(ROUTES);
+registerMarketSearchRoutes(ROUTES, { db });
 registerMarketResearchWatchdog(ROUTES);
 registerPolymarketMlbRoutes(ROUTES);
 registerPredictionMarketDataRoutes(ROUTES);
@@ -8371,7 +8371,7 @@ ROUTES.get("/screener/data", async (req, res) => {
     const dataset = perps ? await kalshiPerps.screener() : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
     const current = perps ? {items:dataset.items,warnings:dataset.manifest.warnings} : await screenerMarketService.current(dataset);
     const page = filterSortPaginateRows(current.items, parsed.query);
-    page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...row,forecast_view_url:perps ? row.forecast_view_url : row.forecast_engine==="quantura_weekly_ensemble_v1"?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
+    page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...row,forecast_view_url:perps ? row.forecast_view_url : ["quantura_weekly_ensemble_v1","quantura_weekly_ensemble_v2"].includes(String(row.forecast_engine))?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=30");
     res.status(200).json({
       ok: true,
@@ -8384,7 +8384,7 @@ ROUTES.get("/screener/data", async (req, res) => {
       dataSource: perps ? "kalshi_perps" : "validated_github_release",
       warnings: current.warnings,
       schemaVersion: dataset.schema_version,
-      signalPolicy: perps ? "Kalshi reference prices normalized to USD per underlying unit; normalized completed trade close fallback. Forecasts are on demand; no scheduled quantile signals or closing-session alerts." : "Latest completed minute close (including extended hours), historical-close fallback. Before the first forecast session, compare with its first row. Saved closing signals are separate.",
+      signalPolicy: perps ? "Kalshi reference prices normalized to USD per underlying unit; normalized completed trade close fallback. Forecasts are on demand; no scheduled quantile signals or closing-session alerts." : "Latest completed daily input close above first future P99 is Buy. Target is final P99 across seven trading sessions. Equal central weights across five models; Toto 4M. No intraday screener tracking.",
     });
   } catch (error: any) {
     const detail = sanitizeText(error?.message || error, 120);

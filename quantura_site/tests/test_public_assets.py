@@ -166,16 +166,9 @@ def test_data_integration_surfaces_are_present():
     dashboard = (PAGES / "dashboard.html").read_text()
     client = (PUBLIC / "data-integrations.js").read_text()
     for marker in [
-        'id="alpaca-history-form"',
-        'id="alpaca-options-form"',
-        'id="alpaca-option-history-form"',
-        'id="prediction-market-form"',
-        'value="polymarket_us" checked',
-        'value="kalshi"',
-        'id="pm-market-list"',
-        'id="pm-canvas-options"',
-        'id="pm-preview-table"',
-        'id="pm-download-csv"',
+        'id="q-download-form"', 'id="qd-kind"', 'id="qd-options"',
+        'id="qd-option-chain"', 'id="qd-basket"', 'id="qd-layout"',
+        'id="qd-preview-table"', 'id="qd-csv"', 'id="qd-json"',
     ]:
         assert marker in forecasting
     assert 'id="aws-integration-form"' not in dashboard
@@ -197,10 +190,10 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
 
     for text in [
         "<title>Quantura Forecasting | Cross-Asset Forecast Intelligence</title>",
-        "Prediction Market Historical Data",
-        "Raw provider data",
-        "Normalized data",
-        "SageMaker Canvas ready",
+        "Q Download",
+        "Provider fields",
+        "Normalized",
+        "SageMaker Canvas",
         "Pregame only",
         "Missing intervals",
     ]:
@@ -354,7 +347,10 @@ def test_options_expirations_auto_load_and_contract_rows_are_accessible():
     assert 'setAttribute("aria-selected", "true")' in client
     assert 'event.key !== "Enter" && event.key !== " "' in client
     assert ">Select</th>" not in forecasting
-    assert "Refresh expirations" in forecasting
+    assert 'id="qd-expiration"' in forecasting
+    unified = (PUBLIC / "q-download.js").read_text()
+    assert "loadExpirations" in unified
+    assert 'data-option=' in unified
     assert "Load expirations" not in forecasting
 
 
@@ -409,16 +405,16 @@ def test_foundry_is_archived_in_favor_of_direct_csv_forecasting():
 
 def test_historical_data_supports_alpaca_yahoo_and_no_start_date():
     forecasting = (PAGES / "forecasting.html").read_text()
-    client = (PUBLIC / "data-integrations.js").read_text()
-    assert 'id="market-history-source"' in forecasting
-    assert 'value="auto" selected>Automatic — Alpaca, then Yahoo Finance' in forecasting
-    assert 'value="alpaca">Alpaca' in forecasting
-    assert 'value="yahoo">Yahoo Finance' in forecasting
-    assert 'id="options-market-source"' in forecasting
-    assert 'id="alpaca-start"' not in forecasting
-    assert 'const source = byId("market-history-source")?.value || "auto"' in client
-    assert 'value="kalshi_perps">Kalshi Perpetuals · underlying spot scale' in forecasting
-    assert 'body.source === "kalshi_perps" ? "/api/market-data/perps/history" : "/api/market-data/stocks/history"' in client
+    client = (PUBLIC / "q-market.js").read_text()
+    assert 'id="market-search-source"' in forecasting
+    assert 'type="hidden" value="auto"' in forecasting
+    assert 'id="qd-range"' in forecasting
+    assert 'id="qd-kind"' in forecasting
+    assert 'id="market-history-source"' not in forecasting
+    assert 'source:"auto"' in client
+    assert '"/api/market-data/perps/history"' in client
+    assert '"/api/market-data/stocks/history"' in client
+    assert '"/api/market-data/options/history"' in client
 
 
 def test_notifications_ui_is_archived_without_deleting_delivery_implementation():

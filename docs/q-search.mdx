@@ -1,0 +1,25 @@
+---
+title: "Q Search"
+description: "One Auto search for stocks, perpetuals, events and exact contracts."
+---
+
+Search a ticker, company, team, prop or Polymarket US/Kalshi link.
+Results show provider, exchange/event and outcome. **Source stays Auto**.
+Selecting never runs a forecast or places an order.
+
+Open **All event markets** for moneylines, props, totals and spreads.
+Follow **Load more** and related branches. Soccer YES/NO sides remain distinct.
+Coverage is provider-limited, not an exhaustive global index.
+
+Jev may rank verified candidates on explicit search. It cannot invent markets or
+select a side. Timeout or uncertain answers keep deterministic results.
+
+```bash
+curl 'https://quantura.studio/api/market-search?q=AAPL&source=auto'
+curl 'https://quantura.studio/api/market-search/event?source=kalshi&event_id=YOUR_EVENT_TICKER'
+```
+
+Pass `next_cursor` unchanged for the same event. For Polymarket US use
+`event_slug` as `event_id`. Public discovery is rate-limited.
+Choose **Forecast**, **Download** or **Add to export**.
+See [Q Download](/docs/q-download) and [Q Forecast](/docs/ensemble-api).

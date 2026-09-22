@@ -2957,10 +2957,11 @@
         };
 
 		    const setActive = (target, { pushPath = true } = {}) => {
-		      const requested = String(target || "").trim();
+		      const requested = normalizePanelName(target);
           const next = panelNames.has(requested) ? requested : String(router?.defaultPanel || buttons[0]?.dataset?.panelTarget || "").trim();
 		      if (!next) return;
 		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
+          window.dispatchEvent(new CustomEvent("quantura:panel-changed", {detail:{panel:next}}));
           const marketSelector = document.querySelector(".market-search-workspace");
           if (marketSelector) marketSelector.hidden = ["autopilot", "foundry"].includes(next);
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
@@ -9383,19 +9384,18 @@
       panelToPath: {
         forecast: "/forecasting",
         autopilot: "/autopilot",
-        "sports-autopilot": "/sports-forecasting",
-        news: "/historical-data",
-        options: "/options",
+        download: "/historical-data",
         screener: "/forecasting",
       },
       pathAliases: {
         "/autopilot": "autopilot",
         "/uploads": "autopilot",
         "/dashboard/uploads": "autopilot",
-        "/sports-forecasting": "sports-autopilot",
+        "/sports-forecasting": "download",
+        "/options": "download",
         "/indicators": "forecast",
-        "/news": "news",
-        "/historical-prices": "news",
+        "/news": "download",
+        "/historical-prices": "download",
         "/trending": "forecast",
       },
     },
@@ -9420,6 +9420,7 @@
 
   const normalizePanelName = (value) => {
     const panel = String(value || "").trim();
+    if (["sports-autopilot", "news", "options", "download"].includes(panel)) return "download";
     if (["autopilot", "notifications", "pricing"].includes(panel)) return "forecast";
     if (panel === "indicators") return "forecast";
     if (panel === "ticker-query") return "forecast";
@@ -15352,14 +15353,14 @@
     window.addEventListener("online", resumeQuoteOverlay);
     window.addEventListener("pageshow", resumeQuoteOverlay);
     window.addEventListener("quantura:market-selected", (event) => {
-      if (event.detail?.intent !== "forecast") return;
+      if (!event.detail?.resource) return;
       const row = event.detail.resource;
       if (!row?.contract_id) {
         if (row?.symbol) {
           ui.ensembleSourceType.value = row.source === "kalshi_perps" ? "kalshi_perp" : "ticker";
           ui.ensembleTicker.value = row.symbol;
           const provider = document.getElementById("ensemble-provider");
-          if (provider) provider.value = ["alpaca", "yahoo"].includes(row.source) ? row.source : "auto";
+          if (provider) provider.value = "auto";
           syncEnsembleSourceFields();
         }
         return;

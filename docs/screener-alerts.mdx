@@ -1,74 +1,49 @@
 ---
-title: 'Weekly Screener and Daily Filter Alerts'
-description: 'Seven-session ensemble forecasts, closing signals, saved filters and optional daily email.'
+title: "Q Screener and Daily Alerts"
+description: "Daily-close Buy signals, seven-session forecasts and saved filters."
 ---
 
-## Weekly methodology
+## Daily scan
 
-The pipeline runs **daily after the market closes** (22:15 UTC on weekdays).
-“Weekly” describes the forecast horizon, not a once-a-week schedule.
-It withholds one completed NYSE session and forecasts the next
-**seven actual exchange sessions**. Prophet, Toto 4M, Granite, Chronos-2 and
-TimesFM each receive a 20% central weight. Tail weights are renormalized across
-capable models. There is no synthetic fallback. The prior validated scan remains
-published until the new scan passes coverage. The website identifies the actual
-published engine, including older scans during validation.
+A scan is scheduled after each NYSE close (normally 4 pm New York).
+The calendar gate handles DST, holidays and early closes. GitHub scheduling
+and inference take time; publication follows coverage validation.
 
-Prices use a split-adjusted basis. Later splits invalidate current comparisons
-until refreshed. Current buy/sell signals mean strictly below P10 / above P90;
-equality is neutral. The latest completed minute may include extended hours.
-Historical-close fallback and comparison dates are labeled. Only the actual
-exchange closing minute is saved as the closing signal, respecting early closes
-and holidays. Previous non-neutral signals remain separate.
+The latest completed daily close is included—no withheld session or minute
+tracking. Seven future trading sessions use Prophet, Toto 4M, Granite, Chronos-2
+and TimesFM, each with 20% central weight. Unsupported tails are reweighted.
+Quantiles: P01/P10/P25/P50/P75/P90/P99. No fabricated fallback.
 
-**Buy · input close above first P99** is a separate, immutable-input rule:
-the last close used to produce that forecast must be strictly greater than
-P99 on its first predicted row. Equality is not a buy. The badge shows both
-values and comparison dates; it never substitutes a live/after-hours quote or
-the average P99. Missing input/P99 or an invalidated split basis withholds the
-signal. No Sell-below-P01 rule is added.
+## Buy rule
 
-Select this rule with the signal filter (`signal=cutoff_buy`). Above/below P01
-and P99 position filters are also available; those compare the current quote
-with the displayed row and are distinct from the frozen input-close buy rule.
-CSV exports retain the cutoff signal, cutoff close/time and first predicted P99.
+**Buy = latest daily input close > first future P99.** Equality is not Buy.
+**Target = final forecast row's P99**, not average or maximum P99.
 
-## Save filters and receive matches
+The only signal filter is Buy (`signal=buy`). Each ticker remembers its last Buy.
+Older-policy scans stay readable without new Buy labels. Prices are split-adjusted.
+Homepage “Quantura approved Buy signals” means this rule passed—not investment
+advice or a guaranteed gain.
 
-Use any combination of minimum, maximum or average P01/P10/P25/P50/P75/P90/P99
-across the seven sessions. Rules combine with AND. “Average P50 > 10% above price”
-means `(average P50 - price) / price * 100 > 10`.
+## Filters and alerts
 
-Open **Save filters & alerts**, sign in, and name the current filters. Optionally
-enable daily email to your verified account address. Maximum ten filters.
-Identical filters update their existing entry. Remove an entry to stop alerts.
-Matches use finalized closing prices, not after-hours provisional quotes.
-The inbox receives matches once per trading day; email-enabled matches are
-combined into one email per account/day. Delivery limits apply. No location
-permission is required. Provider acceptance does not prove inbox delivery.
+Combine min/max/average quantiles with AND rules.
+“Average P50 > 10% above price” means `100 × (average P50 - daily close) / daily close > 10`.
+
+**Save filters & alerts** requires sign-in; maximum ten filters.
+Email is opt-in to your verified address. Remove a filter to stop alerts.
+Matching rows enter the inbox once per input trading date, with one combined
+email subject to delivery limits. No location is needed.
 
 ```bash
-curl https://quantura.studio/api/v1/me/screener-alerts \
-  -H 'Authorization: Bearer YOUR_API_KEY'
-
 curl -X POST https://quantura.studio/api/v1/me/screener-alerts \
   -H 'Authorization: Bearer YOUR_API_KEY' -H 'Content-Type: application/json' \
-  -d '{"name":"P50 opportunity","email":false,"filters":{"signal":"buy","quantileRules":[{"quantile":"p50","statistic":"avg","operator":"gt","percent":10}]}}'
+  -d '{"name":"Daily Buy","email":false,"filters":{"signal":"buy"}}'
 ```
 
-Reading requires `alerts:read`; saving/removing requires `alerts:write`.
-Workspace Viewer status does not prevent managing personal saved filters.
+Reading needs `alerts:read`; saving/removing needs `alerts:write`.
+**View forecast** opens the published snapshot without inference.
+**Save to profile** preserves a private copy; workspace permissions apply.
+Old public scan links expire when replaced; saved copies remain.
 
-## Open the published forecast
-
-**View forecast** opens the exact published ticker forecast in Q Forecast without
-new inference. **Save to profile** creates an immutable private copy including
-history and model provenance; destination workspace write permission is required.
-Old public scan links expire after publication replacement; saved private copies remain.
-
-## Delivery operations
-
-Brevo sends through a server-only Fixie proxy, with no direct-IP fallback.
-The free Fixie plan allows 500 requests/month. Quantura budgets at most 450 per
-billing window for all notification email and deduplicates sends durably.
-Unknown delivery outcomes require reconciliation, not automatic retries.
+Brevo uses the approved Fixie proxy. Sends are durably deduplicated and subject
+to the shared allowance; provider acceptance does not prove inbox delivery.

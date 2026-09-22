@@ -5,18 +5,18 @@ import {registerScreenerAlertRoutes} from "./screenerAlerts";
 const date=new Date().toISOString().slice(0,10);
 const row={ticker:"TEST",actual_price:100,actual_price_timestamp:date+"T00:00:00Z",last_forecast_update:date+"T00:00:00Z",forecast_rows:[{date,timestamp:date+"T00:00:00Z",session_close:date+"T20:00:00Z",p10:90,p50:100,p90:110}]};
 const dataset:any={scan_id:"a",generated_at:new Date().toISOString(),items:[row]};
-test("shared quote hydration deduplicates same-scan requests and never returns another scan",async()=>{
+test("daily snapshot hydration never requests minute quotes and never returns another scan",async()=>{
   let calls=0;const provider:any={getLatestStockPrices:async()=>{calls++;return new Map();},getStockSplits:async()=>[]};
   const store:any={read:async()=>new Map(),save:async()=>0};const service=new ScreenerMarketService(provider,store);
-  await Promise.all([service.current(dataset),service.current(dataset)]);assert.equal(calls,1);
-  const next=await service.current({...dataset,scan_id:"b",items:[{...row,ticker:"OTHER"}]});assert.equal(next.items[0].ticker,"OTHER");assert.equal(calls,2);
+  await Promise.all([service.current(dataset),service.current(dataset)]);assert.equal(calls,0);
+  const next=await service.current({...dataset,scan_id:"b",items:[{...row,ticker:"OTHER"}]});assert.equal(next.items[0].ticker,"OTHER");assert.equal(calls,0);
 });
 test("unavailable split check withholds newer cross-session prices",async()=>{
   const yesterday=new Date(Date.now()-2*86400000).toISOString().slice(0,10);
   const provider:any={getLatestStockPrices:async()=>new Map([["TEST",{price:50,timestamp:new Date(Date.now()-120000).toISOString()}]]),getStockSplits:async()=>{throw new Error("unavailable");}};
   const service=new ScreenerMarketService(provider,{read:async()=>new Map(),save:async()=>0});
   const output=await service.current({...dataset,items:[{...row,actual_price_timestamp:yesterday+"T00:00:00Z",last_forecast_update:yesterday+"T00:00:00Z"}]});
-  assert.equal(output.items[0].actual_price,100);assert.equal(output.warnings.length,1);
+  assert.equal(output.items[0].actual_price,100);assert.equal(output.items[0].signal,"none");
 });
 function harness(){
   const data=new Map<string,any>();const handlers=new Map<string,any>();

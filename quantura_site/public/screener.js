@@ -153,7 +153,7 @@
       })),
       sort: refs.sort.value || "ticker",
       direction: refs.direction.value === "desc" ? "desc" : "asc",
-      signalChanged: Boolean(refs.signalChanged.checked),
+      signalChanged: false,
       positions: checkedPositions(),
     };
   }
@@ -183,7 +183,7 @@
       source: ["stocks","kalshi_perps"],
       universe: ["all", "sp500", "nasdaq", "etf"],
       marketCap: ["all", "mega", "large", "mid", "small", "micro"],
-      signal: ["all", "buy", "sell", "neutral", "unavailable", "cutoff_buy"],
+      signal: ["all", "buy", "cutoff_buy"],
       statistic: ["row", "min", "max", "avg"],
       direction: ["asc", "desc"],
     };
@@ -195,7 +195,8 @@
     });
     const sort = params.get("sort");
     if (Array.from(refs.sort.options).some((option) => option.value === sort)) state.sort = sort;
-    state.signalChanged = params.get("signalChanged") === "true";
+    state.signalChanged = false;
+    if (state.signal === "cutoff_buy") state.signal = "buy";
     try {
       const rules=JSON.parse(params.get("quantileRules") || "[]");
       if(Array.isArray(rules)) state.quantileRules=rules.slice(0,12).filter(rule => rule && ["p01","p10","p25","p50","p75","p90","p99"].includes(rule.quantile) && ["min","max","avg"].includes(rule.statistic) && ["gt","gte","lt","lte"].includes(rule.operator) && Number.isFinite(rule.percent));
@@ -260,18 +261,14 @@
 
   function signalView(row) {
     const signal = row.current_signal;
-    const cutoff = row.cutoff_p99_signal;
-    const cutoffView = cutoff?.value === "buy" ? `<div class="qs-signal-stack"><span class="qs-badge qs-position-below">Buy · cutoff above P99</span><small>Input close ${escapeHtml(formatNumber(cutoff.price))} &gt; first P99 ${escapeHtml(formatNumber(cutoff.p99))}</small><small>${escapeHtml(formatDate(cutoff.quote_timestamp,false))} → ${escapeHtml(formatDate(cutoff.forecast_date,false))}</small></div>` : "";
-    if (!signal) return cutoffView || `<span class="qs-muted-cell">Unavailable</span><small>${escapeHtml(row.signal_status || "No comparable forecast row")}</small>`;
-    const cls = signal.value === "buy" ? "qs-position-below" : signal.value === "sell" ? "qs-position-above" : "";
-    return `${cutoffView}<div class="qs-signal-stack"><span class="qs-badge ${cls}">${escapeHtml(signal.value)} · current P10/P90</span><small>Forecast ${escapeHtml(formatDate(signal.forecast_date,false))}</small>${row.signal_comparison === "before_first_forecast_session" ? '<small>First forecast session not started</small>' : ""}</div>`;
+    if (signal?.value !== "buy") return '<span class="qs-muted-cell">—</span>' + (row.signal_status === "daily_scan_requires_refresh" ? '<small>New daily scan pending</small>' : '');
+    return `<div class="qs-signal-stack"><span class="qs-badge qs-position-below">Buy · close above P99</span><small>Close ${escapeHtml(formatNumber(signal.price))} &gt; first P99 ${escapeHtml(formatNumber(signal.p99))}</small><small>Target ${escapeHtml(formatNumber(signal.price_target))} · ${escapeHtml(formatDate(signal.target_date,false))}</small></div>`;
   }
 
   function savedSignalView(row) {
-    const last=row.last_non_neutral_signal;
+    const last=row.last_buy_signal;
     if(!last)return '<span class="qs-muted-cell">None saved yet</span>';
-    const previous=row.previous_non_neutral_signal;
-    return `<div class="qs-signal-stack"><span class="qs-badge">${escapeHtml(last.value)}</span><small>${escapeHtml(formatDate(last.forecast_date,false))} close</small>${previous?`<small>Prior: ${escapeHtml(previous.value)} · ${escapeHtml(formatDate(previous.forecast_date,false))}</small>`:""}</div>`;
+    return `<div class="qs-signal-stack"><span class="qs-badge">Buy · ${escapeHtml(formatDate(last.input_date,false))}</span><small>Close ${escapeHtml(formatNumber(last.price))} · target ${escapeHtml(formatNumber(last.price_target))}</small></div>`;
   }
 
   function renderRules(rules) {
@@ -301,8 +298,8 @@
       <td data-label="Position" class="qs-mobile-detail"><span class="${position[1]}">${escapeHtml(position[0])}</span></td>
       <td data-label="Distance P10 / P50 / P90" class="qs-mobile-detail"><div class="qs-distance-stack">${distanceView(row.distance_p10_pct)}${distanceView(row.distance_p50_pct)}${distanceView(row.distance_p90_pct)}</div></td>
       <td data-label="Market cap" class="qs-mono qs-mobile-detail">${escapeHtml(formatCap(row.market_cap, row.is_etf))}</td>
-      <td data-label="Current signal" class="qs-mobile-core">${signalView(row)}</td>
-      <td data-label="Last saved buy/sell" class="qs-mobile-detail">${savedSignalView(row)}</td>
+      <td data-label="Buy signal" class="qs-mobile-core">${signalView(row)}</td>
+      <td data-label="Last Buy" class="qs-mobile-detail">${savedSignalView(row)}</td>
       <td data-label="Updated" class="qs-mobile-detail" title="Forecast horizon ends ${escapeHtml(formatDate(row.forecast_date, false))}">${escapeHtml(formatDate(row.last_forecast_update, true))}</td>
     </tr>`;
   }
@@ -344,7 +341,7 @@
     if(perps)refs.metricProcessed.textContent=`${manifest.successfully_processed} spot references available · ${manifest.failed} unavailable`;
     refs.freshness.textContent = perps
       ? `Scan ${formatDate(payload.generatedAt, true)} · Kalshi reference prices normalized by contract exposure, with normalized completed trades as fallback. Quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`
-      : `Scan ${formatDate(payload.generatedAt, true)} · latest completed minute close or historical fallback · quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`;
+      : `Scan ${formatDate(payload.generatedAt, true)} · latest completed daily close · seven future trading sessions · no intraday tracking. ${(payload.warnings || []).join(" ")}`;
     refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} ${perps ? "markets" : "securities"} match the active research filters.`;
     current.page = Number(payload.page || current.page || 1);
     refs.pageLabel.textContent = `Page ${current.page.toLocaleString()} of ${Number(payload.pageCount || 1).toLocaleString()}`;

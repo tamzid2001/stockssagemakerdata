@@ -35,59 +35,27 @@ export class ScreenerSignalStore {
 export class ScreenerMarketService {
   private cached?: {until:number;scan:string;items:QuantScreenerRow[];warnings:string[]};
   private loading?: {scan:string;promise:Promise<{items:QuantScreenerRow[];warnings:string[]}>};
-  private quotes = new Map<string,ScreenerQuote>();
-  private splits?: {until:number;start:string;values:Array<{symbol:string;ex_date:string}>};
-  constructor(private alpaca: Pick<AlpacaClient,"getLatestStockPrices"|"getStockMinuteCloses"|"getStockSplits">, private store: Pick<ScreenerSignalStore,"read"|"save">, private feed="iex") {}
-  async current(dataset: QuantScreenerDataset): Promise<{items:QuantScreenerRow[];warnings:string[]}> {
+  // Keep constructor compatibility; publication snapshots need no minute-price calls.
+  constructor(_alpaca: Pick<AlpacaClient,"getLatestStockPrices"|"getStockMinuteCloses"|"getStockSplits">, private store: Pick<ScreenerSignalStore,"read"|"save">, _feed="iex") {}
+  async current(dataset:QuantScreenerDataset):Promise<{items:QuantScreenerRow[];warnings:string[]}> {
     if(this.cached && this.cached.until>Date.now() && this.cached.scan===dataset.scan_id)return this.cached;
     if(this.loading?.scan===dataset.scan_id)return this.loading.promise;
     const promise=this.refresh(dataset).finally(()=>{if(this.loading?.promise===promise)this.loading=undefined;});
     this.loading={scan:dataset.scan_id,promise};return promise;
   }
-  private async refresh(dataset: QuantScreenerDataset): Promise<{items:QuantScreenerRow[];warnings:string[]}> {
-    const now=Date.now();const warnings:string[]=[];
-    // Older publications remain readable, but never masquerade as a weekly ensemble.
-    const symbols=dataset.items.filter(r=>forecastRows(r).length).map(r=>r.ticker);
-    try {
-      if(symbols.length)for(const [ticker,q] of await this.alpaca.getLatestStockPrices(symbols,this.feed))
-        if(Date.parse(q.timestamp)+60_000<=now && (!this.quotes.has(ticker)||Date.parse(q.timestamp)>=Date.parse(this.quotes.get(ticker)!.timestamp)))
-          this.quotes.set(ticker,{...q,source:`alpaca_${this.feed}_minute_close`});
-    } catch {warnings.push("Latest minute bars unavailable; retained completed quote or historical close is shown with its timestamp.");}
-    let states=new Map<string,SavedScreenerSignal>();
-    try {states=await this.store.read();}catch{warnings.push("Saved closing signals temporarily unavailable.");}
-    let actions:Array<{symbol:string;ex_date:string}>|undefined;
-    // Corporate-action process dates can precede the split's effective date.
-    const start=new Date(Date.parse(dataset.generated_at)-90*86400_000).toISOString().slice(0,10);
-    if(symbols.length)try {
-      if(!this.splits || this.splits.until<now || this.splits.start!==start)this.splits={until:now+1_800_000,start,values:await this.alpaca.getStockSplits(start,newYorkDate(new Date(now).toISOString()))};
-      actions=this.splits.values;
-    }catch {warnings.push("Split check unavailable; newer cross-session quotes are withheld until their price basis can be checked.");}
-    const items=dataset.items.map(row=>{
-      let quote=this.quotes.get(row.ticker);
-      const basis=String(row.price_basis_date || row.last_forecast_update || dataset.generated_at).slice(0,10);
-      const changed=actions?.some(a=>a.symbol===row.ticker && a.ex_date>basis && a.ex_date<=newYorkDate(new Date(now).toISOString()));
-      // Keep the safe historical close if a newer day's split status is unknown.
-      if(!actions && quote && newYorkDate(quote.timestamp)>basis)quote=undefined;
-      return decorateScreenerRow({...row,corporate_action_check:actions?"checked":"unavailable",...(changed?{split_status:"requires_refresh"}:{} )},quote,states.get(row.ticker),now);
-    });
-    // Keep the cache bounded by the current published universe.
-    const active=new Set(symbols);for(const key of this.quotes.keys())if(!active.has(key))this.quotes.delete(key);
-    this.cached={until:now+60_000,scan:dataset.scan_id,items,warnings};return this.cached;
+  private async refresh(dataset:QuantScreenerDataset) {
+    let states=new Map<string,SavedScreenerSignal>();const warnings:string[]=[];
+    try{states=await this.store.read();}catch{warnings.push("Saved Buy history is temporarily unavailable.");}
+    const items=dataset.items.map(row=>decorateScreenerRow(row,undefined,states.get(row.ticker)));
+    if(items.some(r=>r.status==="success" && r.signal_status==="daily_scan_requires_refresh"))warnings.push("The previous publication remains readable; Buy signals require a completed latest-close five-model daily scan.");
+    this.cached={until:Date.now()+300_000,scan:dataset.scan_id,items,warnings};return this.cached;
   }
-  async close(dataset: QuantScreenerDataset, now=Date.now()): Promise<{saved:number;unavailable:number}> {
-    const current=await this.current(dataset);const states=await this.store.read();
-    const groups=new Map<string,QuantScreenerRow[]>();
-    for(const row of current.items)for(const session of forecastRows(row)) {
-      if(row.corporate_action_check!=="checked")continue;
-      const end=Date.parse(session.session_close);
-      if(end<=now && end>now-86400_000 && (!states.get(row.ticker)?.closing_signal || states.get(row.ticker)!.closing_signal!.forecast_date<session.date)) {
-        if(!groups.has(session.session_close))groups.set(session.session_close,[]);groups.get(session.session_close)!.push(row);
-      }
-    }
+  async close(dataset:QuantScreenerDataset,now=Date.now()):Promise<{saved:number;unavailable:number}> {
     const signals=new Map<string,ScreenerSignal>();let unavailable=0;
-    for(const [end,rows] of groups) {
-      const quotes=await this.alpaca.getStockMinuteCloses(rows.map(r=>r.ticker),new Date(Date.parse(end)-60_000).toISOString(),this.feed);
-      for(const row of rows){const quote=quotes.get(row.ticker);const signal=quote ? finalizedClosingSignal(row,{...quote,source:`alpaca_${this.feed}_minute_close`},now):null;if(signal)signals.set(row.ticker,signal);else unavailable++;}
+    for(const row of dataset.items){
+      const decorated=decorateScreenerRow(row,undefined,{},now);
+      const signal=decorated.cutoff_p99_signal as ScreenerSignal|null;
+      if(signal)signals.set(row.ticker,signal);else unavailable++;
     }
     const saved=await this.store.save(signals);this.cached=undefined;return {saved,unavailable};
   }

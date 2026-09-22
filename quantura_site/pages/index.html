@@ -46,6 +46,8 @@
 	    <script defer src="/app.js?v=20260405a"></script>
     <script defer src="/forecasts.js?v=20260908a"></script>
     <script defer src="/marketing-carousel.js"></script>
+    <link rel="stylesheet" href="/screener-buy-preview.css" />
+    <script defer src="/screener-buy-preview.js"></script>
 
     <script type="application/ld+json">
       {
@@ -177,6 +179,13 @@
               </figure>
         </div>
 		      </section>
+
+      <section id="home-buy-signals" class="section section-compact container" aria-labelledby="home-buy-title">
+        <div class="home-buy-heading"><h2 id="home-buy-title">Quantura approved Buy signals</h2><a class="cta secondary small" href="/screener?signal=buy">View Q Screener <i class="iconoir-arrow-right" aria-hidden="true"></i></a></div>
+        <p data-buy-status role="status">Loading the latest daily publication…</p>
+        <div class="home-buy-cards" data-buy-cards></div>
+        <p class="home-buy-note">Rule-based research: latest daily close &gt; first predicted P99. Target: final P99 across seven trading sessions. Five models, equal central weights; not investment advice or a guaranteed gain.</p>
+      </section>
 
       <section class="home-workflow-strip" aria-label="Explore Quantura">
         <div class="container">
