@@ -1,4 +1,5 @@
-import type { Router } from "express";
+import type { Request, Router } from "express";
+import { isIP } from "node:net";
 import { searchPredictionMarkets, discoverForecastMarkets, resolveMarketLink, gameTiming, PredictionMarketDataError, type PredictionMarketSource } from "./predictionMarketData";
 import { AlpacaClient } from "./alpacaClient";
 import { kalshiPerps } from "./kalshiPerps";
@@ -7,6 +8,15 @@ import { rankVerifiedCandidates } from "./qSearchRanking";
 import rateLimit from "express-rate-limit";
 
 type JsonRecord = Record<string, unknown>;
+
+/** Vercel overwrites this edge header. Never trust it on a direct/local server. */
+export function searchClientAddress(req: Pick<Request,"headers"|"ip"|"socket">, vercel = process.env.VERCEL === "1"): string {
+  if (vercel) {
+    const value=req.headers["x-vercel-forwarded-for"] || req.headers["x-forwarded-for"];
+    if (typeof value === "string" && isIP(value.trim())) return value.trim();
+  }
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
 
 export const PROVIDER_CAPABILITIES = {
   kalshi_perps: { label: "Kalshi Perpetuals", assetClasses: ["perpetual"], search: true, history: true, forecasting: ["perpetual"], granularities: ["1min","1h","1D"], redistributionStatus: "review_required" },
@@ -146,7 +156,7 @@ export function predictionResult(source: PredictionMarketSource, contract: any):
 }
 
 export function registerMarketSearchRoutes(router: Router, options: {db?:FirebaseFirestore.Firestore} = {}): void {
-  router.use("/market-search", rateLimit({windowMs:60_000,limit:60,standardHeaders:true,legacyHeaders:false,validate:{trustProxy:false},message:{ok:false,error:"search_rate_limited",message:"Please wait before searching again."}}));
+  router.use("/market-search", rateLimit({windowMs:60_000,limit:60,standardHeaders:true,legacyHeaders:false,keyGenerator:req=>searchClientAddress(req),message:{ok:false,error:"search_rate_limited",message:"Please wait before searching again."}}));
   router.get("/market-search/event", async (req,res)=>{
     try {
       const page=await eventMarketPage(String(req.query.source||""),String(req.query.event_id||""),String(req.query.cursor||""));
@@ -206,7 +216,7 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
     }
     await Promise.all(tasks);
     const results = Object.values(groups).flat();
-    const recommended = req.query.rank === "true" ? await rankVerifiedCandidates(query, results, {...options,ip:req.ip}) : null;
+    const recommended = req.query.rank === "true" ? await rankVerifiedCandidates(query, results, {...options,ip:searchClientAddress(req)}) : null;
     if (recommended) for (const rows of Object.values(groups)) rows.sort((a,b)=>Number(b.resource_id===recommended)-Number(a.resource_id===recommended));
     res.setHeader("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
     res.status(200).json({ ok: true, query, count: results.length, groups, errors, capabilities: PROVIDER_CAPABILITIES, coverage: "Bounded provider discovery, not exhaustive coverage. Paste an event link for exact lookup. Kalshi in-progress is inferred from official start time and open status, not a live score feed." });

@@ -5,7 +5,7 @@ import { eventMarketPage, contractGroup } from "./qSearchEvents";
 import { rankVerifiedCandidates } from "./qSearchRanking";
 import { JEV_MODEL, verifiedChoice } from "./jevClient";
 import { normalizePolymarketEvents } from "./predictionMarketData";
-import { registerMarketSearchRoutes } from "./marketSearch";
+import { registerMarketSearchRoutes, searchClientAddress } from "./marketSearch";
 
 const response=(body:unknown)=>new Response(JSON.stringify(body),{headers:{"Content-Type":"application/json"}});
 const pmEvent=(count:number)=>({id:"e",slug:"game",title:"Home vs Away",markets:Array.from({length:count},(_,i)=>({id:`m${i}`,slug:`game-${i}`,title:`Player ${i} total points`,sportsMarketTypeV2:i?"PLAYER_POINTS":"SPORTS_MARKET_TYPE_MONEYLINE",marketSides:[{id:`${i}-yes`,long:true,description:"Yes"},{id:`${i}-no`,long:false,description:"No"}]}))});
@@ -56,5 +56,23 @@ test("Q Search HTTP errors and capabilities expose no secrets or arbitrary sourc
   const port=(server.address() as any).port;
   try{const res=await fetch(`http://127.0.0.1:${port}/market-search/event?source=evil&event_id=../secret`);assert.equal(res.status,422);assert.equal((await res.json() as any).error,"event_query_invalid");
     const caps=await fetch(`http://127.0.0.1:${port}/market-search/capabilities`);assert.equal(caps.status,200);assert.equal(Object.keys((await caps.json() as any).providers).length,5);
+  }finally{server.close();}
+});
+test("search rate limits use Vercel's validated edge IP without globally trusting proxies",()=>{
+  const req:any={headers:{"x-vercel-forwarded-for":"203.0.113.10","x-forwarded-for":"198.51.100.4"},ip:"127.0.0.1",socket:{remoteAddress:"127.0.0.1"}};
+  assert.equal(searchClientAddress(req,true),"203.0.113.10");
+  assert.equal(searchClientAddress(req,false),"127.0.0.1");
+  for(const value of ["not-an-ip","203.0.113.1, 203.0.113.2",["203.0.113.1"]])assert.equal(searchClientAddress({...req,headers:{"x-vercel-forwarded-for":value}},true),"127.0.0.1");
+  assert.equal(searchClientAddress({...req,headers:{"x-forwarded-for":"2001:db8::1"}},true),"2001:db8::1");
+});
+test("changing untrusted forwarded headers cannot bypass the direct-server search limit",async()=>{
+  const app=express();registerMarketSearchRoutes(app);const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));
+  const port=(server.address() as any).port;
+  try{
+    for(let i=0;i<61;i++){
+      const res=await fetch(`http://127.0.0.1:${port}/market-search/capabilities`,{headers:{"X-Forwarded-For":`203.0.113.${i+1}`}});
+      assert.equal(res.status,i<60?200:429);await res.arrayBuffer();
+    }
+    assert.equal(app.get("trust proxy"),false);
   }finally{server.close();}
 });
