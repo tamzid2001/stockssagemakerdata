@@ -4,7 +4,7 @@ export function addQSearchOpenapi(document:any,origin:string):void {
   const error={description:"Invalid request or provider unavailable",content:{"application/json":{schema:{type:"object"},example:{ok:false,error:"event_query_invalid",message:"Choose a provider event and a valid continuation cursor."}}}};
   const parameter=(name:string,type="string",extra:any={})=>({name,in:"query",required:false,schema:{type,...extra}});
   const mcp=(name:string)=>({"x-mint":{mcp:{enabled:true,name}}});
-  const row={resource_type:"equity",resource_id:"yahoo:AAPL",symbol:"AAPL",name:"Apple Inc.",source:"yahoo",exchange:"NASDAQ",history_available:true,forecast_available:true};
+  const row={resource_type:"instrument",resource_id:"yahoo:AAPL",symbol:"AAPL",name:"Apple Inc.",asset_class:"equity",source:"yahoo",exchange:"NASDAQ",history_available:true,forecast_available:true};
   const add=(path:string,method:string,operation:any)=>{document.paths[path]={...document.paths[path],servers:[{url:origin+"/api"}],[method]:{tags:[method==="get"?"Q Search":"Q Download"],security:[],...operation}};};
   add("/market-search","get",{operationId:"searchQuanturaMarkets",summary:"Search stocks, perpetuals and event contracts with Auto",...mcp("quantura_search_markets"),
     description:"Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Jev optionally ranks verified candidates; it cannot invent or select a contract.",

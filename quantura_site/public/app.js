@@ -14782,14 +14782,14 @@
         }
       : {
           type: "ticker",
-          symbol: normalizeTicker(data.get("ticker") || ui.forecastTicker?.value || state.tickerContext.ticker || ""),
+          symbol: normalizeTicker(data.get("ticker") || ""),
           provider: String(data.get("provider") || "auto"),
           field: "close",
           limit: historyLimit,
           frequency: String(data.get("ticker_frequency") || "1Day"),
         };
     if (sourceType === "workspace_dataset" && !source.dataset_id) throw new Error("Enter a workspace dataset ID.");
-    if (sourceType === "ticker" && !source.symbol) throw new Error("Enter a ticker.");
+    if (sourceType === "ticker" && !source.symbol) throw new Error("Choose a market in Q Search before running a forecast.");
     const models = getEnsembleSelections();
     const enabled = Object.values(models).filter((model) => model.enabled);
     if (!enabled.length || !enabled.some((model) => Number.isFinite(model.weight) && model.weight > 0)) throw new Error("Enable at least one model with a positive weight.");
