@@ -10,7 +10,8 @@ Alternate host: `https://quantura.mintlify.app/mcp`.
 {"mcpServers":{"quantura":{"type":"http","url":"https://quantura.mintlifysite.com/mcp"}}}
 ```
 
-Mintlify supplies documentation search. Quantura adds these read-only tools:
+Mintlify supplies documentation search. Quantura's OpenAPI allowlists these
+read-only API tools:
 
 - `quantura_search_markets`
 - `quantura_resolve_market_link`
@@ -18,6 +19,10 @@ Mintlify supplies documentation search. Quantura adds these read-only tools:
 - `quantura_get_search_capabilities`
 - `quantura_get_my_access`
 - `quantura_list_workspaces`
+
+API tools require [Mintlify's Pro/Enterprise API-tool feature](https://mintlify.com/docs/ai/model-context-protocol) and a refreshed
+deployment. Check your client's tool list: if only documentation tools appear,
+use the HTTP API directly. The allowlist does not guarantee live availability.
 
 Market discovery is public and rate-limited. Account tools require a Quantura
 API key in the client's secret facility and enforce current scopes/membership.
