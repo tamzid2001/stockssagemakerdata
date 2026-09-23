@@ -1731,7 +1731,6 @@
     ensemblePresetName: document.getElementById("ensemble-preset-name"),
     ensembleSavePreset: document.getElementById("ensemble-save-preset"),
     ensembleRunButton: document.getElementById("ensemble-run-button"),
-    ensembleFindSignal: document.getElementById("ensemble-find-signal"),
     ensembleForecastStatus: document.getElementById("ensemble-forecast-status"),
     ensembleForecastResults: document.getElementById("ensemble-forecast-results"),
     ensembleResultState: document.getElementById("ensemble-result-state"),
@@ -14557,9 +14556,7 @@
       if (completed === null) ui.ensembleProgress.removeAttribute("value");
       else ui.ensembleProgress.value = completed;
     }
-    const searching = busy && ensembleUiState.busyAction === "search";
-    if (ui.ensembleRunButton) { ui.ensembleRunButton.disabled = busy; ui.ensembleRunButton.textContent = busy && !searching ? "Forecast in progress…" : "Run forecast"; }
-    if (ui.ensembleFindSignal) { ui.ensembleFindSignal.disabled = busy; ui.ensembleFindSignal.querySelector("span").textContent = searching ? "Searching recent cutoffs…" : "Find recent high / low"; }
+    if (ui.ensembleRunButton) { ui.ensembleRunButton.disabled = busy; ui.ensembleRunButton.textContent = busy ? "Forecast in progress…" : "Run forecast"; }
     if (!busy) ensembleUiState.busyAction = null;
     if (ui.ensembleRefreshLatest) ui.ensembleRefreshLatest.disabled = busy;
     if (ui.ensembleRunAgain) ui.ensembleRunAgain.disabled = busy;
@@ -14758,11 +14755,9 @@
         ? `Unsupported by the enabled weighted models: ${unsupported.map(ensembleQuantileLabel).join(", ")}.`
         : "Weights are normalized independently for each quantile. Toto and TimesFM never contribute outside P10–P90.";
       if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = ensembleUiState.busy || !normalized.length || Boolean(unsupported.length);
-      if (ui.ensembleFindSignal) ui.ensembleFindSignal.disabled = ensembleUiState.busy || !normalized.length || Boolean(unsupported.length);
     } catch (error) {
       if (ui.ensembleQuantileStatus) ui.ensembleQuantileStatus.textContent = error.message;
       if (ui.ensembleRunButton) ui.ensembleRunButton.disabled = true;
-      if (ui.ensembleFindSignal) ui.ensembleFindSignal.disabled = true;
     }
   };
 
@@ -15427,29 +15422,6 @@
         if (input) input.value = String(Number((selection.weight / total).toFixed(6)));
       });
       updateEnsembleWeightsAndSupport();
-    });
-    ui.ensembleFindSignal?.addEventListener("click", async () => {
-      if (ensembleUiState.busy) return;
-      ensembleUiState.busyAction="search";
-      setEnsembleBusy(true);
-      try {
-        await ensureSessionUser({ reason: "ensemble_forecast_requires_session", message: "Sign in to search recent forecast signals." });
-        await loadEnsembleCapabilities();
-        const configured=buildEnsembleRequest();
-        const request={...configured,prediction_length:7,quantiles:Array.from(new Set([...configured.quantiles,.99])).sort((a,b)=>a-b),analysis_mode:"recent_signal_search",search_signal_rule:"cutoff_above_p99",search_max_cutoffs:20,history_lag_minutes:0};
-        delete request.history_cutoff_at;delete request.prediction_end_at;
-        ensembleUiState.lastRequest=request;
-        setEnsembleStatus("Searching recent cutoffs, newest first → forecasting seven periods → checking last input close > first predicted P99…","working");
-        const response=await apiRequestJson("/api/v1/ensemble-forecasts",{method:"POST",body:request,headers:{"Idempotency-Key":`recent-signal-${Date.now()}-${createSecureIdChunk(12)}`}});
-        const job=response.data||{};ensembleUiState.forecastId=String(job.forecast_id||"");
-        if(!ensembleUiState.forecastId)throw new Error("Signal search did not return a forecast ID.");
-        history.replaceState({},"",`${window.location.pathname}?panel=forecast&ensembleForecastId=${encodeURIComponent(ensembleUiState.forecastId)}`);
-        if(job.status==="completed")await renderCompletedEnsemble(job);else{renderEnsembleProgress(job);await pollEnsembleForecast(ensembleUiState.forecastId,{immediate:false});}
-        logEvent("ensemble_recent_signal_search_created",{model_count:Object.values(request.models).filter(model=>model.enabled).length,max_cutoffs:request.search_max_cutoffs});
-        await fetchMyRequestsList({force:true});renderMyRequestsPanels();
-      }catch(error){
-        setEnsembleBusy(false);setEnsembleStatus(`${error.message||"Unable to search recent forecast signals."}${error.code?` (${error.code})`:""}`,"error");showToast(error.message||"Unable to search recent signals.","warn");
-      }
     });
     ui.ensembleForecastForm?.addEventListener("submit", async (event) => {
       event.preventDefault();

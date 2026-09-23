@@ -13,22 +13,20 @@ test('input-close BUY is strict, independent of observed quote/averages, no P01 
   delete job.predictions[0].quantiles['0.99'];assert.equal(controls.cutoffP99Signal(job).status,'unavailable');
   job.predictions[0].quantiles['0.99']=null;assert.equal(controls.cutoffP99Signal(job).status,'unavailable');
 });
-test('both actions disable but only the active action shows progress',()=>{
-  const dom=new JSDOM('<button id="run">Run forecast</button><button id="find"><i></i><span>Find recent high / low</span></button>',{runScripts:'outside-only'});
+test('forecast action shows a single progress label without the recent high/low action',()=>{
+  const page=fs.readFileSync(path.resolve(__dirname,'../../pages/forecasting.html'),'utf8');
+  assert.doesNotMatch(page,/ensemble-find-signal|Find recent high \/ low/);
+  const dom=new JSDOM('<button id="run">Run forecast</button>',{runScripts:'outside-only'});
   const w=dom.window;
-  w.ui={ensembleRunButton:w.document.getElementById('run'),ensembleFindSignal:w.document.getElementById('find')};w.ensembleUiState={};
+  w.ui={ensembleRunButton:w.document.getElementById('run')};w.ensembleUiState={};
   w.eval(app.slice(app.indexOf('  const setEnsembleBusy ='),app.indexOf('  const ensembleDistributionSummary ='))+'\nwindow.busy=setEnsembleBusy;');
   w.busy(true);assert.equal(w.document.body.textContent.match(/Forecast in progress/g).length,1);
-  assert.equal(w.ui.ensembleFindSignal.textContent,'Find recent high / low');assert.equal(w.ui.ensembleFindSignal.disabled,true);
-  w.busy(false);w.ensembleUiState.busyAction='search';w.busy(true);
-  assert.equal(w.ui.ensembleRunButton.textContent,'Run forecast');assert.match(w.ui.ensembleFindSignal.textContent,/Searching/);
-  w.busy(false);assert.equal(w.ui.ensembleRunButton.disabled,false);assert.equal(w.ui.ensembleFindSignal.disabled,false);assert.ok(w.ui.ensembleFindSignal.querySelector('i'));
+  assert.equal(w.ui.ensembleRunButton.disabled,true);
+  w.busy(false);assert.equal(w.ui.ensembleRunButton.disabled,false);assert.equal(w.ui.ensembleRunButton.textContent,'Run forecast');
   dom.window.close();
 });
-test('new searches request P99 and explicitly version the cutoff rule',()=>{
-  const begin=app.indexOf('    ui.ensembleFindSignal?.addEventListener');
-  const handler=app.slice(begin,app.indexOf('    ui.ensembleForecastForm?.addEventListener',begin));
-  assert.match(handler,/search_signal_rule:"cutoff_above_p99"/);assert.match(handler,/configured.quantiles,.99/);
+test('forecast form no longer starts a recent high/low search',()=>{
+  assert.doesNotMatch(app,/ensembleFindSignal|ensemble_recent_signal_search_created/);
 });
 test('recent-search result labels the input close instead of a withheld future quote',()=>{
   const dom=new JSDOM('<section id="ensemble-cutoff-p99-signal"></section><section id="ensemble-first-row-signal"></section>',{runScripts:'outside-only'});
