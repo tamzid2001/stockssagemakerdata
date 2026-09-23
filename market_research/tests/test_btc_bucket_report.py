@@ -120,7 +120,7 @@ def test_capped_recovery_fails_if_original_ledger_does_not_replay():
         capped_recovery_scenarios([row], {"fee_type": "quadratic", "multiplier": 1})
 
 
-def test_start_size_sensitivity_honors_increase_count_and_hard_ceiling():
+def test_start_size_sensitivity_honors_increase_count_without_share_ceiling():
     rows = []
     for index in range(5):
         rows.append({"status": "closed", "market_id": f"btc-{index}",
@@ -135,10 +135,12 @@ def test_start_size_sensitivity_honors_increase_count_and_hard_ceiling():
     ten = replay_recovery_scenario(rows, fee_policy, starting_contracts=10, max_increases=4)
     twenty = replay_recovery_scenario(rows, fee_policy, starting_contracts=20, max_increases=3)
     thirty = replay_recovery_scenario(rows, fee_policy, starting_contracts=30, max_increases=3)
+    large = replay_recovery_scenario(rows, fee_policy, starting_contracts=101, max_increases=3)
     assert three["maximum_contracts_used"] == 75
     assert four["maximum_contracts_used"] == 187
     assert ten["maximum_contracts_used"] == 387
     assert twenty["maximum_contracts_used"] == 312
     assert thirty["maximum_contracts_used"] == 467
+    assert large["maximum_contracts_used"] == 1575
     assert three["historical_minimum_initial_cash"] > 0
     assert four["realized_equity_max_drawdown"] > three["realized_equity_max_drawdown"]

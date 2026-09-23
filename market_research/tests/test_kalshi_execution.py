@@ -36,9 +36,9 @@ def credentials(config):
 @pytest.mark.parametrize('field,value', [('history_minutes', 0), ('history_minutes', 13),
     ('history_minutes', True), ('subaccount', -1), ('subaccount', 64), ('direction_policy', 'settled_99c'),
     ('max_recovery_increases', -1), ('max_recovery_increases', 7), ('max_recovery_increases', True),
-    ('starting_contracts', 0), ('starting_contracts', 101), ('recovery_multiplier', '1'),
+    ('starting_contracts', 0), ('starting_contracts', True), ('recovery_multiplier', '1'),
     ('recovery_multiplier', '5.1'),
-    ('max_order_dollars', 'NaN'), ('daily_loss_dollars', '0'), ('max_ask', '1')])
+    ('max_ask', '1')])
 def test_strict_config(field, value):
     with pytest.raises(ValueError):
         Config(**{field: value})
@@ -78,7 +78,7 @@ def test_v2_yes_no_and_stable_single_market_identity(config):
     assert retry == order_payload(TICKER, 'yes', 2, '.61', 7, config, attempt=1)
 
 
-@pytest.mark.parametrize('quantity,ask,shard', [(101, '.5', 0), (1.5, '.5', 0), (True, '.5', 0),
+@pytest.mark.parametrize('quantity,ask,shard', [(0, '.5', 0), (-1, '.5', 0), (1.5, '.5', 0), (True, '.5', 0),
     (1, 'NaN', 0), (1, 0, 0), (1, '1', 0), (1, '.5555555', 0), (1, '.5', -1)])
 def test_order_risk_validation(config, quantity, ask, shard):
     with pytest.raises(ValueError):
@@ -199,17 +199,32 @@ def test_recovery_uses_approved_start_multiplier_and_increase_limit():
     assert state['size'] == 2 and money(state['cycle']) == 0
 
 
-def test_four_increases_retain_non_configurable_hard_ceiling():
+def test_four_increases_are_not_capped_by_legacy_contract_ceiling():
     config = Config(starting_contracts=10, max_recovery_increases=4)
     state = {'size': 10, 'cycle': '0', 'net': '0'}
     sizes = []
     for _ in range(5):
         state = recovery(state, '-1', config)
         sizes.append(state['size'])
-    assert sizes == [25, 62, 100, 100, 100]
+    assert sizes == [25, 62, 155, 387, 387]
     assert state['recovery_increases'] == 4
-    with pytest.raises(ValueError, match='INVALID_ORDER_INTENT'):
-        order_payload(TICKER, 'yes', 101, '.5', 7, config)
+    assert order_payload(TICKER, 'yes', 387, '.5', 7, config)['count'] == '387.00'
+
+
+def test_read_only_legacy_settlement_retains_its_original_100_contract_cap():
+    from market_research.kalshi_live_settlement import LegacyConfig
+    old = LegacyConfig()
+    state = {'size': 100, 'cycle': '-1', 'net': '-1', 'recovery_increases': 2}
+    assert recovery(state, '-1', old)['size'] == 100
+
+
+def test_uncapped_start_still_requires_actual_shard_funds(rig):
+    trader, broker, journal, signal, quote, now = rig
+    trader.config = Config(starting_contracts=2000)
+    journal.value['size'] = 2000
+    with pytest.raises(RuntimeError, match='INSUFFICIENT_SHARD_FUNDS'):
+        trader.enter(signal, quote, now)
+    assert not broker.sent and journal.state()['active'] is None
 
 
 def test_sizing_reconfiguration_only_when_recovery_zero_and_flat():
@@ -228,7 +243,8 @@ def test_sizing_reconfiguration_only_when_recovery_zero_and_flat():
 
 def test_v2_session_migrates_only_when_flat_and_cycle_zero():
     new = Config(max_recovery_increases=3)
-    legacy = {**new.__dict__, 'version': 'btc-p90-sticky-hold-live-v2', 'max_contracts': 100}
+    legacy = {**new.__dict__, 'version': 'btc-p90-sticky-hold-live-v2',
+              'max_contracts': 100, 'max_order_dollars': '100', 'daily_loss_dollars': '100'}
     legacy.pop('max_recovery_increases')
     flat = {'size': 1, 'cycle': '0', 'net': '2', 'active': None}
     assert approved_reconfiguration(legacy, new.__dict__, flat)['recovery_increases'] == 0
@@ -238,6 +254,20 @@ def test_v2_session_migrates_only_when_flat_and_cycle_zero():
         approved_reconfiguration(legacy, new.__dict__, {**flat, 'cycle': '-0.5'})
     with pytest.raises(RuntimeError, match='LEGACY_CAP_MIGRATION_NOT_APPROVED'):
         approved_reconfiguration({**legacy, 'max_contracts': 50}, new.__dict__, flat)
+
+
+def test_v3_session_migrates_only_when_flat_and_cycle_zero():
+    new = Config(starting_contracts=10)
+    old = {**new.__dict__, 'version': 'btc-p90-sticky-hold-live-v3',
+           'max_order_dollars': '100', 'daily_loss_dollars': '100'}
+    flat = {'size': 10, 'cycle': '0', 'net': '2', 'active': None}
+    assert approved_reconfiguration(old, new.__dict__, flat)['size'] == 10
+    for blocked in ({**flat, 'active': {'intent': 'open'}},
+                    {**flat, 'cycle': '-0.5'}, {**flat, 'size': 25}):
+        with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
+            approved_reconfiguration(old, new.__dict__, blocked)
+    with pytest.raises(RuntimeError, match='LEGACY_DOLLAR_LIMIT_MIGRATION_NOT_APPROVED'):
+        approved_reconfiguration({**old, 'daily_loss_dollars': '50'}, new.__dict__, flat)
 
 
 class MemoryJournal:
@@ -602,11 +632,15 @@ def test_observe_mode_records_intent_but_never_fakes_a_fill(rig):
     assert journal.state()['net'] == '0'
 
 
-def test_daily_loss_and_foreign_positions_block_entries(rig):
+def test_historical_daily_loss_does_not_block_but_foreign_positions_do(rig):
     trader, broker, journal, signal, quote, now = rig
     journal.value.update(day=time.strftime('%Y-%m-%d', time.gmtime(now)), daily_net='-100')
-    with pytest.raises(RuntimeError, match='DAILY_LOSS_LIMIT'): trader.enter(signal, quote, now)
-    journal.value['daily_net'] = '0'
+    with pytest.raises(RuntimeError, match='KALSHI_DELIVERY_OR_RESPONSE_UNKNOWN'):
+        trader.enter(signal, quote, now)
+    assert len(broker.sent) == 1
+    journal = MemoryJournal()
+    broker = Broker(journal, now - 300)
+    trader = Trader(trader.config, broker, journal)
     broker.account = lambda: ([], [{'ticker': 'FOREIGN', 'position_fp': '1'}])
     with pytest.raises(RuntimeError, match='SUBACCOUNT_NOT_FLAT'): trader.enter(signal, quote, now)
     assert not broker.sent

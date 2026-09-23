@@ -11,6 +11,7 @@ from .kalshi_execution import recovery, money
 
 SIZING_FIELDS = frozenset({'starting_contracts', 'recovery_multiplier', 'max_recovery_increases'})
 LEGACY_VERSION = 'btc-p90-sticky-hold-live-v2'
+CAPPED_VERSION = 'btc-p90-sticky-hold-live-v3'
 
 
 def empty_stats():
@@ -45,11 +46,17 @@ def approved_reconfiguration(existing, requested, state):
         'recovery_multiplier': existing.get('recovery_multiplier', '2.5')}
     if normalized == requested:
         return {**state, 'recovery_increases': state.get('recovery_increases', 0)}
-    legacy = normalized.get('version') == LEGACY_VERSION
+    legacy = normalized.get('version') in (LEGACY_VERSION, CAPPED_VERSION)
     if legacy:
-        if normalized.get('max_contracts') != 100:
-            raise RuntimeError('LEGACY_CAP_MIGRATION_NOT_APPROVED')
-        normalized.pop('max_contracts')
+        if (normalized.get('max_order_dollars') != '100'
+                or normalized.get('daily_loss_dollars') != '100'):
+            raise RuntimeError('LEGACY_DOLLAR_LIMIT_MIGRATION_NOT_APPROVED')
+        normalized.pop('max_order_dollars')
+        normalized.pop('daily_loss_dollars')
+        if existing.get('version') == LEGACY_VERSION:
+            if normalized.get('max_contracts') != 100:
+                raise RuntimeError('LEGACY_CAP_MIGRATION_NOT_APPROVED')
+            normalized.pop('max_contracts')
         normalized['version'] = requested['version']
         normalized['max_recovery_increases'] = requested['max_recovery_increases']
     changed = {key for key in set(normalized) | set(requested)
@@ -260,9 +267,6 @@ class Trader:
         state = self.journal.state()
         if state.get('active'):
             raise RuntimeError('PRIOR_TRADE_UNRECONCILED')
-        day = time.strftime('%Y-%m-%d', time.gmtime(now))
-        if state.get('day') == day and money(state.get('daily_net', '0')) <= -money(self.config.daily_loss_dollars):
-            raise RuntimeError('DAILY_LOSS_LIMIT')
         orders, positions = self.broker.account()
         if orders or any(money(p['position_fp']) != 0 for p in positions):
             raise RuntimeError('SUBACCOUNT_NOT_FLAT')
@@ -274,7 +278,7 @@ class Trader:
         side = signal['contract_id'].rsplit(':', 1)[1]
         ask = quote[side + '_ask']
         quantity = int(state['size'])
-        if not 1 <= quantity <= 100:
+        if quantity < 1:
             raise RuntimeError('INVALID_RECOVERY_STATE')
         intent = order_payload(signal['market_id'], side, quantity, ask, market['exchange_index'], self.config)
         # Conservative fee reserve; actual fills/fees, not this reserve, drive P&L.

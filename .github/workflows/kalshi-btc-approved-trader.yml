@@ -34,7 +34,7 @@ on:
       starting_contracts:
         type: number
         default: 1
-        description: Initial whole-contract size (1..100). Change applies only while recovery P&L is zero and no position is active.
+        description: Positive initial whole-contract size. Change applies only while recovery P&L is zero and no position is active.
       recovery_multiplier:
         type: number
         default: 2.5
@@ -43,7 +43,7 @@ on:
         type: choice
         options: ['0', '1', '2', '3', '4', '5', '6']
         default: '3'
-        description: Maximum loss-triggered 2.5x increases in one recovery cycle. Changes wait for recovery P&L zero; a non-configurable 100-contract ceiling remains.
+        description: Maximum loss-triggered 2.5x increases in one recovery cycle. No contract-count ceiling; actual exchange balance must fund every order.
       continuous:
         type: boolean
         default: false

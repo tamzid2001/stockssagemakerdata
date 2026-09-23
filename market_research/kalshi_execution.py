@@ -17,8 +17,7 @@ import uuid
 import httpx
 
 BASE = 'https://external-api.kalshi.com/trade-api/v2'
-VERSION = 'btc-p90-sticky-hold-live-v3'
-MAX_CONTRACTS_HARD = 100
+VERSION = 'btc-p90-sticky-hold-live-v4'
 
 
 def money(value):
@@ -36,8 +35,6 @@ class Config:
     starting_contracts: int = 1
     recovery_multiplier: str = '2.5'
     max_recovery_increases: int = 3
-    max_order_dollars: str = '100'
-    daily_loss_dollars: str = '100'
     max_ask: str = '0.99'
     version: str = VERSION
 
@@ -45,11 +42,9 @@ class Config:
         if (type(self.history_minutes) is not int or not 1 <= self.history_minutes <= 12
                 or type(self.subaccount) is not int or not 0 <= self.subaccount <= 63
                 or self.direction_policy not in ('confirmed', 'provisional_near_close')
-                or type(self.starting_contracts) is not int or not 1 <= self.starting_contracts <= 100
+                or type(self.starting_contracts) is not int or self.starting_contracts < 1
                 or not 1 < money(self.recovery_multiplier) <= 5
                 or type(self.max_recovery_increases) is not int or not 0 <= self.max_recovery_increases <= 6
-                or not 0 < money(self.max_order_dollars) <= 100
-                or not 0 < money(self.daily_loss_dollars) <= 100
                 or not 0 < money(self.max_ask) < 1 or self.version != VERSION):
             raise ValueError('INVALID_LIVE_CONFIGURATION')
 
@@ -68,12 +63,12 @@ def live_allowed(config, requested, env=None):
 
 def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
     if (not re.fullmatch(r'KXBTC15M-[A-Z0-9-]+', ticker) or side not in ('yes', 'no')
-            or type(quantity) is not int or not 1 <= quantity <= MAX_CONTRACTS_HARD
+            or type(quantity) is not int or quantity < 1
             or type(shard) is not int or shard < 0
             or type(attempt) is not int or not 0 <= attempt <= 1000):
         raise ValueError('INVALID_ORDER_INTENT')
     p = money(ask)
-    if not 0 < p <= money(config.max_ask) or p * quantity > money(config.max_order_dollars):
+    if not 0 < p <= money(config.max_ask):
         raise ValueError('ORDER_RISK_LIMIT')
     # V2 is a YES book: buy NO == sell YES at the complementary limit.
     price = p if side == 'yes' else 1 - p
@@ -98,13 +93,17 @@ def recovery(state, net, config=None):
     cycle = money(state.get('cycle', '0')) + money(net)
     size = int(state.get('size', config.starting_contracts))
     increases = int(state.get('recovery_increases', 0))
-    if not 0 <= increases <= config.max_recovery_increases or not 1 <= size <= MAX_CONTRACTS_HARD:
+    if not 0 <= increases <= config.max_recovery_increases or size < 1:
         raise RuntimeError('INVALID_RECOVERY_STATE')
     if cycle >= 0:
         cycle, size, increases = Decimal(0), config.starting_contracts, 0
     elif money(net) < 0 and increases < config.max_recovery_increases:
-        size = min(MAX_CONTRACTS_HARD, int((Decimal(size) * money(config.recovery_multiplier))
-            .to_integral_value(rounding=ROUND_FLOOR)))
+        size = int((Decimal(size) * money(config.recovery_multiplier))
+            .to_integral_value(rounding=ROUND_FLOOR))
+        # The read-only v2 settlement bridge must finish its existing journal
+        # under the old sizing rule. Only newly approved v4 sessions are uncapped.
+        if config.version in ('btc-p90-sticky-hold-live-v2', 'btc-p90-sticky-hold-live-v3'):
+            size = min(100, size)
         increases += 1
     return {**state, 'cycle': str(cycle), 'size': size, 'recovery_increases': increases,
             'net': str(money(state.get('net', '0')) + money(net))}

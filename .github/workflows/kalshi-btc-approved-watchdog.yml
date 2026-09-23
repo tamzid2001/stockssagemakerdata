@@ -34,7 +34,7 @@ jobs:
             if(!['observe','live'].includes(mode) || !/^[a-f0-9]{40}$/.test(sha) ||
                !Number.isInteger(history) || history<1 || history>12 ||
                !Number.isInteger(account) || account<0 || account>63 ||
-               !Number.isInteger(start) || start<1 || start>100 ||
+               !Number.isSafeInteger(start) || start<1 ||
                !Number.isFinite(multiplier) || multiplier<=1 || multiplier>5 ||
                !Number.isInteger(increases) || increases<0 || increases>6 ||
                !['confirmed','provisional_near_close'].includes(direction)) throw new Error('INVALID_WATCHDOG_CONFIGURATION');

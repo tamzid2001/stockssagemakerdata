@@ -196,7 +196,7 @@ def replay_recovery_scenario(trades: list[dict], fee_policy: dict, *,
     """Resize an immutable entry sequence using only confirmed prior outcomes."""
     if fee_policy.get("fee_type") != "quadratic" or fee_policy.get("multiplier") != 1:
         raise ValueError("UNVERIFIED_FEE_POLICY")
-    if (type(starting_contracts) is not int or not 1 <= starting_contracts <= 100 or
+    if (type(starting_contracts) is not int or starting_contracts < 1 or
             (max_increases is not None and (type(max_increases) is not int or not 0 <= max_increases <= 6))):
         raise ValueError("INVALID_RECOVERY_SENSITIVITY")
     source = sorted(_ordered_closed(trades), key=lambda row: (int(row["entry_at"]), str(row["market_id"])))

@@ -1,6 +1,6 @@
 # BTC P90 + sticky trader: approval and operations
 
-Status: implemented approval-gated execution path; offline verification is not proof of exchange fills. **Real orders and continuous execution remain disabled until the operator configures approval.** No startup probe order, funding transfer, or real order is part of verification/readiness.
+Status: approval-gated execution path. The operator has enabled the pinned v3 live workflow, and prior real orders/fills have been observed. Verification and readiness modes remain read-only. The v4 uncapped configuration described below is a separate code/configuration approval; merging it does not automatically switch the running worker.
 
 ## Exact strategy
 
@@ -12,13 +12,13 @@ Status: implemented approval-gated execution path; offline verification is not p
 - Attempt entry on the following completed minute, using that side's observed ask as the maximum economic entry price. A marketable IOC limit provides taker-style execution with a price cap. It is **not** a simulated minus-one-cent maker order and a minute ask is not a guaranteed fill.
 - First received bars must be timely (within 30 seconds), and the actual POST must still be inside the entry window. No backdated execution. Partial and zero fills are recorded; the remainder is not chased.
 - Hold the filled side until authoritative settlement. No stop, switching, ladder, or rolling exit in this version.
-- The dispatch form defaults to one contract and at most three loss-triggered 2.5× increases per recovery cycle, using whole-contract floor rounding. A non-configurable 100-contract safety ceiling remains. Once the increase limit is reached, size stays fixed until cumulative recovery-cycle net P&L reaches zero; then size and the increase count reset. Starting size, multiplier, and maximum increases are explicit bounded inputs in the exact approval hash. A newly approved sizing configuration is adopted only when durable recovery-cycle P&L is exactly zero and no position/intent is active. Mid-cycle or unreconciled sizing changes fail closed. Actual reconciled cost/fees drive recovery. Wait for prior position/accounting reconciliation before another entry; delayed settlement can therefore skip a market.
+- The dispatch form defaults to one contract and at most three loss-triggered 2.5× increases per recovery cycle, using whole-contract floor rounding. There is no strategy-level contract-count ceiling: after the increase limit is reached, size stays fixed until cumulative recovery-cycle net P&L reaches zero; then size and the increase count reset. Starting size, multiplier, and maximum increases are inputs in the exact approval hash. A newly approved sizing configuration is adopted only when durable recovery-cycle P&L is exactly zero and no position/intent is active. Mid-cycle or unreconciled sizing changes fail closed. Actual reconciled cost/fees drive recovery. Wait for prior position/accounting reconciliation before another entry; delayed settlement can therefore skip a market.
 
-Selected timing (September 20): **one observed minute → 14-minute forecast**, first P90 + sticky direction, hold to settlement. The default now matches this selection. No live gate was enabled by this change.
+Selected timing (September 20): **one observed minute → 14-minute forecast**, first P90 + sticky direction, hold to settlement. The default matches this selection.
 
-Prepared account selection: **primary account (subaccount 0)**, as requested. Other defaults still subject to operator review: maximum 100 contracts, $100 principal/order, $100 realized UTC-day net-loss entry breaker, maximum ask $0.99. Breaking the daily limit blocks new entries; it does not liquidate a settlement-held position. Recovery state does not reset with a new runner or UTC day. Other account positions or resting orders block entry, including activity from another bot; this code does not cancel, close or take ownership of them.
+Prepared account selection: **primary account (subaccount 0)**, as requested. The legacy 100-contract, $100 principal/order, and $100 realized UTC-day loss limits were removed from the v4 configuration. The maximum ask remains $0.99, and every order still requires a sufficient live exchange-shard balance with a fee reserve. There is no daily strategy-loss breaker: losses can accumulate across recovery cycles. Recovery state does not reset with a new runner or UTC day. Other account positions or resting orders block entry, including activity from another bot; this code does not cancel, close or take ownership of them. The running v3 worker is unaffected until the new SHA and configuration hash are explicitly approved, and migration requires a flat, zero-recovery-cycle journal.
 
-The user plans funding **exchange shard 2**. This does not mean subaccount 2. Orders and balances follow the market's authoritative `exchange_index`; primary account 0 or subaccount 1–63 is independently selected. Authenticated readiness remains outstanding; this preparation does not fund an account or enable orders.
+Funding **exchange shard 2** does not mean subaccount 2. Orders and balances follow the market's authoritative `exchange_index`; primary account 0 or subaccount 1–63 is independently selected. This code never adds funds or moves them between shards.
 
 ## Provisional near-close direction
 
@@ -31,7 +31,7 @@ The user plans funding **exchange shard 2**. This does not mean subaccount 2. Or
 - **P&L, fees, recovery sizing and release of a held position always require official exchange settlement/accounting.** A provisional signal cannot unblock an unreconciled prior position. Delayed settlement may still cause missed entries.
 - `--direction-policy confirmed` retains official-only direction. Default `provisional_near_close` changes the immutable approval fingerprint; old approvals do not activate the new configuration. The earlier 74.50% retrospective figure is for confirmed direction, not evidence of this new heuristic's performance.
 
-Completed 291-market retrospective cohort: 149 sticky entries, 111 wins / 38 losses (74.50%); one-contract net −$0.302 after modeled fees. Recovery sizing net +$47.6689 with $20.7013 realized drawdown and maximum 75 contracts. These are simulated next-minute ask entries, not verified live fills; the 100-contract cap is not a loss guarantee.
+Completed 291-market retrospective cohort: 149 sticky entries, 111 wins / 38 losses (74.50%); one-contract net −$0.302 after modeled fees. An uncapped three-increase replay started at one contract produced +$20.4719 net, $18.2543 realized-equity drawdown and a maximum of 12 contracts. At 10 starting contracts it produced +$270.9163 net, $231.8877 drawdown and a maximum of 155 contracts; at 30 it produced +$815.4786 net, $698.4594 drawdown and a maximum of 467 contracts. These are simulated next-minute ask entries, not verified live fills, and are not a loss or bankroll guarantee.
 
 ## Reused architecture and source review
 
@@ -110,4 +110,4 @@ Emergency: set `QUANTURA_KALSHI_CONTINUOUS=false` and `QUANTURA_KALSHI_LIVE_ENAB
 
 ## Remaining production verification
 
-No real order was sent during implementation. Authenticated readiness, account isolation/funding, actual YES/NO order reconciliation, real partial fills/fees, settlement reconciliation, provisional disagreement rates and an extended observe run remain unverified. Offline tests cannot establish these. Hosted CPU model initialization may miss short-horizon opportunities; missed signals are reported rather than backfilled as trades. A persistent worker is preferable if uninterrupted coverage becomes mandatory.
+Live fills and settlements have occurred under v3, but this does not validate the uncapped v4 sizing, large-order liquidity, partial fills, provisional disagreement rates, or an extended performance claim. Offline tests cannot establish these. Hosted CPU model initialization may miss short-horizon opportunities; missed signals are reported rather than backfilled as trades. A persistent worker is preferable if uninterrupted coverage becomes mandatory.
