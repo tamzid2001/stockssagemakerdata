@@ -142,7 +142,7 @@
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/screener">Q Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/screener">Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
           <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button" data-analytics="nav_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
@@ -189,8 +189,8 @@
 
       <section class="home-workflow-strip" aria-label="Explore Quantura">
         <div class="container">
-          <a href="/forecasting"><i class="iconoir-stats-up-square" aria-hidden="true"></i><span>Q Forecast</span></a>
-          <a href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Q Screener</span></a>
+          <a href="/forecasting"><i class="iconoir-stats-up-square" aria-hidden="true"></i><span>Forecast</span></a>
+          <a href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
           <a href="/historical-data"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
           <a href="/sports-forecasting"><i class="iconoir-trophy" aria-hidden="true"></i><span>Prediction markets</span></a>
           <a href="/developers/api"><i class="iconoir-code" aria-hidden="true"></i><span>Developer API</span></a>
@@ -433,9 +433,9 @@
               </p>
             </div>
             <div class="card">
-              <h3>Assign the next step</h3>
+              <h3>Organize your workspace</h3>
               <p>
-                Turn research into due-dated tasks, assign collaborators, and track work across the workspace Kanban board and calendar.
+                Keep datasets, forecast requests, and collaborators together in one private workspace.
               </p>
             </div>
             <div class="card">
@@ -446,11 +446,8 @@
             </div>
           </div>
           <div class="hero-actions" style="margin-top: 22px;">
-            <a class="cta" href="/collaboration" data-analytics="home_collaboration_open">
-              <i class="iconoir-group" aria-hidden="true"></i><span>Open collaboration</span>
-            </a>
-            <a class="cta secondary" href="/productivity" data-analytics="home_productivity_open">
-              <i class="iconoir-check-circle" aria-hidden="true"></i><span>Open productivity</span>
+            <a class="cta" href="/forecasting?panel=profile#terminal-profile-collaboration" data-analytics="home_collaboration_open">
+              <i class="iconoir-group" aria-hidden="true"></i><span>Open workspace settings</span>
             </a>
           </div>
         </div>
@@ -706,7 +703,7 @@
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
-          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/forecasting?panel=profile">Profile</a></div>
           <div></div>
           <div><a href="/contact">Contact</a></div>
         </div>

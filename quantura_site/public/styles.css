@@ -5722,6 +5722,80 @@ body.prediction-interstitial-open {
   grid-template-columns: 1fr;
 }
 
+.terminal-profile-panel {
+  min-width: 0;
+  width: 100%;
+}
+
+.terminal-profile-heading {
+  margin-bottom: 12px;
+}
+
+.terminal-profile-heading h2,
+.terminal-profile-heading p {
+  margin: 2px 0 0;
+}
+
+.terminal-profile-group {
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: clip;
+}
+
+.terminal-profile-group[hidden],
+.terminal-profile-alerts[hidden] {
+  display: none !important;
+}
+
+.terminal-profile-group > summary {
+  cursor: pointer;
+  padding: 11px 14px;
+  color: var(--ink);
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.terminal-profile-group > summary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -3px;
+}
+
+.terminal-profile-group[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.terminal-profile-content,
+.terminal-profile-alerts {
+  padding: 12px;
+}
+
+.terminal-profile-content .container {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+}
+
+.terminal-profile-content .section-title {
+  margin-bottom: 10px;
+}
+
+.terminal-profile-content .section-title h2 {
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+}
+
+.terminal-profile-content .card {
+  padding: 14px;
+}
+
+.terminal-profile-alerts a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
 .studio-chart {
   position: relative;
   top: 0;

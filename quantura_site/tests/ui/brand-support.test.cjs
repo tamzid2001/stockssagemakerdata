@@ -14,7 +14,7 @@ test('homepage uses supplied responsive brand assets, removes dock and labels mo
   assert.match(html, /example values, not live market data/);
   assert.match(app, /<span>Terminal<\/span>/);
   assert.match(app, /<span>Shop<\/span>/);
-  assert.match(app, /headerAuth\.innerHTML = accountAuthed[\s\S]{0,160}<span>Dashboard<\/span>[\s\S]{0,100}<span>Sign in<\/span>/);
+  assert.match(app, /headerAuth\.innerHTML = accountAuthed[\s\S]{0,160}<span>Profile<\/span>[\s\S]{0,100}<span>Sign in<\/span>/);
   assert.match(app, /DOMContentLoaded.*init/);
   assert.doesNotMatch(read('public/styles.css'), /a\[href="\/forecasting"\][^{]*\{\s*display: none/);
 });

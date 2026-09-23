@@ -80,8 +80,6 @@
           </div>
           <span id="header-user-status" class="pill">Logged Out</span>
 
-          <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
-
         </div>
       </div>
     </header>
@@ -89,11 +87,13 @@
     <main>
       <div class="app-layout">
         <aside class="app-sidebar">
-	          <div class="sidebar-card workspace-sidebar-switcher"><label class="small" for="forecast-workspace-select"><strong>Workspace</strong></label><select id="forecast-workspace-select" data-workspace-select><option>Sign in to load</option></select><a class="cta secondary small" href="/collaboration"><i class="iconoir-settings" aria-hidden="true"></i><span>Workspace settings</span></a></div>
+	          <div class="sidebar-card workspace-sidebar-switcher"><label class="small" for="forecast-workspace-select"><strong>Workspace</strong></label><select id="forecast-workspace-select" data-workspace-select><option>Sign in to load</option></select><a class="cta secondary small" href="/forecasting?panel=profile#terminal-profile-collaboration"><i class="iconoir-settings" aria-hidden="true"></i><span>Workspace settings</span></a></div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
-	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Q Forecast</span></a>
-              <a class="sidebar-link" href="/historical-data" data-panel-target="download"><i class="iconoir-download" aria-hidden="true"></i><span>Q Download</span></a>
-	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Q Screener</span></a>
+	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
+              <a class="sidebar-link" href="/historical-data" data-panel-target="download"><i class="iconoir-download" aria-hidden="true"></i><span>Download</span></a>
+	            <a class="sidebar-link" href="/forecasting?panel=screener" data-panel-target="screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
+	            <a class="sidebar-link" href="/forecasting?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
+	            <a class="sidebar-link" href="/forecasting?panel=profile" id="dashboard-auth-link"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
 	          </nav>
 	        </aside>
 
@@ -385,6 +385,263 @@
                       <div class="card"><p class="small muted">The full Screener loads only when this panel is opened.</p></div>
                     </div>
                   </section>
+				  <section class="panel hidden terminal-profile-panel" data-panel="profile" aria-labelledby="terminal-profile-title">
+    <div class="terminal-profile-heading"><div class="eyebrow">Your account</div><h2 id="terminal-profile-title">Profile</h2><p class="small muted">Manage your account, requests, workspaces, and API access in Terminal.</p></div>
+    
+    <details class="terminal-profile-group" id="terminal-profile-auth" data-profile-guest open>
+      <summary>Sign in or create an account</summary>
+      <section class="terminal-profile-content auth-section" id="auth">
+        <div class="container">
+          <div class="auth-brand-banner">
+            <img src="/assets/quantura-icon.svg" alt="Quantura logo" class="auth-brand-logo" loading="lazy" decoding="async" />
+            <div>
+              <div class="small muted">Quantura secure access</div>
+              <h3>Authenticate to continue</h3>
+            </div>
+          </div>
+	          <div class="section-title">
+	            <h2>Sign in to save your work</h2>
+	            <p class="small">Email/password plus Google, GitHub, and X sign-in, secured to your account.</p>
+	          </div>
+          <div class="auth-grid">
+            <div class="card">
+              <h3>Email access</h3>
+              <p class="small">Use your email to sign in or create your Quantura account.</p>
+              <form id="email-auth-form" class="auth-form">
+                <label class="label" for="auth-email">Email</label>
+                <input id="auth-email" type="email" placeholder="you@domain.com" required />
+                <label class="label" for="auth-password">Password</label>
+                <input id="auth-password" type="password" minlength="6" placeholder="Minimum 6 characters" required />
+                <div id="auth-create-fields" class="hidden" aria-hidden="true">
+                  <label class="label" for="auth-username">Username</label>
+                  <input id="auth-username" type="text" maxlength="32" placeholder="quantura_alpha" autocomplete="username" />
+                  <label class="label" for="auth-confirm-password">Confirm password</label>
+                  <input
+                    id="auth-confirm-password"
+                    type="password"
+                    minlength="6"
+                    placeholder="Re-enter your password"
+                    autocomplete="new-password"
+                  />
+                </div>
+                <div class="auth-inline">
+                  <button class="link-button auth-link" id="auth-forgot-password" type="button">Forgot password?</button>
+                  <button class="link-button auth-link hidden" id="auth-back-to-signin" type="button">Back to sign in</button>
+                </div>
+                <p class="small muted hidden" id="auth-create-hint">
+                  Create your Quantura account with a username, email, password, and matching password confirmation.
+                </p>
+                <div class="auth-actions">
+                  <button class="cta" id="email-signin" type="submit">Sign in</button>
+                  <button class="cta secondary" id="email-create" type="button">Create account</button>
+                </div>
+                <p class="small" id="auth-email-message"></p>
+              </form>
+            </div>
+            <div class="card">
+              <h3>Social sign-in</h3>
+              <p class="small">Use your preferred provider for fast access, or continue as a guest and upgrade later.</p>
+              <div class="auth-actions" style="margin-top: 12px;">
+                <button class="cta google auth-provider-button" id="google-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--google" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" focusable="false" aria-hidden="true">
+                      <path fill="#FFC107" d="M43.6 20.2H42V20H24v8h11.3C33.6 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12S17.4 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.8z"/>
+                      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+                      <path fill="#4CAF50" d="M24 44c5.1 0 9.8-2 13.3-5.2l-6.2-5.2C29 35.2 26.6 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/>
+                      <path fill="#1976D2" d="M43.6 20.2H42V20H24v8h11.3c-.8 2.4-2.3 4.4-4.2 5.6l.1-.1 6.2 5.2C37 38.5 44 33.3 44 24c0-1.3-.1-2.6-.4-3.8z"/>
+                    </svg>
+                  </span>
+                  <span>Continue with Google</span>
+                </button>
+                <button class="cta facebook auth-provider-button" id="facebook-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--facebook" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                      <path fill="currentColor" d="M13.5 22v-8h2.7l.4-3.1h-3.1V8.9c0-.9.2-1.5 1.6-1.5h1.7V4.6c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v1.9H7.1V14h2.7v8h3.7z"/>
+                    </svg>
+                  </span>
+                  <span>Continue with Facebook</span>
+                </button>
+                <button class="cta secondary auth-provider-button" id="github-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--github" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                      <path fill="currentColor" d="M12 .5A12 12 0 0 0 8.2 23.9c.6.1.8-.3.8-.6v-2.1c-3.4.8-4.1-1.6-4.1-1.6-.6-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.4 3.6 1.1.1-.8.4-1.4.8-1.8-2.7-.3-5.5-1.4-5.5-6.1 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.3 11.3 0 0 1 6.1 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.9.1 3.2.8.9 1.2 2 1.2 3.3 0 4.7-2.8 5.8-5.5 6.1.5.4.9 1.2.9 2.5v3.7c0 .4.2.7.8.6A12 12 0 0 0 12 .5z"/>
+                    </svg>
+                  </span>
+                  <span>Continue with GitHub</span>
+                </button>
+                <button class="cta secondary auth-provider-button" id="twitter-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--x" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                      <path fill="currentColor" d="M18.9 2h3.7l-8 9.1L24 22h-7.4l-5.8-7.6L4.2 22H.5l8.5-9.8L0 2h7.6l5.2 6.9L18.9 2zm-1.3 17.8h2.1L6.5 4.1H4.2z"/>
+                    </svg>
+                  </span>
+                  <span>Continue with X</span>
+                </button>
+                <button class="cta secondary auth-provider-button" id="anonymous-signin" type="button">
+                  <span class="auth-provider-logo auth-provider-logo--guest" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                      <path fill="currentColor" d="M12 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 12c4.4 0 8 2 8 4.5V22H4v-3.5C4 16 7.6 14 12 14z"/>
+                    </svg>
+                  </span>
+                  <span>Continue as Guest</span>
+                </button>
+              </div>
+              <div class="notice">
+                <strong>Secure by design.</strong> We only store what’s needed to deliver your report and
+                show your order status in Profile.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </details>
+    <details class="terminal-profile-group" id="terminal-profile-profile" data-profile-account hidden open>
+      <summary>Account settings</summary>
+      <section class="terminal-profile-content" id="profile">
+        <div class="container">
+          <div class="section-title">
+            <div><div class="eyebrow">Private account settings</div><h2>Profile</h2><p class="small">Manage your private account details and saved research.</p></div>
+          </div>
+          <div class="content-grid">
+            <div class="card">
+              <h3>Account</h3>
+              <div class="profile-item"><span class="label">Signed in as</span><span id="user-email" class="value">Not signed in</span></div>
+              <div class="profile-item"><span class="label">Provider</span><span id="user-provider" class="value">—</span></div>
+              <div class="profile-item"><span class="label">Status</span><span id="user-status" class="pill">Logged Out</span></div>
+              <div class="billing-panel"><span class="label">Billing</span><a id="billing-portal-link" class="cta secondary small" href="/account">Sign in to manage billing</a><span class="small muted">Manage your plan, invoices, and payment method in Stripe.</span></div>
+              <div class="notice small">This settings area is authenticated and private. Public profiles and user discovery have been removed.</div>
+            </div>
+
+          </div>
+
+
+        </div>
+      </section>
+    </details>
+    <details class="terminal-profile-group" id="terminal-profile-orders" data-profile-account hidden>
+      <summary>Orders and forecast requests</summary>
+      <section class="terminal-profile-content" id="orders">
+	        <div class="container">
+	          <div class="section-title">
+	            <h2>Your orders</h2>
+	            <p class="small">Track your subscription requests and fulfillment status.</p>
+	          </div>
+	            <div class="dashboard-grid">
+	            <div class="card">
+	              <h3>Order history</h3>
+	              <div id="user-orders" class="order-list panel-output"></div>
+	            </div>
+	            <div class="card">
+	              <h3>Forecast requests</h3>
+	              <div id="user-forecasts" class="order-list panel-output"></div>
+	            </div>
+	          </div>
+	        </div>
+	      </section>
+    </details>
+    <details class="terminal-profile-group" id="terminal-profile-collaboration" data-profile-account hidden>
+      <summary>Workspaces and collaborators</summary>
+      <section class="terminal-profile-content" id="collaboration">
+        <div class="container">
+          <div class="section-title">
+            <div><div class="eyebrow">Workspace settings</div><h2>Workspaces &amp; collaboration</h2><p class="small">Organize CSVs and research inside isolated workspaces with live, fine-grained access controls.</p></div>
+            <button class="cta" id="workspace-new-toggle" type="button"><i class="iconoir-plus" aria-hidden="true"></i><span>New Workspace</span></button>
+          </div>
+
+          <div class="content-grid">
+            <div class="card">
+              <h3>Active workspace</h3>
+              <p class="small">CSV uploads, forecasts, analyses, and exports follow this workspace context.</p>
+              <div class="field">
+                <label class="label" for="workspace-select">Workspace</label>
+                <select id="workspace-select" data-workspace-select></select>
+              </div>
+              <dl class="workspace-summary" id="workspace-summary"><div><dt>Role</dt><dd>—</dd></div><div><dt>Workspace ID</dt><dd>—</dd></div></dl>
+              <p class="small muted" id="workspace-hint">Switching workspaces reloads research shared with that team.</p>
+            </div>
+
+            <form class="card hidden" id="workspace-create-form">
+              <h3>Create workspace</h3>
+              <div class="field"><label class="label" for="workspace-create-name">Name</label><input id="workspace-create-name" maxlength="80" placeholder="Institutional Research" required /></div>
+              <div class="field"><label class="label" for="workspace-create-description">Description</label><textarea id="workspace-create-description" maxlength="500" rows="3" placeholder="Forecast datasets and research exports"></textarea></div>
+              <div class="hero-actions"><button class="cta" type="submit">Create</button><button class="cta secondary" id="workspace-create-cancel" type="button">Cancel</button></div>
+              <p class="small muted" id="workspace-create-status" role="status" aria-live="polite"></p>
+            </form>
+
+            <form class="card" id="workspace-general-form">
+              <h3>General</h3>
+              <div class="field"><label class="label" for="workspace-general-name">Workspace name</label><input id="workspace-general-name" maxlength="80" required /></div>
+              <div class="field"><label class="label" for="workspace-general-description">Description</label><textarea id="workspace-general-description" maxlength="500" rows="3"></textarea></div>
+              <button class="cta secondary" type="submit">Save workspace</button>
+              <p class="small muted" id="workspace-general-status" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+
+          <div class="content-grid" style="margin-top: 24px;">
+            <div class="card">
+              <h3>Add a collaborator</h3>
+              <p class="small">Add an existing Quantura account. Access is checked again on every web and API request.</p>
+              <form id="collab-invite-form" class="auth-form">
+                <div class="field"><label class="label" for="collab-invite-email">Email</label><input id="collab-invite-email" type="email" placeholder="collaborator@domain.com" required /></div>
+                <div class="field"><label class="label" for="collab-invite-role">Permission preset</label><select id="collab-invite-role"><option value="viewer">Viewer — read only</option><option value="analyst">Analyst — create</option><option value="editor">Editor — organize</option><option value="admin">Admin — manage</option><option value="custom">Custom</option></select></div>
+                <div class="field"><label class="label" for="collab-csv-scope">CSV access</label><select id="collab-csv-scope"><option value="all">All workspace CSVs</option><option value="selected">Selected CSVs only</option><option value="none">No CSV access</option></select></div>
+                <div class="field hidden" id="collab-selected-csv-field"><label class="label" for="collab-selected-csv-ids">Selected CSV IDs</label><textarea id="collab-selected-csv-ids" rows="2" placeholder="csv_123, csv_456"></textarea></div>
+                <fieldset class="workspace-permissions hidden" id="collab-custom-permissions"><legend>Custom permissions</legend><div id="collab-permission-options" class="workspace-permission-grid"><span class="small muted">Loading permissions…</span></div></fieldset>
+                <div class="auth-actions" style="margin-top: 14px;">
+                  <button class="cta" type="submit" data-analytics="collab_invite_submit">Add collaborator</button>
+                </div>
+                <p class="small" id="collab-invite-status"></p>
+              </form>
+            </div>
+            <div class="card">
+              <div class="card-head"><div><h3>Members</h3><p class="small muted">Edit permissions or remove access immediately.</p></div><button class="cta secondary small" id="workspace-members-refresh" type="button">Refresh</button></div>
+              <div id="collab-collaborators-list" class="small">No collaborators yet.</div>
+            </div>
+          </div>
+
+          <section class="results-panel workspace-csv-panel" aria-labelledby="workspace-csv-heading" style="margin-top: 24px;">
+            <div class="card-head"><div><div class="eyebrow">Workspace data</div><h3 id="workspace-csv-heading">CSV Library</h3><p class="small muted">Download, rename, move, copy, or delete files when your current permissions allow it.</p></div><div class="hero-actions"><button class="cta secondary small" id="workspace-csv-download-all" type="button"><i class="iconoir-download" aria-hidden="true"></i><span>Download authorized ZIP</span></button><button class="cta secondary small" id="workspace-csv-refresh" type="button">Refresh</button></div></div>
+            <p class="small muted" id="workspace-csv-status" role="status" aria-live="polite"></p>
+            <div id="workspace-csv-list" class="workspace-csv-list"><div class="empty-state">Sign in to load workspace CSVs.</div></div>
+          </section>
+
+          <section class="card" style="margin-top: 24px;" aria-labelledby="workspace-audit-heading">
+            <div class="card-head"><div><h3 id="workspace-audit-heading">Audit Log</h3><p class="small muted">Administrative and CSV actions for this workspace.</p></div><button class="cta secondary small" id="workspace-audit-refresh" type="button">Refresh</button></div>
+            <div id="workspace-audit-list" class="order-list"><div class="empty-state">No audit events loaded.</div></div>
+          </section>
+        </div>
+      </section>
+    </details>
+    <details class="terminal-profile-group" id="terminal-profile-developer" data-profile-account hidden>
+      <summary>API keys and developer access</summary>
+      <section class="terminal-profile-content" id="developer">
+        <div class="container">
+          <div class="section-title">
+            <div><div class="eyebrow">Account / Developer</div><h2>API Keys</h2><p class="small">Create personal credentials for Quantura's versioned API. Workspace roles and plan access are evaluated dynamically on every request.</p></div>
+            <div class="hero-actions"><a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>Interactive API docs</span></a><a class="cta secondary" href="/api/openapi.json"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>OpenAPI</span></a></div>
+          </div>
+          <div class="content-grid developer-key-grid">
+            <form id="api-key-form" class="card" autocomplete="off">
+              <h3>Create API key</h3>
+              <div class="field"><label class="label" for="api-key-name">Name</label><input id="api-key-name" maxlength="120" placeholder="Research notebook" required /></div>
+              <div class="field"><label class="label" for="api-key-expiration">Expiration (optional)</label><input id="api-key-expiration" type="date" /></div>
+              <fieldset class="api-scope-fieldset"><legend>Scopes</legend><div id="api-key-scopes" class="api-scope-grid"><span class="small muted">Sign in to load available scopes.</span></div></fieldset>
+              <button class="cta" type="submit">Create API Key</button>
+              <p id="api-key-status" class="small muted" role="status" aria-live="polite">The full secret is shown once and is never stored in plaintext.</p>
+            </form>
+            <section class="card" aria-labelledby="api-key-list-title">
+              <div class="card-head"><div><h3 id="api-key-list-title">Your keys</h3><p class="small muted">Revoke or replace credentials immediately.</p></div><button class="cta secondary small" id="api-key-refresh" type="button">Refresh</button></div>
+              <div id="api-key-secret" class="api-key-secret hidden" role="status" aria-live="polite"></div>
+              <div id="api-key-list" class="order-list"><div class="empty-state">Sign in to manage API keys.</div></div>
+            </section>
+          </div>
+          <div class="notice small">Viewer collaborators may use their own key for read-only resources in a shared workspace even when their personal plan does not grant unrestricted API access. Removing the membership revokes that workspace access immediately.</div>
+          <div class="notice small"><strong>AI clients:</strong> connect to <a href="https://quantura.mintlifysite.com/mcp"><code>https://quantura.mintlifysite.com/mcp</code></a>. Only approved read-only workspace and CSV metadata operations are exposed as tools.</div>
+        </div>
+      </section>
+    </details>
+    <div class="terminal-profile-alerts hidden" data-profile-account><a href="/screener#saved-alerts"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Saved alerts and notifications</span></a></div>
+  </section>
 
                 </div>
               </div>
@@ -420,7 +677,7 @@
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
-          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/forecasting?panel=profile">Profile</a></div>
           <div></div>
           <div><a href="/contact">Contact</a></div>
         </div>

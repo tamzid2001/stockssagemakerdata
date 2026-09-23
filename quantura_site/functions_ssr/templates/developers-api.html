@@ -16,12 +16,12 @@
     <script defer src="/vercel-observability.js"></script>
   </head>
   <body>
-    <header class="header"><div class="container nav"><a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a><nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/screener">Q Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav><div class="nav-actions"><a class="cta secondary" href="/dashboard?panel=developer">Manage API keys</a></div></div></header>
+    <header class="header"><div class="container nav"><a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a><nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/screener">Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav><div class="nav-actions"><a class="cta secondary" href="/forecasting?panel=profile#terminal-profile-developer">Manage API keys</a></div></div></header>
     <main>
       <section class="section"><div class="container">
         <div class="section-title"><div><div class="eyebrow">Quantura Developer Platform</div><h1>Forecast Intelligence API</h1><p>Versioned access to forecasts, quantile datasets, screeners, prediction-market exports, and collaborator-aware workspace resources.</p></div><a class="cta" href="/api/openapi.json">Download OpenAPI JSON</a></div>
         <div class="content-grid">
-          <article class="card"><h2>Getting started</h2><ol class="compact-list"><li>Sign in and open <a href="/dashboard?panel=developer">Account / Developer</a>.</li><li>Create a scoped key and copy it once.</li><li>Send it in the <code>Authorization: Bearer</code> header.</li><li>Call <code>GET /api/v1/me/access</code> to inspect effective access.</li></ol></article>
+          <article class="card"><h2>Getting started</h2><ol class="compact-list"><li>Sign in and open <a href="/forecasting?panel=profile#terminal-profile-developer">Account / Developer</a>.</li><li>Create a scoped key and copy it once.</li><li>Send it in the <code>Authorization: Bearer</code> header.</li><li>Call <code>GET /api/v1/me/access</code> to inspect effective access.</li></ol></article>
           <article class="card"><h2>Workspaces &amp; collaborators</h2><p class="small">API keys identify a user; they do not freeze a workspace role. Quantura checks current membership, role, resource ownership, and plan on every request. Viewer access is GET-only in the shared workspace and does not reduce permissions in the viewer's personal workspace.</p></article>
         </div>
         <div class="content-grid" style="margin-top:18px;">
@@ -121,7 +121,7 @@ const { data: job } = await created.json();</code></pre></article>
       </div></section>
       <section class="section" aria-labelledby="api-reference-title"><div class="container"><div class="section-title"><div><div class="eyebrow">OpenAPI 3.1</div><h2 id="api-reference-title">Interactive API reference</h2><p>Use synthetic credentials in examples. Never paste production secrets into shared screenshots or support requests.</p></div></div><div id="api-reference"></div></div></section>
     </main>
-    <footer class="footer"><div class="container footer-grid"><div><div class="logo">QUANTURA</div><p class="small">Quantitative data, forecasts, and research infrastructure.</p></div><div class="small"><strong>Developers</strong><div><a href="/developers/api">API reference</a></div><div><a href="/dashboard?panel=developer">API keys</a></div><div></div></div><div class="small"><strong>Legal</strong><div><a href="/terms">Terms</a></div><div><a href="/privacy">Privacy</a></div><div><a href="/disclaimer">Disclaimer</a></div></div></div></footer>
+    <footer class="footer"><div class="container footer-grid"><div><div class="logo">QUANTURA</div><p class="small">Quantitative data, forecasts, and research infrastructure.</p></div><div class="small"><strong>Developers</strong><div><a href="/developers/api">API reference</a></div><div><a href="/forecasting?panel=profile#terminal-profile-developer">API keys</a></div><div></div></div><div class="small"><strong>Legal</strong><div><a href="/terms">Terms</a></div><div><a href="/privacy">Privacy</a></div><div><a href="/disclaimer">Disclaimer</a></div></div></div></footer>
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
     <script>
       Scalar.createApiReference(document.getElementById('api-reference'), { url: '/api/openapi.json', theme: 'saturn', hideModels: false, darkMode: true });

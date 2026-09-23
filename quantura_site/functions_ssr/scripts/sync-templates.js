@@ -3,6 +3,48 @@ const path = require("path");
 
 const sourceRoot = path.join(__dirname, "..", "..", "pages");
 const destRoot = path.join(__dirname, "..", "templates");
+const PROFILE_MARKER = "<!-- TERMINAL_PROFILE_PANEL -->";
+
+const extractDashboardPanel = (html, name) => {
+  const start = new RegExp(`<section\\b[^>]*\\bdata-panel="${name}"[^>]*>`, "i").exec(html);
+  if (!start) throw new Error(`Missing archived account panel: ${name}`);
+  const tags = /<\/?section\b[^>]*>/gi;
+  tags.lastIndex = start.index;
+  let depth = 0;
+  for (let match = tags.exec(html); match; match = tags.exec(html)) {
+    depth += /^<\/section/i.test(match[0]) ? -1 : 1;
+    if (depth === 0) {
+      return html.slice(start.index, tags.lastIndex).replace(
+        /^<section\b[^>]*>/i,
+        `<section class="terminal-profile-content${name === "auth" ? " auth-section" : ""}" id="${name}">`,
+      )
+        .replace("Sign in to unlock your dashboard", "Sign in to save your work")
+        .replace("surface your order status in the dashboard.", "show your order status in Profile.")
+        .replace("Switching workspaces reloads the research and tasks shared with that team.", "Switching workspaces reloads research shared with that team.");
+    }
+  }
+  throw new Error(`Unclosed archived account panel: ${name}`);
+};
+
+const buildTerminalProfilePanel = (dashboardHtml) => {
+  const groups = [
+    { name: "auth", label: "Sign in or create an account", guest: true, open: true },
+    { name: "profile", label: "Account settings", open: true },
+    { name: "orders", label: "Orders and forecast requests" },
+    { name: "collaboration", label: "Workspaces and collaborators" },
+    { name: "developer", label: "API keys and developer access" },
+  ];
+  const sections = groups.map(({ name, label, guest, open }) => `
+    <details class="terminal-profile-group" id="terminal-profile-${name}"${guest ? " data-profile-guest" : " data-profile-account hidden"}${open ? " open" : ""}>
+      <summary>${label}</summary>
+      ${extractDashboardPanel(dashboardHtml, name)}
+    </details>`).join("");
+  return `<section class="panel hidden terminal-profile-panel" data-panel="profile" aria-labelledby="terminal-profile-title">
+    <div class="terminal-profile-heading"><div class="eyebrow">Your account</div><h2 id="terminal-profile-title">Profile</h2><p class="small muted">Manage your account, requests, workspaces, and API access in Terminal.</p></div>
+    ${sections}
+    <div class="terminal-profile-alerts hidden" data-profile-account><a href="/screener#saved-alerts"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Saved alerts and notifications</span></a></div>
+  </section>`;
+};
 
 const walk = async (dir) => {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -25,6 +67,7 @@ const main = async () => {
   await fs.mkdir(destRoot, { recursive: true });
 
   const files = await walk(sourceRoot);
+  const dashboardHtml = await fs.readFile(path.join(sourceRoot, "dashboard.html"), "utf8");
   let copied = 0;
   for (const file of files) {
     if (!file.endsWith(".html")) continue;
@@ -34,7 +77,13 @@ const main = async () => {
     if (/\s\d+\.html$/i.test(rel)) continue;
     const dest = path.join(destRoot, rel);
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    await fs.copyFile(file, dest);
+    if (rel === "forecasting.html") {
+      const source = await fs.readFile(file, "utf8");
+      if (!source.includes(PROFILE_MARKER)) throw new Error("Forecasting template has no profile insertion marker");
+      await fs.writeFile(dest, source.replace(PROFILE_MARKER, buildTerminalProfilePanel(dashboardHtml)));
+    } else {
+      await fs.copyFile(file, dest);
+    }
     copied += 1;
   }
 
@@ -42,8 +91,10 @@ const main = async () => {
   console.log(`Quantura SSR: synced ${copied} HTML templates into ${destRoot}`);
 };
 
-main().catch((err) => {
+if (require.main === module) main().catch((err) => {
   // eslint-disable-next-line no-console
   console.error(err);
   process.exitCode = 1;
 });
+
+module.exports = { buildTerminalProfilePanel, extractDashboardPanel };
