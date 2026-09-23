@@ -396,7 +396,7 @@ export async function loadPublishedScreenerCsv(owner: string, repo: string): Pro
 
 /** Remove legacy trade-signal fields from current public research results. */
 export function publicScreenerRow(row: QuantScreenerRow): QuantScreenerRow {
-  return Object.fromEntries(Object.entries(row).filter(([key]) => !/(signal|bias|buy_price_target|buy_target_date)/i.test(key))) as QuantScreenerRow;
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !/(signal|bias|daily_evaluation|buy_price_target|buy_target_date)/i.test(key))) as QuantScreenerRow;
 }
 
 /** Export the same filtered price/quantile snapshot, with formula-safe text fields. */
