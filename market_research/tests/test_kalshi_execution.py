@@ -34,7 +34,8 @@ def credentials(config):
 
 
 @pytest.mark.parametrize('field,value', [('history_minutes', 0), ('history_minutes', 13),
-    ('history_minutes', True), ('subaccount', -1), ('subaccount', 64), ('direction_policy', 'settled_99c'), ('max_contracts', 101),
+    ('history_minutes', True), ('subaccount', -1), ('subaccount', 64), ('direction_policy', 'settled_99c'),
+    ('max_recovery_increases', -1), ('max_recovery_increases', 7), ('max_recovery_increases', True),
     ('starting_contracts', 0), ('starting_contracts', 101), ('recovery_multiplier', '1'),
     ('recovery_multiplier', '5.1'),
     ('max_order_dollars', 'NaN'), ('daily_loss_dollars', '0'), ('max_ask', '1')])
@@ -59,7 +60,7 @@ def test_requested_one_minute_preset_is_not_live_approval():
     assert config.direction_policy == 'provisional_near_close'
     assert config.starting_contracts == 1
     assert config.recovery_multiplier == '2.5'
-    assert config.max_contracts == 100
+    assert config.max_recovery_increases == 3
     assert not live_allowed(config, True, {})
 
 
@@ -170,42 +171,73 @@ def test_partial_and_zero_fill_are_not_full_fills(config):
             reconciled_order({**final_order(intent), **patch}, intent, 'yes')
 
 
-def test_recovery_until_net_recovers_whole_contracts_and_fixed_cap():
+def test_recovery_until_net_recovers_with_three_increases():
     state = {'size': 1, 'cycle': '0', 'net': '0'}
     sizes = []
     for _ in range(7):
         state = recovery(state, '-1'); sizes.append(state['size'])
-    assert sizes == [2, 5, 12, 30, 75, 100, 100]
+    assert sizes == [2, 5, 12, 12, 12, 12, 12]
+    assert state['recovery_increases'] == 3
     state = recovery(state, '1')
-    assert state['size'] == 100 and money(state['cycle']) == -6
+    assert state['size'] == 12 and money(state['cycle']) == -6
     state = recovery(state, '6')
     assert state['size'] == 1 and money(state['cycle']) == 0
+    assert state['recovery_increases'] == 0
 
 
-def test_recovery_uses_approved_start_multiplier_and_cap():
-    config = Config(starting_contracts=2, recovery_multiplier='3', max_contracts=20)
+def test_recovery_uses_approved_start_multiplier_and_increase_limit():
+    config = Config(starting_contracts=2, recovery_multiplier='3', max_recovery_increases=2)
     state = {'size': 2, 'cycle': '0', 'net': '0'}
     state = recovery(state, '-1', config)
     assert state['size'] == 6
     state = recovery(state, '-1', config)
     assert state['size'] == 18
     state = recovery(state, '-1', config)
-    assert state['size'] == 20
+    assert state['size'] == 18
+    assert state['recovery_increases'] == 2
     state = recovery(state, '3', config)
     assert state['size'] == 2 and money(state['cycle']) == 0
 
 
+def test_four_increases_retain_non_configurable_hard_ceiling():
+    config = Config(starting_contracts=10, max_recovery_increases=4)
+    state = {'size': 10, 'cycle': '0', 'net': '0'}
+    sizes = []
+    for _ in range(5):
+        state = recovery(state, '-1', config)
+        sizes.append(state['size'])
+    assert sizes == [25, 62, 100, 100, 100]
+    assert state['recovery_increases'] == 4
+    with pytest.raises(ValueError, match='INVALID_ORDER_INTENT'):
+        order_payload(TICKER, 'yes', 101, '.5', 7, config)
+
+
 def test_sizing_reconfiguration_only_when_recovery_zero_and_flat():
     old = Config()
-    new = Config(starting_contracts=2, recovery_multiplier='3', max_contracts=80)
+    new = Config(starting_contracts=2, recovery_multiplier='3', max_recovery_increases=4)
     flat = {'size': 1, 'cycle': '0', 'net': '17.5', 'active': None}
     assert approved_reconfiguration(old.__dict__, new.__dict__, flat)['size'] == 2
+    assert approved_reconfiguration(old.__dict__, new.__dict__, flat)['recovery_increases'] == 0
     with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
         approved_reconfiguration(old.__dict__, new.__dict__, {**flat, 'cycle': '-1'})
     with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
         approved_reconfiguration(old.__dict__, new.__dict__, {**flat, 'active': {'intent': 'open'}})
     with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
         approved_reconfiguration(old.__dict__, replace(new, history_minutes=2).__dict__, flat)
+
+
+def test_v2_session_migrates_only_when_flat_and_cycle_zero():
+    new = Config(max_recovery_increases=3)
+    legacy = {**new.__dict__, 'version': 'btc-p90-sticky-hold-live-v2', 'max_contracts': 100}
+    legacy.pop('max_recovery_increases')
+    flat = {'size': 1, 'cycle': '0', 'net': '2', 'active': None}
+    assert approved_reconfiguration(legacy, new.__dict__, flat)['recovery_increases'] == 0
+    with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
+        approved_reconfiguration(legacy, new.__dict__, {**flat, 'active': {'intent': 'open'}})
+    with pytest.raises(RuntimeError, match='RECOVERY_ZERO'):
+        approved_reconfiguration(legacy, new.__dict__, {**flat, 'cycle': '-0.5'})
+    with pytest.raises(RuntimeError, match='LEGACY_CAP_MIGRATION_NOT_APPROVED'):
+        approved_reconfiguration({**legacy, 'max_contracts': 50}, new.__dict__, flat)
 
 
 class MemoryJournal:
@@ -410,6 +442,26 @@ def test_zero_fill_does_not_retry_after_market_closes(rig):
     broker.settled = True
     assert trader.reconcile() == 'unfilled'
     assert journal.state()['active'] is None and len(broker.sent) == 1
+
+
+def test_settlement_only_reconciliation_cannot_retry_zero_fill(rig):
+    trader, broker, journal, signal, quote, now = rig
+    signal['agrees'] = True
+    with pytest.raises(RuntimeError):
+        trader.enter(signal, quote, now)
+    broker.order = final_order(broker.sent[0], count='0.00')
+    assert trader.reconcile(allow_order_retry=False) == 'zero_fill_retry_disabled'
+    assert len(broker.sent) == 1
+    assert journal.state()['active'] is not None
+
+
+def test_legacy_settlement_config_matches_v2_persisted_fields():
+    from dataclasses import asdict
+    from market_research.kalshi_live_settlement import LegacyConfig
+    legacy = asdict(LegacyConfig())
+    assert legacy['version'] == 'btc-p90-sticky-hold-live-v2'
+    assert legacy['max_contracts'] == 100
+    assert 'max_recovery_increases' not in legacy
 
 
 def test_journal_summary_counts_acknowledgements_rejections_and_settlements(config):

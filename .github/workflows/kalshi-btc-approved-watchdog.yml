@@ -24,19 +24,19 @@ jobs:
           DIRECTION_POLICY: ${{ vars.QUANTURA_KALSHI_DIRECTION_POLICY || 'provisional_near_close' }}
           STARTING_CONTRACTS: ${{ vars.QUANTURA_KALSHI_STARTING_CONTRACTS || '1' }}
           RECOVERY_MULTIPLIER: ${{ vars.QUANTURA_KALSHI_RECOVERY_MULTIPLIER || '2.5' }}
-          MAX_CONTRACTS: ${{ vars.QUANTURA_KALSHI_MAX_CONTRACTS || '100' }}
+          MAX_RECOVERY_INCREASES: ${{ vars.QUANTURA_KALSHI_MAX_RECOVERY_INCREASES || '3' }}
           LIVE_ENABLED: ${{ vars.QUANTURA_KALSHI_LIVE_ENABLED || 'false' }}
         with:
           script: |
             const mode=process.env.APPROVED_MODE, sha=process.env.APPROVED_SHA;
             const history=Number(process.env.HISTORY_MINUTES), account=Number(process.env.SUBACCOUNT), direction=process.env.DIRECTION_POLICY;
-            const start=Number(process.env.STARTING_CONTRACTS), multiplier=Number(process.env.RECOVERY_MULTIPLIER), cap=Number(process.env.MAX_CONTRACTS);
+            const start=Number(process.env.STARTING_CONTRACTS), multiplier=Number(process.env.RECOVERY_MULTIPLIER), increases=Number(process.env.MAX_RECOVERY_INCREASES);
             if(!['observe','live'].includes(mode) || !/^[a-f0-9]{40}$/.test(sha) ||
                !Number.isInteger(history) || history<1 || history>12 ||
                !Number.isInteger(account) || account<0 || account>63 ||
                !Number.isInteger(start) || start<1 || start>100 ||
                !Number.isFinite(multiplier) || multiplier<=1 || multiplier>5 ||
-               !Number.isInteger(cap) || cap<start || cap>100 ||
+               !Number.isInteger(increases) || increases<0 || increases>6 ||
                !['confirmed','provisional_near_close'].includes(direction)) throw new Error('INVALID_WATCHDOG_CONFIGURATION');
             if(mode==='live' && process.env.LIVE_ENABLED!=='true') return;
             const workflow_id='kalshi-btc-approved-trader.yml';
@@ -46,5 +46,5 @@ jobs:
             }
             await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:context.payload.repository.default_branch,
               inputs:{mode,history_minutes:String(history),subaccount:String(account),direction_policy:direction,
-                starting_contracts:String(start),recovery_multiplier:String(multiplier),max_contracts:String(cap),
+                starting_contracts:String(start),recovery_multiplier:String(multiplier),max_recovery_increases:String(increases),
                 continuous:'true',code_ref:sha}});

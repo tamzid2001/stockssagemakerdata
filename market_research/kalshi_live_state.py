@@ -9,7 +9,8 @@ from .store import Store, claim_transition
 from .kalshi_execution import recovery, money
 
 
-SIZING_FIELDS = frozenset({'starting_contracts', 'recovery_multiplier', 'max_contracts'})
+SIZING_FIELDS = frozenset({'starting_contracts', 'recovery_multiplier', 'max_recovery_increases'})
+LEGACY_VERSION = 'btc-p90-sticky-hold-live-v2'
 
 
 def empty_stats():
@@ -43,13 +44,21 @@ def approved_reconfiguration(existing, requested, state):
     normalized = {**existing, 'starting_contracts': existing.get('starting_contracts', 1),
         'recovery_multiplier': existing.get('recovery_multiplier', '2.5')}
     if normalized == requested:
-        return dict(state)
+        return {**state, 'recovery_increases': state.get('recovery_increases', 0)}
+    legacy = normalized.get('version') == LEGACY_VERSION
+    if legacy:
+        if normalized.get('max_contracts') != 100:
+            raise RuntimeError('LEGACY_CAP_MIGRATION_NOT_APPROVED')
+        normalized.pop('max_contracts')
+        normalized['version'] = requested['version']
+        normalized['max_recovery_increases'] = requested['max_recovery_increases']
     changed = {key for key in set(normalized) | set(requested)
                if normalized.get(key) != requested.get(key)}
-    if (not changed or not changed <= SIZING_FIELDS or state.get('active')
-            or money(state.get('cycle', '0')) != 0):
+    if ((not changed and not legacy) or not changed <= SIZING_FIELDS or state.get('active')
+            or money(state.get('cycle', '0')) != 0 or
+            (legacy and int(state.get('size', -1)) != int(existing.get('starting_contracts', 1)))):
         raise RuntimeError('LIVE_CONFIG_CHANGE_REQUIRES_RECOVERY_ZERO')
-    return {**state, 'size': requested['starting_contracts']}
+    return {**state, 'size': requested['starting_contracts'], 'recovery_increases': 0}
 
 
 class LiveJournal(Store):
@@ -67,7 +76,7 @@ class LiveJournal(Store):
             requested = asdict(self.config)
             existing = old.get('configuration')
             state = with_stats(old.get('state', {'size': self.config.starting_contracts,
-                'cycle': '0', 'net': '0', 'active': None}))
+                'cycle': '0', 'net': '0', 'active': None, 'recovery_increases': 0}))
             if existing:
                 state = approved_reconfiguration(existing, requested, state)
             lease = claim_transition(old.get('lease', {}), self.holder, time.time())
@@ -221,6 +230,8 @@ class LiveJournal(Store):
                 'acknowledged_remaining': acknowledgement.get('acknowledged_remaining'),
                 'created_at': active.get('created_at')}
         return {'active': safe_active, 'next_contracts': state.get('size'),
+                'recovery_increases': state.get('recovery_increases', 0),
+                'maximum_recovery_increases': self.config.max_recovery_increases,
                 'recovery_cycle_pnl': state.get('cycle', '0'),
                 'realized_net_pnl': state.get('net', '0'),
                 'daily_net_pnl': state.get('daily_net', '0'), **state['stats']}
@@ -262,7 +273,9 @@ class Trader:
             raise RuntimeError('MARKET_NOT_TRADEABLE')
         side = signal['contract_id'].rsplit(':', 1)[1]
         ask = quote[side + '_ask']
-        quantity = min(int(state['size']), self.config.max_contracts)
+        quantity = int(state['size'])
+        if not 1 <= quantity <= 100:
+            raise RuntimeError('INVALID_RECOVERY_STATE')
         intent = order_payload(signal['market_id'], side, quantity, ask, market['exchange_index'], self.config)
         # Conservative fee reserve; actual fills/fees, not this reserve, drive P&L.
         if self.broker.balance(market['exchange_index']) < quantity * (money(ask) + money('.07')):
@@ -360,7 +373,7 @@ class Trader:
         self.journal.acknowledge(retry, acknowledgement)
         return 'retry_acknowledged'
 
-    def reconcile(self):
+    def reconcile(self, *, allow_order_retry=True):
         from .engine import stamp
         from .kalshi_execution import reconciled_order
         state = self.journal.state()
@@ -377,6 +390,8 @@ class Trader:
                     else 'unknown_delivery_blocked')
         fill = reconciled_order(order, entry['intent'], entry['side'])
         if money(fill['filled']) == 0:
+            if not allow_order_retry:
+                return 'zero_fill_retry_disabled'
             return self.retry_unfilled(entry, fill)
         market = self.broker.market(entry['ticker'])
         if market.get('status') not in ('settled', 'finalized') or market.get('result') not in ('yes', 'no'):

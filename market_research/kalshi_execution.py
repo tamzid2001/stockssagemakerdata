@@ -17,7 +17,8 @@ import uuid
 import httpx
 
 BASE = 'https://external-api.kalshi.com/trade-api/v2'
-VERSION = 'btc-p90-sticky-hold-live-v2'
+VERSION = 'btc-p90-sticky-hold-live-v3'
+MAX_CONTRACTS_HARD = 100
 
 
 def money(value):
@@ -34,7 +35,7 @@ class Config:
     direction_policy: str = 'provisional_near_close'
     starting_contracts: int = 1
     recovery_multiplier: str = '2.5'
-    max_contracts: int = 100
+    max_recovery_increases: int = 3
     max_order_dollars: str = '100'
     daily_loss_dollars: str = '100'
     max_ask: str = '0.99'
@@ -46,8 +47,7 @@ class Config:
                 or self.direction_policy not in ('confirmed', 'provisional_near_close')
                 or type(self.starting_contracts) is not int or not 1 <= self.starting_contracts <= 100
                 or not 1 < money(self.recovery_multiplier) <= 5
-                or type(self.max_contracts) is not int or not 1 <= self.max_contracts <= 100
-                or self.starting_contracts > self.max_contracts
+                or type(self.max_recovery_increases) is not int or not 0 <= self.max_recovery_increases <= 6
                 or not 0 < money(self.max_order_dollars) <= 100
                 or not 0 < money(self.daily_loss_dollars) <= 100
                 or not 0 < money(self.max_ask) < 1 or self.version != VERSION):
@@ -68,7 +68,7 @@ def live_allowed(config, requested, env=None):
 
 def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
     if (not re.fullmatch(r'KXBTC15M-[A-Z0-9-]+', ticker) or side not in ('yes', 'no')
-            or type(quantity) is not int or not 1 <= quantity <= config.max_contracts
+            or type(quantity) is not int or not 1 <= quantity <= MAX_CONTRACTS_HARD
             or type(shard) is not int or shard < 0
             or type(attempt) is not int or not 0 <= attempt <= 1000):
         raise ValueError('INVALID_ORDER_INTENT')
@@ -97,12 +97,16 @@ def recovery(state, net, config=None):
     config = config or Config()
     cycle = money(state.get('cycle', '0')) + money(net)
     size = int(state.get('size', config.starting_contracts))
+    increases = int(state.get('recovery_increases', 0))
+    if not 0 <= increases <= config.max_recovery_increases or not 1 <= size <= MAX_CONTRACTS_HARD:
+        raise RuntimeError('INVALID_RECOVERY_STATE')
     if cycle >= 0:
-        cycle, size = Decimal(0), config.starting_contracts
-    elif money(net) < 0:
-        size = min(config.max_contracts, int((Decimal(size) * money(config.recovery_multiplier))
+        cycle, size, increases = Decimal(0), config.starting_contracts, 0
+    elif money(net) < 0 and increases < config.max_recovery_increases:
+        size = min(MAX_CONTRACTS_HARD, int((Decimal(size) * money(config.recovery_multiplier))
             .to_integral_value(rounding=ROUND_FLOOR)))
-    return {**state, 'cycle': str(cycle), 'size': size,
+        increases += 1
+    return {**state, 'cycle': str(cycle), 'size': size, 'recovery_increases': increases,
             'net': str(money(state.get('net', '0')) + money(net))}
 
 
