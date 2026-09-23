@@ -2,8 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   filterSortPaginateRows,
+  clearPublishedScreenerCache,
+  loadPublishedScreenerDataset,
+  listPublishedScreenerDates,
   parseQuantScreenerQuery,
   rowMatchesQuery,
+  screenerArchiveDates,
   type QuantScreenerQuery,
   type QuantScreenerRow,
 } from "./quantScreener";
@@ -142,4 +146,24 @@ test("URL query parser preserves valid combined filters", () => {
   assert.deepEqual(parsed.errors, []);
   assert.deepEqual(parsed.query.positions, ["above-p50", "below-p90"]);
   assert.equal(parsed.query.page, 3);
+});
+test("dated screener assets expose only real scans within fourteen calendar days", () => {
+  const assets=["quantura-screener-2026-09-09.json","quantura-screener-2026-09-10.json","quantura-screener-2026-09-22.json","quantura-screener-2026-09-22.csv","quantura-screener-2026-02-30.json"].map(name=>({name}));
+  assert.deepEqual(screenerArchiveDates(assets,"2026-09-23",new Date("2026-09-23T18:00:00Z")),["2026-09-23","2026-09-22","2026-09-10"]);
+});
+test("dated release reads the archived rows, not today's overwritten rolling asset", async () => {
+  const originalFetch=globalThis.fetch;
+  const today=new Date().toISOString().slice(0,10);
+  const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const latest={schema_version:"quantura-screener-v3",scan_date:today,scan_id:`${today}-new`,generated_at:`${today}T22:00:00Z`,manifest:{},items:[{ticker:"NEW"}]};
+  const archive={...latest,scan_date:yesterday,scan_id:`${yesterday}-old`,generated_at:`${yesterday}T22:00:00Z`,items:[{ticker:"OLD"}]};
+  const assets=[{name:"quantura-screener-latest.json",browser_download_url:"https://example.test/latest"},{name:`quantura-screener-${yesterday}.json`,browser_download_url:"https://example.test/archive"}];
+  globalThis.fetch=async input=>new Response(JSON.stringify(String(input).includes("api.github.com")?{assets}:String(input).includes("archive")?archive:latest),{status:200});
+  clearPublishedScreenerCache();
+  try {
+    assert.deepEqual(await listPublishedScreenerDates("owner","repo",today),[today,yesterday]);
+    assert.equal((await loadPublishedScreenerDataset("owner","repo")).items[0].ticker,"NEW");
+    assert.equal((await loadPublishedScreenerDataset("owner","repo",yesterday)).items[0].ticker,"OLD");
+    await assert.rejects(loadPublishedScreenerDataset("owner","repo","2020-01-01"),/screener_snapshot_not_found/);
+  } finally {globalThis.fetch=originalFetch;clearPublishedScreenerCache();}
 });

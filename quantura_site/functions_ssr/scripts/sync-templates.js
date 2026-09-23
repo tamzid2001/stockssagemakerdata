@@ -39,11 +39,13 @@ const buildTerminalProfilePanel = (dashboardHtml) => {
       <summary>${label}</summary>
       ${extractDashboardPanel(dashboardHtml, name)}
     </details>`).join("");
-  return `<section class="panel hidden terminal-profile-panel" data-panel="profile" aria-labelledby="terminal-profile-title">
+  return `<!-- BEGIN_TERMINAL_PROFILE_PANEL -->
+  <section class="panel hidden terminal-profile-panel" data-panel="profile" aria-labelledby="terminal-profile-title">
     <div class="terminal-profile-heading"><div class="eyebrow">Your account</div><h2 id="terminal-profile-title">Profile</h2><p class="small muted">Manage your account, requests, workspaces, and API access in Terminal.</p></div>
     ${sections}
     <div class="terminal-profile-alerts hidden" data-profile-account><a href="/screener#saved-alerts"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Saved alerts and notifications</span></a></div>
-  </section>`;
+  </section>
+  <!-- END_TERMINAL_PROFILE_PANEL -->`;
 };
 
 const walk = async (dir) => {

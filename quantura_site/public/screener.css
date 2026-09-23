@@ -150,43 +150,24 @@
   outline-offset: 2px;
 }
 
-.qs-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.qs-metrics article {
-  display: grid;
-  gap: 7px;
-  min-height: 92px;
-  padding: 12px;
-  border: 1px solid var(--qs-border);
-  border-radius: var(--qs-radius);
-  background: var(--qs-panel);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
-}
-
-.qs-metrics span {
+.qs-snapshot-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 12px;
   color: var(--qs-muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: .78rem;
 }
-
-.qs-metrics strong {
-  align-self: end;
-  color: var(--qs-text);
-  font-size: 1.42rem;
-  line-height: 1.2;
-}
-
-.qs-metrics small {
-  color: var(--qs-muted);
-  font-size: 0.76rem;
-}
+.qs-market-count { margin: 0 auto 0 0; font-variant-numeric: tabular-nums; }
+.qs-market-count strong { color: var(--qs-text); font-size: .92rem; }
+.qs-market-count span, #qs-date-availability { color: var(--qs-muted); font-size: .72rem; }
+.qs-date-navigation { display: flex; align-items: center; gap: 6px; }
+.qs-date-navigation label { display: inline-flex; align-items: center; gap: 6px; color: var(--qs-muted); font-size: .72rem; }
+.qs-date-navigation input { width: 142px; min-height: 34px; padding: 3px 7px; border: 1px solid var(--qs-border-strong); border-radius: 8px; background: var(--qs-panel); color: var(--qs-text); color-scheme: light; font: inherit; }
+[data-theme="dark"] .qs-date-navigation input { color-scheme: dark; }
+.qs-date-navigation .cta { min-height: 34px; padding: 5px 8px; font-size: .72rem; }
+.qs-date-navigation :disabled { opacity: .55; cursor: not-allowed; }
 
 .qs-filter-panel,
 .qs-results,
@@ -682,10 +663,6 @@
     width: max-content;
   }
 
-  .qs-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .qs-methodology {
     grid-template-columns: 1fr;
   }
@@ -714,19 +691,10 @@
     justify-content: center;
   }
 
-  .qs-metrics {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-
-  .qs-metrics article {
-    min-height: 84px;
-    padding: 14px;
-  }
-
-  .qs-metrics strong {
-    font-size: 1.08rem;
-  }
+  .qs-snapshot-bar { align-items: flex-start; }
+  .qs-market-count { flex-basis: 100%; }
+  .qs-date-navigation { flex-wrap: wrap; }
+  .qs-date-navigation .cta, .qs-date-navigation input { min-height: 40px; }
 
   .qs-filter-panel:not([open]) summary {
     border-bottom-color: transparent;

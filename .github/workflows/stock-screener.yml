@@ -259,17 +259,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          SCAN_DATE="$(jq -r .scan_date screener-work/final/quantura-screener-latest.json)"
+          if [[ ! "$SCAN_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Invalid screener scan date" >&2
+            exit 1
+          fi
           if ! gh release view screener-latest >/dev/null 2>&1; then
             gh release create screener-latest \
               --title "Quantura Screener — Latest Complete Scan" \
               --notes "Rolling validated dataset consumed by quantura.studio/screener." \
               --latest=false
           fi
+          cp screener-work/final/quantura-screener-latest.json "screener-work/final/quantura-screener-${SCAN_DATE}.json"
           gh release upload screener-latest \
+            "screener-work/final/quantura-screener-${SCAN_DATE}.json" \
             screener-work/final/quantura-screener-latest.json \
             screener-work/final/quantura-screener-latest.csv \
             screener-work/final/run-manifest.json \
             --clobber
+          CUTOFF_DATE="$(date -u -d "${SCAN_DATE} -13 days" +%F)"
+          while IFS= read -r asset; do
+            if [[ "$asset" =~ ^quantura-screener-([0-9]{4}-[0-9]{2}-[0-9]{2})\.json$ ]] && [[ "${BASH_REMATCH[1]}" < "$CUTOFF_DATE" ]]; then
+              gh release delete-asset screener-latest "$asset" --yes
+            fi
+          done < <(gh release view screener-latest --json assets --jq '.assets[].name')
       - name: Persist daily Buy history and evaluate saved filters
         if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
         env:

@@ -36,14 +36,16 @@
     filterCount: document.getElementById("qs-filter-count"),
     metricMatches: document.getElementById("qs-metric-matches"),
     metricTotal: document.getElementById("qs-metric-total"),
-    metricCoverage: document.getElementById("qs-metric-coverage"),
-    metricProcessed: document.getElementById("qs-metric-processed"),
-    metricDate: document.getElementById("qs-metric-date"),
-    metricFreshness: document.getElementById("qs-metric-freshness"),
+    dateInput: document.getElementById("qs-date"),
+    datePrevious: document.getElementById("qs-date-previous"),
+    dateNext: document.getElementById("qs-date-next"),
+    dateAvailability: document.getElementById("qs-date-availability"),
+    lastBuyHeading: document.getElementById("qs-last-buy-heading"),
   };
 
   const defaults = Object.freeze({
     source: "stocks",
+    date: "",
     search: "",
     universe: "all",
     marketCap: "all",
@@ -64,6 +66,7 @@
   let savedAlerts = [];
   let savedAlertsMeta = {};
   let alertPanelLoading = null;
+  let availableDates = [];
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -188,6 +191,8 @@
       direction: ["asc", "desc"],
     };
     const state = { ...defaults, positions: [] };
+    const date = String(params.get("date") || "");
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) state.date = date;
     state.search = String(params.get("search") || "").slice(0, 80);
     Object.keys(allowed).forEach((key) => {
       const value = params.get(key);
@@ -211,6 +216,7 @@
   function buildParams(state) {
     const params = new URLSearchParams();
     if(state.source!=="stocks")params.set("source",state.source);
+    if (state.date && state.source === "stocks") params.set("date", state.date);
     if (window.location.pathname === "/forecasting") params.set("panel", "screener");
     if (state.search) params.set("search", state.search);
     if (state.universe !== "all") params.set("universe", state.universe);
@@ -267,7 +273,7 @@
 
   function savedSignalView(row) {
     const last=row.last_buy_signal;
-    if(!last)return '<span class="qs-muted-cell">None saved yet</span>';
+    if(!last)return `<span class="qs-muted-cell">${row.archived_scan?"No Buy in this scan":"None saved yet"}</span>`;
     return `<div class="qs-signal-stack"><span class="qs-badge">Buy · ${escapeHtml(formatDate(last.input_date,false))}</span><small>Close ${escapeHtml(formatNumber(last.price))} · target ${escapeHtml(formatNumber(last.price_target))}</small></div>`;
   }
 
@@ -326,22 +332,25 @@
 
   function render(payload) {
     const items = Array.isArray(payload.items) ? payload.items : [];
-    const manifest = payload.manifest || {};
     refs.metricMatches.textContent = Number(payload.total || 0).toLocaleString();
     refs.metricTotal.textContent = `of ${Number(payload.universeCount || 0).toLocaleString()} in universe`;
-    const coverage = finite(manifest.coverage_percentage);
-    refs.metricCoverage.textContent = coverage === null ? "Unavailable" : `${coverage.toFixed(1)}%`;
-    refs.metricProcessed.textContent = `${Number(manifest.successfully_processed || 0).toLocaleString()} evaluated · ${Number(manifest.failed || 0).toLocaleString()} failed`;
-    refs.metricDate.textContent = formatDate(payload.generatedAt || payload.scanDate, false);
-    refs.metricFreshness.textContent = freshnessLabel(payload.generatedAt);
     const weekly=payload.schemaVersion === "quantura-screener-v3";
     const perps=payload.dataSource==="kalshi_perps";
-    document.getElementById("qs-engine").textContent=perps ? "Forecast on demand" : weekly ? "Five-model weekly ensemble" : "Prior validated scan";
-    document.getElementById("qs-engine-detail").textContent=perps ? "USD per underlying unit · reference spot scale" : weekly ? "1 session withheld · 7 NYSE sessions · Toto 4M" : "Weekly ensemble scan not published yet";
-    if(perps)refs.metricProcessed.textContent=`${manifest.successfully_processed} spot references available · ${manifest.failed} unavailable`;
+    availableDates = perps ? [] : (Array.isArray(payload.availableDates) ? payload.availableDates.filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)) : []);
+    const selectedDate = perps ? "" : String(payload.selectedDate || payload.scanDate || "");
+    const dateIndex=availableDates.indexOf(selectedDate);
+    refs.dateInput.value=selectedDate;
+    refs.dateInput.disabled=perps || availableDates.length<2;
+    refs.dateInput.min=availableDates.at(-1) || "";
+    refs.dateInput.max=availableDates[0] || "";
+    refs.datePrevious.disabled=perps || dateIndex<0 || dateIndex>=availableDates.length-1;
+    refs.dateNext.disabled=perps || dateIndex<=0;
+    refs.dateAvailability.textContent=perps ? "Perpetual prices are currently on demand; no daily archive." :
+      `${availableDates.length} saved ${availableDates.length===1?"scan":"scans"} in the 14-day window${dateIndex>0?" · viewing archived output":" · latest published scan"}.`;
+    refs.lastBuyHeading.textContent=dateIndex>0?"Buy in scan":"Last Buy";
     refs.freshness.textContent = perps
       ? `Scan ${formatDate(payload.generatedAt, true)} · Kalshi reference prices normalized by contract exposure, with normalized completed trades as fallback. Quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`
-      : `Scan ${formatDate(payload.generatedAt, true)} · latest completed daily close · seven future trading sessions · no intraday tracking. ${(payload.warnings || []).join(" ")}`;
+      : `${dateIndex>0?"Archived":"Latest"} scan ${formatDate(payload.generatedAt, true)} · completed daily close · seven future trading sessions · no intraday tracking. ${weekly?"Five-model weekly ensemble.":"Prior validated scan."} ${(payload.warnings || []).join(" ")}`;
     refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} ${perps ? "markets" : "securities"} match the active research filters.`;
     current.page = Number(payload.page || current.page || 1);
     refs.pageLabel.textContent = `Page ${current.page.toLocaleString()} of ${Number(payload.pageCount || 1).toLocaleString()}`;
@@ -387,7 +396,7 @@
   }
 
   function clearFilters() {
-    current = { ...defaults, positions: [] };
+    current = { ...defaults, date: current.date, positions: [] };
     writeControls(current);
     load({ resetPage: true });
   }
@@ -397,7 +406,7 @@
     load({ resetPage: true });
   });
   root.addEventListener("change", event => {
-    if(event.target===refs.source){current={...defaults,source:refs.source.value,positions:[],quantileRules:[]};writeControls(current);}
+    if(event.target===refs.source){current={...defaults,source:refs.source.value,date:refs.source.value==="stocks"?current.date:"",positions:[],quantileRules:[]};writeControls(current);}
     const perps=refs.source?.value==="kalshi_perps";
     for(const control of [refs.universe,refs.marketCap,refs.signal,refs.signalChanged,refs.statistic,refs.addRule])control.disabled=perps;
     root.querySelectorAll('input[name="position"]').forEach(control=>{control.disabled=perps;});
@@ -419,6 +428,26 @@
   refs.emptyClear.addEventListener("click", clearFilters);
   refs.refresh.addEventListener("click", () => load({ force: true }));
   refs.retry.addEventListener("click", () => load({ force: true }));
+  refs.dateInput.addEventListener("change", () => {
+    const date=refs.dateInput.value;
+    if(!availableDates.includes(date)) {
+      refs.dateInput.value=current.date || availableDates[0] || "";
+      refs.dateAvailability.textContent="No validated scan was published on that date. Choose an available scan day.";
+      return;
+    }
+    current.date=date;
+    load({resetPage:true});
+  });
+  refs.datePrevious.addEventListener("click", () => {
+    const index=availableDates.indexOf(refs.dateInput.value);
+    if(index<0 || index>=availableDates.length-1)return;
+    current.date=availableDates[index+1];load({resetPage:true});
+  });
+  refs.dateNext.addEventListener("click", () => {
+    const index=availableDates.indexOf(refs.dateInput.value);
+    if(index<=0)return;
+    current.date=availableDates[index-1];load({resetPage:true});
+  });
   refs.previous.addEventListener("click", () => {
     if (current.page <= 1) return;
     current.page -= 1;
@@ -501,7 +530,7 @@
   });
   document.getElementById("qs-saved-list").addEventListener("click",async event=>{
     const apply=event.target.closest("[data-apply-alert]");const remove=event.target.closest("[data-remove-alert]");
-    if(apply){const a=savedAlerts.find(s=>s.id===apply.dataset.applyAlert);if(a){current={...defaults,...a.filters,positions:[...a.filters.positions],page:1};writeControls(current);load();alertStatus.textContent=`Applied ${a.name}.`;}}
+    if(apply){const a=savedAlerts.find(s=>s.id===apply.dataset.applyAlert);if(a){current={...defaults,...a.filters,date:current.date,positions:[...a.filters.positions],page:1};writeControls(current);load();alertStatus.textContent=`Applied ${a.name}.`;}}
     if(remove){remove.disabled=true;try{await accountRequest(`/api/v1/me/screener-alerts/${remove.dataset.removeAlert}`,{method:"DELETE"});await loadSavedAlerts();alertStatus.textContent="Removed. This filter will no longer send notifications.";}catch(error){alertStatus.textContent=error.message;remove.disabled=false;}}
   });
   const openSavedAlerts=()=>{savedAlertPanel.open=true;refreshAlertPanel({announce:false}).catch(error=>{alertStatus.textContent=error.message;if(alertSummary)alertSummary.textContent="Sign in to load";});};

@@ -43,6 +43,18 @@ export class ScreenerMarketService {
     const promise=this.refresh(dataset).finally(()=>{if(this.loading?.promise===promise)this.loading=undefined;});
     this.loading={scan:dataset.scan_id,promise};return promise;
   }
+  archived(dataset:QuantScreenerDataset):{items:QuantScreenerRow[];warnings:string[]} {
+    // Archived scans must not inherit Buy history written after their date.
+    const publishedAt=Date.parse(dataset.generated_at);
+    const now=Number.isFinite(publishedAt)?publishedAt:Date.parse(`${dataset.scan_date}T23:59:59Z`);
+    return {items:dataset.items.map(row=>{
+      const decorated=decorateScreenerRow(row,undefined,{},now);
+      const signal=decorated.cutoff_p99_signal as ScreenerSignal|null;
+      if(signal?.value==="buy")decorated.last_buy_signal=signal;
+      decorated.archived_scan=true;
+      return decorated;
+    }),warnings:[]};
+  }
   private async refresh(dataset:QuantScreenerDataset) {
     let states=new Map<string,SavedScreenerSignal>();const warnings:string[]=[];
     try{states=await this.store.read();}catch{warnings.push("Saved Buy history is temporarily unavailable.");}
