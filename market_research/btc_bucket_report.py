@@ -191,60 +191,68 @@ def bankroll(trades: list[dict]) -> dict:
     }
 
 
-def capped_recovery_scenarios(trades: list[dict], fee_policy: dict) -> list[dict]:
-    """Resize one immutable entry sequence using only confirmed prior outcomes.
-
-    A step is one loss-triggered multiplication, so floor rounding yields
-    1 -> 2 -> 5 -> 12 contracts for a 2.5x factor. Entry/settlement times,
-    prices, and fee policy remain identical across scenarios.
-    """
+def replay_recovery_scenario(trades: list[dict], fee_policy: dict, *,
+                             starting_contracts: int, max_increases: int | None) -> dict:
+    """Resize an immutable entry sequence using only confirmed prior outcomes."""
     if fee_policy.get("fee_type") != "quadratic" or fee_policy.get("multiplier") != 1:
         raise ValueError("UNVERIFIED_FEE_POLICY")
+    if (type(starting_contracts) is not int or not 1 <= starting_contracts <= 100 or
+            (max_increases is not None and (type(max_increases) is not int or not 0 <= max_increases <= 6))):
+        raise ValueError("INVALID_RECOVERY_SENSITIVITY")
     source = sorted(_ordered_closed(trades), key=lambda row: (int(row["entry_at"]), str(row["market_id"])))
     if len(source) != len(trades) or len({row["market_id"] for row in source}) != len(source):
         raise ValueError("COMPLETE_UNIQUE_TRADE_LEDGER_REQUIRED")
-    results = []
-    for limit in (1, 2, 3, None):
-        pending: list[tuple[int, str, float]] = []
-        size, increases, cycle = 1, 0, 0.0
-        resized = []
-        for row in source:
-            entry_at = int(row["entry_at"])
-            while pending and pending[0][0] < entry_at:
-                _, _, net = heapq.heappop(pending)
-                cycle += net
-                if cycle >= -1e-10:
-                    cycle, size, increases = 0.0, 1, 0
-                elif net < 0 and (limit is None or increases < limit):
-                    size = min(100, math.floor(size * 2.5))
-                    increases += 1
-            price = _finite(row["entry_price"])
-            payout = _finite(row["exit_price"])
-            if not 0 < price < 1 or payout not in (0, 1) or int(row["outcome_confirmed_at"]) < entry_at:
-                raise ValueError("INVALID_HISTORICAL_TRADE")
-            fee = taker_fee(size, price, "0.0001", fee_policy["multiplier"])
-            net = size * (payout - price) - fee
-            if limit is None and (size != row["quantity"] or
-                    not math.isclose(fee, row["fees"], abs_tol=1e-7) or
-                    not math.isclose(net, row["net_pnl"], abs_tol=1e-7)):
-                raise ValueError("BASELINE_REPLAY_MISMATCH")
-            revised = {**row, "quantity": size, "fees": fee,
-                       "gross_pnl": size * (payout - price), "net_pnl": net}
-            resized.append(revised)
-            heapq.heappush(pending, (int(row["outcome_confirmed_at"]), str(row["market_id"]), net))
-        summary = trade_statistics(resized)
-        results.append({
-            "maximum_loss_escalations_per_recovery_cycle": limit,
-            "maximum_contracts_allowed_by_escalations": 100 if limit is None else (1, 2, 5, 12)[limit],
-            "closed_trades": summary["closed_trades"],
-            "wins": summary["wins"], "losses": summary["losses"],
-            "net_pnl": round(summary["net_pnl"], 6),
-            "return_on_entry_notional": summary["net_return_on_closed_entry_notional"],
-            "realized_equity_max_drawdown": round(summary["realized_equity_max_drawdown"], 6),
-            "maximum_contracts_used": summary["max_quantity_used"],
-            "historical_minimum_initial_cash": bankroll(resized)["historical_minimum_initial_cash"],
-        })
-    return results
+    pending: list[tuple[int, str, float]] = []
+    size, increases, cycle = starting_contracts, 0, 0.0
+    resized = []
+    for row in source:
+        entry_at = int(row["entry_at"])
+        while pending and pending[0][0] < entry_at:
+            _, _, net = heapq.heappop(pending)
+            cycle += net
+            if cycle >= -1e-10:
+                cycle, size, increases = 0.0, starting_contracts, 0
+            elif net < 0 and (max_increases is None or increases < max_increases):
+                size = min(100, math.floor(size * 2.5))
+                increases += 1
+        price = _finite(row["entry_price"])
+        payout = _finite(row["exit_price"])
+        if not 0 < price < 1 or payout not in (0, 1) or int(row["outcome_confirmed_at"]) < entry_at:
+            raise ValueError("INVALID_HISTORICAL_TRADE")
+        fee = taker_fee(size, price, "0.0001", fee_policy["multiplier"])
+        net = size * (payout - price) - fee
+        if starting_contracts == 1 and max_increases is None and (size != row["quantity"] or
+                not math.isclose(fee, row["fees"], abs_tol=1e-7) or
+                not math.isclose(net, row["net_pnl"], abs_tol=1e-7)):
+            raise ValueError("BASELINE_REPLAY_MISMATCH")
+        revised = {**row, "quantity": size, "fees": fee,
+                   "gross_pnl": size * (payout - price), "net_pnl": net}
+        resized.append(revised)
+        heapq.heappush(pending, (int(row["outcome_confirmed_at"]), str(row["market_id"]), net))
+    summary = trade_statistics(resized)
+    maximum_allowed = starting_contracts
+    for _ in range(max_increases or 0):
+        maximum_allowed = min(100, math.floor(maximum_allowed * 2.5))
+    funding = bankroll(resized)
+    return {
+        "starting_contracts": starting_contracts,
+        "maximum_loss_escalations_per_recovery_cycle": max_increases,
+        "maximum_contracts_allowed_by_escalations": 100 if max_increases is None else maximum_allowed,
+        "closed_trades": summary["closed_trades"],
+        "wins": summary["wins"], "losses": summary["losses"],
+        "net_pnl": round(summary["net_pnl"], 6),
+        "return_on_entry_notional": summary["net_return_on_closed_entry_notional"],
+        "realized_equity_max_drawdown": round(summary["realized_equity_max_drawdown"], 6),
+        "maximum_contracts_used": summary["max_quantity_used"],
+        "historical_minimum_initial_cash": funding["historical_minimum_initial_cash"],
+        "maximum_cash_drawdown_including_locked_positions": funding["maximum_cash_drawdown_including_locked_positions"],
+    }
+
+
+def capped_recovery_scenarios(trades: list[dict], fee_policy: dict) -> list[dict]:
+    """Prior published 1-contract sensitivity; keep the baseline verified."""
+    return [replay_recovery_scenario(trades, fee_policy, starting_contracts=1, max_increases=limit)
+            for limit in (1, 2, 3, None)]
 
 
 def price_buckets(trades: list[dict]) -> list[dict]:
@@ -328,6 +336,10 @@ def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: s
     if fee_policy is not None and 1 in origin_scenarios:
         result["origin_1_recovery_escalation_sensitivity"] = capped_recovery_scenarios(
             origin_scenarios[1]["trades"], fee_policy)
+        result["origin_1_start_size_sensitivity"] = [
+            replay_recovery_scenario(origin_scenarios[1]["trades"], fee_policy,
+                                     starting_contracts=start, max_increases=limit)
+            for start in (1, 5, 10) for limit in (3, 4)]
     return result
 
 

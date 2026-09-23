@@ -1,6 +1,6 @@
 import pytest
 
-from market_research.btc_bucket_report import aggregate, bankroll, capped_recovery_scenarios, price_buckets, recovery_cycles, streaks
+from market_research.btc_bucket_report import aggregate, bankroll, capped_recovery_scenarios, price_buckets, recovery_cycles, replay_recovery_scenario, streaks
 from market_research.btc_sticky_tracking import taker_fee
 
 
@@ -118,3 +118,23 @@ def test_capped_recovery_fails_if_original_ledger_does_not_replay():
     row.update(game_id="m-1", trade_id="trade-1", exit_at=11, outcome_confirmed_at=11)
     with pytest.raises(ValueError, match="BASELINE_REPLAY_MISMATCH"):
         capped_recovery_scenarios([row], {"fee_type": "quadratic", "multiplier": 1})
+
+
+def test_start_size_sensitivity_honors_increase_count_and_hard_ceiling():
+    rows = []
+    for index in range(5):
+        rows.append({"status": "closed", "market_id": f"btc-{index}",
+                     "entry_at": 100 + index * 20, "exit_at": 110 + index * 20,
+                     "outcome_confirmed_at": 110 + index * 20,
+                     "entry_price": 0.6, "exit_price": 0, "quantity": 1,
+                     "fees": taker_fee(1, 0.6, "0.0001", 1), "net_pnl": -0.6,
+                     "game_id": f"btc-{index}", "trade_id": f"trade-{index}"})
+    fee_policy = {"fee_type": "quadratic", "multiplier": 1}
+    three = replay_recovery_scenario(rows, fee_policy, starting_contracts=5, max_increases=3)
+    four = replay_recovery_scenario(rows, fee_policy, starting_contracts=5, max_increases=4)
+    ten = replay_recovery_scenario(rows, fee_policy, starting_contracts=10, max_increases=4)
+    assert three["maximum_contracts_used"] == 75
+    assert four["maximum_contracts_used"] == 100
+    assert ten["maximum_contracts_used"] == 100
+    assert three["historical_minimum_initial_cash"] > 0
+    assert four["realized_equity_max_drawdown"] > three["realized_equity_max_drawdown"]

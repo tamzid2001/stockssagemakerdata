@@ -17,7 +17,9 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert inputs['direction_policy']['default'] == 'provisional_near_close'
     assert inputs['starting_contracts']['default'] == 1
     assert inputs['recovery_multiplier']['default'] == 2.5
-    assert inputs['max_contracts']['default'] == 100
+    assert 'max_contracts' not in inputs
+    assert inputs['max_recovery_increases']['default'] == '3'
+    assert inputs['max_recovery_increases']['options'] == [str(n) for n in range(7)]
     assert workflow['concurrency']['cancel-in-progress'] is False
     assert workflow['jobs']['worker']['timeout-minutes'] <= 355
     assert workflow['permissions']['contents'] == 'read'
@@ -34,7 +36,7 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert 'direction_policy: process.env.DIRECTION_POLICY' in text
     assert 'starting_contracts: process.env.STARTING_CONTRACTS' in text
     assert 'recovery_multiplier: process.env.RECOVERY_MULTIPLIER' in text
-    assert 'max_contracts: process.env.MAX_CONTRACTS' in text
+    assert 'max_recovery_increases: process.env.MAX_RECOVERY_INCREASES' in text
     assert workflow['jobs']['worker']['steps'][0]['name'] == 'Record total job budget'
     assert workflow['jobs']['worker']['steps'][2]['name'] == 'Validate live approval reference'
 
@@ -77,3 +79,15 @@ def test_stale_recovery_is_manual_proof_gated_and_shares_live_singleton():
     assert 'QUANTURA_KALSHI_LIVE_ENABLED' not in text
     assert 'QUANTURA_KALSHI_APPROVED_CONFIG' not in text
     assert 'RECOVERY_TICKER' in text and '${{ inputs.ticker }}' not in text.split('run: >-', 1)[1]
+
+
+def test_existing_fill_settlement_is_manual_read_only_and_serialized():
+    text = (ROOT / '.github/workflows/kalshi-btc-filled-settlement.yml').read_text()
+    workflow = yaml.safe_load(text)
+    assert workflow[True]['workflow_dispatch']['inputs']['confirmation']['required'] is True
+    assert workflow['permissions'] == {'contents': 'read'}
+    assert workflow['concurrency']['group'] == 'quantura-kalshi-btc-execution-singleton'
+    assert 'kalshi_live_settlement' in text
+    assert 'QUANTURA_KALSHI_LIVE_ENABLED' not in text
+    assert 'QUANTURA_KALSHI_APPROVED_CONFIG' not in text
+    assert 'RECOVERY_TICKER' not in text
