@@ -38,6 +38,7 @@ import {
   filterSortPaginateRows,
   screenerRowsCsv,
   loadPublishedScreenerDataset,
+  listPublishedScreenerDates,
   parseQuantScreenerQuery,
 } from "./quantScreener";
 import { ScreenerMarketService, ScreenerSignalStore } from "./screenerMarketService";
@@ -8362,14 +8363,20 @@ ROUTES.get("/screener/github-history/:workflowRunId/artifacts/:artifactId/downlo
 ROUTES.get("/screener/data", async (req, res) => {
   if(req.query.source && !["stocks","kalshi_perps"].includes(String(req.query.source))) {res.status(422).json({error:"screener_source_invalid"});return;}
   const perps=req.query.source==="kalshi_perps";
+  const selectedDate=String(req.query.date||"").trim();
+  if(selectedDate && (perps || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate))) {res.status(422).json({error:"screener_date_invalid"});return;}
   const parsed = parseQuantScreenerQuery(asPlainObject(req.query));
   if (parsed.errors.length) {
     res.status(400).json({ error: "invalid_screener_query", details: parsed.errors });
     return;
   }
   try {
-    const dataset = perps ? await kalshiPerps.screener() : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
-    const current = perps ? {items:dataset.items,warnings:dataset.manifest.warnings} : await screenerMarketService.current(dataset);
+    const latest = perps ? null : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    const availableDates = perps ? [] : await listPublishedScreenerDates(GITHUB_REPO_OWNER, GITHUB_REPO_NAME, latest!.scan_date);
+    if(selectedDate && !availableDates.includes(selectedDate)) {res.status(404).json({error:"screener_snapshot_not_found"});return;}
+    const dataset = perps ? await kalshiPerps.screener() : selectedDate && selectedDate!==latest!.scan_date ? await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME,selectedDate) : latest!;
+    const archived=Boolean(selectedDate && selectedDate!==latest?.scan_date);
+    const current = perps ? {items:dataset.items,warnings:dataset.manifest.warnings} : archived ? screenerMarketService.archived(dataset) : await screenerMarketService.current(dataset);
     const page = filterSortPaginateRows(current.items, parsed.query);
     page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...row,forecast_view_url:perps ? row.forecast_view_url : ["quantura_weekly_ensemble_v1","quantura_weekly_ensemble_v2"].includes(String(row.forecast_engine))?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=30");
@@ -8378,6 +8385,8 @@ ROUTES.get("/screener/data", async (req, res) => {
       ...page,
       scanId: dataset.scan_id,
       scanDate: dataset.scan_date,
+      selectedDate: perps ? null : dataset.scan_date,
+      availableDates,
       generatedAt: dataset.generated_at,
       manifest: dataset.manifest,
       universeCount: dataset.items.length,
@@ -8400,16 +8409,20 @@ ROUTES.get("/screener/data", async (req, res) => {
 
 ROUTES.get("/screener/export.csv", async (req, res) => {
   if(req.query.source && !["stocks","kalshi_perps"].includes(String(req.query.source))) {res.status(422).json({error:"screener_source_invalid"});return;}
+  const selectedDate=String(req.query.date||"").trim();
+  if(selectedDate && (req.query.source==="kalshi_perps" || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate))) {res.status(422).json({error:"screener_date_invalid"});return;}
   const parsed = parseQuantScreenerQuery(asPlainObject(req.query));
   if (parsed.errors.length) { res.status(400).json({error:"invalid_screener_query",details:parsed.errors}); return; }
   try {
     const perps=req.query.source==="kalshi_perps";
-    const dataset = perps ? await kalshiPerps.screener() : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
-    const current = perps ? {items:dataset.items} : await screenerMarketService.current(dataset);
+    const latest = perps ? null : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
+    if(selectedDate && !(await listPublishedScreenerDates(GITHUB_REPO_OWNER,GITHUB_REPO_NAME,latest!.scan_date)).includes(selectedDate)) {res.status(404).json({error:"screener_snapshot_not_found"});return;}
+    const dataset = perps ? await kalshiPerps.screener() : selectedDate && selectedDate!==latest!.scan_date ? await loadPublishedScreenerDataset(GITHUB_REPO_OWNER,GITHUB_REPO_NAME,selectedDate) : latest!;
+    const current = perps ? {items:dataset.items} : selectedDate && selectedDate!==latest!.scan_date ? screenerMarketService.archived(dataset) : await screenerMarketService.current(dataset);
     const csv = screenerRowsCsv(filterSortPaginateRows(current.items,{...parsed.query,page:1,pageSize:Math.max(1,current.items.length)}).items);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60");
-    res.setHeader("Content-Disposition", 'attachment; filename="quantura-screener-latest.csv"');
+    res.setHeader("Content-Disposition", `attachment; filename="quantura-screener-${dataset.scan_date || "latest"}.csv"`);
     res.status(200).send(csv);
   } catch (error) {
     console.error("[Screener] validated CSV export unavailable", {

@@ -915,9 +915,13 @@ function internal(options: Options, handler: (req: Request, res: Response, reque
 }
 
 export function registerEnsembleForecastRoutes(router: Router, options: Options): void {
-  const publishedSnapshot = async (req: Request) => screenerForecastSnapshot(
-    await loadPublishedScreenerDataset(process.env.GITHUB_REPO_OWNER || "tamzid2001", process.env.GITHUB_REPO_NAME || "stockssagemakerdata"),
-    text(req.params.ticker,20),text(req.query.scan_id || req.body?.scan_id,160));
+  const publishedSnapshot = async (req: Request) => {
+    const scanId=text(req.query.scan_id || req.body?.scan_id,160);
+    const scanDate=/^(\d{4}-\d{2}-\d{2})-/.exec(scanId)?.[1];
+    const dataset=await loadPublishedScreenerDataset(
+      process.env.GITHUB_REPO_OWNER || "tamzid2001", process.env.GITHUB_REPO_NAME || "stockssagemakerdata",scanDate);
+    return screenerForecastSnapshot(dataset,text(req.params.ticker,20),scanId);
+  };
   // Public, precomputed data only: opening a screener row does not run models or create private requests.
   router.get("/v1/screener/forecasts/:ticker", async (req,res) => {
     const requestId=crypto.randomUUID();

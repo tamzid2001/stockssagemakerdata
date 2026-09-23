@@ -827,7 +827,7 @@
       signin_manage_notifications: "Sign in to manage notifications",
       account: "Account",
       leaderboard_profile: "Public profile",
-      sidebar_forecast: "Q Forecast",
+      sidebar_forecast: "Forecast",
       sidebar_trending: "Trending",
       sidebar_news_data: "Historical Data Download",
       sidebar_corporate_events: "Earnings calendar",
@@ -835,7 +835,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Options",
       sidebar_learn_more: "Forecast guide",
-      sidebar_screener: "Q Screener",
+      sidebar_screener: "Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Multi-model probabilistic forecasting. Configure once, run asynchronously, and download your final ensemble.",
       panel_market_headlines_title: "Top market headlines",
@@ -885,7 +885,7 @@
       signin_manage_notifications: "Inicia sesion para gestionar notificaciones",
       account: "Cuenta",
       leaderboard_profile: "Perfil publico",
-      sidebar_forecast: "Q Forecast",
+      sidebar_forecast: "Forecast",
       sidebar_trending: "Tendencias",
       sidebar_news_data: "Noticias y datos",
       sidebar_corporate_events: "Calendario de resultados",
@@ -893,7 +893,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Opciones",
       sidebar_learn_more: "Mas informacion",
-      sidebar_screener: "Q Screener",
+      sidebar_screener: "Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
       panel_market_headlines_title: "Titulares del mercado",
@@ -943,7 +943,7 @@
       signin_manage_notifications: "Connectez-vous pour gerer les notifications",
       account: "Compte",
       leaderboard_profile: "Profil public",
-      sidebar_forecast: "Q Forecast",
+      sidebar_forecast: "Forecast",
       sidebar_trending: "Tendances",
       sidebar_news_data: "Actualites et donnees",
       sidebar_corporate_events: "Calendrier des resultats",
@@ -951,7 +951,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Options",
       sidebar_learn_more: "En savoir plus",
-      sidebar_screener: "Q Screener",
+      sidebar_screener: "Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
       panel_market_headlines_title: "Titres du marche",
@@ -1001,7 +1001,7 @@
       signin_manage_notifications: "Zum Verwalten von Benachrichtigungen anmelden",
       account: "Konto",
       leaderboard_profile: "Offentliches Profil",
-      sidebar_forecast: "Q Forecast",
+      sidebar_forecast: "Forecast",
       sidebar_trending: "Trending",
       sidebar_news_data: "News und Daten",
       sidebar_corporate_events: "Ergebnis-Kalender",
@@ -1009,7 +1009,7 @@
       sidebar_ask_gpt5: "Forecast Review",
       sidebar_options: "Optionen",
       sidebar_learn_more: "Mehr erfahren",
-      sidebar_screener: "Q Screener",
+      sidebar_screener: "Screener",
       panel_forecast_title: "Quantura Forecast",
       panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
       panel_market_headlines_title: "Top-Markt-Schlagzeilen",
@@ -1059,7 +1059,7 @@
       signin_manage_notifications: "سجل الدخول لادارة الاشعارات",
       account: "الحساب",
       leaderboard_profile: "الملف العام",
-      sidebar_forecast: "Q Forecast",
+      sidebar_forecast: "Forecast",
       sidebar_trending: "الترند",
       sidebar_news_data: "الاخبار والبيانات",
       sidebar_corporate_events: "تقويم الأرباح",
@@ -1117,7 +1117,7 @@
       signin_manage_notifications: "নোটিফিকেশন পরিচালনা করতে সাইন ইন করুন",
       account: "অ্যাকাউন্ট",
       leaderboard_profile: "পাবলিক প্রোফাইল",
-      sidebar_forecast: "Q Forecast",
+      sidebar_forecast: "Forecast",
       sidebar_trending: "ট্রেন্ডিং",
       sidebar_news_data: "খবর ও ডেটা",
       sidebar_corporate_events: "আর্নিংস ক্যালেন্ডার",
@@ -2474,8 +2474,8 @@
       reason: "full_account_required",
       message: nextMessage,
     });
-    if (redirect && !isNativeApp() && window.location.pathname !== "/account") {
-      window.location.href = "/account";
+    if (redirect && !isNativeApp() && !(window.location.pathname === "/forecasting" && new URLSearchParams(window.location.search).get("panel") === "profile")) {
+      window.location.href = "/forecasting?panel=profile";
     }
     return false;
   };
@@ -2961,9 +2961,14 @@
           const next = panelNames.has(requested) ? requested : String(router?.defaultPanel || buttons[0]?.dataset?.panelTarget || "").trim();
 		      if (!next) return;
 		      panels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.panel !== next));
+          panelsRoot.dataset.activePanel = next;
           window.dispatchEvent(new CustomEvent("quantura:panel-changed", {detail:{panel:next}}));
           const marketSelector = document.querySelector(".market-search-workspace");
-          if (marketSelector) marketSelector.hidden = ["autopilot", "foundry"].includes(next);
+          if (marketSelector) marketSelector.hidden = ["autopilot", "foundry", "profile"].includes(next);
+		      if (next === "profile" && /^#terminal-profile-(auth|profile|orders|collaboration|developer)$/.test(window.location.hash)) {
+		        const requestedGroup = document.getElementById(window.location.hash.slice(1));
+		        if (requestedGroup instanceof HTMLDetailsElement && !requestedGroup.hidden) requestedGroup.open = true;
+		      }
 		      buttons.forEach((btn) => btn.classList.toggle("active", btn.dataset.panelTarget === next));
 		      if (pushPath && router?.panelToPath?.[next]) {
 		        const desiredUrl = buildPanelUrl(next);
@@ -3245,7 +3250,7 @@
     };
 
     const preferredByRouter = {
-      terminal: ["forecast", "/forecasting", "options", "/options", "news"],
+      terminal: ["forecast", "download", "screener", "profile"],
       dashboard: ["orders", "profile", "developer", "productivity", "collaboration", "notifications"],
     };
     const preferredByPath = {
@@ -3295,6 +3300,7 @@
         };
         const compactLabel = compactLabelMap[label] || label;
         const panelAttr = panel ? ` data-panel-target="${escapeHtml(panel)}"` : "";
+        const authAttr = link.id === "dashboard-auth-link" ? ' data-auth-nav="true"' : "";
         const hrefPath = normalizePath(href.split("?")[0].split("#")[0] || "");
         const hrefQuery = (() => {
           try {
@@ -3309,7 +3315,7 @@
         const activeByRoute = !activeByPanel && Boolean(hrefPath && hrefPath === currentPath && hrefQuery === currentQuery);
         const activeClass = activeByPanel || activeByRoute ? " active" : "";
         return `
-          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
+          <a class="mobile-bottom-link${activeClass}" href="${escapeHtml(href)}"${panelAttr}${authAttr} aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">
             ${iconMarkup}
             <span class="mobile-bottom-label">${escapeHtml(compactLabel)}</span>
           </a>
@@ -3318,13 +3324,33 @@
       .join("");
 
     const syncVisibility = () => {
+      const authSource = document.getElementById("dashboard-auth-link");
+      const authMobile = nav.querySelector('[data-auth-nav="true"]');
+      if (authSource && authMobile) {
+        const label = String(authSource.textContent || "").trim() || "Sign in";
+        authMobile.setAttribute("href", authSource.getAttribute("href") || "/forecasting?panel=profile");
+        authMobile.setAttribute("aria-label", label);
+        authMobile.setAttribute("title", label);
+        const text = authMobile.querySelector(".mobile-bottom-label");
+        if (text) text.textContent = label;
+        const iconNode = authSource.querySelector("i");
+        if (iconNode && authMobile.querySelector("i")) authMobile.querySelector("i").className = iconNode.className;
+      }
       const visible = window.innerWidth <= 980;
       nav.classList.toggle("hidden", !visible);
       document.body.classList.toggle("mobile-bottom-nav-enabled", visible);
     };
 
     syncVisibility();
-    window.addEventListener("resize", syncVisibility);
+    if (nav.dataset.authNavBound !== "true") {
+      nav.dataset.authNavBound = "true";
+      nav.addEventListener("click", (event) => {
+        if (!event.target.closest('[data-auth-nav="true"]')) return;
+        event.preventDefault();
+        document.getElementById("dashboard-auth-link")?.click();
+      });
+      window.addEventListener("resize", () => window.__quanturaMobileBottomNavSync?.());
+    }
     window.__quanturaMobileBottomNavSync = syncVisibility;
   };
 
@@ -5437,12 +5463,12 @@
     }
 
     if (ui.headerAuth) {
-      const authLabel = accountAuthed ? (pack.dashboard || fallback.dashboard || "Dashboard") : (pack.sign_in || fallback.sign_in || "Sign in");
+      const authLabel = accountAuthed ? "Profile" : (pack.sign_in || fallback.sign_in || "Sign in");
       setLocalizedAttribute(ui.headerAuth, "title", authLabel);
       setLocalizedAttribute(
         ui.headerAuth,
         "aria-label",
-        accountAuthed ? (pack.open_dashboard || fallback.open_dashboard || "Open dashboard") : (pack.sign_in || fallback.sign_in || "Sign in")
+        accountAuthed ? "Open profile" : (pack.sign_in || fallback.sign_in || "Sign in")
       );
     }
 
@@ -7221,17 +7247,29 @@
     }
     ensureProfileFeedbackButtons();
     ensureHeaderNotificationsCta();
+    document.querySelectorAll("[data-profile-guest]").forEach((section) => {
+      section.hidden = accountAuthed;
+      section.classList.toggle("hidden", accountAuthed);
+    });
+    document.querySelectorAll("[data-profile-account]").forEach((section) => {
+      section.hidden = !accountAuthed;
+      section.classList.toggle("hidden", !accountAuthed);
+    });
+    if (accountAuthed && /^#terminal-profile-(profile|orders|collaboration|developer)$/.test(window.location.hash)) {
+      const requestedGroup = document.getElementById(window.location.hash.slice(1));
+      if (requestedGroup instanceof HTMLDetailsElement) requestedGroup.open = true;
+    }
     if (ui.headerAuth) {
       ui.headerAuth.classList.remove("icon-only");
       ui.headerAuth.innerHTML = accountAuthed
-        ? `${icon("dashboard")}<span>Dashboard</span>`
+        ? `${icon("user")}<span>Profile</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.headerAuth.setAttribute("title", accountAuthed ? "Dashboard" : "Sign in");
-      ui.headerAuth.setAttribute("aria-label", accountAuthed ? "Open dashboard" : "Sign in");
+      ui.headerAuth.setAttribute("title", accountAuthed ? "Profile" : "Sign in");
+      ui.headerAuth.setAttribute("aria-label", accountAuthed ? "Open profile" : "Sign in");
       if (ui.headerAuth.tagName.toLowerCase() === "button") {
-        ui.headerAuth.dataset.route = accountAuthed ? "/dashboard" : "/account";
+        ui.headerAuth.dataset.route = "/forecasting?panel=profile";
       } else {
-        ui.headerAuth.setAttribute("href", accountAuthed ? "/dashboard" : "/account");
+        ui.headerAuth.setAttribute("href", "/forecasting?panel=profile");
       }
     }
 
@@ -7262,7 +7300,7 @@
           ? nativeBillingPortalLabel()
           : "Open billing portal"
         : "Sign in to manage billing";
-      ui.billingPortalLink.setAttribute("href", (accountAuthed || (nativeBilling && guestSession)) ? "#" : "/account");
+      ui.billingPortalLink.setAttribute("href", (accountAuthed || (nativeBilling && guestSession)) ? "#" : "/forecasting?panel=profile");
       ui.billingPortalLink.setAttribute("target", "_self");
       ui.billingPortalLink.removeAttribute("rel");
     }
@@ -7274,25 +7312,26 @@
 
     if (ui.pricingAuthCta) {
       ui.pricingAuthCta.innerHTML = accountAuthed
-        ? `${icon("dashboard")}<span>Open dashboard</span>`
+        ? `${icon("user")}<span>Open profile</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.pricingAuthCta.setAttribute("href", accountAuthed ? "/dashboard" : "/account");
+      ui.pricingAuthCta.setAttribute("href", "/forecasting?panel=profile");
     }
 
     if (ui.pricingStarterCta) {
       ui.pricingStarterCta.innerHTML = accountAuthed
-        ? `${icon("dashboard")}<span>Go to dashboard</span>`
+        ? `${icon("user")}<span>Go to profile</span>`
         : `${icon("user-plus")}<span>Start free</span>`;
-      ui.pricingStarterCta.setAttribute("href", accountAuthed ? "/dashboard" : "/account");
+      ui.pricingStarterCta.setAttribute("href", "/forecasting?panel=profile");
     }
 
     if (ui.dashboardAuthLink) {
       ui.dashboardAuthLink.innerHTML = accountAuthed
         ? `${icon("log-out")}<span>Sign out</span>`
         : `${icon("log-in")}<span>Sign in</span>`;
-      ui.dashboardAuthLink.setAttribute("href", accountAuthed ? "#" : "/account");
+      ui.dashboardAuthLink.setAttribute("href", accountAuthed ? "#" : "/forecasting?panel=profile");
       ui.dashboardAuthLink.setAttribute("aria-label", accountAuthed ? "Sign out" : "Sign in");
     }
+    window.__quanturaMobileBottomNavSync?.();
 
     setPurchaseState(user);
     applyAdFreeExperience();
@@ -9386,6 +9425,7 @@
         autopilot: "/autopilot",
         download: "/historical-data",
         screener: "/forecasting",
+        profile: "/forecasting",
       },
       pathAliases: {
         "/autopilot": "autopilot",
@@ -9533,7 +9573,7 @@
     navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Terminal</span></a>
-        ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Q Screener</span></a>`}
+        ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>`}
         <a href="/shop" data-analytics="nav_shop">${icon("shopping-bag")}<span>Shop</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
         <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
@@ -9584,11 +9624,11 @@
         platform.className = "small";
         platform.innerHTML = `
           <strong>Platform</strong>
-          <div><a href="/forecasting">Q Forecast</a></div>
-          <div><a href="/screener">Q Screener</a></div>
+          <div><a href="/forecasting">Terminal</a></div>
+          <div><a href="/screener">Screener</a></div>
           <div><a href="/forecasts">Quantura Forecasts</a></div>
           <div><a href="/research">Research</a></div>
-          <div><a href="/dashboard">Workspace</a></div>
+          <div><a href="/forecasting?panel=profile">Profile</a></div>
           <div>Free tools · fair-use limits</div>
         `;
       }
@@ -9597,7 +9637,7 @@
         resources.innerHTML = `
           <strong>Developers &amp; company</strong>
           <div><a href="/developers/api">API reference</a></div>
-          <div><a href="/dashboard?panel=developer">API keys</a></div>
+          <div><a href="/forecasting?panel=profile#terminal-profile-developer">API keys</a></div>
           <div><a href="https://quantura.mintlify.app/" target="_blank" rel="noopener noreferrer">Developer documentation</a></div>
           <div><a href="/contact">Data licensing</a></div>
           <div><a href="/about">About</a></div>
@@ -15294,7 +15334,7 @@
           await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(ensembleUiState.forecastId)}/prepare-save`, {method:"POST",body:{}});
           // Store only the resource ID. Ownership proof stays in an HttpOnly cookie.
           window.sessionStorage.setItem("quantura_pending_forecast_save", ensembleUiState.forecastId);
-          window.location.href = "/account";
+          window.location.href = "/forecasting?panel=profile";
           return;
         }
         await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(ensembleUiState.forecastId)}/save`, {method:"POST",body:{}});
@@ -25667,8 +25707,8 @@
       }
       if (paid) {
         try {
-          history.replaceState({}, "", "/dashboard");
-          window.location.assign("/dashboard");
+          history.replaceState({}, "", "/forecasting?panel=profile");
+          window.location.assign("/forecasting?panel=profile");
         } catch (error) {
           // Ignore.
         }
@@ -26566,7 +26606,7 @@
             if (!shareId) return;
             if (!hasFullAccount()) {
               setPendingShareId(shareId);
-              window.location.href = "/account";
+              window.location.href = "/forecasting?panel=profile";
               return;
             }
             importSharedScreener.disabled = true;
@@ -27247,7 +27287,7 @@
         renderMyRequestsPanels();
 
 			    ui.headerAuth?.addEventListener("click", () => {
-			      window.location.href = hasFullAccount() ? "/dashboard" : "/account";
+			      window.location.href = "/forecasting?panel=profile";
 			    });
 
 	    (ui.workspaceSelects?.length ? ui.workspaceSelects : ui.workspaceSelect ? [ui.workspaceSelect] : []).forEach((workspaceSelect) => workspaceSelect.addEventListener("change", async () => {
@@ -27271,7 +27311,7 @@
 		      renderWorkspaceSummary();
 		      startUserForecasts(db, next);
           startScreenerRuns(db, next);
-		      startWorkspaceTasks(db, next);
+              if (ui.productivityBoard || ui.tasksCalendar) startWorkspaceTasks(db, next);
           startAIAgents(db, next);
           startVolatilityMonitor(db, functions, next);
           seedDefaultAIAgents(db, next).catch(() => {});
@@ -30530,17 +30570,18 @@
 
             const pendingShare = String(getPendingShareId() || "").trim();
             const onScreenerPage = window.location.pathname === "/screener";
+            const onTerminalProfile = window.location.pathname === "/forecasting" && new URLSearchParams(window.location.search).get("panel") === "profile";
             if (pendingShare && onScreenerPage) {
               try {
                 await renderSharedScreenerRun(pendingShare);
               } catch (error) {
-                if (window.location.pathname !== "/account") {
-                  window.location.href = "/account";
+                if (!onTerminalProfile) {
+                  window.location.href = "/forecasting?panel=profile";
                   return;
                 }
               }
-            } else if (pendingShare && window.location.pathname !== "/account") {
-              window.location.href = "/account";
+            } else if (pendingShare && !onTerminalProfile) {
+              window.location.href = "/forecasting?panel=profile";
               return;
             }
 
@@ -30554,7 +30595,7 @@
             state.sharedWorkspaces = [];
             renderWorkspaceSelect(user);
           });
-	      startCalendarInteractions(db, user);
+	      if (ui.tasksCalendar) startCalendarInteractions(db, user);
 		      const activeWorkspaceId = resolveActiveWorkspaceId(user);
 		      setActiveWorkspaceId(activeWorkspaceId);
 		      renderWorkspaceSelect(user);
@@ -30567,7 +30608,7 @@
             loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
           }
           loadScreenerUsageToday(db);
-          startWorkspaceTasks(db, activeWorkspaceId);
+          if (ui.productivityBoard || ui.tasksCalendar) startWorkspaceTasks(db, activeWorkspaceId);
           await seedDefaultAIAgents(db, activeWorkspaceId).catch(() => {});
           await seedAdminPresetScreenerRuns(db, activeWorkspaceId).catch(() => {});
           startAIAgents(db, activeWorkspaceId);
@@ -30585,7 +30626,7 @@
         }
 
         if (window.location.pathname === "/account" && !String(getPendingShareId() || "").trim()) {
-          window.location.href = "/dashboard";
+          window.location.href = "/forecasting?panel=profile";
         }
 
         if (

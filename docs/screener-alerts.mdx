@@ -24,6 +24,21 @@ Older-policy scans stay readable without new Buy labels. Prices are split-adjust
 Homepage “Quantura approved Buy signals” means this rule passed—not investment
 advice or a guaranteed gain.
 
+## Browse recent scans
+
+The screener keeps each validated stock scan for 14 calendar days. Use the
+date picker or Previous day / Next day to visit published dates; days without
+a completed scan are unavailable. Search, Buy, quantile, sort and CSV-export
+filters apply to the selected date. The count is the number of markets matching
+those filters. Historic rows use their saved close and forecast, not today's
+quote or a later Buy signal. Kalshi perpetuals remain on demand and have no
+dated screener forecast archive.
+
+For programmatic reads, pass `date=YYYY-MM-DD` to
+`GET /api/screener/data` or `GET /api/screener/export.csv`. The JSON response
+includes `availableDates` and `selectedDate`. An unavailable date returns
+`screener_snapshot_not_found` (404); the service does not synthesize a scan.
+
 ## Filters and alerts
 
 Combine min/max/average quantiles with AND rules.
@@ -43,7 +58,8 @@ curl -X POST https://quantura.studio/api/v1/me/screener-alerts \
 Reading needs `alerts:read`; saving/removing needs `alerts:write`.
 **View forecast** opens the published snapshot without inference.
 **Save to profile** preserves a private copy; workspace permissions apply.
-Old public scan links expire when replaced; saved copies remain.
+Public stock scan links remain available while their dated asset is in the
+14-day archive; saved profile copies remain after that window.
 
 Brevo uses the approved Fixie proxy. Sends are durably deduplicated and subject
 to the shared allowance; provider acceptance does not prove inbox delivery.

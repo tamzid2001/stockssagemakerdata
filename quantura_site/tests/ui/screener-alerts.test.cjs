@@ -53,3 +53,23 @@ test('mobile result cards keep core ticker metrics visible and expand one row at
   assert.equal(toggle.getAttribute('aria-expanded'),'false');toggle.click();assert.equal(result.classList.contains('is-expanded'),true);assert.equal(toggle.getAttribute('aria-expanded'),'true');assert.match(toggle.textContent,/Fewer metrics/);
   toggle.click();assert.equal(result.classList.contains('is-expanded'),false);assert.match(toggle.textContent,/More metrics/);d.window.close();
 });
+test('saved scan day navigation retains filters and CSV date; missing days are not requested',async()=>{
+  const d=new JSDOM(fs.readFileSync(path.join(root,'pages/screener.html'),'utf8'),{url:'https://quantura.studio/screener',runScripts:'outside-only'});
+  const w=d.window,requests=[];
+  w.fetch=async url=>{requests.push(String(url));const selected=new URL(String(url),'https://quantura.studio').searchParams.get('date')||'2026-09-23';return {ok:true,json:async()=>({items:[{ticker:'PLTR'}],total:1,universeCount:1,page:1,pageCount:1,selectedDate:selected,scanDate:selected,generatedAt:`${selected}T22:00:00Z`,availableDates:['2026-09-23','2026-09-22','2026-09-19']})};};
+  w.eval(fs.readFileSync(path.join(root,'public/screener.js'),'utf8'));await tick();
+  w.document.getElementById('qs-search').value='PLTR';
+  w.document.getElementById('qs-date-previous').click();await tick();
+  assert.equal(w.document.getElementById('qs-date').value,'2026-09-22');
+  assert.equal(w.document.getElementById('qs-last-buy-heading').textContent,'Buy in scan');
+  assert.match(requests.at(-1),/date=2026-09-22/);assert.match(requests.at(-1),/search=PLTR/);
+  assert.match(w.document.getElementById('qs-export').href,/date=2026-09-22/);
+  w.document.getElementById('qs-date').value='2026-09-21';w.document.getElementById('qs-date').dispatchEvent(new w.Event('change'));
+  assert.equal(w.document.getElementById('qs-date').value,'2026-09-22');
+  assert.match(w.document.getElementById('qs-date-availability').textContent,/No validated scan/);
+  assert.equal(requests.length,2);
+  w.document.getElementById('qs-date-next').click();await tick();
+  assert.equal(w.document.getElementById('qs-date').value,'2026-09-23');
+  assert.equal(w.document.getElementById('qs-last-buy-heading').textContent,'Last Buy');
+  d.window.close();
+});

@@ -18,6 +18,14 @@ test("unavailable split check withholds newer cross-session prices",async()=>{
   const output=await service.current({...dataset,items:[{...row,actual_price_timestamp:yesterday+"T00:00:00Z",last_forecast_update:yesterday+"T00:00:00Z"}]});
   assert.equal(output.items[0].actual_price,100);assert.equal(output.items[0].signal,"none");
 });
+test("archived screener never borrows a Buy signal from a later live scan",()=>{
+  let reads=0;
+  const store:any={read:async()=>{reads++;return new Map([["TEST",{last_buy_signal:{value:"buy",input_date:"2026-09-23"}}]]);},save:async()=>0};
+  const service=new ScreenerMarketService({} as any,store);
+  const archived=service.archived({...dataset,scan_date:"2026-09-17",generated_at:"2026-09-17T22:00:00Z"});
+  assert.equal(reads,0);
+  assert.equal(archived.items[0].last_buy_signal,undefined);
+});
 function harness(){
   const data=new Map<string,any>();const handlers=new Map<string,any>();
   const ref=(path:string):any=>({path,get:async()=>({exists:data.has(path),data:()=>structuredClone(data.get(path))})});

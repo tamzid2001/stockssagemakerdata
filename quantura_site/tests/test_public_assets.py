@@ -90,8 +90,10 @@ def test_removed_routes_and_assets_stay_removed():
     redirect_sources = {item["source"]: item["destination"] for item in vercel.get("redirects", [])}
     assert redirect_sources["/explore"] == "/forecasting"
     assert redirect_sources["/indicators"] == "/forecasting"
-    assert redirect_sources["/profile"] == "/account"
-    assert redirect_sources["/u/:path*"] == "/account"
+    assert redirect_sources["/profile"] == "/forecasting?panel=profile"
+    assert redirect_sources["/u/:path*"] == "/forecasting?panel=profile"
+    for archived_route in ("/dashboard", "/account", "/productivity", "/collaboration", "/admin"):
+        assert redirect_sources[archived_route] == "/forecasting?panel=profile"
     assert redirect_sources["/tools/fx"] == "/forecasting"
     assert not (PUBLIC / "explore.html").exists()
     assert not (PUBLIC / "profile.html").exists()
@@ -106,7 +108,8 @@ def test_q_forecast_has_no_standalone_indicators_panel_and_ai_is_opt_in():
     analysis = (ROOT / "functions_explore" / "src" / "forecastAnalysis.ts").read_text()
 
     assert "Quantura Forecast" in forecasting
-    assert ">Q Forecast<" in forecasting
+    assert 'data-panel-target="forecast"' in forecasting
+    assert ">Forecast<" in forecasting
     assert "Meta Prophet Forecast" not in forecasting
     assert 'id="technical-indicators"' not in forecasting
     assert 'id="forecast-ai-host"' in forecasting
@@ -359,11 +362,16 @@ def test_static_pages_do_not_shadow_authoritative_forecasting_or_dashboard_ssr_r
     assert not (PUBLIC / "dashboard.html").exists()
 
 
-def test_product_interactions_calendar_and_safe_csv_export_are_present():
+def test_productivity_ui_is_archived_without_removing_legacy_data_api():
     dashboard = (PAGES / "dashboard.html").read_text()
+    forecasting = (ROOT / "functions_ssr" / "templates" / "forecasting.html").read_text()
     client = (PUBLIC / "app.js").read_text()
     backend = (ROOT / "functions_explore" / "src" / "platformApiRoutes.ts").read_text()
-    assert 'id="calendar-export"' in dashboard
+    assert 'id="calendar-export"' not in dashboard
+    assert 'id="tasks-calendar"' not in dashboard
+    assert 'id="tasks-calendar"' not in forecasting
+    assert "Kanban board" not in dashboard
+    assert "Kanban board" not in forecasting
     assert "calendar_interactions" in client
     assert "quantura-productivity-calendar" in client
     assert "if (/^[=+\\-@]/.test(clean))" in client
@@ -496,8 +504,9 @@ def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
     assert ".replace(/\\/assets\\/quantura-icon\\.svg/g" in ssr
     assert "node.innerHTML = '<a href=\"mailto:hello@quantura.studio\">hello@quantura.studio</a>'" in client
     for marker in [
-        ">Q Forecast<",
-        ">Q Screener<",
+        ">Terminal<",
+        ">Screener<",
+        ">Profile<",
         ">Quantura Forecasts<",
         ">API reference<",
         ">Developer documentation<",
@@ -543,6 +552,10 @@ def test_quantitative_screener_surface_replaces_manual_prophet_dispatch():
     assert 'id="screener-generate-button"' not in screener
     assert 'id="qs-special-p10"' not in screener
     assert "$100B" not in screener
+    for marker in ('id="qs-date"', 'id="qs-date-previous"', 'id="qs-date-next"'):
+        assert marker in screener
+    assert 'id="qs-metric-coverage"' not in screener
+    assert 'id="qs-engine"' not in screener
 
 
 def test_mobile_cookie_banner_resets_desktop_centering_transform():
@@ -565,4 +578,19 @@ def test_ssr_templates_mirror_every_public_html_page():
     template_files = sorted(path.relative_to(templates) for path in templates.rglob("*.html") if not path.stem.endswith(" 2"))
     assert template_files == page_files
     for relative_path in page_files:
-        assert (templates / relative_path).read_bytes() == (PAGES / relative_path).read_bytes()
+        source = (PAGES / relative_path).read_text()
+        generated = (templates / relative_path).read_text()
+        if relative_path.as_posix() == "forecasting.html":
+            begin = "<!-- BEGIN_TERMINAL_PROFILE_PANEL -->"
+            end = "<!-- END_TERMINAL_PROFILE_PANEL -->"
+            assert source.count("<!-- TERMINAL_PROFILE_PANEL -->") == 1
+            assert generated.count(begin) == 1
+            assert generated.count(end) == 1
+            panel_start = generated.index(begin)
+            panel_end = generated.index(end, panel_start) + len(end)
+            panel = generated[panel_start:panel_end]
+            assert 'data-panel="profile"' in panel
+            assert 'id="terminal-profile-auth"' in panel
+            assert 'id="terminal-profile-developer"' in panel
+            generated = generated[:panel_start] + "<!-- TERMINAL_PROFILE_PANEL -->" + generated[panel_end:]
+        assert generated == source

@@ -82,8 +82,7 @@
 			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
 			            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
 		            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
-		            <a class="sidebar-link" href="/dashboard?panel=developer" data-panel-target="developer"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>Developer</span></a>
-		            <a class="sidebar-link" href="/productivity" data-panel-target="productivity"><i class="iconoir-kanban-board" aria-hidden="true"></i><span>Productivity</span></a>
+		            <a class="sidebar-link" href="/forecasting?panel=profile#terminal-profile-developer" data-panel-target="developer"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>Developer</span></a>
 		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Collaboration</span></a>
 
 		            <a class="sidebar-link" href="/account" data-panel-target="auth" id="dashboard-auth-link"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
@@ -265,65 +264,6 @@
 	        </div>
 	      </section>
 
-	      <section class="section panel hidden" data-panel="productivity" id="productivity">
-	        <div class="container productivity-shell">
-	          <div class="section-title">
-	            <h2>Workspace productivity</h2>
-	            <p class="small">Create tasks quickly and track due dates in one place.</p>
-	          </div>
-
-          <div class="productivity-grid">
-            <form id="task-form" class="card productivity-form">
-              <h3>Create task</h3>
-              <div class="form-grid form-grid-compact">
-                <div class="field">
-                  <label class="label" for="task-title">Title</label>
-                  <input id="task-title" placeholder="Review earnings transcript" required />
-                </div>
-                <div class="field">
-                  <label class="label" for="task-assignee">Assignee (optional)</label>
-                  <input id="task-assignee" type="email" placeholder="collaborator@domain.com" />
-                </div>
-              </div>
-              <div class="form-grid form-grid-compact">
-                <div class="field">
-                  <label class="label" for="task-due">Due date</label>
-                  <input id="task-due" type="date" />
-                </div>
-                <div class="field">
-                  <label class="label" for="task-status">Status</label>
-                  <select id="task-status">
-                    <option value="backlog">Backlog</option>
-                    <option value="doing">Doing</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-              </div>
-              <button class="cta" type="submit" data-analytics="task_create">Add task</button>
-              <p class="small" id="task-status-text"></p>
-            </form>
-
-            <div class="results-panel productivity-board-wrap">
-              <div class="productivity-head">
-                <h3>Kanban board</h3>
-                <p class="small">Drag tasks between Backlog, Doing, and Done.</p>
-              </div>
-              <div id="productivity-board" class="kanban-host"></div>
-            </div>
-          </div>
-
-          <div class="card productivity-calendar-wrap">
-            <div class="productivity-head">
-              <div><h3>Activity calendar</h3><p class="small">Workspace due dates and your recorded Quantura product activity.</p></div>
-              <button class="cta secondary small" id="calendar-export" type="button"><i class="iconoir-download" aria-hidden="true"></i><span>Export CSV</span></button>
-            </div>
-            <p class="small muted" id="calendar-export-status" role="status" aria-live="polite"></p>
-            <div id="tasks-calendar" class="tasks-calendar small muted">Tasks and recorded interactions will appear here.</div>
-          </div>
-
-        </div>
-      </section>
-
       <section class="section panel hidden" data-panel="collaboration" id="collaboration">
         <div class="container">
           <div class="section-title">
@@ -425,7 +365,7 @@
           <div><a href="/forecasting">Forecasting</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/blog">Blog</a></div>
-          <div><a href="/dashboard">Dashboard</a></div>
+          <div><a href="/forecasting?panel=profile">Profile</a></div>
           <div></div>
           <div><a href="/contact">Contact</a></div>
         </div>

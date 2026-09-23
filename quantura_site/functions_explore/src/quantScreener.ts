@@ -1,3 +1,5 @@
+import { gunzipSync } from "node:zlib";
+
 export type QuantScreenerRow = Record<string, unknown> & {
   ticker: string;
   company_name?: string | null;
@@ -54,6 +56,8 @@ export type QuantScreenerPage = {
 const RELEASE_TAG = "screener-latest";
 const JSON_ASSET = "quantura-screener-latest.json";
 const CSV_ASSET = "quantura-screener-latest.csv";
+const ARCHIVE_DAYS = 14;
+const ARCHIVE_ASSET = /^quantura-screener-(\d{4}-\d{2}-\d{2})\.json\.gz$/;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_POSITIONS = new Set(["below-p01", "above-p01", "below-p10", "above-p10", "below-p50", "above-p50", "below-p90", "above-p90", "below-p99", "above-p99"]);
 const SORT_FIELDS = new Set([
@@ -71,7 +75,7 @@ const SORT_FIELDS = new Set([
   "lastUpdate",
 ]);
 
-let datasetCache: { expiresAt: number; value: QuantScreenerDataset } | null = null;
+const datasetCache = new Map<string, { expiresAt: number; value: QuantScreenerDataset }>();
 let releaseCache: { expiresAt: number; assets: Array<Record<string, unknown>> } | null = null;
 
 function firstValue(value: unknown): string {
@@ -329,16 +333,57 @@ async function fetchReleaseAsset(owner: string, repo: string, name: string): Pro
   return fetchWithTimeout(`${url}?v=${Math.floor(Date.now() / CACHE_TTL_MS)}`, { headers: { "Cache-Control": "no-cache" } }, 30000);
 }
 
-export async function loadPublishedScreenerDataset(owner: string, repo: string): Promise<QuantScreenerDataset> {
-  if (datasetCache && datasetCache.expiresAt > Date.now()) return datasetCache.value;
-  const response = await fetchReleaseAsset(owner, repo, JSON_ASSET);
-  const payload = (await response.json()) as QuantScreenerDataset;
+function validArchiveDate(date: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) &&
+    new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
+}
+
+export function screenerArchiveDates(assets: Array<Record<string, unknown>>, latestDate: string, today = new Date()): string[] {
+  const cutoff = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (ARCHIVE_DAYS - 1))).toISOString().slice(0, 10);
+  const available = assets.map(asset => ARCHIVE_ASSET.exec(String(asset.name || ""))?.[1] || "").filter(date =>
+    validArchiveDate(date) && date >= cutoff && date <= today.toISOString().slice(0, 10) && date <= latestDate);
+  // Older releases had only a rolling asset. Keep that readable even before
+  // the first dated publication; never invent any missing daily scans.
+  if (validArchiveDate(latestDate)) available.push(latestDate);
+  return Array.from(new Set(available)).sort().reverse();
+}
+
+export async function listPublishedScreenerDates(owner: string, repo: string, latestDate: string): Promise<string[]> {
+  try {
+    return screenerArchiveDates(await getReleaseAssets(owner, repo), latestDate);
+  } catch (error) {
+    // Private staging can serve the current dataset from an override URL with
+    // no public GitHub release. It still gets the current date, never fake days.
+    if (process.env.SCREENER_DATA_URL) return screenerArchiveDates([], latestDate);
+    throw error;
+  }
+}
+
+export async function loadPublishedScreenerDataset(owner: string, repo: string, date?: string): Promise<QuantScreenerDataset> {
+  const key = date || "latest";
+  const cached = datasetCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (date && !validArchiveDate(date)) throw new Error("screener_snapshot_not_found");
+  const name = date ? `quantura-screener-${date}.json.gz` : JSON_ASSET;
+  let response: Response;
+  if (date) {
+    const latest = await loadPublishedScreenerDataset(owner, repo);
+    const dates = await listPublishedScreenerDates(owner, repo, latest.scan_date);
+    if (!dates.includes(date)) throw new Error("screener_snapshot_not_found");
+    if (date === latest.scan_date) return latest;
+    response = await fetchReleaseAsset(owner, repo, name);
+  } else response = await fetchReleaseAsset(owner, repo, name);
+  const payload = (date
+    ? JSON.parse(gunzipSync(Buffer.from(await response.arrayBuffer())).toString("utf8"))
+    : await response.json()) as QuantScreenerDataset;
   if (!["quantura-screener-v2", "quantura-screener-v3"].includes(payload?.schema_version) || !Array.isArray(payload.items) || !payload.manifest) {
     throw new Error("screener_dataset_invalid");
   }
+  if (date && payload.scan_date !== date) throw new Error("screener_snapshot_date_mismatch");
   const validItems = payload.items.filter((row) => row && typeof row === "object" && String(row.ticker || "").trim());
   const value = { ...payload, items: validItems };
-  datasetCache = { expiresAt: Date.now() + CACHE_TTL_MS, value };
+  datasetCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+  for (const [cacheKey, entry] of datasetCache) if (entry.expiresAt <= Date.now()) datasetCache.delete(cacheKey);
   return value;
 }
 
@@ -364,6 +409,6 @@ export function screenerRowsCsv(rows: QuantScreenerRow[]): string {
 }
 
 export function clearPublishedScreenerCache(): void {
-  datasetCache = null;
+  datasetCache.clear();
   releaseCache = null;
 }
