@@ -1,3 +1,5 @@
+import { gunzipSync } from "node:zlib";
+
 export type QuantScreenerRow = Record<string, unknown> & {
   ticker: string;
   company_name?: string | null;
@@ -55,7 +57,7 @@ const RELEASE_TAG = "screener-latest";
 const JSON_ASSET = "quantura-screener-latest.json";
 const CSV_ASSET = "quantura-screener-latest.csv";
 const ARCHIVE_DAYS = 14;
-const ARCHIVE_ASSET = /^quantura-screener-(\d{4}-\d{2}-\d{2})\.json$/;
+const ARCHIVE_ASSET = /^quantura-screener-(\d{4}-\d{2}-\d{2})\.json\.gz$/;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_POSITIONS = new Set(["below-p01", "above-p01", "below-p10", "above-p10", "below-p50", "above-p50", "below-p90", "above-p90", "below-p99", "above-p99"]);
 const SORT_FIELDS = new Set([
@@ -362,7 +364,7 @@ export async function loadPublishedScreenerDataset(owner: string, repo: string, 
   const cached = datasetCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (date && !validArchiveDate(date)) throw new Error("screener_snapshot_not_found");
-  const name = date ? `quantura-screener-${date}.json` : JSON_ASSET;
+  const name = date ? `quantura-screener-${date}.json.gz` : JSON_ASSET;
   let response: Response;
   if (date) {
     const latest = await loadPublishedScreenerDataset(owner, repo);
@@ -371,7 +373,9 @@ export async function loadPublishedScreenerDataset(owner: string, repo: string, 
     if (date === latest.scan_date) return latest;
     response = await fetchReleaseAsset(owner, repo, name);
   } else response = await fetchReleaseAsset(owner, repo, name);
-  const payload = (await response.json()) as QuantScreenerDataset;
+  const payload = (date
+    ? JSON.parse(gunzipSync(Buffer.from(await response.arrayBuffer())).toString("utf8"))
+    : await response.json()) as QuantScreenerDataset;
   if (!["quantura-screener-v2", "quantura-screener-v3"].includes(payload?.schema_version) || !Array.isArray(payload.items) || !payload.manifest) {
     throw new Error("screener_dataset_invalid");
   }
