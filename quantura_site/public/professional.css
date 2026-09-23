@@ -761,7 +761,6 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 #ensemble-custom-quantiles { max-width: 440px; }
 .ensemble-primary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .ensemble-primary-actions .cta { width: auto; max-width: 100%; justify-content: center; }
-.ensemble-signal-search-help { margin: 7px 0 0; max-width: 760px; line-height: 1.45; }
 .market-search-form :is(input, select, button), .ensemble-model-card :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .ensemble-model-card select { width: 100%; text-overflow: ellipsis; }
 @media (min-width: 769px) {
