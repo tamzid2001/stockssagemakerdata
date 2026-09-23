@@ -74,25 +74,16 @@
       return { timestamp, target };
     });
   }
-  function cutoffP99Signal(job) {
-    const last = job.history?.at(-1), first = job.predictions?.[0];
-    const price = last?.target, p99 = first?.quantiles?.["0.99"];
-    if (![price,p99].every(v => typeof v === "number" && Number.isFinite(v)) ||
-        !(Date.parse(last?.timestamp) < Date.parse(first?.timestamp))) return {status:"unavailable", signal:null};
-    return {status:"available",signal:price > p99 ? "buy" : "none",price,p99,cutoffTimestamp:last.timestamp,forecastTimestamp:first.timestamp};
-  }
-  function firstRowSignal(job, now = Date.now()) {
+  function firstRowObservation(job, now = Date.now()) {
     const first = job.predictions?.[0];
     const timestamp = Date.parse(first?.timestamp);
     if (!Number.isFinite(timestamp)) return {status: "unavailable", reason: "Waiting for the first prediction row."};
     const dailyStock = job.source?.type === "ticker" && job.frequency === "1D";
     const intervalLabel = job.frequency === "1D" ? "day" : job.frequency === "1h" ? "hour" : job.frequency === "1min" ? "minute" : "interval";
-    const levels = first.quantiles || {}, lower = levels["0.1"], upper = levels["0.9"];
-    if (![lower, upper].every(v => typeof v === "number" && Number.isFinite(v)) || lower > upper) return {status: "unavailable", reason: "Request both P10 and P90."};
     const published = Date.parse(job.completed_at);
     const replay = job.source?.analysis_mode === "historical_replay";
     // Match the first predicted interval after the immutable input cutoff.
-    // Worker latency must not move the signal to a different market minute.
+    // Worker latency must not move the observation to a different market minute.
     const observation = (job.observations || []).find(row => {
       if (row.is_forward_filled === true || row.observed === false || row.is_complete === false) return false;
       if (row.interval && row.interval !== job.frequency) return false;
@@ -107,7 +98,7 @@
     const price = observation?.target;
     if (quoteTimestamp > now || typeof price !== "number" || !Number.isFinite(price)) return {status: "waiting", timestamp, reason: `Waiting for the completed ${intervalLabel} closing value matching the first prediction row, immediately after the downloaded history. Later or shorter-interval quotes cannot replace it.`};
     const prospective = !replay && Number.isFinite(published) && published < timestamp;
-    return {status: "observed", timestamp, quoteTimestamp, price, lower, upper, signal: price < lower ? "buy" : price > upper ? "sell" : "none", prospective,
+    return {status: "observed", timestamp, quoteTimestamp, price, prospective,
       timing: `First predicted ${intervalLabel} after downloaded history${prospective ? "" : " · retrospective comparison, not a backdated live entry"}`};
   }
   function forecastChartRange(job) {
@@ -171,7 +162,7 @@
     }
     return closed.length?[{values:closed,dvalue:86400_000}]:[];
   }
-  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowSignal, cutoffP99Signal, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
+  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);

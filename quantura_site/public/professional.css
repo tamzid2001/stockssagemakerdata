@@ -596,10 +596,6 @@ body.shop-page { background: var(--q-bg) !important; color: var(--q-text) !impor
 .market-search-results { position: absolute; z-index: 100; inset-inline: 0; top: calc(100% + 4px); margin: 0; padding: 8px; display: grid; gap: 6px; max-height: min(60dvh, 480px); overflow: auto; overscroll-behavior: contain; color: var(--popover-foreground); background: var(--popover); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px var(--shadow); }
 .market-search-results[hidden] { display: none; }
 .ensemble-duration-control[hidden] { display: none !important; }
-.ensemble-first-row-signal { padding: 8px; margin-block: 8px; border: 1px solid var(--border); border-inline-start: 3px solid var(--muted-foreground); border-radius: 6px; color: var(--foreground); background: var(--card); }
-.ensemble-first-row-signal[data-signal="buy"] { border-inline-start-color: var(--success); }
-.ensemble-first-row-signal[data-signal="sell"] { border-inline-start-color: var(--destructive); }
-.ensemble-first-row-signal p { margin: 4px 0; }
 .ensemble-toolbar-menu[open] { z-index: 100; }
 .ensemble-results, .ensemble-forecast-shell, .ensemble-forecast-body { overflow: visible; }
 .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 50%; color: var(--foreground); background: var(--secondary); cursor: pointer; }

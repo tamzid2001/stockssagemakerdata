@@ -14599,37 +14599,6 @@
     return {symbol, side, title};
   };
 
-  const renderEnsembleSignals = (job) => {
-    const firstHost = document.getElementById("ensemble-first-row-signal");
-    const cutoffHost = document.getElementById("ensemble-cutoff-p99-signal");
-    const cutoff = window.QuanturaForecastControls?.cutoffP99Signal?.(job);
-    if (cutoffHost) {
-      cutoffHost.hidden = cutoff?.status !== "available" || job.recent_signal_search?.signal_rule === "cutoff_above_p99";
-      cutoffHost.dataset.signal = cutoff?.signal || "none";
-      cutoffHost.innerHTML = cutoff?.status === "available" ? `<strong>${cutoff.signal === "buy" ? "BUY · input close above first P99" : "No Buy-above-P99 signal"}</strong><p>Last input close ${escapeHtml(cutoff.price.toLocaleString(undefined,{maximumFractionDigits:6}))} at ${escapeHtml(ensembleLocalTime(cutoff.cutoffTimestamp))} · first P99 ${escapeHtml(cutoff.p99.toLocaleString(undefined,{maximumFractionDigits:6}))} at ${escapeHtml(ensembleLocalTime(cutoff.forecastTimestamp))}.</p><small>Strictly greater than P99; equality is not a signal. Uses the saved input close, not a live quote or a forecast average. Research signal only.</small>` : "";
-    }
-    const search=job.recent_signal_search;
-    if(firstHost && search?.signal_rule === "cutoff_above_p99") {
-      const actual=search.cutoff_observation||{}, p99=search.thresholds?.p99;
-      firstHost.dataset.signal=search.signal||"none";
-      firstHost.innerHTML=`<strong>${search.status === "found" ? "BUY · input close above first P99" : "No recent Buy-above-P99 signal found"}</strong><p>Last input close ${escapeHtml(Number(actual.price).toLocaleString(undefined,{maximumFractionDigits:6}))} at ${escapeHtml(ensembleLocalTime(actual.timestamp))} · first predicted P99 ${escapeHtml(Number(p99).toLocaleString(undefined,{maximumFractionDigits:6}))}.</p><small>${escapeHtml(search.cutoffs_examined)} of ${escapeHtml(search.max_cutoffs)} cutoffs examined, newest first. Last input close must be strictly greater than first P99. No sell rule. Research signal only; not a performance backtest or an order.</small>`;
-      return;
-    }
-    if(firstHost && search) {
-      const actual=search.next_observation||{}, thresholds=search.thresholds||{};
-      firstHost.dataset.signal=search.signal||"none";
-      firstHost.innerHTML=`<strong>${search.status === "found" ? `${String(search.signal).toUpperCase()} found` : "No recent P10/P90 breach found"}</strong><p>Cutoff: ${escapeHtml(ensembleLocalTime(search.history_cutoff_at))} · next close: ${escapeHtml(ensembleLocalTime(actual.timestamp))} at ${escapeHtml(Number(actual.price).toLocaleString(undefined,{maximumFractionDigits:6}))}</p><p>P10 ${escapeHtml(Number(thresholds.p10).toLocaleString(undefined,{maximumFractionDigits:6}))} · P50 ${escapeHtml(Number(thresholds.p50).toLocaleString(undefined,{maximumFractionDigits:6}))} · P90 ${escapeHtml(Number(thresholds.p90).toLocaleString(undefined,{maximumFractionDigits:6}))}</p><small>${escapeHtml(search.cutoffs_examined)} of ${escapeHtml(search.max_cutoffs)} recent cutoffs examined. The next close was withheld from each forecast. Research signal only; not an order or fill.</small>`;
-      return;
-    }
-    const first = window.QuanturaForecastControls?.firstRowSignal(job);
-    if (firstHost && first) {
-      firstHost.dataset.signal = first.signal || "waiting";
-      firstHost.innerHTML = first.status !== "observed" ? escapeHtml(first.reason) : `<strong>First-quote signal · ${first.signal === "buy" ? "BUY — below P10" : first.signal === "sell" ? "SELL — above P90" : "NEUTRAL — within P10–P90"}</strong><p>Quote: ${escapeHtml(ensembleLocalTime(first.quoteTimestamp))} · ${escapeHtml(first.price.toFixed(4))}. Forecast row: ${escapeHtml(ensembleLocalTime(first.timestamp))} · P10 ${escapeHtml(first.lower.toFixed(4))} · P90 ${escapeHtml(first.upper.toFixed(4))}</p><small>${escapeHtml(first.timing)}. A research signal, not an order or fill.</small>`;
-      const firstCell = ui.ensembleResultTable?.querySelector("tbody tr:first-child td");
-      if (firstCell) { firstCell.querySelector(".first-row-signal-badge")?.remove(); if (first.status === "observed") { const badge = document.createElement("strong"); badge.className = "first-row-signal-badge"; badge.textContent = first.signal === "none" ? " · Neutral" : ` · ${first.signal.toUpperCase()}`; firstCell.append(badge); } }
-    }
-  };
-
   const renderEnsembleLiveQuote = (job, now = Date.now()) => {
     const host = document.getElementById("ensemble-live-quote");
     if (!host) return;
@@ -14877,8 +14846,6 @@
     // Never show the previous job's distribution or metrics under a new ID.
     if (ui.ensembleSummary) { ui.ensembleSummary.hidden = true; ui.ensembleSummary.replaceChildren(); }
     document.getElementById("ensemble-live-quote")?.replaceChildren();
-    document.getElementById("ensemble-first-row-signal")?.replaceChildren();
-    document.getElementById("ensemble-cutoff-p99-signal")?.replaceChildren();
     document.getElementById("ensemble-crossing-signals")?.replaceChildren();
     if (ui.ensembleObservedMetrics) ui.ensembleObservedMetrics.textContent = "";
     if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = "";
@@ -14930,9 +14897,8 @@
       if (points.length) traces.push({type:"scatter",mode:"lines+markers",x:points.map(plotTimestamp),y:points.map(r=>r.target),customdata:points.map(r=>ensembleChartTime(r.timestamp,timeZone)),name:group.name,line:{width:2,color:isDarkMode()?"#5eead4":"#0f766e"},connectgaps:false});
     }
     const dark = isDarkMode();
-    const firstSignal = window.QuanturaForecastControls?.firstRowSignal(job);
-    if (firstSignal?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstSignal.timestamp).toISOString()], y:[firstSignal.price], name:`First-quote · ${firstSignal.signal === "none" ? "NEUTRAL" : firstSignal.signal.toUpperCase()}${firstSignal.prospective ? "" : " (retrospective)"}`, marker:{size:13,symbol:"diamond",color:firstSignal.signal === "buy" ? "#087f5b" : firstSignal.signal === "sell" ? "#b42318" : "#64748b"}});
-    renderEnsembleSignals(job);
+    const firstQuote = window.QuanturaForecastControls?.firstRowObservation(job);
+    if (firstQuote?.status === "observed") traces.push({type:"scatter", mode:"markers", x:[new Date(firstQuote.timestamp).toISOString()], y:[firstQuote.price], name:`First observed quote${firstQuote.prospective ? "" : " (retrospective)"}`, marker:{size:11,symbol:"diamond",color:"#64748b"}});
     // ISO UTC positions avoid Plotly's browser-local conversion of numeric date
     // values, which can put Monday/session-open points inside a closed-day gap.
     traces.forEach(trace => { trace.customdata ||= trace.x.map(value => job.frequency === "1D" && source.type === "ticker" ? value.slice(0,10) : ensembleChartTime(value, timeZone)); trace.x = trace.x.map(value => new Date(value).toISOString()); if (trace.hoverinfo !== "skip") trace.hovertemplate = "%{customdata}<br>%{y:.6f}<extra>%{fullData.name}</extra>"; });
@@ -15063,7 +15029,7 @@
     ui.ensembleForecastResults.hidden = false;
     const quantiles = Array.isArray(job?.quantiles) ? job.quantiles.map(Number) : [];
     const predictions = Array.isArray(job?.predictions) ? job.predictions : [];
-    if (ui.ensembleResultState) ui.ensembleResultState.textContent = job.analysis_mode === "recent_signal_search" ? "Recent signal search" : job.source?.analysis_mode === "historical_replay" ? "Historical replay" : "Completed";
+    if (ui.ensembleResultState) ui.ensembleResultState.textContent = job.analysis_mode === "recent_signal_search" ? "Historical comparison" : job.source?.analysis_mode === "historical_replay" ? "Historical replay" : "Completed";
     if (ui.ensembleResultMeta) {
       const models = Object.entries(job?.models || {}).filter(([, value]) => value?.enabled).map(([id]) => id);
       const participated = (job.model_runtime || []).filter(model=>typeof model === "string" || model.status === "completed").map(model=>typeof model === "string" ? model : model.id);
@@ -19236,8 +19202,6 @@
     }
     if (!Object.keys(metrics).length) return "";
 
-    const generalBias = String(metrics.generalBias || "Neutral / Mixed");
-    const tailActive = Boolean(metrics.extendedP10BuyBiasActive);
     const modelInterval = String(metrics.p50BoundaryMethod || "") === "model_95_interval";
     const boundaryCopy = modelInterval
       ? `Supplied model 95% interval · avg ${formatForecastAnalysisNumber(metrics.p50ModelLowerBoundaryAverage)} to ${formatForecastAnalysisNumber(metrics.p50ModelUpperBoundaryAverage)}`
@@ -19250,7 +19214,6 @@
             <h3>${escapeHtml(String(state.foundryContext.activeRun?.dataset?.ticker || "Uploaded forecast"))}</h3>
             <p class="small muted">${escapeHtml(String(metrics.forecastStartDate || "N/A"))} → ${escapeHtml(String(metrics.forecastEndDate || "N/A"))}</p>
           </div>
-          <span class="forecast-signal-pill">${escapeHtml(generalBias)}</span>
         </div>
         <div class="forecast-metric-grid">
           <div><span>P10 average</span><strong>${formatForecastAnalysisNumber(metrics.p10Average)}</strong></div>
@@ -19268,12 +19231,11 @@
               <div><dt>Unusual P50</dt><dd>${formatForecastAnalysisNumber(metrics.p50UnusualCount)} (${formatForecastAnalysisNumber(metrics.p50UnusualPercentage, { percentage: true })})</dd></div>
               <div><dt>Above average</dt><dd>${formatForecastAnalysisNumber(metrics.p50UnusualAboveAverageCount)} (${formatForecastAnalysisNumber(metrics.p50UnusualAboveAveragePercentage, { percentage: true })})</dd></div>
               <div><dt>Below average</dt><dd>${formatForecastAnalysisNumber(metrics.p50UnusualBelowAverageCount)} (${formatForecastAnalysisNumber(metrics.p50UnusualBelowAveragePercentage, { percentage: true })})</dd></div>
-              <div><dt>General Bias</dt><dd>${escapeHtml(generalBias)}</dd></div>
             </dl>
-            <p class="small muted">${escapeHtml(String(data.biasExplanation || "This is a model-derived statistical bias, not a trading certainty."))}</p>
+            <p class="small muted">These describe the uploaded forecast distribution, not a trading recommendation.</p>
           </section>
           <section>
-            <h4>Tail signal</h4>
+            <h4>P10 distribution</h4>
             <dl class="forecast-stat-list">
               <div><dt>P10 range</dt><dd>${formatForecastAnalysisNumber(metrics.p10Minimum)} → ${formatForecastAnalysisNumber(metrics.p10Maximum)}</dd></div>
               <div><dt>P10 standard deviation</dt><dd>${formatForecastAnalysisNumber(metrics.p10StandardDeviation)}</dd></div>
@@ -19282,9 +19244,8 @@
               <div><dt>Last two P10 valid</dt><dd>${metrics.lastTwoP10Valid ? "Yes" : "No"}</dd></div>
               <div><dt>Both business days</dt><dd>${metrics.lastTwoBusinessDays ? "Yes" : "No"}</dd></div>
               <div><dt>Both unusually low</dt><dd>${metrics.lastTwoP10UnusuallyLow ? "Yes" : "No"}</dd></div>
-              <div><dt>Extended P10 Buy Bias</dt><dd>${tailActive ? "Active" : "Inactive"}</dd></div>
             </dl>
-            <p class="small muted">Model-derived buy-bias window: ${escapeHtml(String(metrics.biasWindowStartDate || "N/A"))} → ${escapeHtml(String(metrics.biasWindowEndDate || "N/A"))} (approximately two weeks after the forecast horizon).</p>
+            <p class="small muted">Reported quantiles reflect the uploaded forecast and should be evaluated against observed outcomes.</p>
           </section>
         </div>
         ${validationWarnings.length ? `<details class="forecast-validation-notes"><summary>Parsing notes (${validationWarnings.length})</summary><ul>${validationWarnings.map((item) => `<li>${escapeHtml(String(item || ""))}</li>`).join("")}</ul></details>` : ""}

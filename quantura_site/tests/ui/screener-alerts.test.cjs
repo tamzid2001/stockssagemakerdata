@@ -29,19 +29,27 @@ test('saved alerts and the screener-only inbox expose icons and evaluation statu
   assert.ok(calls.some(([path])=>path==='/api/notifications/items?category=screener&limit=20'));
   d.window.close();
 });
+test('legacy trade-signal saved filters are visibly paused and cannot be applied',async()=>{
+  const {d,w}=setup();
+  w.QuanturaScreenerAccount.request=async p=>p.includes('notifications')?{items:[]}:{data:[{id:'c'.repeat(24),name:'Old filter',status:'paused_legacy_filter',email:true,filters:{signal:'buy',positions:[]}}],meta:{maximum:10}};
+  w.document.getElementById('qs-load-alerts').click();await tick();await tick();
+  assert.match(w.document.getElementById('qs-saved-list').textContent,/Paused/);
+  assert.equal(w.document.querySelector('[data-apply-alert]'),null);
+  assert.ok(w.document.querySelector('[data-remove-alert]'));
+  assert.match(w.document.getElementById('qs-alert-summary').textContent,/0 of 10 active/);
+  d.window.close();
+});
 test('shared screener shows seven quantiles, no earnings or obsolete special-signal UI',()=>{
   const {d,w}=setup();const html=w.document.getElementById('qs-filters').textContent;assert.doesNotMatch(html,/Earnings|Special P10|Model bias/);
-  assert.ok(w.document.getElementById('qs-statistic'));assert.ok(w.document.getElementById('qs-signal'));d.window.close();
+  assert.ok(w.document.getElementById('qs-statistic'));assert.equal(w.document.getElementById('qs-signal'),null);d.window.close();
 });
-test('daily P99 Buy and final target are visible; no Sell or Neutral signal options',async()=>{
-  const row={ticker:'PLTR',actual_price:100,p99:130,cutoff_p99_signal:{value:'buy',price:131,p99:130,quote_timestamp:'2026-09-17',forecast_date:'2026-09-21'},current_signal:{value:'buy',price:131,p99:130,price_target:136,target_date:'2026-09-29',forecast_date:'2026-09-21'}};
+test('screener keeps quantile filters without trade-signal columns or saved filter fields',async()=>{
+  const row={ticker:'PLTR',actual_price:100,p99:130,p50:110,cutoff_p99_signal:{value:'buy',price:131,p99:130},current_signal:{value:'buy',price_target:136}};
   const {d,w,calls}=setup({items:[row],total:1,page:1,pageCount:1});await tick();
-  assert.match(w.document.getElementById('qs-table-body').textContent,/Buy · close above P99/);
-  assert.match(w.document.getElementById('qs-table-body').textContent,/Target 136/);
-  assert.deepEqual([...w.document.getElementById('qs-signal').options].map(o=>o.value),['all','buy']);
-  w.document.getElementById('qs-signal').value='buy';w.document.getElementById('qs-signal').dispatchEvent(new w.Event('change',{bubbles:true}));
-  w.document.getElementById('qs-alert-name').value='P99 cutoff buy';w.document.getElementById('qs-save-alert').click();await tick();await tick();
-  assert.equal(calls.find(c=>c[1]?.method==='POST')[1].body.filters.signal,'buy');
+  assert.doesNotMatch(w.document.getElementById('qs-table-body').textContent,/Buy|Sell|Target 136/);
+  assert.equal(w.document.querySelector('th#qs-last-buy-heading'),null);
+  w.document.getElementById('qs-alert-name').value='P99 comparison';w.document.getElementById('qs-save-alert').click();await tick();await tick();
+  assert.equal('signal' in calls.find(c=>c[1]?.method==='POST')[1].body.filters,false);
   for(const value of ['above-p99','below-p99','above-p01','below-p01'])assert.ok(w.document.querySelector(`[name="position"][value="${value}"]`));
   d.window.close();
 });
@@ -49,7 +57,7 @@ test('mobile result cards keep core ticker metrics visible and expand one row at
   const row={ticker:'GOLD',company_name:'Gold',actual_price:4381.3,actual_price_timestamp:'2026-09-20T12:00:00Z',p01:70,p10:80,p25:90,p50:100,p75:110,p90:120,p99:130,current_signal:{value:'buy',forecast_date:'2026-09-21'},quantile_position:'below_p10',forecast_view_url:'/forecasting?ticker=GOLD',forecast_action:'view'};
   const {d,w}=setup({items:[row],total:1,universeCount:1,page:1,pageCount:1,generatedAt:'2026-09-20T12:00:00Z',manifest:{successfully_processed:1,failed:0,coverage_percentage:100}});await tick();
   const result=w.document.querySelector('#qs-table-body tr'),toggle=result.querySelector('[data-row-toggle]');
-  assert.equal(result.querySelectorAll('.qs-mobile-core').length,5);assert.equal(result.querySelectorAll('.qs-mobile-detail').length,9);
+  assert.equal(result.querySelectorAll('.qs-mobile-core').length,5);assert.equal(result.querySelectorAll('.qs-mobile-detail').length,7);
   assert.equal(toggle.getAttribute('aria-expanded'),'false');toggle.click();assert.equal(result.classList.contains('is-expanded'),true);assert.equal(toggle.getAttribute('aria-expanded'),'true');assert.match(toggle.textContent,/Fewer metrics/);
   toggle.click();assert.equal(result.classList.contains('is-expanded'),false);assert.match(toggle.textContent,/More metrics/);d.window.close();
 });
@@ -61,7 +69,6 @@ test('saved scan day navigation retains filters and CSV date; missing days are n
   w.document.getElementById('qs-search').value='PLTR';
   w.document.getElementById('qs-date-previous').click();await tick();
   assert.equal(w.document.getElementById('qs-date').value,'2026-09-22');
-  assert.equal(w.document.getElementById('qs-last-buy-heading').textContent,'Buy in scan');
   assert.match(requests.at(-1),/date=2026-09-22/);assert.match(requests.at(-1),/search=PLTR/);
   assert.match(w.document.getElementById('qs-export').href,/date=2026-09-22/);
   w.document.getElementById('qs-date').value='2026-09-21';w.document.getElementById('qs-date').dispatchEvent(new w.Event('change'));
@@ -70,6 +77,5 @@ test('saved scan day navigation retains filters and CSV date; missing days are n
   assert.equal(requests.length,2);
   w.document.getElementById('qs-date-next').click();await tick();
   assert.equal(w.document.getElementById('qs-date').value,'2026-09-23');
-  assert.equal(w.document.getElementById('qs-last-buy-heading').textContent,'Last Buy');
   d.window.close();
 });

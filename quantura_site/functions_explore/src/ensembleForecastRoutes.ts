@@ -274,17 +274,10 @@ type NormalizedConfiguration = {
 export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey): NormalizedConfiguration {
   assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule"], "configuration");
   const analysisModeRaw = text(body.analysis_mode || "forecast", 40);
-  if (!new Set(["forecast", "recent_signal_search"]).has(analysisModeRaw)) throw new Error("analysis_mode_unsupported");
+  if (analysisModeRaw !== "forecast") throw new Error("analysis_mode_unsupported");
+  if (body.search_max_cutoffs !== undefined || body.search_signal_rule !== undefined) throw new Error("signal_search_retired");
   let searchMaximum: number | null = null;
   let searchRule: NormalizedConfiguration["search_signal_rule"] = null;
-  if (analysisModeRaw === "recent_signal_search") {
-    const rawRule = body.search_signal_rule ?? "cutoff_above_p99";
-    if (rawRule !== "cutoff_above_p99" && rawRule !== "next_close_p10_p90") throw new Error("search_signal_rule_unsupported");
-    searchRule = rawRule;
-    const raw = body.search_max_cutoffs ?? 20;
-    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1 || raw > 30) throw new Error("search_max_cutoffs_unsupported");
-    searchMaximum = raw;
-  }
   const totoVariant = body.toto_variant ?? modelRegistry.models.toto.defaultVariant;
   if (typeof totoVariant !== "string" || !modelRegistry.models.toto.variants.some(v => v.id === totoVariant)) throw new Error("toto_variant_unsupported");
   historyCutoffAt(body.history_lag_minutes);

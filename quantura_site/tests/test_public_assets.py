@@ -406,7 +406,6 @@ def test_foundry_is_archived_in_favor_of_direct_csv_forecasting():
         "forecast-summary-card",
         "p50Anomalies",
         "p10Anomalies",
-        "Extended P10 Buy Bias",
     ]:
         assert marker in client
 
@@ -538,7 +537,6 @@ def test_quantitative_screener_surface_replaces_manual_prophet_dispatch():
         'id="qs-market-cap"',
         'value="above-p50"',
         'value="below-p90"',
-        'id="qs-signal"',
         'id="qs-statistic"',
         'id="qs-save-alert"',
         'id="qs-table-body"',

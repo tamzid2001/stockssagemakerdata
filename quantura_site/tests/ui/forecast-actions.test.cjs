@@ -21,40 +21,11 @@ test('every forecast action has one icon-labelled control above the chart, in bo
   }
 });
 
-const minute = '2026-09-13T12:';
-const row=(m,bid,target=bid)=>({timestamp:minute+String(m).padStart(2,'0')+':00Z',bid,target});
-function setup(){
-  const d=new JSDOM('<section id="ensemble-first-row-signal"></section><table><tbody><tr><td>First row</td></tr></tbody></table>',{runScripts:'outside-only'});
-  const helper = require(path.join(root,'public/forecast-controls.js'));
-  d.window.QuanturaForecastControls={firstRowSignal:job=>helper.firstRowSignal(job,Date.parse(minute+'05:00Z'))};
-  d.window.eval('const escapeHtml=String,ensembleLocalTime=String,ui={ensembleResultTable:document.querySelector("table")};'+source.slice(source.indexOf('  const renderEnsembleSignals ='),source.indexOf('  const renderEnsembleLiveQuote ='))+'\nwindow.signals=renderEnsembleSignals;');
-  const job={source:{type:'prediction_market'},frequency:'1min',completed_at:minute+'01:30Z',
-    history:[row(1,.3)],predictions:[2,3,4,5].map(m=>({...row(m,0),quantiles:{'0.1':.2,'0.9':.8}})),
-    observations:[row(2,.5),row(3,.85),row(4,.15)]};
-  return {d,job,run:j=>{d.window.signals(j);return d.window.document.getElementById('ensemble-first-row-signal').textContent;}};
-}
-
-test('only the first completed quote displays Buy below P10, Sell above P90, otherwise Neutral',()=>{
-  const {d,job,run}=setup();
-  for(const [price,label] of [[.1,'BUY — below P10'],[.85,'SELL — above P90'],[.5,'NEUTRAL'],[.2,'NEUTRAL'],[.8,'NEUTRAL']]) {
-    job.observations[0]=row(2,price);
-    const text=run(job);assert.ok(text.includes(label));
-    assert.doesNotMatch(text,/Cross upward|Cross downward|P90 · Buy|P10 · Sell/);
-    assert.equal(d.window.document.querySelectorAll('.first-row-signal-badge').length,1);
+test('forecast pages and chart do not present trade-signal badges',()=>{
+  for(const folder of ['pages','functions_ssr/templates']) {
+    const html=fs.readFileSync(path.join(root,folder,'forecasting.html'),'utf8');
+    assert.doesNotMatch(html,/ensemble-first-row-signal|ensemble-cutoff-p99-signal|ensemble-crossing-signals/);
   }
-  d.window.close();
-});
-
-test('later crossings, ticks, missing first quote and filled bars do not manufacture first-quote signals',()=>{
-  const {d,job,run}=setup();
-  assert.match(run(job),/NEUTRAL/); // Later P90/P10 crossings cannot change the first quote.
-  for(const changed of [
-    {...job,observations:[row(3,.9)]},
-    {...job,observations:[{...row(2,.9),timestamp:minute+'02:15Z'}]},
-    {...job,observations:[{...row(2,.9),is_forward_filled:true}]},
-  ]) assert.doesNotMatch(run(changed),/BUY —|SELL —|NEUTRAL/);
-  for(const completed_at of [minute+'04:30Z',null]) assert.match(run({...job,completed_at}),/NEUTRAL[\s\S]*retrospective/);
-  assert.doesNotMatch(source,/ensembleMinuteSignals|Cross upward|Cross downward/);
-  for(const folder of ['pages','functions_ssr/templates']) assert.doesNotMatch(fs.readFileSync(path.join(root,folder,'forecasting.html'),'utf8'),/ensemble-crossing-signals/);
-  d.window.close();
+  assert.doesNotMatch(source,/renderEnsembleSignals|first-row-signal-badge|BUY — below P10|SELL — above P90/);
+  assert.match(source,/First observed quote/);
 });

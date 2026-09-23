@@ -25,7 +25,7 @@ export function parseSavedAlert(body:unknown, now=new Date().toISOString()):Save
     typeof value.name!=="string" || !value.name.trim() || value.name.length>80 || /[\x00-\x1f]/.test(value.name) ||
     typeof value.email!=="boolean" || !value.filters || typeof value.filters!=="object" || Array.isArray(value.filters)) throw new Error("INVALID_ALERT");
   const raw=value.filters as Record<string,unknown>;
-  if (Object.keys(raw).some(k=>!["search","universe","marketCap","minMarketCap","maxMarketCap","signal","signalChanged","quantileRules","positions","sort","direction","page","pageSize","statistic"].includes(k))) throw new Error("INVALID_FILTERS");
+  if (Object.keys(raw).some(k=>!["search","universe","marketCap","minMarketCap","maxMarketCap","quantileRules","positions","sort","direction","page","pageSize","statistic"].includes(k))) throw new Error("INVALID_FILTERS");
   // Null numeric bounds are absent in persisted normalized filters.
   const parsed=parseQuantScreenerQuery({...raw,position:raw.positions,minMarketCap:raw.minMarketCap??"",maxMarketCap:raw.maxMarketCap??"",page:1,pageSize:100});
   if(parsed.errors.length)throw new Error("INVALID_FILTERS");
@@ -45,14 +45,15 @@ export function closingRows(items:QuantScreenerRow[], date:string):QuantScreener
   });
 }
 export function digestMatches(alerts:SavedScreenerAlert[], rows:QuantScreenerRow[], date:string) {
-  return alerts.map(alert=>({alert,rows:rows.filter(row=>rowMatchesQuery(row,alert.filters,new Date(date+"T12:00:00Z")))})).filter(match=>match.rows.length>0);
+  return alerts.filter(alert=>!((alert.filters.signal && alert.filters.signal!=="all") || alert.filters.signalChanged || (alert.filters.bias && alert.filters.bias!=="all") || alert.filters.specialP10))
+    .map(alert=>({alert,rows:rows.filter(row=>rowMatchesQuery(row,alert.filters,new Date(date+"T12:00:00Z")))})).filter(match=>match.rows.length>0);
 }
 export function buildScreenerDigest(uid:string,date:string,matches:ReturnType<typeof digestMatches>,origin:string):Omit<NotificationEmail,"to"> {
-  const lines=matches.map(m=>`${m.alert.name}: ${m.rows.length} matches — ${m.rows.slice(0,30).map(r=>`${r.ticker} (${r.signal})`).join(", ")}${m.rows.length>30?"; more in screener":""}`);
+  const lines=matches.map(m=>`${m.alert.name}: ${m.rows.length} matches — ${m.rows.slice(0,30).map(r=>r.ticker).join(", ")}${m.rows.length>30?"; more in screener":""}`);
   const url=origin+"/screener#saved-alerts";
-  const text=[`Your Quantura closing screener matches · ${date}`,...lines,"Signals compare the latest completed daily input close with the first future P99; they are not recommendations or guaranteed outcomes.",`Review filters or stop notifications: ${url}`].join("\n\n");
+  const text=[`Your Quantura closing screener matches · ${date}`,...lines,"These are price and forecast-quantile comparisons, not investment recommendations.",`Review filters or stop notifications: ${url}`].join("\n\n");
   return {id:`screener-digest-${uid}-${date}`,subject:`Quantura screener matches · ${date}`,text,
-    html:`<!doctype html><html><body style="font-family:Arial,sans-serif;color:#17202a;background:#f4f6f8;padding:20px"><main style="max-width:600px;margin:auto;background:#fff;padding:24px;border-radius:12px"><h1 style="font-size:20px">Your closing screener matches</h1><p>${escape(date)} · Finalized exchange closes</p>${lines.map(l=>`<p>${escape(l)}</p>`).join("")}<p><a href="${escape(url)}">View saved filters / stop notifications</a></p><p style="font-size:13px">Model-derived signals are not recommendations or guaranteed outcomes.</p></main></body></html>`};
+    html:`<!doctype html><html><body style="font-family:Arial,sans-serif;color:#17202a;background:#f4f6f8;padding:20px"><main style="max-width:600px;margin:auto;background:#fff;padding:24px;border-radius:12px"><h1 style="font-size:20px">Your closing screener matches</h1><p>${escape(date)} · Finalized exchange closes</p>${lines.map(l=>`<p>${escape(l)}</p>`).join("")}<p><a href="${escape(url)}">View saved filters / stop notifications</a></p><p style="font-size:13px">Forecast comparisons are not investment recommendations.</p></main></body></html>`};
 }
 
 export function registerScreenerAlertRoutes(router:Router,options:Options):void {
@@ -65,7 +66,8 @@ export function registerScreenerAlertRoutes(router:Router,options:Options):void 
   };
   router.get("/v1/me/screener-alerts",handle(false,async(_req,res,p)=>{
     const snap=await options.db.collection(COLLECTION).doc(p.userId).get();const data=snap.data()||{};
-    const alerts=(Object.values(data.alerts||{}) as SavedScreenerAlert[]).sort((a,b)=>String(a.created_at||"").localeCompare(String(b.created_at||"")));
+    const alerts=(Object.values(data.alerts||{}) as SavedScreenerAlert[]).sort((a,b)=>String(a.created_at||"").localeCompare(String(b.created_at||"")))
+      .map(alert=>{const {signal,signalChanged,bias,specialP10,...filters}=alert.filters;return {...alert,filters,status:(signal && signal!=="all") || signalChanged || (bias && bias!=="all") || specialP10 ? "paused_legacy_filter" : "active"};});
     res.json({data:alerts,meta:{maximum:10,email_configured:isBrevoEmailConfigured(),last_evaluation:data.last_evaluation||null}});
   }));
   router.post("/v1/me/screener-alerts",handle(true,async(req,res,p)=>{

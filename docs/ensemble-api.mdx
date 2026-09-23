@@ -17,9 +17,9 @@ Choose **Upload your own CSV** to parse a CSV of at most 2 MB / 10,000 rows. Sel
 
 Advanced settings offers approved, revision-pinned `toto_variant` values `4m`, `22m`, `313m`, `1b`, `2.5b`, from smallest to largest. Default remains `2.5b`. Arbitrary checkpoint IDs are rejected. Larger models require more memory/startup time; TimesFM's separate access and commercial-license checks still apply.
 
-## First-row minute signal
+## First-row observed quote
 
-The website compares the **completed one-minute observation at the first predicted timestamp**, immediately after the downloaded input history, with that row's frozen P10/P90 levels. Worker completion time does not change which quote is selected. The price is the same selected-side target used by the history/chart (closing ask for Kalshi, display quote for Polymarket US, closing price for stocks). Below P10 is BUY; above P90 is SELL; otherwise NEUTRAL. Equality is neutral. A missing exact observation remains pending, never replaced by a later quote or forward-filled price. If the forecast finished after this observation, the comparison is explicitly retrospective, not a backdated live entry. Signals are research annotations, not orders, fills or verified strategy returns.
+When available, the chart marks the completed observation at the first predicted timestamp. It uses the same selected-side target as the historical chart. Missing observations are never replaced by later or forward-filled quotes. The marker is a price observation, not a buy/sell recommendation; if the forecast finished after that quote, it is labelled retrospective.
 
 Daily stock charts align closes by exchange session date, while intraday bars use completed interval timestamps. Recent minute closes are separate from final daily closes; today's daily candle is not treated as final. Source, price adjustment, session and feed are retained for overlays and refreshed requests. Calendar cutoffs are validated against the current clock at submission, not the time the page was opened.
 
@@ -35,34 +35,11 @@ At least one model must be enabled and at least one enabled weight must be posit
 
 ## Quantile support
 
-### Buy above the first predicted P99
-
-Q Forecast and Q Screener show **Buy · input close above first P99** when the
-last historical close actually used as input is strictly greater than P99 on
-the first predicted row. Equality produces no signal. This rule does not use
-the current streaming quote, a withheld observation, or the average P99 across
-the horizon. Missing P99/input evidence means unavailable, not an assumed buy.
-There is no Sell-below-P01 rule. Existing first-future-quote P10/P90 annotations
-are separate and remain explicitly labelled.
-
-In Q Screener, select **Buy · input close above first P99** (`signal=cutoff_buy`).
-The above/below P01 and P99 position filters instead compare the current quote
-with the displayed forecast row, just like the existing P10/P50/P90 filters.
-
-**Find recent high / low** now searches recent input cutoffs newest first for
-this buy rule. It forecasts seven periods at each cutoff, uses only data at or
-before that cutoff, and stops at the first qualifying result or the bounded
-attempt limit. This is signal discovery, not evidence of strategy performance.
-API requests use `analysis_mode: "recent_signal_search"`,
-`search_signal_rule: "cutoff_above_p99"`, `prediction_length: 7`, and include
-`0.99` in `quantiles`. `search_max_cutoffs` defaults to 20 (maximum 30).
-The result includes `cutoff_observation`, first-row `thresholds.p99`, the
-selected history and the number of cutoffs examined. Older saved searches
-retain their original, separately versioned P10/P90 rule.
-
-Select at least one positive-weight model capable of P99 (Prophet, Granite or
-Chronos) for this search. Ordinary single-model forecasts using Toto or TimesFM
-remain supported with quantiles inside P10–P90; those models cannot supply P99.
+Q Forecast and Q Screener present quantile values without buy/sell labels. The
+above/below P01 and P99 screener filters compare the displayed close with the
+published quantile, just like the P10/P50/P90 filters. Previously saved
+historical searches remain readable, but the website no longer starts new
+trade-signal searches.
 
 Prophet, Granite, and Chronos participate in requested tail quantiles when supported by their runtime. Toto and TimesFM provide native P10 through P90 quantiles and may interpolate only inside that interval. Quantura never extrapolates P01 or P99 from those bounded heads.
 

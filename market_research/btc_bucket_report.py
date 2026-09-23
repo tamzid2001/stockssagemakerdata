@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
+import heapq
 import json
 import math
 import os
@@ -20,7 +21,9 @@ import statistics
 import tempfile
 
 from .engine import digest
+from .btc_sticky_tracking import taker_fee
 from .recovery_cloud import Campaign, decode_catalog, validate_campaign
+from .recovery_switch import statistics as trade_statistics
 
 
 REPORT_KEY = re.compile(r"report-[a-f0-9]{32}")
@@ -188,6 +191,62 @@ def bankroll(trades: list[dict]) -> dict:
     }
 
 
+def capped_recovery_scenarios(trades: list[dict], fee_policy: dict) -> list[dict]:
+    """Resize one immutable entry sequence using only confirmed prior outcomes.
+
+    A step is one loss-triggered multiplication, so floor rounding yields
+    1 -> 2 -> 5 -> 12 contracts for a 2.5x factor. Entry/settlement times,
+    prices, and fee policy remain identical across scenarios.
+    """
+    if fee_policy.get("fee_type") != "quadratic" or fee_policy.get("multiplier") != 1:
+        raise ValueError("UNVERIFIED_FEE_POLICY")
+    source = sorted(_ordered_closed(trades), key=lambda row: (int(row["entry_at"]), str(row["market_id"])))
+    if len(source) != len(trades) or len({row["market_id"] for row in source}) != len(source):
+        raise ValueError("COMPLETE_UNIQUE_TRADE_LEDGER_REQUIRED")
+    results = []
+    for limit in (1, 2, 3, None):
+        pending: list[tuple[int, str, float]] = []
+        size, increases, cycle = 1, 0, 0.0
+        resized = []
+        for row in source:
+            entry_at = int(row["entry_at"])
+            while pending and pending[0][0] < entry_at:
+                _, _, net = heapq.heappop(pending)
+                cycle += net
+                if cycle >= -1e-10:
+                    cycle, size, increases = 0.0, 1, 0
+                elif net < 0 and (limit is None or increases < limit):
+                    size = min(100, math.floor(size * 2.5))
+                    increases += 1
+            price = _finite(row["entry_price"])
+            payout = _finite(row["exit_price"])
+            if not 0 < price < 1 or payout not in (0, 1) or int(row["outcome_confirmed_at"]) < entry_at:
+                raise ValueError("INVALID_HISTORICAL_TRADE")
+            fee = taker_fee(size, price, "0.0001", fee_policy["multiplier"])
+            net = size * (payout - price) - fee
+            if limit is None and (size != row["quantity"] or
+                    not math.isclose(fee, row["fees"], abs_tol=1e-7) or
+                    not math.isclose(net, row["net_pnl"], abs_tol=1e-7)):
+                raise ValueError("BASELINE_REPLAY_MISMATCH")
+            revised = {**row, "quantity": size, "fees": fee,
+                       "gross_pnl": size * (payout - price), "net_pnl": net}
+            resized.append(revised)
+            heapq.heappush(pending, (int(row["outcome_confirmed_at"]), str(row["market_id"]), net))
+        summary = trade_statistics(resized)
+        results.append({
+            "maximum_loss_escalations_per_recovery_cycle": limit,
+            "maximum_contracts_allowed_by_escalations": 100 if limit is None else (1, 2, 5, 12)[limit],
+            "closed_trades": summary["closed_trades"],
+            "wins": summary["wins"], "losses": summary["losses"],
+            "net_pnl": round(summary["net_pnl"], 6),
+            "return_on_entry_notional": summary["net_return_on_closed_entry_notional"],
+            "realized_equity_max_drawdown": round(summary["realized_equity_max_drawdown"], 6),
+            "maximum_contracts_used": summary["max_quantity_used"],
+            "historical_minimum_initial_cash": bankroll(resized)["historical_minimum_initial_cash"],
+        })
+    return results
+
+
 def price_buckets(trades: list[dict]) -> list[dict]:
     buckets: dict[int, dict] = {}
     for trade in _ordered_closed(trades):
@@ -251,10 +310,11 @@ def summarize_origin(origin: int, scenario: dict) -> dict:
     }
 
 
-def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: str) -> dict:
+def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: str,
+              fee_policy: dict | None = None) -> dict:
     origins = [summarize_origin(origin, origin_scenarios[origin]) for origin in sorted(origin_scenarios)]
     combined = [trade for origin in sorted(origin_scenarios) for trade in origin_scenarios[origin]["trades"]]
-    return {
+    result = {
         "schema_version": 2,
         "paper_only": True,
         "campaign_id": campaign_id,
@@ -265,6 +325,10 @@ def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: s
         "combined_price_buckets": price_buckets(combined),
         "combined_bucket_warning": "Origins reuse markets and are not independent trades; do not sum their P&L as one portfolio.",
     }
+    if fee_policy is not None and 1 in origin_scenarios:
+        result["origin_1_recovery_escalation_sensitivity"] = capped_recovery_scenarios(
+            origin_scenarios[1]["trades"], fee_policy)
+    return result
 
 
 def _record(campaign: Campaign, key: str) -> dict:
@@ -297,7 +361,7 @@ def load(campaign_id: str, report_key: str) -> dict:
         scenarios[int(origin)] = full["p90_sticky"]["recover_cycle"]
     if set(scenarios) != set(range(1, 13)):
         raise ValueError("ALL_MINUTE_ORIGINS_REQUIRED")
-    result = aggregate(scenarios, campaign_id, report_key)
+    result = aggregate(scenarios, campaign_id, report_key, compact.get("fee_policy"))
     result["coverage"] = compact.get("coverage", {})
     result["as_of"] = compact.get("as_of")
     result["complete"] = compact.get("complete")
@@ -323,6 +387,15 @@ def markdown(report: dict) -> str:
             f"{median if median is not None else 'n/a'} |"
         )
     rows.extend(["", "Exact 1-cent winner/loser buckets are included in the sanitized JSON artifact."])
+    if scenarios := report.get("origin_1_recovery_escalation_sensitivity"):
+        rows.extend(["", "## First minute to 14-minute forecast: recovery escalation limits", "",
+                     "| Maximum increases | Max contracts used | Net P&L | Return on entries | Realized drawdown | Historical minimum cash |",
+                     "|---:|---:|---:|---:|---:|---:|"])
+        for item in scenarios:
+            label = "unlimited (100-contract cap)" if item["maximum_loss_escalations_per_recovery_cycle"] is None else str(item["maximum_loss_escalations_per_recovery_cycle"])
+            rows.append(f"| {label} | {item['maximum_contracts_used']} | ${item['net_pnl']:.2f} | "
+                        f"{item['return_on_entry_notional']:.2%} | ${item['realized_equity_max_drawdown']:.2f} | "
+                        f"${item['historical_minimum_initial_cash']:.2f} |")
     return "\n".join(rows) + "\n"
 
 

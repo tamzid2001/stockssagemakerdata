@@ -1,6 +1,6 @@
 ---
 title: "Q Screener and Daily Alerts"
-description: "Daily-close Buy signals, seven-session forecasts and saved filters."
+description: "Daily-close quantile comparisons, seven-session forecasts and saved filters."
 ---
 
 ## Daily scan
@@ -14,24 +14,23 @@ tracking. Seven future trading sessions use Prophet, Toto 4M, Granite, Chronos-2
 and TimesFM, each with 20% central weight. Unsupported tails are reweighted.
 Quantiles: P01/P10/P25/P50/P75/P90/P99. No fabricated fallback.
 
-## Buy rule
+## Price and quantile comparisons
 
-**Buy = latest daily input close > first future P99.** Equality is not Buy.
-**Target = final forecast row's P99**, not average or maximum P99.
-
-The only signal filter is Buy (`signal=buy`). Each ticker remembers its last Buy.
-Older-policy scans stay readable without new Buy labels. Prices are split-adjusted.
-Homepage “Quantura approved Buy signals” means this rule passed—not investment
-advice or a guaranteed gain.
+The screener shows the latest completed daily close beside the first future
+P01/P10/P25/P50/P75/P90/P99 values. Above/below quantile and min/max/average
+filters are descriptive comparisons, not buy/sell recommendations. Prices are
+split-adjusted. Trade-signal filters and labels have been retired; old saved
+signal-based alerts are paused and can be removed and recreated with quantile
+filters.
 
 ## Browse recent scans
 
 The screener keeps each validated stock scan for 14 calendar days. Use the
 date picker or Previous day / Next day to visit published dates; days without
-a completed scan are unavailable. Search, Buy, quantile, sort and CSV-export
+a completed scan are unavailable. Search, quantile, sort and CSV-export
 filters apply to the selected date. The count is the number of markets matching
 those filters. Historic rows use their saved close and forecast, not today's
-quote or a later Buy signal. Kalshi perpetuals remain on demand and have no
+quote. Kalshi perpetuals remain on demand and have no
 dated screener forecast archive.
 
 For programmatic reads, pass `date=YYYY-MM-DD` to
@@ -52,7 +51,7 @@ email subject to delivery limits. No location is needed.
 ```bash
 curl -X POST https://quantura.studio/api/v1/me/screener-alerts \
   -H 'Authorization: Bearer YOUR_API_KEY' -H 'Content-Type: application/json' \
-  -d '{"name":"Daily Buy","email":false,"filters":{"signal":"buy"}}'
+  -d '{"name":"P50 above close","email":false,"filters":{"quantileRules":[{"quantile":"p50","statistic":"avg","operator":"gt","percent":10}]}}'
 ```
 
 Reading needs `alerts:read`; saving/removing needs `alerts:write`.

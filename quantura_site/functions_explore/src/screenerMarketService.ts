@@ -57,9 +57,9 @@ export class ScreenerMarketService {
   }
   private async refresh(dataset:QuantScreenerDataset) {
     let states=new Map<string,SavedScreenerSignal>();const warnings:string[]=[];
-    try{states=await this.store.read();}catch{warnings.push("Saved Buy history is temporarily unavailable.");}
+    try{states=await this.store.read();}catch{warnings.push("Archived comparison history is temporarily unavailable.");}
     const items=dataset.items.map(row=>decorateScreenerRow(row,undefined,states.get(row.ticker)));
-    if(items.some(r=>r.status==="success" && r.signal_status==="daily_scan_requires_refresh"))warnings.push("The previous publication remains readable; Buy signals require a completed latest-close five-model daily scan.");
+    if(items.some(r=>r.status==="success" && r.signal_status==="daily_scan_requires_refresh"))warnings.push("The previous publication remains readable while the latest-close daily scan completes.");
     this.cached={until:Date.now()+300_000,scan:dataset.scan_id,items,warnings};return this.cached;
   }
   async close(dataset:QuantScreenerDataset,now=Date.now()):Promise<{saved:number;unavailable:number}> {
