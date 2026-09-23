@@ -213,7 +213,7 @@ def replay_recovery_scenario(trades: list[dict], fee_policy: dict, *,
             if cycle >= -1e-10:
                 cycle, size, increases = 0.0, starting_contracts, 0
             elif net < 0 and (max_increases is None or increases < max_increases):
-                size = min(100, math.floor(size * 2.5))
+                size = math.floor(size * 2.5)
                 increases += 1
         price = _finite(row["entry_price"])
         payout = _finite(row["exit_price"])
@@ -232,12 +232,12 @@ def replay_recovery_scenario(trades: list[dict], fee_policy: dict, *,
     summary = trade_statistics(resized)
     maximum_allowed = starting_contracts
     for _ in range(max_increases or 0):
-        maximum_allowed = min(100, math.floor(maximum_allowed * 2.5))
+        maximum_allowed = math.floor(maximum_allowed * 2.5)
     funding = bankroll(resized)
     return {
         "starting_contracts": starting_contracts,
         "maximum_loss_escalations_per_recovery_cycle": max_increases,
-        "maximum_contracts_allowed_by_escalations": 100 if max_increases is None else maximum_allowed,
+        "maximum_contracts_allowed_by_escalations": None if max_increases is None else maximum_allowed,
         "closed_trades": summary["closed_trades"],
         "wins": summary["wins"], "losses": summary["losses"],
         "net_pnl": round(summary["net_pnl"], 6),
@@ -328,7 +328,7 @@ def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: s
         "campaign_id": campaign_id,
         "report_key": report_key,
         "strategy": "first_p90_plus_sticky_direction_hold_to_settlement",
-        "sizing": "1 contract; floor(2.5x) after losses until cycle P&L recovers; 100-contract cap",
+        "sizing": "Original replay: 1 contract and its historical sizing; sensitivity cases: floor(2.5x) after losses with no share cap",
         "origins": origins,
         "combined_price_buckets": price_buckets(combined),
         "combined_bucket_warning": "Origins reuse markets and are not independent trades; do not sum their P&L as one portfolio.",
@@ -339,7 +339,7 @@ def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: s
         result["origin_1_start_size_sensitivity"] = [
             replay_recovery_scenario(origin_scenarios[1]["trades"], fee_policy,
                                      starting_contracts=start, max_increases=limit)
-            for start in (1, 5, 10) for limit in (3, 4)]
+            for start in (1, 5, 10, 20, 30) for limit in (3, 4)]
     return result
 
 
@@ -404,7 +404,7 @@ def markdown(report: dict) -> str:
                      "| Maximum increases | Max contracts used | Net P&L | Return on entries | Realized drawdown | Historical minimum cash |",
                      "|---:|---:|---:|---:|---:|---:|"])
         for item in scenarios:
-            label = "unlimited (100-contract cap)" if item["maximum_loss_escalations_per_recovery_cycle"] is None else str(item["maximum_loss_escalations_per_recovery_cycle"])
+            label = "unlimited increases" if item["maximum_loss_escalations_per_recovery_cycle"] is None else str(item["maximum_loss_escalations_per_recovery_cycle"])
             rows.append(f"| {label} | {item['maximum_contracts_used']} | ${item['net_pnl']:.2f} | "
                         f"{item['return_on_entry_notional']:.2%} | ${item['realized_equity_max_drawdown']:.2f} | "
                         f"${item['historical_minimum_initial_cash']:.2f} |")
