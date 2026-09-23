@@ -1,6 +1,7 @@
 import pytest
 
-from market_research.btc_bucket_report import aggregate, bankroll, price_buckets, recovery_cycles, streaks
+from market_research.btc_bucket_report import aggregate, bankroll, capped_recovery_scenarios, price_buckets, recovery_cycles, streaks
+from market_research.btc_sticky_tracking import taker_fee
 
 
 def trade(price, pnl, at, quantity=1):
@@ -89,3 +90,31 @@ def test_aggregate_warns_that_origins_overlap():
     assert result["combined_price_buckets"][0]["wins"] == 1
     assert result["combined_price_buckets"][0]["losses"] == 1
     assert "not independent" in result["combined_bucket_warning"]
+
+
+def test_capped_recovery_uses_confirmed_outcomes_and_replays_baseline():
+    prices = [0.6, 0.6, 0.6, 0.6, 0.6, 0.6]
+    payouts = [0, 0, 0, 0, 1, 1]
+    original_sizes = [1, 2, 5, 12, 30, 30]
+    rows = []
+    for index, (price, payout, size) in enumerate(zip(prices, payouts, original_sizes)):
+        fee = taker_fee(size, price, "0.0001", 1)
+        rows.append({"status": "closed", "market_id": f"btc-{index}",
+                     "entry_at": 100 + index * 20, "exit_at": 110 + index * 20,
+                     "outcome_confirmed_at": 110 + index * 20,
+                     "entry_price": price, "exit_price": payout, "quantity": size,
+                     "fees": fee, "gross_pnl": size * (payout - price),
+                     "net_pnl": size * (payout - price) - fee,
+                     "game_id": f"btc-{index}", "trade_id": f"trade-{index}"})
+    scenarios = capped_recovery_scenarios(rows, {"fee_type": "quadratic", "multiplier": 1})
+    assert [s["maximum_contracts_used"] for s in scenarios] == [2, 5, 12, 30]
+    assert all(s["closed_trades"] == 6 for s in scenarios)
+    assert [s["maximum_loss_escalations_per_recovery_cycle"] for s in scenarios] == [1, 2, 3, None]
+    assert scenarios[3]["net_pnl"] == round(sum(r["net_pnl"] for r in rows), 6)
+
+
+def test_capped_recovery_fails_if_original_ledger_does_not_replay():
+    row = trade(.6, -.6, 1)
+    row.update(game_id="m-1", trade_id="trade-1", exit_at=11, outcome_confirmed_at=11)
+    with pytest.raises(ValueError, match="BASELINE_REPLAY_MISMATCH"):
+        capped_recovery_scenarios([row], {"fee_type": "quadratic", "multiplier": 1})

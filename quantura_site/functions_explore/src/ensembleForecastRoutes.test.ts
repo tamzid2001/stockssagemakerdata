@@ -433,15 +433,10 @@ test("worker result validation rejects crossed quantiles and invalid effective w
   assert.throws(() => validateWorkerResult({ ...valid, effective_weights_by_quantile: { ...valid.effective_weights_by_quantile, "0.5": { prophet: 0.8 } } }, job), /weights/);
 });
 
-test("recent signal search configuration is explicitly bounded", () => {
-  const config = normalizeEnsembleConfiguration({
-    analysis_mode:"recent_signal_search", search_max_cutoffs:12,
-    prediction_length:7, horizon_mode:"frequency_periods", calendar:"NONE",
-    quantiles:[.1,.5,.9], models:{prophet:{enabled:true,weight:1}},
-  }, "free");
-  assert.equal(config.analysis_mode,"recent_signal_search");
-  assert.equal(config.search_max_cutoffs,12);
-  for (const value of [0,31,1.5,"20"]) assert.throws(() => normalizeEnsembleConfiguration({analysis_mode:"recent_signal_search",search_max_cutoffs:value},"free"),/search_max_cutoffs/);
+test("new forecast configurations reject retired trade-signal searches", () => {
+  assert.throws(() => normalizeEnsembleConfiguration({analysis_mode:"recent_signal_search"},"free"),/analysis_mode/);
+  assert.throws(() => normalizeEnsembleConfiguration({search_signal_rule:"cutoff_above_p99"},"free"),/signal_search_retired/);
+  assert.throws(() => normalizeEnsembleConfiguration({search_max_cutoffs:20},"free"),/signal_search_retired/);
   assert.throws(() => normalizeEnsembleConfiguration({analysis_mode:"future_peek"},"free"),/analysis_mode/);
 });
 
@@ -468,5 +463,5 @@ test("P99 search validates last input close, first row and versioned strict BUY 
   assert.equal(validateWorkerResult(valid,job).recentSignalSearch?.signal,"buy");
   for(const change of [{signal:"sell"},{thresholds:{p99:100}},{history_row_count:3},{cutoff_observation:{timestamp:"2026-09-05T00:00:00Z",price:120}},{cutoff_observation:{timestamp:"2026-09-04T00:00:00Z",price:110}}])
     assert.throws(()=>validateWorkerResult({...valid,recent_signal_search:{...valid.recent_signal_search,...change}},job),/search_invalid/);
-  assert.throws(()=>normalizeEnsembleConfiguration({analysis_mode:"recent_signal_search",search_signal_rule:"sell_below_p01"},"free"),/search_signal_rule_unsupported/);
+  assert.throws(()=>normalizeEnsembleConfiguration({analysis_mode:"recent_signal_search",search_signal_rule:"sell_below_p01"},"free"),/analysis_mode_unsupported/);
 });

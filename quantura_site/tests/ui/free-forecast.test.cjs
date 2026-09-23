@@ -6,32 +6,33 @@ const {execFileSync} = require('node:child_process');
 const {JSDOM} = require('jsdom');
 const root = path.resolve(__dirname,'../..');
 const helper = require('../../public/forecast-controls.js');
-test('first-row signal matches the first prediction timestamp regardless of worker latency',()=>{
+test('first-row observation matches the first prediction timestamp regardless of worker latency',()=>{
   const job={frequency:'1min',source:{type:'prediction_market'},completed_at:'2026-09-16T10:04:12Z',predictions:[{timestamp:'2026-09-16T10:01:00Z',quantiles:{'0.1':.2,'0.9':.8}}],observations:[{timestamp:'2026-09-16T10:01:00Z',target:.1},{timestamp:'2026-09-16T10:05:00Z',target:.15}]};
   const now=Date.parse('2026-09-16T10:06:00Z');
-  const result=helper.firstRowSignal(job,now);
-  assert.equal(result.signal,'buy');assert.equal(result.prospective,false);
+  const result=helper.firstRowObservation(job,now);
+  assert.equal(result.price,.1);assert.equal(result.prospective,false);
+  assert.equal('signal' in result,false);
   assert.match(result.timing,/retrospective/);
   assert.equal(result.quoteTimestamp,Date.parse('2026-09-16T10:01:00Z'));
-  for(const [price,signal] of [[.85,'sell'],[.2,'none'],[.8,'none'],[.5,'none']]){job.observations[0].target=price;job.observations[0].ask=.99;assert.equal(helper.firstRowSignal(job,now).signal,signal);}
-  assert.equal(helper.firstRowSignal({...job,completed_at:'2026-09-16T10:00:30Z'},now).prospective,true);
-  job.observations[0].is_forward_filled=true;assert.equal(helper.firstRowSignal(job,now).status,'waiting');
-  job.observations[0]={timestamp:'2026-09-16T10:06:00Z',target:.1};assert.equal(helper.firstRowSignal(job,now).status,'waiting');
+  for(const price of [.85,.2,.8,.5]){job.observations[0].target=price;job.observations[0].ask=.99;assert.equal(helper.firstRowObservation(job,now).price,price);}
+  assert.equal(helper.firstRowObservation({...job,completed_at:'2026-09-16T10:00:30Z'},now).prospective,true);
+  job.observations[0].is_forward_filled=true;assert.equal(helper.firstRowObservation(job,now).status,'waiting');
+  job.observations[0]={timestamp:'2026-09-16T10:06:00Z',target:.1};assert.equal(helper.firstRowObservation(job,now).status,'waiting');
 });
-test('first-row signal supports daily session closes and never substitutes intraday quotes',()=>{
+test('first-row observation supports daily session closes and never substitutes intraday quotes',()=>{
   const job={frequency:'1D',source:{type:'ticker',exchange_timezone:'America/New_York'},completed_at:'2026-09-14T18:00Z',predictions:[{timestamp:'2026-09-15T00:00:00Z',quantiles:{'0.1':100,'0.9':110}}],observations:[{timestamp:'2026-09-15T13:31:00Z',target:90,interval:'1min'}]};
   const now=Date.parse('2026-09-17T12:00Z');
-  let result=helper.firstRowSignal(job,now);assert.equal(result.status,'waiting');assert.match(result.reason,/completed day closing value/);assert.doesNotMatch(result.reason,/Requires a one-minute/);
+  let result=helper.firstRowObservation(job,now);assert.equal(result.status,'waiting');assert.match(result.reason,/completed day closing value/);assert.doesNotMatch(result.reason,/Requires a one-minute/);
   job.observations.push({timestamp:'2026-09-15T04:00:00Z',session_date:'2026-09-15',target:111,interval:'1D'});
-  result=helper.firstRowSignal(job,now);assert.equal(result.signal,'sell');assert.equal(result.price,111);assert.match(result.timing,/predicted day/);
-  job.observations[1].session_date='2026-09-16';assert.equal(helper.firstRowSignal(job,now).status,'waiting');
+  result=helper.firstRowObservation(job,now);assert.equal(result.price,111);assert.match(result.timing,/predicted day/);
+  job.observations[1].session_date='2026-09-16';assert.equal(helper.firstRowObservation(job,now).status,'waiting');
 });
-test('hourly and arbitrary interval signals require the matching completed forecast row',()=>{
+test('hourly and arbitrary interval observations require the matching completed forecast row',()=>{
   for(const frequency of ['1h','15min','1D']){
     const job={frequency,source:{type:'series'},predictions:[{timestamp:'2026-09-15T14:30:00Z',quantiles:{'0.1':100,'0.9':110}}],observations:[{timestamp:'2026-09-15T14:30:00Z',target:90,interval:'1min'},{timestamp:'2026-09-15T14:30:00Z',target:105,interval:frequency,is_complete:false}]};
-    const now=Date.parse('2026-09-17T12:00Z');assert.equal(helper.firstRowSignal(job,now).status,'waiting');
-    job.observations[1].is_complete=true;assert.equal(helper.firstRowSignal(job,now).signal,'none');
-    job.observations[1].target=99;assert.equal(helper.firstRowSignal(job,now).signal,'buy');
+    const now=Date.parse('2026-09-17T12:00Z');assert.equal(helper.firstRowObservation(job,now).status,'waiting');
+    job.observations[1].is_complete=true;assert.equal(helper.firstRowObservation(job,now).price,105);
+    job.observations[1].target=99;assert.equal(helper.firstRowObservation(job,now).price,99);
   }
 });
 test('cutoff checks the current clock, not the page-load time, including timezone conversion',()=>{

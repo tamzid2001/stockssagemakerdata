@@ -6,12 +6,10 @@ const {JSDOM} = require('jsdom');
 const controls = require('../../public/forecast-controls.js');
 const app = fs.readFileSync(path.resolve(__dirname,'../../public/app.js'),'utf8');
 
-test('input-close BUY is strict, independent of observed quote/averages, no P01 sell',()=>{
-  const job={history:[{timestamp:'2026-09-18',target:131}],observations:[{timestamp:'2026-09-21',target:1}],predictions:[{timestamp:'2026-09-21',quantiles:{'0.01':20,'0.99':130}},{timestamp:'2026-09-22',quantiles:{'0.99':500}}]};
-  assert.equal(controls.cutoffP99Signal(job).signal,'buy');
-  for(const price of [130,129,10]) {job.history[0].target=price;assert.equal(controls.cutoffP99Signal(job).signal,'none');}
-  delete job.predictions[0].quantiles['0.99'];assert.equal(controls.cutoffP99Signal(job).status,'unavailable');
-  job.predictions[0].quantiles['0.99']=null;assert.equal(controls.cutoffP99Signal(job).status,'unavailable');
+test('forecast controls expose observations and quantiles without trade classifications',()=>{
+  assert.equal(controls.cutoffP99Signal,undefined);
+  assert.equal(controls.firstRowSignal,undefined);
+  assert.equal(typeof controls.firstRowObservation,'function');
 });
 test('forecast action shows a single progress label without the recent high/low action',()=>{
   const page=fs.readFileSync(path.resolve(__dirname,'../../pages/forecasting.html'),'utf8');
@@ -27,14 +25,4 @@ test('forecast action shows a single progress label without the recent high/low 
 });
 test('forecast form no longer starts a recent high/low search',()=>{
   assert.doesNotMatch(app,/ensembleFindSignal|ensemble_recent_signal_search_created/);
-});
-test('recent-search result labels the input close instead of a withheld future quote',()=>{
-  const dom=new JSDOM('<section id="ensemble-cutoff-p99-signal"></section><section id="ensemble-first-row-signal"></section>',{runScripts:'outside-only'});
-  const w=dom.window;w.QuanturaForecastControls=controls;w.escapeHtml=String;w.ensembleLocalTime=String;
-  const begin=app.indexOf('  const renderEnsembleSignals =');
-  w.eval(app.slice(begin,app.indexOf('  const describeEnsembleCapability =',begin))+'\nwindow.render=renderEnsembleSignals;');
-  w.render({recent_signal_search:{signal_rule:'cutoff_above_p99',status:'found',signal:'buy',cutoff_observation:{timestamp:'2026-09-18',price:131},thresholds:{p99:130},cutoffs_examined:1,max_cutoffs:20}});
-  assert.match(w.document.getElementById('ensemble-first-row-signal').textContent,/BUY · input close above first P99/);
-  assert.doesNotMatch(w.document.getElementById('ensemble-first-row-signal').textContent,/withheld|P10\/P90 breach/);
-  assert.equal(w.document.getElementById('ensemble-cutoff-p99-signal').hidden,true);dom.window.close();
 });

@@ -40,6 +40,7 @@ import {
   loadPublishedScreenerDataset,
   listPublishedScreenerDates,
   parseQuantScreenerQuery,
+  publicScreenerRow,
 } from "./quantScreener";
 import { ScreenerMarketService, ScreenerSignalStore } from "./screenerMarketService";
 import { registerScreenerAlertRoutes, runScreenerDigests } from "./screenerAlerts";
@@ -8378,11 +8379,13 @@ ROUTES.get("/screener/data", async (req, res) => {
     const archived=Boolean(selectedDate && selectedDate!==latest?.scan_date);
     const current = perps ? {items:dataset.items,warnings:dataset.manifest.warnings} : archived ? screenerMarketService.archived(dataset) : await screenerMarketService.current(dataset);
     const page = filterSortPaginateRows(current.items, parsed.query);
-    page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...row,forecast_view_url:perps ? row.forecast_view_url : ["quantura_weekly_ensemble_v1","quantura_weekly_ensemble_v2"].includes(String(row.forecast_engine))?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
+    page.items = page.items.map(({forecast_input_gzip, ...row}) => ({...publicScreenerRow(row),forecast_view_url:perps ? row.forecast_view_url : ["quantura_weekly_ensemble_v1","quantura_weekly_ensemble_v2"].includes(String(row.forecast_engine))?`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(row.ticker)}&screenerScan=${encodeURIComponent(dataset.scan_id)}`:null}));
+    const {signal,signalChanged,bias,specialP10,...publicQuery}=page.query;
     res.setHeader("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=30");
     res.status(200).json({
       ok: true,
       ...page,
+      query: publicQuery,
       scanId: dataset.scan_id,
       scanDate: dataset.scan_date,
       selectedDate: perps ? null : dataset.scan_date,
@@ -8393,7 +8396,7 @@ ROUTES.get("/screener/data", async (req, res) => {
       dataSource: perps ? "kalshi_perps" : "validated_github_release",
       warnings: current.warnings,
       schemaVersion: dataset.schema_version,
-      signalPolicy: perps ? "Kalshi reference prices normalized to USD per underlying unit; normalized completed trade close fallback. Forecasts are on demand; no scheduled quantile signals or closing-session alerts." : "Latest completed daily input close above first future P99 is Buy. Target is final P99 across seven trading sessions. Equal central weights across five models; Toto 4M. No intraday screener tracking.",
+      comparisonPolicy: perps ? "Kalshi reference prices are normalized to USD per underlying unit; completed trade closes are the fallback. Forecasts are on demand." : "Stock prices use the latest completed daily close. Forecast quantiles span seven trading sessions; no intraday screener tracking.",
     });
   } catch (error: any) {
     const detail = sanitizeText(error?.message || error, 120);

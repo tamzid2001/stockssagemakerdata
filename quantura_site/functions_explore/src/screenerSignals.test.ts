@@ -20,7 +20,7 @@ test("Buy is strictly latest input daily close > FIRST P99; target is LAST P99",
     assert.equal(result.buy_price_target,value==="buy"?136:null);
     assert.equal(result.quote_source,"split_adjusted_daily_close");
     assert.equal(result.actual_price_timestamp,"2026-09-18T20:00:00Z");
-    assert.equal(rowMatchesQuery(result,parseQuantScreenerQuery({signal:"buy"}).query),value==="buy");
+    assert.equal(parseQuantScreenerQuery({signal:"buy"}).errors.length>0,true);
   }
 });
 test("old policy, wrong split basis, mismatched input, missing rows or late price cannot produce Buy",()=>{
@@ -31,9 +31,9 @@ test("old policy, wrong split basis, mismatched input, missing rows or late pric
     {forecast_config:{...makeRow().forecast_config as any,toto_variant:"313m"}}
   ])assert.equal(decorateScreenerRow({...makeRow(),...invalid},undefined,{},now).current_signal,null);
 });
-test("no Sell/Neutral selector; prior cutoff_buy URLs remain an alias",()=>{
-  for(const signal of ["sell","neutral","unavailable"])assert.ok(parseQuantScreenerQuery({signal}).errors.length);
-  assert.equal(parseQuantScreenerQuery({signal:"cutoff_buy"}).query.signal,"buy");
+test("new screener queries reject all trade-signal filters",()=>{
+  for(const signal of ["buy","sell","neutral","unavailable","cutoff_buy"])assert.ok(parseQuantScreenerQuery({signal}).errors.length);
+  assert.ok(parseQuantScreenerQuery({signalChanged:"true"}).errors.length);
 });
 test("latest Buy persists across non-buy days, is idempotent, and cannot regress",()=>{
   const buy=decorateScreenerRow(makeRow(),undefined,{},now).current_signal as any;
@@ -52,7 +52,7 @@ test("min/max/avg and tail-position filters remain independent of Buy rule",()=>
     assert.equal(rowMatchesQuery({ticker:"X",actual_price:position.startsWith("above")?200:1,p01:10,p99:100},query),true);
   }
   const result=decorateScreenerRow(makeRow(),undefined,{},now);
-  const parsed=parseQuantScreenerQuery({signal:"buy",quantileRules:JSON.stringify([{quantile:"p50",statistic:"avg",operator:"gt",percent:20}])});
+  const parsed=parseQuantScreenerQuery({quantileRules:JSON.stringify([{quantile:"p50",statistic:"avg",operator:"gt",percent:20}])});
   assert.deepEqual(parsed.errors,[]);assert.equal(rowMatchesQuery(result,parsed.query),true);
   assert.equal(rowMatchesQuery({...result,actual_price:150},parsed.query),false);
 });

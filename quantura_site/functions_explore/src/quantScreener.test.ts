@@ -7,13 +7,25 @@ import {
   loadPublishedScreenerDataset,
   listPublishedScreenerDates,
   parseQuantScreenerQuery,
+  publicScreenerRow,
   rowMatchesQuery,
+  screenerRowsCsv,
   screenerArchiveDates,
   type QuantScreenerQuery,
   type QuantScreenerRow,
 } from "./quantScreener";
 
 const TODAY = new Date("2026-08-24T12:00:00Z");
+
+test("public screener JSON and CSV retain quantiles but omit trade classifications", () => {
+  const source = row({p99:140,signal:"buy",current_signal:{value:"buy"},last_buy_signal:{value:"buy"},buy_price_target:150});
+  const visible = publicScreenerRow(source);
+  assert.equal(visible.p99,140);
+  for(const key of ["signal","current_signal","last_buy_signal","buy_price_target"]) assert.equal(key in visible,false);
+  const csv=screenerRowsCsv([source]);
+  assert.match(csv,/p99/);
+  assert.doesNotMatch(csv,/signal|buy_price_target|last_buy/i);
+});
 
 function row(overrides: Partial<QuantScreenerRow> = {}): QuantScreenerRow {
   return {

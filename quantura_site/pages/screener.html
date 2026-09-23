@@ -4,11 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Q Screener | Stocks &amp; Kalshi Perpetuals</title>
-    <meta name="description" content="Screen the current S&amp;P 500, eligible Nasdaq common stocks, and SPY by forecast quantiles, market cap, earnings, and model-derived signals." />
+    <meta name="description" content="Screen stocks and Kalshi perpetuals by forecast quantiles, market cap, and historical prices." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura.studio/screener" />
     <meta property="og:title" content="Q Screener" />
-    <meta property="og:description" content="A high-density market research table for quantile dislocations, earnings, and forecast signals." />
+    <meta property="og:description" content="A high-density market research table for prices and forecast quantiles." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura.studio/screener" />
     <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
@@ -31,8 +31,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260824s1"></script>
-    <script defer src="/screener.js?v=20260923-archive"></script>
+    <script defer src="/app.js?v=20260923-neutral"></script>
+    <script defer src="/screener.js?v=20260923-neutral"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -67,7 +67,7 @@
             <h1 id="screener-title">Q Screener</h1>
             <p>
               Compare stock closes with weekly forecast quantiles, or browse Kalshi perpetual prices and open an on-demand forecast.
-              Stock Buy signals use the latest completed daily close; no intraday price tracking. Perpetual reference prices and trade history use the underlying spot scale.
+              Stock comparisons use the latest completed daily close; no intraday price tracking. Perpetual reference prices and trade history use the underlying spot scale.
             </p>
           </div>
           <div class="qs-hero-actions">
@@ -136,13 +136,6 @@
                 </select>
               </label>
               <label class="qs-field">
-                <span>Buy signal</span>
-                <select id="qs-signal" name="signal">
-                  <option value="all">All stocks</option>
-                  <option value="buy">Buy · close above first P99</option>
-                </select>
-              </label>
-              <label class="qs-field">
                 <span>Quantile values shown</span>
                 <select id="qs-statistic" name="statistic">
                   <option value="row">Comparison session</option>
@@ -201,7 +194,6 @@
             </fieldset>
 
             <div class="qs-filter-footer">
-              <input id="qs-signal-changed" type="hidden" value="false" />
               <button class="cta secondary small" id="qs-clear" type="button"><i class="iconoir-erase" aria-hidden="true"></i>Clear filters</button>
             </div>
           </form>
@@ -245,8 +237,6 @@
                   <th scope="col">Quantile position</th>
                   <th scope="col">Distance %<span>P10 / P50 / P90</span></th>
                   <th scope="col">Market cap</th>
-                  <th scope="col">Buy signal</th>
-                  <th scope="col" id="qs-last-buy-heading">Last Buy</th>
                   <th scope="col">Updated</th>
                 </tr>
               </thead>
@@ -264,15 +254,15 @@
         <section class="qs-methodology">
           <article>
             <h2>How to read this screener</h2>
-            <p>Buy means the latest completed daily input close is strictly above the first future P99. The price target is the final P99 in the seven-trading-session forecast. This is a model-derived research rule, not a recommendation or guaranteed gain.</p>
+            <p>Compare the latest completed daily input close with the first forecast quantile values. Quantiles describe a forecast distribution, not a recommendation or guaranteed outcome.</p>
           </article>
           <article>
             <h3>Daily five-model ensemble</h3>
-            <p>Buy signals are provisional, not trade instructions. Saved closing signals use the final observed minute of an exchange session (normally 4 pm New York time; earlier on early-close days). After-hours movement never changes that record. No closing signal is backfilled using a forecast generated after the close.</p>
+            <p>Stock comparisons use the published daily close for an exchange session (normally 4 pm New York time; earlier on early-close days). After-hours movement does not change that historical close.</p>
           </article>
           <article>
             <h3>Freshness and gaps</h3>
-            <p>Input date and forecast dates are explicit. Daily prices are split-adjusted. The prior validated dataset stays available while a new scan runs; older-policy forecasts do not receive new Buy labels.</p>
+            <p>Input date and forecast dates are explicit. Daily prices are split-adjusted. The prior validated dataset stays available while a new scan runs.</p>
           </article>
         </section>
       </div>
