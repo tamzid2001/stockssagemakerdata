@@ -133,8 +133,12 @@ def test_start_size_sensitivity_honors_increase_count_and_hard_ceiling():
     three = replay_recovery_scenario(rows, fee_policy, starting_contracts=5, max_increases=3)
     four = replay_recovery_scenario(rows, fee_policy, starting_contracts=5, max_increases=4)
     ten = replay_recovery_scenario(rows, fee_policy, starting_contracts=10, max_increases=4)
+    twenty = replay_recovery_scenario(rows, fee_policy, starting_contracts=20, max_increases=3)
+    thirty = replay_recovery_scenario(rows, fee_policy, starting_contracts=30, max_increases=3)
     assert three["maximum_contracts_used"] == 75
     assert four["maximum_contracts_used"] == 100
     assert ten["maximum_contracts_used"] == 100
+    assert twenty["maximum_contracts_used"] == 100
+    assert thirty["maximum_contracts_used"] == 100
     assert three["historical_minimum_initial_cash"] > 0
     assert four["realized_equity_max_drawdown"] > three["realized_equity_max_drawdown"]

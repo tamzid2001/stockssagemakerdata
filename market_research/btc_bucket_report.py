@@ -339,7 +339,7 @@ def aggregate(origin_scenarios: dict[int, dict], campaign_id: str, report_key: s
         result["origin_1_start_size_sensitivity"] = [
             replay_recovery_scenario(origin_scenarios[1]["trades"], fee_policy,
                                      starting_contracts=start, max_increases=limit)
-            for start in (1, 5, 10) for limit in (3, 4)]
+            for start in (1, 5, 10, 20, 30) for limit in (3, 4)]
     return result
 
 
