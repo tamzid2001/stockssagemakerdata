@@ -112,5 +112,5 @@ jobs:
                 starting_contracts: process.env.STARTING_CONTRACTS,
                 recovery_multiplier: process.env.RECOVERY_MULTIPLIER,
                 max_recovery_increases: process.env.MAX_RECOVERY_INCREASES,
-                continuous: 'true', code_ref: process.env.QUANTURA_CODE_SHA}
+                continuous: 'true', code_ref: ''}
             });

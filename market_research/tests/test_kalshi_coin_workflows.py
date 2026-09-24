@@ -12,6 +12,7 @@ def test_each_coin_has_its_own_disabled_dispatch_and_series_identity():
     assert shared['jobs']['worker']['environment'] == 'quantura-kalshi-live'
     assert 'KX${COIN}15M' in (ROOT / 'kalshi-coin-approved-worker.yml').read_text()
     assert shared['jobs']['worker']['timeout-minutes'] <= 355
+    assert "code_ref: ''" in (ROOT / 'kalshi-coin-approved-worker.yml').read_text()
     assert '(( SUBACCOUNT >= 1 ))' not in (ROOT / 'kalshi-coin-approved-worker.yml').read_text()
     for coin in COINS:
         workflow = yaml.safe_load((ROOT / f'kalshi-{coin.lower()}-approved-trader.yml').read_text())
