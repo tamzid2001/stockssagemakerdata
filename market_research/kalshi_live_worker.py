@@ -15,7 +15,7 @@ import signal
 import tempfile
 import time
 
-from .kalshi_execution import Config, KalshiExecution, money
+from .kalshi_execution import Config, CoinConfig, KalshiExecution, money
 from .kalshi_live_state import LiveJournal, Trader, session_statistics
 
 
@@ -79,7 +79,7 @@ def persist_evidence(journal, ticker, value):
 
 def run(config, mode, duration):
     from .engine import stamp
-    from .kalshi_btc import KalshiBTCProvider
+    from .interval_markets import KalshiIntervalProvider
     from .local_store import LocalStore
     from .btc_minute_archive import MinuteCollector
     from .btc_hold_tracking import first_signals, prospective_observations
@@ -116,8 +116,9 @@ def run(config, mode, duration):
     try:
         with tempfile.TemporaryDirectory(prefix='kalshi-minute-live-') as directory:
             store = LocalStore(journal.session, journal.holder, directory, capacity_bytes=100*1024*1024)
-            collector = MinuteCollector(store, KalshiBTCProvider())
-            near_close = NearCloseCollector(store, KalshiBTCProvider(timeout=1.5, attempts=1))
+            collector = MinuteCollector(store, KalshiIntervalProvider(config.series_ticker))
+            near_close = NearCloseCollector(store,
+                KalshiIntervalProvider(config.series_ticker, timeout=1.5, attempts=1))
             collector.start()
             if config.direction_policy == 'provisional_near_close':
                 near_close.start()
@@ -205,7 +206,8 @@ def run(config, mode, duration):
                             if signals:
                                 first = signals[0]
                                 direction = direction_at(settlements, list(snapshots.values()), lifecycle,
-                                    first['signal_received_at'], ticker, opened, config.direction_policy)
+                                    first['signal_received_at'], ticker, opened, config.direction_policy,
+                                    config.series_ticker)
                                 agrees = direction and first['contract_id'].endswith(':' + direction['side'])
                                 pending[ticker] = {**first, 'direction': direction, 'agrees': bool(agrees), 'done': False}
                                 persist_evidence(journal, ticker, {'kind': 'first_p90', **pending[ticker]})
@@ -269,6 +271,8 @@ def run(config, mode, duration):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['config', 'readiness', 'observe', 'live'], default='config')
+    parser.add_argument('--series', choices=['KXBTC15M', 'KXBNB15M', 'KXDOGE15M',
+                        'KXETH15M', 'KXNEAR15M', 'KXZEC15M'], default='KXBTC15M')
     parser.add_argument('--history-minutes', type=int, default=1)
     parser.add_argument('--subaccount', type=int, default=0)
     parser.add_argument('--direction-policy', choices=['confirmed', 'provisional_near_close'],
@@ -278,12 +282,16 @@ def main():
     parser.add_argument('--max-recovery-increases', type=int, default=3)
     parser.add_argument('--duration-minutes', type=int, default=300)
     args = parser.parse_args()
-    config = Config(history_minutes=args.history_minutes, subaccount=args.subaccount,
+    config_type = Config if args.series == 'KXBTC15M' else CoinConfig
+    config = config_type(**({'series_ticker': args.series} if config_type is CoinConfig else {}),
+                    history_minutes=args.history_minutes, subaccount=args.subaccount,
                     direction_policy=args.direction_policy, starting_contracts=args.starting_contracts,
                     recovery_multiplier=args.recovery_multiplier,
                     max_recovery_increases=args.max_recovery_increases)
     if not 1 <= args.duration_minutes <= 300:
         parser.error('Duration must be 1..300 minutes')
+    if config_type is CoinConfig and args.mode != 'config' and args.subaccount == 0:
+        parser.error('An existing dedicated coin subaccount is required for account access')
     if args.mode == 'config':
         print(json.dumps({'configuration': asdict(config), 'config_hash': config.fingerprint, 'orders_sent': 0}))
     else:

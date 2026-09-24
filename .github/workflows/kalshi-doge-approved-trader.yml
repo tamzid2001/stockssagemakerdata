@@ -1,0 +1,71 @@
+name: Kalshi DOGE Approval-Gated P90 Trader
+run-name: Kalshi DOGE · ${{ inputs.mode }} · first ${{ inputs.history_minutes }}m · dedicated subaccount ${{ inputs.subaccount }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [verify, readiness, observe, live]
+        default: verify
+        description: Verify is offline; observe is read-only. Live needs separate DOGE approval and an existing dedicated subaccount.
+      history_minutes:
+        type: choice
+        options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+        default: '1'
+        description: Exact opening minute observations; first-P90 plus sticky opposite-prior direction, hold to official settlement.
+      subaccount:
+        type: number
+        default: 0
+        description: Set an existing dedicated Kalshi subaccount 1–63 before account access; 0 is config-display only.
+      direction_policy:
+        type: choice
+        options: [provisional_near_close, confirmed]
+        default: provisional_near_close
+        description: Near-close 99c bid is provisional direction only; official settlement drives P&L.
+      starting_contracts:
+        type: number
+        default: 1
+        description: Initial whole-contract size; changes take effect only with no position and zero recovery P&L.
+      recovery_multiplier:
+        type: number
+        default: 2.5
+        description: Multiplier after a loss until game-independent recovery; 1–5 exclusive/inclusive bounds.
+      max_recovery_increases:
+        type: choice
+        options: ['0', '1', '2', '3', '4', '5', '6']
+        default: '3'
+        description: Maximum loss-triggered sizing increases in one recovery cycle.
+      continuous:
+        type: boolean
+        default: false
+        description: Queue a successor only when the separate DOGE continuous gate is enabled.
+      code_ref:
+        type: string
+        default: ''
+        description: Optional exact SHA; live mode uses the separately approved SHA when blank.
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: quantura-kalshi-doge-execution-${{ inputs.mode == 'verify' && github.run_id || 'singleton' }}
+  cancel-in-progress: false
+jobs:
+  worker:
+    uses: ./.github/workflows/kalshi-coin-approved-worker.yml
+    with:
+      coin: DOGE
+      workflow_file: kalshi-doge-approved-trader.yml
+      mode: ${{ inputs.mode }}
+      history_minutes: ${{ inputs.history_minutes }}
+      subaccount: ${{ format('{0}', inputs.subaccount) }}
+      direction_policy: ${{ inputs.direction_policy }}
+      starting_contracts: ${{ format('{0}', inputs.starting_contracts) }}
+      recovery_multiplier: ${{ format('{0}', inputs.recovery_multiplier) }}
+      max_recovery_increases: ${{ inputs.max_recovery_increases }}
+      continuous: ${{ inputs.continuous }}
+      code_ref: ${{ inputs.code_ref }}
+      approved_sha: ${{ vars.QUANTURA_KALSHI_DOGE_APPROVED_SHA }}
+      approved_config: ${{ vars.QUANTURA_KALSHI_DOGE_APPROVED_CONFIG }}
+      live_enabled: ${{ vars.QUANTURA_KALSHI_DOGE_LIVE_ENABLED || 'false' }}
+      continuous_gate: ${{ vars.QUANTURA_KALSHI_DOGE_CONTINUOUS || 'false' }}
+    secrets: inherit

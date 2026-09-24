@@ -44,6 +44,17 @@ def test_quote_is_provisional_direction_not_a_settlement():
     assert 'confirmed_at' not in selected and 'prior_result' not in selected
 
 
+def test_coin_direction_only_uses_same_series_predecessor():
+    coin = 'KXETH15M'
+    prior = coin + '-TEST-00'
+    current = coin + '-TEST-15'
+    row = provisional.snapshot({**market(), 'ticker': prior}, prior, CLOSE-2, CLOSE-1.8, coin)
+    selected = provisional.direction_at([], [row], [], CLOSE+120, current, CLOSE,
+                                        series_ticker=coin)
+    assert selected['side'] == 'no'
+    assert provisional.direction_at([], [row], [], CLOSE+120, CURRENT, CLOSE) is None
+
+
 def test_no_side_is_selected_from_complementary_bid_not_ask_or_last_trade():
     row = sample(yes_bid_dollars='0', yes_ask_dollars='.01', no_bid_dollars='.99', no_ask_dollars='1')
     assert direction([row])['side'] == 'yes'

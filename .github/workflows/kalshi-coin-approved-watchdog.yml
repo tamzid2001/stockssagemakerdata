@@ -1,0 +1,119 @@
+name: Kalshi Coin Approved Trader Watchdog
+on:
+  schedule:
+    - cron: '3,18,33,48 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  recover:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - coin: BNB
+            workflow_file: kalshi-bnb-approved-trader.yml
+            enabled: ${{ vars.QUANTURA_KALSHI_BNB_CONTINUOUS || 'false' }}
+            mode: ${{ vars.QUANTURA_KALSHI_BNB_WATCHDOG_MODE || 'observe' }}
+            live_enabled: ${{ vars.QUANTURA_KALSHI_BNB_LIVE_ENABLED || 'false' }}
+            approved_sha: ${{ vars.QUANTURA_KALSHI_BNB_APPROVED_SHA }}
+            history_minutes: ${{ vars.QUANTURA_KALSHI_BNB_HISTORY_MINUTES || '1' }}
+            subaccount: ${{ vars.QUANTURA_KALSHI_BNB_SUBACCOUNT || '0' }}
+            direction_policy: ${{ vars.QUANTURA_KALSHI_BNB_DIRECTION_POLICY || 'provisional_near_close' }}
+            starting_contracts: ${{ vars.QUANTURA_KALSHI_BNB_STARTING_CONTRACTS || '1' }}
+            recovery_multiplier: ${{ vars.QUANTURA_KALSHI_BNB_RECOVERY_MULTIPLIER || '2.5' }}
+            max_recovery_increases: ${{ vars.QUANTURA_KALSHI_BNB_MAX_RECOVERY_INCREASES || '3' }}
+          - coin: DOGE
+            workflow_file: kalshi-doge-approved-trader.yml
+            enabled: ${{ vars.QUANTURA_KALSHI_DOGE_CONTINUOUS || 'false' }}
+            mode: ${{ vars.QUANTURA_KALSHI_DOGE_WATCHDOG_MODE || 'observe' }}
+            live_enabled: ${{ vars.QUANTURA_KALSHI_DOGE_LIVE_ENABLED || 'false' }}
+            approved_sha: ${{ vars.QUANTURA_KALSHI_DOGE_APPROVED_SHA }}
+            history_minutes: ${{ vars.QUANTURA_KALSHI_DOGE_HISTORY_MINUTES || '1' }}
+            subaccount: ${{ vars.QUANTURA_KALSHI_DOGE_SUBACCOUNT || '0' }}
+            direction_policy: ${{ vars.QUANTURA_KALSHI_DOGE_DIRECTION_POLICY || 'provisional_near_close' }}
+            starting_contracts: ${{ vars.QUANTURA_KALSHI_DOGE_STARTING_CONTRACTS || '1' }}
+            recovery_multiplier: ${{ vars.QUANTURA_KALSHI_DOGE_RECOVERY_MULTIPLIER || '2.5' }}
+            max_recovery_increases: ${{ vars.QUANTURA_KALSHI_DOGE_MAX_RECOVERY_INCREASES || '3' }}
+          - coin: ETH
+            workflow_file: kalshi-eth-approved-trader.yml
+            enabled: ${{ vars.QUANTURA_KALSHI_ETH_CONTINUOUS || 'false' }}
+            mode: ${{ vars.QUANTURA_KALSHI_ETH_WATCHDOG_MODE || 'observe' }}
+            live_enabled: ${{ vars.QUANTURA_KALSHI_ETH_LIVE_ENABLED || 'false' }}
+            approved_sha: ${{ vars.QUANTURA_KALSHI_ETH_APPROVED_SHA }}
+            history_minutes: ${{ vars.QUANTURA_KALSHI_ETH_HISTORY_MINUTES || '1' }}
+            subaccount: ${{ vars.QUANTURA_KALSHI_ETH_SUBACCOUNT || '0' }}
+            direction_policy: ${{ vars.QUANTURA_KALSHI_ETH_DIRECTION_POLICY || 'provisional_near_close' }}
+            starting_contracts: ${{ vars.QUANTURA_KALSHI_ETH_STARTING_CONTRACTS || '1' }}
+            recovery_multiplier: ${{ vars.QUANTURA_KALSHI_ETH_RECOVERY_MULTIPLIER || '2.5' }}
+            max_recovery_increases: ${{ vars.QUANTURA_KALSHI_ETH_MAX_RECOVERY_INCREASES || '3' }}
+          - coin: NEAR
+            workflow_file: kalshi-near-approved-trader.yml
+            enabled: ${{ vars.QUANTURA_KALSHI_NEAR_CONTINUOUS || 'false' }}
+            mode: ${{ vars.QUANTURA_KALSHI_NEAR_WATCHDOG_MODE || 'observe' }}
+            live_enabled: ${{ vars.QUANTURA_KALSHI_NEAR_LIVE_ENABLED || 'false' }}
+            approved_sha: ${{ vars.QUANTURA_KALSHI_NEAR_APPROVED_SHA }}
+            history_minutes: ${{ vars.QUANTURA_KALSHI_NEAR_HISTORY_MINUTES || '1' }}
+            subaccount: ${{ vars.QUANTURA_KALSHI_NEAR_SUBACCOUNT || '0' }}
+            direction_policy: ${{ vars.QUANTURA_KALSHI_NEAR_DIRECTION_POLICY || 'provisional_near_close' }}
+            starting_contracts: ${{ vars.QUANTURA_KALSHI_NEAR_STARTING_CONTRACTS || '1' }}
+            recovery_multiplier: ${{ vars.QUANTURA_KALSHI_NEAR_RECOVERY_MULTIPLIER || '2.5' }}
+            max_recovery_increases: ${{ vars.QUANTURA_KALSHI_NEAR_MAX_RECOVERY_INCREASES || '3' }}
+          - coin: ZEC
+            workflow_file: kalshi-zec-approved-trader.yml
+            enabled: ${{ vars.QUANTURA_KALSHI_ZEC_CONTINUOUS || 'false' }}
+            mode: ${{ vars.QUANTURA_KALSHI_ZEC_WATCHDOG_MODE || 'observe' }}
+            live_enabled: ${{ vars.QUANTURA_KALSHI_ZEC_LIVE_ENABLED || 'false' }}
+            approved_sha: ${{ vars.QUANTURA_KALSHI_ZEC_APPROVED_SHA }}
+            history_minutes: ${{ vars.QUANTURA_KALSHI_ZEC_HISTORY_MINUTES || '1' }}
+            subaccount: ${{ vars.QUANTURA_KALSHI_ZEC_SUBACCOUNT || '0' }}
+            direction_policy: ${{ vars.QUANTURA_KALSHI_ZEC_DIRECTION_POLICY || 'provisional_near_close' }}
+            starting_contracts: ${{ vars.QUANTURA_KALSHI_ZEC_STARTING_CONTRACTS || '1' }}
+            recovery_multiplier: ${{ vars.QUANTURA_KALSHI_ZEC_RECOVERY_MULTIPLIER || '2.5' }}
+            max_recovery_increases: ${{ vars.QUANTURA_KALSHI_ZEC_MAX_RECOVERY_INCREASES || '3' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: quantura-kalshi-${{ matrix.coin }}-watchdog
+      cancel-in-progress: false
+    steps:
+      - if: matrix.enabled == 'true'
+        uses: actions/github-script@v8
+        env:
+          COIN: ${{ matrix.coin }}
+          WORKFLOW_FILE: ${{ matrix.workflow_file }}
+          MODE: ${{ matrix.mode }}
+          LIVE_ENABLED: ${{ matrix.live_enabled }}
+          APPROVED_SHA: ${{ matrix.approved_sha }}
+          HISTORY_MINUTES: ${{ matrix.history_minutes }}
+          SUBACCOUNT: ${{ matrix.subaccount }}
+          DIRECTION_POLICY: ${{ matrix.direction_policy }}
+          STARTING_CONTRACTS: ${{ matrix.starting_contracts }}
+          RECOVERY_MULTIPLIER: ${{ matrix.recovery_multiplier }}
+          MAX_RECOVERY_INCREASES: ${{ matrix.max_recovery_increases }}
+        with:
+          script: |
+            const e=process.env;
+            if (!['BNB','DOGE','ETH','NEAR','ZEC'].includes(e.COIN) ||
+                e.WORKFLOW_FILE !== `kalshi-${e.COIN.toLowerCase()}-approved-trader.yml` ||
+                !['observe','live'].includes(e.MODE) ||
+                !/^[a-f0-9]{40}$/.test(e.APPROVED_SHA || '') ||
+                !Number.isInteger(Number(e.SUBACCOUNT)) || Number(e.SUBACCOUNT)<1 || Number(e.SUBACCOUNT)>63 ||
+                !/^(?:[1-9]|1[0-2])$/.test(e.HISTORY_MINUTES) ||
+                !['confirmed','provisional_near_close'].includes(e.DIRECTION_POLICY) ||
+                !Number.isSafeInteger(Number(e.STARTING_CONTRACTS)) || Number(e.STARTING_CONTRACTS)<1 ||
+                !Number.isFinite(Number(e.RECOVERY_MULTIPLIER)) || Number(e.RECOVERY_MULTIPLIER)<=1 || Number(e.RECOVERY_MULTIPLIER)>5 ||
+                !/^[0-6]$/.test(e.MAX_RECOVERY_INCREASES)) throw new Error('INVALID_COIN_WATCHDOG_CONFIGURATION');
+            if (e.MODE === 'live' && e.LIVE_ENABLED !== 'true') return;
+            for (const status of ['queued','in_progress','requested','waiting','pending']) {
+              const {data}=await github.rest.actions.listWorkflowRuns({...context.repo,
+                workflow_id:e.WORKFLOW_FILE,status,per_page:1});
+              if (data.workflow_runs.length) {core.info('Existing coin worker/approval/queue; no duplicate dispatch.');return;}
+            }
+            await github.rest.actions.createWorkflowDispatch({...context.repo,
+              workflow_id:e.WORKFLOW_FILE,ref:context.payload.repository.default_branch,
+              inputs:{mode:e.MODE,history_minutes:e.HISTORY_MINUTES,subaccount:e.SUBACCOUNT,
+                direction_policy:e.DIRECTION_POLICY,starting_contracts:e.STARTING_CONTRACTS,
+                recovery_multiplier:e.RECOVERY_MULTIPLIER,max_recovery_increases:e.MAX_RECOVERY_INCREASES,
+                continuous:'true',code_ref:e.APPROVED_SHA}});
