@@ -259,7 +259,7 @@ def test_v2_session_migrates_only_when_flat_and_cycle_zero():
 def test_v3_session_migrates_only_when_flat_and_cycle_zero():
     new = Config(starting_contracts=10)
     old = {**new.__dict__, 'version': 'btc-p90-sticky-hold-live-v3',
-           'max_order_dollars': '100', 'daily_loss_dollars': '100'}
+           'max_contracts': 100, 'max_order_dollars': '100', 'daily_loss_dollars': '100'}
     flat = {'size': 10, 'cycle': '0', 'net': '2', 'active': None}
     assert approved_reconfiguration(old, new.__dict__, flat)['size'] == 10
     for blocked in ({**flat, 'active': {'intent': 'open'}},
@@ -268,6 +268,8 @@ def test_v3_session_migrates_only_when_flat_and_cycle_zero():
             approved_reconfiguration(old, new.__dict__, blocked)
     with pytest.raises(RuntimeError, match='LEGACY_DOLLAR_LIMIT_MIGRATION_NOT_APPROVED'):
         approved_reconfiguration({**old, 'daily_loss_dollars': '50'}, new.__dict__, flat)
+    with pytest.raises(RuntimeError, match='LEGACY_CAP_MIGRATION_NOT_APPROVED'):
+        approved_reconfiguration({**old, 'max_contracts': 50}, new.__dict__, flat)
 
 
 class MemoryJournal:
