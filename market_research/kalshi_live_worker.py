@@ -114,7 +114,7 @@ def run(config, mode, duration):
     attempts, pairs, pending, archived = {}, {}, {}, set()
     snapshots = {r['market_id']: r for r in journal.direction_snapshots()}
     reconciled_directions = set()
-    last_renew = last_reconcile = last_health = 0
+    last_renew = last_reconcile = last_health = last_heartbeat = 0
     status = 'starting'
     try:
         with tempfile.TemporaryDirectory(prefix='kalshi-minute-live-') as directory:
@@ -134,19 +134,25 @@ def run(config, mode, duration):
                     # A proven zero-fill IOC is retried at roughly one-second
                     # cadence. Each cycle still authenticates the exact prior
                     # order before a uniquely identified replacement is sent.
-                    interval = 1 if status.startswith(('retry_', 'account_order_gate_')) else 20
+                    active_position = bool(journal.state().get('active')) if broker.enabled else False
+                    interval = (1 if status.startswith(('retry_', 'stop_', 'account_order_gate_'))
+                        or (active_position and bool((journal.state().get('active') or {}).get('stop')))
+                        else 2 if active_position else 20)
                     if now - last_reconcile >= interval:
+                        previous_status = status
                         try:
                             status = trader.reconcile()
                         except RuntimeError as exc:
                             if str(exc) != 'LEASE_HELD':
                                 raise
                             status = 'account_order_gate_wait'
-                        summary = journal.public_summary()
-                        print(json.dumps({'event': 'execution_heartbeat', 'mode': mode,
-                            'status': status, 'worker_started_at': boot_at,
-                            'session_stats': session_statistics(summary, session_baseline),
-                            **summary}), flush=True)
+                        if now - last_heartbeat >= 20 or status != previous_status:
+                            summary = journal.public_summary()
+                            print(json.dumps({'event': 'execution_heartbeat', 'mode': mode,
+                                'status': status, 'worker_started_at': boot_at,
+                                'session_stats': session_statistics(summary, session_baseline),
+                                **summary}), flush=True)
+                            last_heartbeat = now
                         last_reconcile = now
                     lifecycle = store.values('btc_lifecycle')
                     minute_rows = store.values('btc_minutes')
@@ -263,7 +269,7 @@ def run(config, mode, duration):
                             archived.add(ticker)
                     if store.at_capacity:
                         raise RuntimeError('LOCAL_EVIDENCE_CAPACITY_REACHED')
-                    time.sleep(1 if status.startswith(('retry_', 'account_order_gate_')) else 3)
+                    time.sleep(1 if broker.enabled and active_position else 3)
             finally:
                 near_close.stop()
                 collector.stop()

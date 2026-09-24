@@ -27,7 +27,7 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert 'ref: ${{ env.QUANTURA_CODE_SHA }}' in text
     assert 'name: Validate live approval reference' in text
     assert 'Leave code_ref empty to use QUANTURA_KALSHI_APPROVED_SHA automatically' in text
-    assert 'code_ref: process.env.QUANTURA_CODE_SHA' in text
+    assert "code_ref: ''" in text  # Successor resolves the current approved SHA.
     assert 'upload-artifact' not in text and 'git push' not in text
     assert 'QUANTURA_KALSHI_APPROVED_CONFIG' in text and 'QUANTURA_KALSHI_APPROVED_SHA' in text
     assert 'QUANTURA_KALSHI_CONTINUOUS' in text

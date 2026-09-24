@@ -84,7 +84,7 @@ jobs:
             python -m pip install pytest==8.4.2 pyyaml==6.0.2
           fi
       - name: Offline execution and restart tests
-        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_coin_workflows.py market_research/tests/test_kalshi_provisional_direction.py -q
+        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_coin_workflows.py market_research/tests/test_kalshi_provisional_direction.py market_research/tests/test_kalshi_stop_exit.py market_research/tests/test_kalshi_shared_account.py -q
       - name: Display exact proposed configuration (no secrets)
         run: python -m market_research.kalshi_live_worker --mode config --series "KX${COIN}15M" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-recovery-increases "$MAX_RECOVERY_INCREASES"
       - name: Readiness or explicitly selected worker
@@ -112,5 +112,5 @@ jobs:
                 starting_contracts: process.env.STARTING_CONTRACTS,
                 recovery_multiplier: process.env.RECOVERY_MULTIPLIER,
                 max_recovery_increases: process.env.MAX_RECOVERY_INCREASES,
-                continuous: 'true', code_ref: process.env.QUANTURA_CODE_SHA}
+                continuous: 'true', code_ref: ''}
             });

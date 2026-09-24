@@ -19,6 +19,7 @@ import httpx
 BASE = 'https://external-api.kalshi.com/trade-api/v2'
 VERSION = 'btc-p90-sticky-hold-live-v4'
 COIN_SERIES = frozenset({'KXBNB15M', 'KXDOGE15M', 'KXETH15M', 'KXNEAR15M', 'KXZEC15M'})
+STOP_BID = Decimal('0.05')
 
 
 def money(value):
@@ -120,6 +121,31 @@ def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
         client_order_id=str(uuid.uuid5(uuid.NAMESPACE_URL, identity)),
         exchange_index=shard, subaccount=config.subaccount,
         time_in_force='immediate_or_cancel', post_only=False, reduce_only=False,
+        self_trade_prevention_type='taker_at_cross', cancel_order_on_pause=True)
+
+
+def stop_exit_payload(entry, quantity, bid, shard, config, *, attempt):
+    """Reduce the held economic side; V2 prices and directions use the YES book."""
+    ticker, side = entry['ticker'], entry['side']
+    if (not re.fullmatch(re.escape(config.series_ticker) + r'-[A-Z0-9-]+', ticker)
+            or side not in ('yes', 'no') or type(shard) is not int or shard < 0 or type(attempt) is not int
+            or not 1 <= attempt <= 3600):
+        raise ValueError('INVALID_STOP_EXIT_INTENT')
+    count = money(quantity)
+    if count <= 0 or count != count.quantize(Decimal('.01')):
+        raise ValueError('INVALID_STOP_EXIT_COUNT')
+    economic_limit = min(STOP_BID, money(bid))
+    if not 0 < economic_limit <= STOP_BID:
+        raise ValueError('STOP_EXIT_PRICE_UNAVAILABLE')
+    yes_limit = economic_limit if side == 'yes' else 1 - economic_limit
+    if yes_limit != yes_limit.quantize(Decimal('.0001')):
+        raise ValueError('INVALID_PRICE_PRECISION')
+    identity = f"{entry['intent']['client_order_id']}:stop:{attempt}"
+    return dict(ticker=ticker, side='ask' if side == 'yes' else 'bid',
+        count=f'{count:.2f}', price=f'{yes_limit:.4f}',
+        client_order_id=str(uuid.uuid5(uuid.NAMESPACE_URL, identity)),
+        exchange_index=shard, subaccount=config.subaccount,
+        time_in_force='immediate_or_cancel', post_only=False, reduce_only=True,
         self_trade_prevention_type='taker_at_cross', cancel_order_on_pause=True)
 
 
@@ -249,6 +275,39 @@ class KalshiExecution:
         # Caller MUST persist intent and validate current fenced ownership first.
         return self.request('POST', '/portfolio/events/orders', body=payload)
 
+    def exit_fill_summary(self, intent, side, terminal):
+        """Price a sell from authenticated fills, never from the triggering quote."""
+        expected = money(terminal['filled'])
+        if expected == 0:
+            return {'filled': '0', 'proceeds': '0', 'fees': '0'}
+        rows = self.pages('/portfolio/fills', 'fills', order_id=terminal['order_id'],
+            exchange_index=intent['exchange_index'])
+        seen, count, proceeds, fees = set(), Decimal(0), Decimal(0), Decimal(0)
+        for row in rows:
+            fill_id = row.get('fill_id')
+            if (not isinstance(fill_id, str) or fill_id in seen
+                    or row.get('order_id') != terminal['order_id']
+                    or row.get('ticker') != intent['ticker']
+                    or row.get('exchange_index') != intent['exchange_index']
+                    or row.get('subaccount_number') != intent['subaccount']
+                    or row.get('book_side') != intent['side']
+                    or row.get('outcome_side') != side or row.get('action') != 'sell'):
+                raise RuntimeError('STOP_EXIT_FILL_IDENTITY_MISMATCH')
+            seen.add(fill_id)
+            quantity = money(row['count_fp'])
+            price = money(row[side + '_price_dollars'])
+            fee = money(row['fee_cost'])
+            if quantity <= 0 or not 0 < price < 1 or fee < 0:
+                raise RuntimeError('STOP_EXIT_FILL_VALUE_INVALID')
+            count += quantity
+            proceeds += quantity * price
+            fees += fee
+        if count < expected:
+            return None  # The fill read model may lag the terminal order.
+        if count != expected or abs(fees - money(terminal['fees'])) > Decimal('.0001'):
+            raise RuntimeError('STOP_EXIT_FILL_TOTAL_MISMATCH')
+        return {'filled': str(count), 'proceeds': str(proceeds), 'fees': str(fees)}
+
 
 def acknowledged_order(response, intent):
     """Validate and minimize the authoritative Create Order V2 acknowledgement."""
@@ -302,3 +361,22 @@ def reconciled_order(order, intent, economic_side):
     if min(cost, fees) < 0 or cost > count or (count == 0 and cost != 0):
         raise RuntimeError('INVALID_FILL_ACCOUNTING')
     return {'filled': str(count), 'cost': str(cost), 'fees': str(fees), 'order_id': order['order_id']}
+
+
+def reconciled_stop_order(order, intent, economic_side):
+    """Require a terminal, same-position reduce-only exit before another IOC."""
+    if (not intent.get('reduce_only') or order.get('client_order_id') != intent['client_order_id']
+            or order.get('ticker') != intent['ticker']
+            or order.get('exchange_index') != intent['exchange_index']
+            or order.get('subaccount_number') != intent['subaccount']
+            or order.get('book_side') != intent['side']):
+        raise RuntimeError('STOP_ORDER_IDENTITY_MISMATCH')
+    count, remaining = money(order['fill_count_fp']), money(order['remaining_count_fp'])
+    if not 0 <= count <= money(intent['count']) or remaining != 0 or order.get('status') not in ('executed', 'canceled'):
+        raise RuntimeError('STOP_ORDER_NOT_TERMINAL')
+    if count and (order.get('outcome_side') != economic_side or order.get('action') != 'sell'):
+        raise RuntimeError('STOP_EXIT_DIRECTION_UNVERIFIED')
+    fees = money(order['taker_fees_dollars']) + money(order['maker_fees_dollars'])
+    if fees < 0:
+        raise RuntimeError('STOP_EXIT_FEE_INVALID')
+    return {'filled': str(count), 'fees': str(fees), 'order_id': order['order_id']}
