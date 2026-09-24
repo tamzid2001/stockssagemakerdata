@@ -182,8 +182,6 @@ function successExample(operationId: string): unknown {
     case "createEnsembleForecast": case "reproduceEnsembleForecast": return { data: ensemble, meta: successMeta() };
     case "getEnsembleForecast": return {data:{...ensemble,status:"completed",progress:{completed_models:1,total_models:1,current_model:null},
       quantiles:[.1,.5,.9],predictions:[{timestamp:"2026-09-21T00:00:00Z",quantiles:{"0.1":98,"0.5":100,"0.9":102}}],
-      historical_validation:{policy:"chronological_holdout_v1",method:"chronological_holdout",status:"completed",training_rows:39,holdout_rows:1,
-        metrics:{count:1,point_count:1,mae:1.25,rmse:1.25,smape:.012,average_wql:.018}},
     },meta:successMeta()};
     case "listEnsembleForecastPresets": return { data: [{ id: "preset_01JEXAMPLE", name: "Balanced Ensemble", workspace_id: workspace.id, configuration: { prediction_length: 30, horizon_mode: "trading_sessions", quantiles: [0.01, 0.25, 0.5, 0.75, 0.99] } }], meta: successMeta(1) };
     case "createEnsembleForecastPreset": return { data: { id: "preset_01JEXAMPLE", name: "Balanced Ensemble", workspace_id: workspace.id }, meta: successMeta() };
@@ -686,9 +684,9 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
             {
               type: "object", required: ["source"], properties: {
                 workspace_id: { type: "string" },
-                history_lag_minutes: { type: "integer", minimum: 0, maximum: 129600, default: 0, description: "Input cutoff up to 90 days before request time, in minutes (hours × 60; days × 1440). Select up to 500 observations BEFORE cutoff. Positive values create a historical replay, not a previously published forecast. Later observations are separate overlays." },
+                history_lag_minutes: { type: "integer", minimum: 0, default: 0, description: "Input cutoff before request time, in minutes (hours × 60; days × 1440). Select up to 500 observations BEFORE cutoff. Source retention still applies. Positive values create a historical replay, not a previously published forecast. Later observations are separate overlays." },
                 toto_variant: {type:"string",enum:["4m","22m","313m","1b","2.5b"],default:"2.5b",description:"Approved Toto size, smallest to largest. Only relevant when Toto is enabled. The server pins the checkpoint and revision, including in the cache identity; clients cannot submit arbitrary model repositories. All sizes require at least 32 observed values."},
-                history_cutoff_at: {type:"string",format:"date-time",description:"Optional absolute cutoff with timezone offset (ISO 8601). Within the previous 90 days. Cannot be combined with a positive history_lag_minutes. Browser calendar values convert from the user's device timezone to UTC."},
+                history_cutoff_at: {type:"string",format:"date-time",description:"Optional past absolute cutoff with timezone offset (ISO 8601), subject to available source history. Cannot be combined with a positive history_lag_minutes. Browser calendar values convert from the user's device timezone to UTC."},
                 prediction_end_at: {type:"string",format:"date-time",description:"Optional absolute end date/time. After input materialization, the server derives the number of forecast bars up through this time (rounded up to the next observation interval), still subject to 512 and model-specific limits. NYSE daily forecasts use real exchange sessions in the selected calendar window. Overrides prediction_length."},
                 source: {
                   oneOf: [

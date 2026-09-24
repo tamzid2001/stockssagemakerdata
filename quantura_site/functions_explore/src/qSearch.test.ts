@@ -5,7 +5,7 @@ import { eventMarketPage, contractGroup } from "./qSearchEvents";
 import { rankVerifiedCandidates } from "./qSearchRanking";
 import { JEV_MODEL, verifiedChoice } from "./jevClient";
 import { normalizePolymarketEvents } from "./predictionMarketData";
-import { registerMarketSearchRoutes, searchClientAddress } from "./marketSearch";
+import { alpacaCandidateSymbols, registerMarketSearchRoutes, searchClientAddress } from "./marketSearch";
 
 const response=(body:unknown)=>new Response(JSON.stringify(body),{headers:{"Content-Type":"application/json"}});
 const pmEvent=(count:number)=>({id:"e",slug:"game",title:"Home vs Away",markets:Array.from({length:count},(_,i)=>({id:`m${i}`,slug:`game-${i}`,title:`Player ${i} total points`,sportsMarketTypeV2:i?"PLAYER_POINTS":"SPORTS_MARKET_TYPE_MONEYLINE",marketSides:[{id:`${i}-yes`,long:true,description:"Yes"},{id:`${i}-no`,long:false,description:"No"}]}))});
@@ -50,6 +50,12 @@ test("Jev ranks only verified candidates; outage and exact symbols preserve dete
   assert.equal(await rankVerifiedCandidates("Away player points",rows,{decide}),"polymarket_us:two");
   assert.equal(await rankVerifiedCandidates("ONE",rows,{decide}),null);assert.equal(calls,1);
   assert.equal(await rankVerifiedCandidates("different ambiguous player",rows,{decide:async()=>{throw Error("timeout");}}),null);
+});
+test("sentence-discovered Yahoo equities can also be verified as Alpaca symbols",()=>{
+  const yahoo=[{symbol:"AAPL",asset_class:"equity"},{symbol:"AAPL",asset_class:"equity"},
+    {symbol:"MSFT",asset_class:"equity"},{symbol:"BTC-USD",asset_class:"crypto"},{symbol:"NVDA",asset_class:"equity"}];
+  assert.deepEqual(alpacaCandidateSymbols(yahoo,[]),["AAPL","MSFT","NVDA"]);
+  assert.deepEqual(alpacaCandidateSymbols(yahoo,[{symbol:"AAPL"}],2),["MSFT","NVDA"]);
 });
 test("Q Search HTTP errors and capabilities expose no secrets or arbitrary source URLs",async()=>{
   const app=express();registerMarketSearchRoutes(app);const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));

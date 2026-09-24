@@ -69,39 +69,71 @@ function yahooAssetClass(quoteType: unknown, symbol: string): string {
   return "equity";
 }
 
+const yahooSearchCache = new Map<string, { at: number; rows: JsonRecord[] }>();
+const yahooSearchInflight = new Map<string, Promise<JsonRecord[]>>();
+const alpacaAssetCache = new Map<string, { at: number; rows: JsonRecord[] }>();
+let yahooSearchCooldownUntil = 0;
+
 async function searchYahoo(query: string, limit: number): Promise<JsonRecord[]> {
-  const url = new URL("https://query2.finance.yahoo.com/v1/finance/search");
-  url.searchParams.set("q", query);
-  url.searchParams.set("quotesCount", String(limit));
-  url.searchParams.set("newsCount", "0");
-  url.searchParams.set("enableFuzzyQuery", "true");
-  const response = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": "quantura-market-search/1.0" },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!response.ok) throw new Error("yahoo_search_unavailable");
-  const payload = await response.json() as JsonRecord;
-  const quotes = Array.isArray(payload.quotes) ? payload.quotes : [];
-  return quotes.slice(0, limit).flatMap((value) => {
-    const item = value && typeof value === "object" ? value as JsonRecord : {};
-    const symbol = text(item.symbol, 32).toUpperCase();
-    if (!symbol || !/^[A-Z0-9.^=\-]{1,32}$/.test(symbol)) return [];
-    const assetClass = yahooAssetClass(item.quoteType, symbol);
-    if (!PROVIDER_CAPABILITIES.yahoo.forecasting.includes(assetClass as any)) return [];
-    return [{
-      resource_type: "instrument",
-      resource_id: `yahoo:${symbol}`,
-      symbol,
-      name: text(item.longname || item.shortname || item.name, 220) || symbol,
-      asset_class: assetClass,
-      source: "yahoo",
-      exchange: text(item.exchDisp || item.exchange, 80) || null,
-      currency: text(item.currency, 16) || null,
-      unit: assetClass === "fx" ? "quote currency per base currency" : null,
-      history_available: true,
-      forecast_available: true,
-    }];
-  });
+  const key = `${query.trim().toLowerCase()}:${limit}`;
+  const cached = yahooSearchCache.get(key);
+  if (cached && Date.now() - cached.at < 15 * 60_000) return cached.rows;
+  if (yahooSearchInflight.has(key)) return yahooSearchInflight.get(key)!;
+  if (Date.now() < yahooSearchCooldownUntil) {
+    if (cached && Date.now() - cached.at < 24 * 3600_000) return cached.rows;
+    throw new Error("yahoo_search_cooling_down");
+  }
+  const request = fetchYahoo().then(rows => {
+    yahooSearchCache.delete(key);
+    yahooSearchCache.set(key, { at: Date.now(), rows });
+    if (yahooSearchCache.size > 256) yahooSearchCache.delete(yahooSearchCache.keys().next().value!);
+    return rows;
+  }).catch(error => {
+    // Company metadata can be served briefly while the upstream rate-limits.
+    if (cached && Date.now() - cached.at < 24 * 3600_000) return cached.rows;
+    throw error;
+  }).finally(() => yahooSearchInflight.delete(key));
+  yahooSearchInflight.set(key, request);
+  return request;
+
+  async function fetchYahoo(): Promise<JsonRecord[]> {
+    const url = new URL("https://query2.finance.yahoo.com/v1/finance/search");
+    url.searchParams.set("q", query);
+    url.searchParams.set("quotesCount", String(limit));
+    url.searchParams.set("newsCount", "0");
+    url.searchParams.set("enableFuzzyQuery", "true");
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "quantura-market-search/1.0" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status === 429) {
+      const retry = Number(response.headers.get("retry-after"));
+      yahooSearchCooldownUntil = Date.now() + Math.min(3600_000, Math.max(60_000, Number.isFinite(retry) ? retry * 1000 : 60_000));
+    }
+    if (!response.ok) throw new Error("yahoo_search_unavailable");
+    const payload = await response.json() as JsonRecord;
+    const quotes = Array.isArray(payload.quotes) ? payload.quotes : [];
+    return quotes.slice(0, limit).flatMap((value) => {
+      const item = value && typeof value === "object" ? value as JsonRecord : {};
+      const symbol = text(item.symbol, 32).toUpperCase();
+      if (!symbol || !/^[A-Z0-9.^=\-]{1,32}$/.test(symbol)) return [];
+      const assetClass = yahooAssetClass(item.quoteType, symbol);
+      if (!PROVIDER_CAPABILITIES.yahoo.forecasting.includes(assetClass as any)) return [];
+      return [{
+        resource_type: "instrument",
+        resource_id: `yahoo:${symbol}`,
+        symbol,
+        name: text(item.longname || item.shortname || item.name, 220) || symbol,
+        asset_class: assetClass,
+        source: "yahoo",
+        exchange: text(item.exchDisp || item.exchange, 80) || null,
+        currency: text(item.currency, 16) || null,
+        unit: assetClass === "fx" ? "quote currency per base currency" : null,
+        history_available: true,
+        forecast_available: true,
+      }];
+    });
+  }
 }
 
 async function searchAlpaca(query: string): Promise<JsonRecord[]> {
@@ -122,6 +154,21 @@ async function searchAlpaca(query: string): Promise<JsonRecord[]> {
     history_available: true,
     forecast_available: ["us_equity", "equity"].includes(asset.assetClass),
   }];
+}
+
+async function verifiedAlpacaAsset(symbol: string): Promise<JsonRecord[]> {
+  const cached = alpacaAssetCache.get(symbol);
+  if (cached && Date.now() - cached.at < 24 * 3600_000) return cached.rows;
+  const rows = await searchAlpaca(symbol);
+  alpacaAssetCache.set(symbol, { at: Date.now(), rows });
+  if (alpacaAssetCache.size > 256) alpacaAssetCache.delete(alpacaAssetCache.keys().next().value!);
+  return rows;
+}
+
+export function alpacaCandidateSymbols(yahooRows: JsonRecord[], alpacaRows: JsonRecord[], limit = 3): string[] {
+  const existing = new Set(alpacaRows.map(row => String(row.symbol || "")));
+  return [...new Set(yahooRows.filter(row => row.asset_class === "equity")
+    .map(row => String(row.symbol || "")))].filter(symbol => symbol && !existing.has(symbol)).slice(0, limit);
 }
 
 export function predictionResult(source: PredictionMarketSource, contract: any): JsonRecord {
@@ -215,6 +262,12 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
         .catch(() => { errors[source] = "temporarily_unavailable"; }));
     }
     await Promise.all(tasks);
+    if (requested === "auto" && mode !== "live" && groups.yahoo?.length) {
+      const symbols = alpacaCandidateSymbols(groups.yahoo, groups.alpaca || []);
+      const verified = await Promise.all(symbols.map(symbol => verifiedAlpacaAsset(symbol).catch(() => [])));
+      groups.alpaca = [...(groups.alpaca || []), ...verified.flat()].slice(0, limit);
+      if (groups.alpaca.length) delete errors.alpaca;
+    }
     const results = Object.values(groups).flat();
     const recommended = req.query.rank === "true" ? await rankVerifiedCandidates(query, results, {...options,ip:searchClientAddress(req)}) : null;
     if (recommended) for (const rows of Object.values(groups)) rows.sort((a,b)=>Number(b.resource_id===recommended)-Number(a.resource_id===recommended));

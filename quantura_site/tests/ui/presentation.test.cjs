@@ -8,6 +8,19 @@ const source = file => fs.readFileSync(path.join(root, 'public', file), 'utf8');
 const page = file => fs.readFileSync(path.join(root, 'pages', file), 'utf8');
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+test('Normalize weights emits editable two-decimal values that total exactly 1.00', () => {
+  const {normalizeWeightsTwoDecimals} = require('../../public/forecast-controls.js');
+  const weights = normalizeWeightsTwoDecimals({
+    prophet:{enabled:true,weight:1},toto:{enabled:true,weight:1},granite:{enabled:true,weight:1},
+    chronos:{enabled:true,weight:1},timesfm:{enabled:false,weight:100},
+  });
+  assert.deepEqual(Object.keys(weights),['prophet','toto','granite','chronos']);
+  assert.equal(Object.values(weights).reduce((sum,value)=>sum+Number(value),0),1);
+  assert.ok(Object.values(weights).every(value=>/^\d+\.\d{2}$/.test(value)));
+  const single=normalizeWeightsTwoDecimals({chronos:{enabled:true,weight:2}});
+  assert.equal(single.chronos,'1.00');
+});
+
 function dom(html = '<div id="chart"></div>') {
   const d = new JSDOM(html, { url:'https://quantura.studio/forecasting', runScripts:'outside-only', pretendToBeVisual:true });
   d.window.matchMedia = () => ({matches:false});

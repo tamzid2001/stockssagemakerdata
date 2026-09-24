@@ -14514,10 +14514,12 @@
     return frequency;
   };
 
-  const ensembleDurationMinutes = (amount, unit) => {
+  const ensembleDurationMinutes = (amount, unit, maximum = 129600) => {
     const factor = { minutes: 1, hours: 60, days: 1440 }[unit];
     const value = Number(amount);
-    if (!factor || !Number.isInteger(value) || value < 0 || value * factor > 129600) throw new Error("Choose a whole duration between 0 and 90 days.");
+    if (!factor || !Number.isSafeInteger(value) || value < 0 || !Number.isSafeInteger(value * factor) || value * factor > maximum) {
+      throw new Error(Number.isFinite(maximum) ? "Choose a whole duration between 0 and 90 days." : "Choose a nonnegative whole cutoff duration.");
+    }
     return value * factor;
   };
 
@@ -14800,7 +14802,7 @@
     if (enabled.some((model) => !Number.isFinite(model.weight) || model.weight < 0)) throw new Error("Model weights must be finite and nonnegative.");
     const contextRaw = String(data.get("context_length") || "").trim();
     const cutoffMode = document.getElementById("ensemble-cutoff-mode")?.value || "relative";
-    const lag = cutoffMode === "relative" ? ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes")) : 0;
+    const lag = cutoffMode === "relative" ? ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes"), Infinity) : 0;
     const cutoffAt = cutoffMode === "date" ? window.QuanturaForecastControls.cutoffInstant(document.getElementById("ensemble-history-cutoff").value) : undefined;
     const endAt = document.getElementById("ensemble-prediction-mode")?.value === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-prediction-end").value) : undefined;
     const frequencyMinutes = ({"1Day":1440,"1D":1440,"1Hour":60,"1h":60,"1Min":1,"1min":1})[source.frequency] || 1440;
@@ -15380,12 +15382,11 @@
     });
     ui.ensembleNormalizeWeights?.addEventListener("click", () => {
       const selections = getEnsembleSelections();
-      const total = Object.values(selections).filter((selection) => selection.enabled && selection.weight > 0).reduce((sum, selection) => sum + selection.weight, 0);
-      if (total <= 0) return;
-      Object.entries(selections).forEach(([modelId, selection]) => {
-        if (!selection.enabled || selection.weight <= 0) return;
+      const normalized = window.QuanturaForecastControls.normalizeWeightsTwoDecimals(selections);
+      if (!normalized) return;
+      Object.entries(normalized).forEach(([modelId, value]) => {
         const input = ui.ensembleModelList?.querySelector(`[data-ensemble-model="${modelId}"] [data-model-weight]`);
-        if (input) input.value = String(Number((selection.weight / total).toFixed(6)));
+        if (input) input.value = value;
       });
       updateEnsembleWeightsAndSupport();
     });

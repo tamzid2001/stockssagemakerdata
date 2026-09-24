@@ -11,7 +11,7 @@ The default **Q Forecast** workspace at `/forecasting` uses this asynchronous en
 
 Guests can run available models and download their results, subject to fair-use limits and provider availability. Sign in to save to My Requests. The website prepares a single-use, 15-minute HttpOnly ownership cookie before sign-in so a guest forecast can also be saved to an existing account. API keys and collaborator resources still require account authentication, token scopes and current workspace permissions. Existing billing records are not deleted.
 
-Choose **Calendar date and time** for Data cutoff or Forecast until. Times are displayed in your device timezone and sent as explicit UTC instants in `history_cutoff_at` and `prediction_end_at`. A cutoff is within the previous 90 days. Alternatively choose a duration or offset in days, hours or minutes. The backend converts the end time to complete future periods after the last input observation; daily NYSE requests use actual exchange sessions within the calendar window. Quotas and model horizon limits apply.
+Choose **Calendar date and time** for Data cutoff or Forecast until. Times are displayed in your device timezone and sent as explicit UTC instants in `history_cutoff_at` and `prediction_end_at`. There is no arbitrary 90-day forecast cutoff; available history still depends on the selected provider. Alternatively choose a duration or offset in days, hours or minutes. The backend converts the end time to complete future periods after the last input observation; daily NYSE requests use actual exchange sessions within the calendar window. Quotas and model horizon limits apply.
 
 Choose **Upload your own CSV** to parse a CSV of at most 2 MB / 10,000 rows. Select the timestamp and numeric target columns and observed interval. At least 40 unique valid rows are required for this upload workflow. ISO dates are UTC dates; minute-resolution local date-times use your device timezone; timestamps with seconds need an explicit offset. The upload is sent through the existing immutable inline-series API, not a new public file URL. Missing dates or values fail validation, and duplicate timestamps deterministically retain the last supplied value.
 
@@ -62,16 +62,15 @@ also runs only that forecast. No automatic historical-validation pass is added.
 
 MAE, RMSE, sMAPE and average weighted quantile loss describe this request's
 predictions only when observed prices for the **same prediction timestamps** are
-available. Known historical/replay comparisons and observations after publication
-are labeled separately. Earlier training values cannot be paired with later
+available after publication. Earlier training values cannot be paired with later
 predictions just to produce a score. No missing outcomes or accuracy scores are
 fabricated. Without P50, point-error metrics are undefined; weighted quantile loss
 is undefined when matched actual values are all zero. sMAPE uses a ratio internally
 and displays as a percentage; zero/zero contributes zero.
 
 Older immutable results may retain `historical_validation`, which described a
-**separate** historical forecast. These legacy scores remain available in downloads
-and a collapsed archive section, not as accuracy for the requested future forecast.
+**separate** historical forecast. This compatibility field is omitted from the
+normal quality panel, not presented as accuracy for the requested future forecast.
 An old queued policy does not cause the current worker to repeat validation.
 
 Reproduction creates a new job from the original input snapshot, stored configuration, and pinned model checkpoints while re-evaluating current authorization and license gates.
@@ -88,7 +87,7 @@ In **Sports / Prediction Markets**, use **Download from a market link**, choose 
 
 ### Historical cutoff and chart controls
 
-**Data cutoff** defaults to latest data. Choose minutes, hours, or days ago (up to 90 days) to exclude newer observations **before** selecting up to 500 inputs. The API accepts top-level `history_lag_minutes` (hours × 60 or days × 1440); it resolves the cutoff once to a stored UTC minute. For example, use `history_lag_minutes: 30` and `prediction_length: 60` with `1min` data. Forecast timestamps begin after the last actual input, so gaps can shorten the part extending past now.
+**Data cutoff** defaults to latest data. Choose minutes, hours, or days ago to exclude newer observations **before** selecting up to 500 inputs. The API accepts top-level `history_lag_minutes` (hours × 60 or days × 1440); it resolves the cutoff once to a stored UTC minute. An older cutoff can still fail if the provider no longer has that history. For example, use `history_lag_minutes: 30` and `prediction_length: 60` with `1min` data. Forecast timestamps begin after the last actual input, so gaps can shorten the part extending past now.
 
 ### Pregame, in-game and history lookback
 

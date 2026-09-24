@@ -18,6 +18,25 @@
     if (Date.parse(instant) > now) throw new Error("The data cutoff cannot be in the future.");
     return instant;
   };
+  function normalizeWeightsTwoDecimals(selections) {
+    const entries = Object.entries(selections || {}).filter(([, row]) => row?.enabled && Number.isFinite(row.weight) && row.weight > 0);
+    const total = entries.reduce((sum, [, row]) => sum + row.weight, 0);
+    if (!entries.length || !Number.isFinite(total) || total <= 0 || entries.length > 100) return null;
+    // Reserve one cent for each selected positive model, then use largest
+    // remainders so editable two-decimal inputs sum to exactly 1.00.
+    const distributable = 100 - entries.length;
+    const allocations = entries.map(([id, row], index) => {
+      const ideal = distributable * row.weight / total;
+      const floor = Math.floor(ideal);
+      return { id, index, cents: 1 + floor, remainder: ideal - floor };
+    });
+    let left = 100 - allocations.reduce((sum, row) => sum + row.cents, 0);
+    for (const row of [...allocations].sort((a, b) => b.remainder - a.remainder || a.index - b.index)) {
+      if (left-- <= 0) break;
+      row.cents += 1;
+    }
+    return Object.fromEntries(allocations.map(row => [row.id, (row.cents / 100).toFixed(2)]));
+  }
   const stockSessionFormatters = new Map();
   function stockChartTimestamp(row, job) {
     if (!row.timestamp || !Number.isFinite(Date.parse(row.timestamp))) return row.timestamp;
@@ -162,7 +181,7 @@
     }
     return closed.length?[{values:closed,dvalue:86400_000}]:[];
   }
-  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
+  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, normalizeWeightsTwoDecimals, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);

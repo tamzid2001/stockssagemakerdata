@@ -67,14 +67,14 @@
     const element = (tag,text,className) => {const el=doc.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
     const format = (value, percent = false) => finite(value) ? (percent ? `${(100*value).toFixed(2)}%` : new Intl.NumberFormat(undefined,{maximumSignificantDigits:5}).format(value)) : "—";
     const cards = [
-      ["MAE","mae",false,"Mean absolute P50 error; lower is better. In the target's units."],
-      ["RMSE","rmse",false,"Root mean squared P50 error; penalizes large misses. In the target's units."],
-      ["sMAPE","smape",true,"Symmetric percentage error; zero/zero contributes zero. Unstable near zero."],
-      ["Weighted quantile loss","average_wql",false,"Mean wQL across the requested quantiles: twice the pinball loss divided by total absolute actual values. Lower is better. Undefined when all actuals are zero."],
+      ["MAE","mae",false,"Mean absolute difference between predicted P50 and the actual completed price at the same time. It cannot be measured before that price exists."],
+      ["RMSE","rmse",false,"Root mean squared P50 error; larger misses count more. It requires completed prices after publication."],
+      ["sMAPE","smape",true,"Symmetric percentage error between P50 and completed prices after publication. Near-zero values can make it unstable."],
+      ["Weighted quantile loss","average_wql",false,"Average quantile error against completed prices after publication. It cannot be inferred from the forecast distribution alone."],
     ];
     const section = (metrics, title, description) => {
       const box=element("section",undefined,"forecast-metrics-section");box.append(element("h4",title));
-      box.append(element("p",`${description || `${metrics.count} / ${report.expected} timestamp-matched completed outcomes · ${metrics.point_count} P50 comparisons`}${metrics.count && metrics.count<30 ? " · Small validation sample." : ""}`,"small muted"));
+      box.append(element("p",`${description || `${metrics.count} / ${report.expected} timestamp-matched completed outcomes · ${metrics.point_count} P50 comparisons`}${metrics.count && metrics.count<30 ? " · Small outcome sample." : ""}`,"small muted"));
       const grid=element("dl",undefined,"forecast-metrics-grid");
       for(const [name,key,percent,help] of cards){const cell=element("div"),term=element("dt",name),hint=element("button","ⓘ","forecast-metric-help");hint.type="button";hint.title=help;hint.setAttribute("aria-label",`${name}: ${help}`);hint.addEventListener("click",()=>{hint.nextElementSibling.hidden=!hint.nextElementSibling.hidden;hint.setAttribute("aria-expanded",String(!hint.nextElementSibling.hidden));});hint.setAttribute("aria-expanded","false");const explanation=element("p",help,"small muted");explanation.hidden=true;term.append(hint,explanation);cell.append(term,element("dd",format(metrics[key],percent)));grid.append(cell);}box.append(grid);
       if(metrics.count && !metrics.point_count) box.append(element("p","P50 was not requested, so the three point-error metrics are undefined. Weighted quantile loss uses the requested quantiles.","small muted"));
@@ -82,20 +82,11 @@
       return box;
     };
     const fragment=doc.createDocumentFragment(),heading=element("h3","Forecast quality");heading.id="ensemble-quality-title";fragment.append(heading);
-    if(report.prospective.count || report.retrospective.count) {
-      if(report.prospective.count)fragment.append(section(report.prospective,"This forecast · observed after publication"));
-      if(report.retrospective.count)fragment.append(section(report.retrospective,"This forecast · historical/replay comparison (not live validation)"));
+    if(report.prospective.count) {
+      fragment.append(section(report.prospective,"Observed after this forecast was published"));
     } else {
       fragment.append(section({count:0,point_count:0},"This forecast",
-        "No completed prices match this forecast's prediction timestamps yet. MAE, RMSE, sMAPE and weighted quantile loss need predicted and observed values for the same timestamps. No additional forecast or withheld-history run is performed."));
-    }
-    const validation = job.historical_validation;
-    if(validation?.status === "completed" && validation.metrics?.count > 0) {
-      const detail=element("details");detail.append(element("summary","Previously stored historical validation (separate forecast)"));
-      detail.append(section(validation.metrics,"Archived historical validation",
-        `${validation.metrics.count} / ${validation.holdout_rows} held-out historical values · ${validation.training_rows} earlier training values · ${validation.metrics.point_count} P50 comparisons`));
-      detail.append(element("p","These preserved scores came from a separate historical run, not this future forecast. New requests do not repeat that validation.","small muted"));
-      fragment.append(detail);
+        "No completed post-publication prices match the prediction timestamps yet. MAE, RMSE, sMAPE and weighted quantile loss require actual outcomes; a forecast alone cannot produce honest error scores. No historical validation or second model run is performed."));
     }
     host.replaceChildren(fragment);
     [...host.querySelectorAll("details")].forEach((el,i)=>{el.open=Boolean(openDetails[i]);});
