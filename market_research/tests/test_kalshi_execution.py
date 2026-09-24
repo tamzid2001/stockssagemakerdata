@@ -9,7 +9,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
-from market_research.kalshi_execution import (Config, KalshiExecution, live_allowed,
+from market_research.kalshi_execution import (Config, CoinConfig, KalshiExecution, live_allowed,
     acknowledged_order, definitive_rejection, money, order_payload,
     reconciled_order, recovery)
 from market_research.kalshi_live_state import LiveJournal, Trader, session_statistics
@@ -62,6 +62,29 @@ def test_requested_one_minute_preset_is_not_live_approval():
     assert config.recovery_multiplier == '2.5'
     assert config.max_recovery_increases == 3
     assert not live_allowed(config, True, {})
+
+
+@pytest.mark.parametrize('series', ['KXBNB15M', 'KXDOGE15M', 'KXETH15M', 'KXNEAR15M', 'KXZEC15M'])
+def test_coin_series_isolated_and_not_implicitly_live(series, credentials):
+    config = CoinConfig(series_ticker=series, subaccount=1)
+    ticker = series + '-26SEP201215-15'
+    assert order_payload(ticker, 'yes', 1, '.50', 2, config)['subaccount'] == 1
+    with pytest.raises(ValueError, match='INVALID_ORDER_INTENT'):
+        order_payload(TICKER, 'yes', 1, '.50', 2, config)
+    env, _ = credentials
+    assert not live_allowed(config, True, env)  # BTC approval never enables another coin.
+    coin = series[2:-3]
+    gated = {**env, f'QUANTURA_KALSHI_{coin}_LIVE_ENABLED': 'true',
+             f'QUANTURA_KALSHI_{coin}_APPROVED_CONFIG': config.fingerprint,
+             f'QUANTURA_KALSHI_{coin}_APPROVED_SHA': 'a'*40}
+    assert live_allowed(config, True, gated)
+    assert not live_allowed(replace(config, subaccount=2), True, gated)
+
+
+def test_coin_requires_dedicated_existing_subaccount():
+    assert not live_allowed(CoinConfig(series_ticker='KXETH15M', subaccount=0), True, {})
+    with pytest.raises(ValueError, match='INVALID_COIN_CONFIGURATION'):
+        CoinConfig(series_ticker='KXBTC15M', subaccount=1)
 
 
 def test_v2_yes_no_and_stable_single_market_identity(config):

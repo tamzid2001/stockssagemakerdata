@@ -17,8 +17,8 @@ FINAL_FRESHNESS_SECONDS = 3
 MAX_REQUEST_SECONDS = 2
 
 
-def snapshot(market, ticker, started_at, received_at):
-    if (not re.fullmatch(r'KXBTC15M-[A-Z0-9-]+', ticker)
+def snapshot(market, ticker, started_at, received_at, series_ticker='KXBTC15M'):
+    if (not re.fullmatch(re.escape(series_ticker) + r'-[A-Z0-9-]+', ticker)
             or market.get('ticker') != ticker or market.get('market_type') != 'binary'):
         raise ValueError('PROVISIONAL_MARKET_IDENTITY_INVALID')
     opened, close = stamp(market['open_time']), stamp(market['close_time'])
@@ -51,7 +51,7 @@ def snapshot(market, ticker, started_at, received_at):
 
 
 def direction_at(settlements, snapshots, lifecycle, timestamp, current_market, current_open,
-                 policy='provisional_near_close'):
+                 policy='provisional_near_close', series_ticker='KXBTC15M'):
     """Use the immediately preceding known market; never jump past an unknown one.
 
 Official receipt-timed outcomes supersede quote inference for that market. An
@@ -60,7 +60,7 @@ immutable first-P90 decision is not rewritten when a later settlement disagrees.
     if policy not in ('confirmed', 'provisional_near_close'):
         raise ValueError('INVALID_DIRECTION_POLICY')
     prior = [r for r in [*lifecycle, *settlements, *snapshots]
-             if r['market_id'] != current_market and r['market_id'].startswith('KXBTC15M-')
+             if r['market_id'] != current_market and r['market_id'].startswith(series_ticker + '-')
              and r['close_at'] <= current_open and r['close_at'] < timestamp]
     latest = max(prior, key=lambda r: (r['close_at'], r['market_id']), default=None)
     # Do not substitute yesterday's last known outcome after a collection gap.
@@ -119,7 +119,8 @@ class NearCloseCollector:
             self.last_poll[ticker] = now
             started = time.time()
             try:
-                value = snapshot(self.provider.market(ticker), ticker, started, time.time())
+                value = snapshot(self.provider.market(ticker), ticker, started, time.time(),
+                                 getattr(self.provider, 'series_ticker', 'KXBTC15M'))
                 with self.store.lock, self.store.db:
                     # Latest neutral snapshot invalidates an earlier 99c snapshot.
                     self.store._put('btc_provisional_direction', ticker, value)

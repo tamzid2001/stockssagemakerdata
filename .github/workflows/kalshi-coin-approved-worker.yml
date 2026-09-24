@@ -1,0 +1,117 @@
+name: Kalshi Coin Approval-Gated P90 Worker
+on:
+  workflow_call:
+    inputs:
+      coin: {type: string, required: true}
+      workflow_file: {type: string, required: true}
+      mode: {type: string, required: true}
+      history_minutes: {type: string, required: true}
+      subaccount: {type: string, required: true}
+      direction_policy: {type: string, required: true}
+      starting_contracts: {type: string, required: true}
+      recovery_multiplier: {type: string, required: true}
+      max_recovery_increases: {type: string, required: true}
+      continuous: {type: boolean, required: true}
+      code_ref: {type: string, required: false, default: ''}
+      approved_sha: {type: string, required: false, default: ''}
+      approved_config: {type: string, required: false, default: ''}
+      live_enabled: {type: string, required: false, default: 'false'}
+      continuous_gate: {type: string, required: false, default: 'false'}
+permissions:
+  contents: read
+  actions: write
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    environment: quantura-kalshi-live
+    env:
+      COIN: ${{ inputs.coin }}
+      WORKFLOW_FILE: ${{ inputs.workflow_file }}
+      MODE: ${{ inputs.mode }}
+      HISTORY_MINUTES: ${{ inputs.history_minutes }}
+      SUBACCOUNT: ${{ inputs.subaccount }}
+      DIRECTION_POLICY: ${{ inputs.direction_policy }}
+      STARTING_CONTRACTS: ${{ inputs.starting_contracts }}
+      RECOVERY_MULTIPLIER: ${{ inputs.recovery_multiplier }}
+      MAX_RECOVERY_INCREASES: ${{ inputs.max_recovery_increases }}
+      APPROVED_SHA: ${{ inputs.approved_sha }}
+      APPROVED_CONFIG: ${{ inputs.approved_config }}
+      LIVE_ENABLED: ${{ inputs.live_enabled }}
+      CONTINUOUS_GATE: ${{ inputs.continuous_gate }}
+      QUANTURA_CODE_SHA: ${{ inputs.code_ref || (inputs.mode == 'live' && inputs.approved_sha) || github.sha }}
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+      CUDA_VISIBLE_DEVICES: ''
+      GRANITE_DEVICE: cpu
+    steps:
+      - name: Validate bounded series, dedicated account, and approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$COIN" =~ ^(BNB|DOGE|ETH|NEAR|ZEC)$ ]]
+          [[ "$WORKFLOW_FILE" == "kalshi-${COIN,,}-approved-trader.yml" ]]
+          [[ "$MODE" =~ ^(verify|readiness|observe|live)$ ]]
+          [[ "$SUBACCOUNT" =~ ^[0-9]+$ ]] && (( SUBACCOUNT >= 0 && SUBACCOUNT <= 63 ))
+          if [[ "$MODE" != verify ]]; then (( SUBACCOUNT >= 1 )); fi
+          [[ "$HISTORY_MINUTES" =~ ^([1-9]|1[0-2])$ ]]
+          [[ "$QUANTURA_CODE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$DIRECTION_POLICY" =~ ^(confirmed|provisional_near_close)$ ]]
+          [[ "$LIVE_ENABLED" =~ ^(true|false)$ ]] && [[ "$CONTINUOUS_GATE" =~ ^(true|false)$ ]]
+          if [[ "$MODE" == live ]]; then
+            [[ "$LIVE_ENABLED" == true ]] && [[ "$APPROVED_CONFIG" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$APPROVED_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$QUANTURA_CODE_SHA" == "$APPROVED_SHA" ]]
+          fi
+          printf 'QUANTURA_JOB_STARTED_AT=%s\n' "$(date +%s)" >> "$GITHUB_ENV"
+          printf 'QUANTURA_KALSHI_%s_LIVE_ENABLED=%s\n' "$COIN" "$LIVE_ENABLED" >> "$GITHUB_ENV"
+          printf 'QUANTURA_KALSHI_%s_APPROVED_CONFIG=%s\n' "$COIN" "$APPROVED_CONFIG" >> "$GITHUB_ENV"
+          printf 'QUANTURA_KALSHI_%s_APPROVED_SHA=%s\n' "$COIN" "$APPROVED_SHA" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.QUANTURA_CODE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$MODE" == observe || "$MODE" == live ]]; then
+            python -m pip install --require-hashes -r market_research/requirements.lock
+          else
+            python -m pip install --require-hashes -r market_research/requirements-analysis.lock
+            python -m pip install pytest==8.4.2 pyyaml==6.0.2
+          fi
+      - name: Offline execution and restart tests
+        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_coin_workflows.py market_research/tests/test_kalshi_provisional_direction.py -q
+      - name: Display exact proposed configuration (no secrets)
+        run: python -m market_research.kalshi_live_worker --mode config --series "KX${COIN}15M" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-recovery-increases "$MAX_RECOVERY_INCREASES"
+      - name: Readiness or explicitly selected worker
+        if: inputs.mode != 'verify'
+        env:
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_PROD_API_KEY }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-${{ inputs.coin }}-model-cache
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        run: python -m market_research.kalshi_live_worker --mode "$MODE" --series "KX${COIN}15M" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-recovery-increases "$MAX_RECOVERY_INCREASES" --duration-minutes 300
+      - name: Serialized handoff after successful durable worker exit
+        if: success() && inputs.continuous && (inputs.mode == 'observe' || inputs.mode == 'live') && inputs.continuous_gate == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: process.env.WORKFLOW_FILE,
+              ref: context.payload.repository.default_branch,
+              inputs: {mode: process.env.MODE, history_minutes: process.env.HISTORY_MINUTES,
+                subaccount: process.env.SUBACCOUNT, direction_policy: process.env.DIRECTION_POLICY,
+                starting_contracts: process.env.STARTING_CONTRACTS,
+                recovery_multiplier: process.env.RECOVERY_MULTIPLIER,
+                max_recovery_increases: process.env.MAX_RECOVERY_INCREASES,
+                continuous: 'true', code_ref: process.env.QUANTURA_CODE_SHA}
+            });

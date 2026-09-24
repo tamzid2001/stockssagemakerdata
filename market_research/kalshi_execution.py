@@ -18,6 +18,7 @@ import httpx
 
 BASE = 'https://external-api.kalshi.com/trade-api/v2'
 VERSION = 'btc-p90-sticky-hold-live-v4'
+COIN_SERIES = frozenset({'KXBNB15M', 'KXDOGE15M', 'KXETH15M', 'KXNEAR15M', 'KXZEC15M'})
 
 
 def money(value):
@@ -52,17 +53,52 @@ class Config:
     def fingerprint(self):
         return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()
 
+    @property
+    def series_ticker(self):
+        return 'KXBTC15M'
+
+
+@dataclass(frozen=True)
+class CoinConfig:
+    """Separate approval identity; BTC's persisted v4 fingerprint is unchanged."""
+    series_ticker: str
+    history_minutes: int = 1
+    subaccount: int = 0
+    direction_policy: str = 'provisional_near_close'
+    starting_contracts: int = 1
+    recovery_multiplier: str = '2.5'
+    max_recovery_increases: int = 3
+    max_ask: str = '0.99'
+    version: str = 'coin-p90-sticky-hold-live-v1'
+
+    def __post_init__(self):
+        if self.series_ticker not in COIN_SERIES or type(self.subaccount) is not int or not 0 <= self.subaccount <= 63:
+            raise ValueError('INVALID_COIN_CONFIGURATION')
+        # Reuse all numerical/risk validation without changing the BTC schema.
+        Config(self.history_minutes, self.subaccount, self.direction_policy,
+            self.starting_contracts, self.recovery_multiplier,
+            self.max_recovery_increases, self.max_ask)
+        if self.version != 'coin-p90-sticky-hold-live-v1':
+            raise ValueError('INVALID_LIVE_CONFIGURATION')
+
+    @property
+    def fingerprint(self):
+        return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()
+
 
 def live_allowed(config, requested, env=None):
     env = os.environ if env is None else env
-    return bool(requested and env.get('QUANTURA_KALSHI_LIVE_ENABLED') == 'true'
-        and env.get('QUANTURA_KALSHI_APPROVED_CONFIG') == config.fingerprint
+    prefix = ('QUANTURA_KALSHI_' + config.series_ticker[2:-3] + '_'
+              if isinstance(config, CoinConfig) else 'QUANTURA_KALSHI_')
+    return bool(requested and (not isinstance(config, CoinConfig) or config.subaccount > 0)
+        and env.get(prefix + 'LIVE_ENABLED') == 'true'
+        and env.get(prefix + 'APPROVED_CONFIG') == config.fingerprint
         and re.fullmatch('[a-f0-9]{40}', env.get('QUANTURA_CODE_SHA', ''))
-        and env.get('QUANTURA_KALSHI_APPROVED_SHA') == env.get('QUANTURA_CODE_SHA'))
+        and env.get(prefix + 'APPROVED_SHA') == env.get('QUANTURA_CODE_SHA'))
 
 
 def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
-    if (not re.fullmatch(r'KXBTC15M-[A-Z0-9-]+', ticker) or side not in ('yes', 'no')
+    if (not re.fullmatch(re.escape(config.series_ticker) + r'-[A-Z0-9-]+', ticker) or side not in ('yes', 'no')
             or type(quantity) is not int or quantity < 1
             or type(shard) is not int or shard < 0
             or type(attempt) is not int or not 0 <= attempt <= 1000):
@@ -76,7 +112,7 @@ def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
     # but sending six in a request is outside the documented request contract.
     if price != price.quantize(Decimal('.0001')):
         raise ValueError('INVALID_PRICE_PRECISION')
-    identity = f'{VERSION}:{config.subaccount}:{ticker}'
+    identity = f'{config.version}:{config.subaccount}:{ticker}'
     if attempt:
         identity += f':retry:{attempt}'
     return dict(ticker=ticker, side='bid' if side == 'yes' else 'ask',
@@ -165,8 +201,8 @@ class KalshiExecution:
         raise RuntimeError('ACCOUNT_PAGINATION_INCOMPLETE')
 
     def market(self, ticker):
-        if not re.fullmatch(r'KXBTC15M-[A-Z0-9-]+', ticker):
-            raise ValueError('BTC_MARKET_REQUIRED')
+        if not re.fullmatch(re.escape(self.config.series_ticker) + r'-[A-Z0-9-]+', ticker):
+            raise ValueError('CONFIGURED_SERIES_MARKET_REQUIRED')
         value = self.request('GET', '/markets/' + ticker)['market']
         if value.get('ticker') != ticker or type(value.get('exchange_index')) is not int or value['exchange_index'] < 0:
             raise RuntimeError('AUTHORITATIVE_MARKET_SHARD_REQUIRED')
