@@ -757,6 +757,33 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 #ensemble-custom-quantiles { max-width: 440px; }
 .ensemble-primary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .ensemble-primary-actions .cta { width: auto; max-width: 100%; justify-content: center; }
+.backtest-dialog { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: var(--background); color: var(--foreground); overflow: auto; box-sizing: border-box; }
+.backtest-dialog::backdrop { background: rgb(0 0 0 / 70%); }
+.backtest-shell { max-width: 1500px; min-height: 100%; margin: auto; padding: clamp(12px, 2vw, 28px); box-sizing: border-box; }
+.backtest-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; position: sticky; top: 0; z-index: 2; padding: 8px 0 14px; background: var(--background); border-bottom: 1px solid var(--border); }
+.backtest-header h2 { margin: 0 0 4px; font-size: clamp(1.25rem, 2vw, 1.8rem); }
+.backtest-header p { margin: 0 0 4px; }
+.backtest-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .85fr); align-items: start; gap: 14px; margin-top: 14px; }
+.backtest-form { display: grid; gap: 12px; min-width: 0; }
+.backtest-panel { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--card-foreground); }
+.backtest-panel h3 { margin: 0 0 8px; font-size: 1rem; }
+.backtest-panel p { margin: 0 0 10px; line-height: 1.4; }
+.backtest-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.backtest-fields .field { min-width: 0; }
+.backtest-fields input, .backtest-fields select { width: 100%; max-width: 100%; min-height: 40px; box-sizing: border-box; }
+.backtest-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.backtest-actions .cta, .backtest-actions .task-chip { width: auto; min-height: 40px; }
+.backtest-results { position: sticky; top: 104px; }
+.backtest-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.backtest-metrics > div { display: flex; flex-direction: column; gap: 3px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
+.backtest-metrics span { color: var(--muted-foreground); font-size: .78rem; }
+.backtest-equity svg { width: 100%; height: 160px; margin: 8px 0; color: var(--primary); background: var(--muted); border-radius: 8px; }
+.backtest-table-wrap { max-height: 320px; max-width: 100%; overflow: auto; margin: 8px 0; }
+.backtest-table-wrap table { width: 100%; border-collapse: collapse; font-size: .8rem; white-space: nowrap; }
+.backtest-table-wrap th, .backtest-table-wrap td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+.backtest-dialog :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 850px) { .backtest-layout { grid-template-columns: 1fr; } .backtest-results { position: static; } }
+@media (max-width: 450px) { .backtest-fields { grid-template-columns: 1fr; } .backtest-shell { padding: 10px; } .backtest-header .task-chip span { display: none; } }
 .market-search-form :is(input, select, button), .ensemble-model-card :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .ensemble-model-card select { width: 100%; text-overflow: ellipsis; }
 @media (min-width: 769px) {
