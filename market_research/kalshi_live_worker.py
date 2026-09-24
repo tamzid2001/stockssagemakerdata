@@ -131,11 +131,11 @@ def run(config, mode, duration):
                     if now - last_renew >= 25:
                         journal.renew()
                         last_renew = now
-                    # A proven zero-fill IOC is retried at roughly one-second
-                    # cadence. Each cycle still authenticates the exact prior
-                    # order before a uniquely identified replacement is sent.
+                    # Proven zero- or partial-fill IOCs retry only their remaining
+                    # quantity at roughly one-second cadence. Authenticate each
+                    # terminal order before reserving the next unique intent.
                     active_position = bool(journal.state().get('active')) if broker.enabled else False
-                    interval = (1 if status.startswith(('retry_', 'stop_', 'account_order_gate_'))
+                    interval = (1 if status.startswith(('retry_', 'entry_', 'partial_', 'stop_', 'account_order_gate_'))
                         or (active_position and bool((journal.state().get('active') or {}).get('stop')))
                         else 2 if active_position else 20)
                     if now - last_reconcile >= interval:

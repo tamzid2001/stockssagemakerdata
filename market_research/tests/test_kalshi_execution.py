@@ -373,10 +373,16 @@ class MemoryJournal:
         self.records[entry['ticker']] = deepcopy(self.value['active'])
     def retry(self, completed, entry):
         assert self.value['active']['intent'] == completed['intent']
-        assert completed['status'] == 'unfilled' and money(completed['filled']) == 0
+        assert completed['status'] == 'terminal'
         assert entry['attempt'] == self.value['active'].get('attempt', 0) + 1
-        self.value['active'] = deepcopy(entry)
-        self.records[entry['ticker']] = deepcopy(entry)
+        self.value['active'] = {**deepcopy(entry), 'previous_entry': deepcopy(self.value['active'])}
+        self.records[entry['ticker']] = deepcopy(self.value['active'])
+    def reject_retry(self, entry, code):
+        active = self.value['active']
+        assert active['intent'] == entry['intent']
+        self.value['active'] = {**active['previous_entry'], 'attempt': active['attempt'],
+                                'retry_rejection_code': code, 'retry_rejected_at': time.time()}
+        self.records[entry['ticker']] = deepcopy(self.value['active'])
     def finish(self, entry, net=None):
         if net is not None: self.value = recovery(self.value, net)
         self.value['active'] = None; self.records[entry['ticker']] = deepcopy(entry)
@@ -390,6 +396,8 @@ class JournalHarness(LiveJournal):
     def state(self): return deepcopy(self.value)
     def change(self, event, ticker, update):
         self.value, self.rows[ticker] = update(deepcopy(self.value), self.rows.get(ticker))
+    def before_post(self):
+        pass
 
 
 class Broker:
@@ -535,6 +543,117 @@ def test_authoritative_zero_fill_retries_until_a_fill_with_fresh_quotes(rig):
     assert len(broker.sent) == 3
 
 
+@pytest.mark.parametrize('series', ['KXBTC15M', 'KXBNB15M', 'KXDOGE15M',
+    'KXETH15M', 'KXNEAR15M', 'KXZEC15M'])
+@pytest.mark.parametrize('initial_fill,remaining', [('2.00', '3.00'), ('2.50', '2.50')])
+def test_partial_entry_retries_exact_remainder_for_each_series(series, initial_fill, remaining, monkeypatch):
+    from market_research.engine import iso
+    now = 1800000120
+    monkeypatch.setattr(time, 'time', lambda: now)
+    config = Config(starting_contracts=5) if series == 'KXBTC15M' else CoinConfig(
+        series_ticker=series, starting_contracts=5)
+    ticker = series + '-26SEP201215-15'
+    journal = MemoryJournal()
+    journal.value['size'] = 5
+    broker = Broker(journal, now - 300)
+    broker.market = lambda _: {'ticker': ticker, 'exchange_index': 7, 'market_type': 'binary',
+        'status': 'active', 'open_time': iso(now - 300), 'close_time': iso(now + 600),
+        'yes_ask_dollars': '.5000', 'yes_bid_dollars': '.4000'}
+    broker.account = lambda: ([], [{'ticker': ticker, 'position_fp': str(
+        money(broker.order['fill_count_fp']) + money(getattr(broker, 'prior_fill', '0')))}]
+        if broker.order and (money(broker.order['fill_count_fp']) +
+            money(getattr(broker, 'prior_fill', '0'))) else [])
+    trader = Trader(config, broker, journal)
+    signal = {'signal_at': now - 60, 'market_end': now + 600,
+        'market_id': ticker, 'contract_id': ticker + ':yes', 'agrees': True}
+    quote = {'timestamp': now, 'received_at': now, 'timely': True, 'yes_ask': '.5000'}
+    with pytest.raises(RuntimeError, match='KALSHI_DELIVERY_OR_RESPONSE_UNKNOWN'):
+        trader.enter(signal, quote, now)
+    first = broker.sent[0]
+    broker.order = final_order(first, count=initial_fill)
+    with pytest.raises(RuntimeError, match='KALSHI_DELIVERY_OR_RESPONSE_UNKNOWN'):
+        trader.reconcile()
+    second = broker.sent[1]
+    assert first['count'] == '5.00' and second['count'] == remaining
+    assert first['client_order_id'] != second['client_order_id']
+    assert journal.state()['active']['accumulated']['filled'] == initial_fill
+    broker.prior_fill = initial_fill
+    broker.order = final_order(second, count=remaining)
+    assert trader.reconcile() == 'held_to_settlement'
+    assert len(broker.sent) == 2
+
+
+def test_partial_entry_stop_preempts_buying_the_remainder(monkeypatch):
+    from market_research.engine import iso
+    now = 1800000120
+    monkeypatch.setattr(time, 'time', lambda: now)
+    config = Config(starting_contracts=5)
+    journal = JournalHarness(config)
+    first = {'ticker': TICKER, 'side': 'yes', 'intent': order_payload(TICKER, 'yes', 5, '.5', 7, config),
+        'target_contracts': '5.00', 'signal': {'agrees': True, 'market_end': now + 600},
+        'attempt': 0, 'created_at': now, 'status': 'delivery_unknown'}
+    journal.begin(first)
+    broker = Broker(journal, now - 300)
+    broker.order = final_order(first['intent'], count='2.00')
+    broker.market = lambda _: {'ticker': TICKER, 'exchange_index': 7, 'market_type': 'binary',
+        'status': 'active', 'open_time': iso(now - 300), 'close_time': iso(now + 600),
+        'yes_ask_dollars': '.5000', 'yes_bid_dollars': '.0500'}
+    trader = Trader(config, broker, journal)
+    trader._reconcile_stop = lambda entry, market, **kwargs: 'stop_triggered_for_test'
+    assert trader.reconcile() == 'stop_triggered_for_test'
+    assert journal.state()['active']['stop']['threshold'] == '0.05'
+    assert journal.state()['active']['filled'] == '2.00'
+    assert not broker.sent
+
+
+def test_five_cent_stop_retries_partial_exit_until_account_is_flat(monkeypatch):
+    from market_research.engine import iso
+    now = 1800000120
+    monkeypatch.setattr(time, 'time', lambda: now)
+    config = Config(starting_contracts=5)
+    journal = JournalHarness(config)
+    entry = {'ticker': TICKER, 'side': 'yes', 'intent': order_payload(TICKER, 'yes', 5, '.5', 7, config),
+        'target_contracts': '5.00', 'signal': {'agrees': True, 'market_end': now + 600},
+        'attempt': 0, 'created_at': now, 'status': 'delivery_unknown'}
+    journal.begin(entry)
+    journal.trigger_stop(entry, {'filled': '5.00', 'cost': '2.50', 'fees': '0',
+        'order_id': 'entry-order'}, now)
+    broker = Broker(journal, now - 300)
+    broker.market = lambda _: {'ticker': TICKER, 'exchange_index': 7, 'market_type': 'binary',
+        'status': 'active', 'open_time': iso(now - 300), 'close_time': iso(now + 600),
+        'yes_ask_dollars': '.5000', 'yes_bid_dollars': '.0500'}
+    broker.account = lambda: ([], [{'ticker': TICKER, 'position_fp': str(
+        money('5') - money(journal.state()['active']['stop']['sold']))}]
+        if journal.state()['active'] and
+        money(journal.state()['active']['stop']['sold']) < 5 else [])
+    exits = {}
+    broker.find_order = lambda intent, order_id=None: (exits.get(intent['client_order_id'])
+        if intent.get('reduce_only') else final_order(entry['intent'], count='5.00'))
+    def submit(intent):
+        count = '2.00' if len(exits) == 0 else '3.00'
+        exits[intent['client_order_id']] = {**intent, 'order_id': 'stop-order-' + str(len(exits) + 1),
+            'book_side': intent['side'], 'outcome_side': 'yes', 'action': 'sell',
+            'subaccount_number': 0, 'fill_count_fp': count,
+            'remaining_count_fp': '0.00', 'status': 'canceled',
+            'taker_fees_dollars': '0', 'maker_fees_dollars': '0'}
+        return {'order_id': exits[intent['client_order_id']]['order_id'],
+            'client_order_id': intent['client_order_id'], 'fill_count': count,
+            'remaining_count': '0.00', 'ts_ms': now * 1000}
+    broker.submit = submit
+    broker.exit_fill_summary = lambda intent, side, terminal: {
+        'filled': terminal['filled'], 'proceeds': str(money(terminal['filled']) * money('.05')),
+        'fees': '0'}
+    trader = Trader(config, broker, journal)
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    assert journal.state()['active']['stop']['pending']['intent']['count'] == '5.00'
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    assert journal.state()['active']['stop']['sold'] == '2.00'
+    assert journal.state()['active']['stop']['pending']['intent']['count'] == '3.00'
+    assert trader.reconcile() == 'stopped'
+    assert journal.state()['active'] is None
+    assert len(exits) == 2
+
+
 def test_zero_fill_waits_for_safe_executable_quote_then_retries(rig):
     trader, broker, journal, signal, quote, now = rig
     signal['agrees'] = True
@@ -564,7 +683,7 @@ def test_settlement_only_reconciliation_cannot_retry_zero_fill(rig):
     with pytest.raises(RuntimeError):
         trader.enter(signal, quote, now)
     broker.order = final_order(broker.sent[0], count='0.00')
-    assert trader.reconcile(allow_order_retry=False) == 'zero_fill_retry_disabled'
+    assert trader.reconcile(allow_order_retry=False) == 'entry_topup_retry_disabled'
     assert len(broker.sent) == 1
     assert journal.state()['active'] is not None
 
@@ -611,12 +730,46 @@ def test_journal_retry_atomically_counts_no_fill_and_reserves_unique_attempt(con
     retry = {**first, 'attempt': 1, 'intent': order_payload(
         TICKER, 'yes', 1, '.5', 7, config, attempt=1),
         'status': 'delivery_unknown'}
-    journal.retry({**first, 'filled': '0', 'status': 'unfilled'}, retry)
+    journal.retry({**first, 'filled': '0', 'cost': '0', 'fees': '0',
+                   'order_id': ack['order_id'],
+                   'status': 'terminal'}, {**retry, 'target_contracts': '1.00',
+                   'accumulated': {'filled': '0', 'cost': '0', 'fees': '0'}})
     summary = journal.public_summary()
     assert summary['intents'] == 2 and summary['retries'] == 1 and summary['unfilled'] == 1
     assert summary['requested_contracts'] == '2.00'
     assert summary['active']['attempt'] == 1
     assert journal.rows[TICKER]['attempt_history'][0]['status'] == 'unfilled'
+
+
+def test_rejected_topup_retains_existing_partial_fill_and_advances_unique_attempt():
+    config = Config(starting_contracts=5)
+    journal = JournalHarness(config)
+    first = {'ticker': TICKER, 'side': 'yes',
+        'intent': order_payload(TICKER, 'yes', 5, '.5', 7, config),
+        'target_contracts': '5.00', 'attempt': 0, 'created_at': 1800000000,
+        'status': 'delivery_unknown'}
+    journal.begin(first)
+    ack = {'order_id': '3b23c1c7-f4ef-4f0d-8b9a-9e53c61f0000',
+        'client_order_id': first['intent']['client_order_id'],
+        'acknowledged_fill': '2.00', 'acknowledged_remaining': '0',
+        'matching_engine_ts_ms': 1800000000000}
+    journal.acknowledge(first, ack)
+    terminal = {'intent': first['intent'], 'status': 'terminal', 'filled': '2.00',
+        'cost': '1.00', 'fees': '0.05', 'order_id': ack['order_id']}
+    second = {**first, 'intent': order_payload(TICKER, 'yes', 3, '.5', 7, config, attempt=1),
+        'attempt': 1, 'accumulated': {'filled': '2.00', 'cost': '1.00', 'fees': '0.05'}}
+    journal.retry(terminal, second)
+    journal.reject_retry(second, 'KALSHI_HTTP_400')
+    active = journal.state()['active']
+    assert active['intent'] == first['intent']
+    assert active['attempt'] == 1
+    assert journal.state()['size'] == 5
+    assert journal.state()['stats']['rejected'] == 1
+    third = {**second, 'intent': order_payload(TICKER, 'yes', 3, '.5', 7, config, attempt=2),
+        'attempt': 2}
+    journal.retry(terminal, third)
+    assert journal.state()['active']['intent']['client_order_id'] not in (
+        first['intent']['client_order_id'], second['intent']['client_order_id'])
 
 
 def test_session_statistics_start_fresh_without_resetting_lifetime_state():

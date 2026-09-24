@@ -6,7 +6,7 @@ POST and reconciliation after ambiguous delivery. No legacy ladder strategy.
 """
 import base64
 from dataclasses import asdict, dataclass
-from decimal import Decimal, ROUND_FLOOR
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR
 import hashlib
 import json
 import os
@@ -98,9 +98,19 @@ def live_allowed(config, requested, env=None):
         and env.get(prefix + 'APPROVED_SHA') == env.get('QUANTURA_CODE_SHA'))
 
 
-def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
+def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0,
+                  fractional_remainder=False):
+    if type(quantity) is not int and not (fractional_remainder and
+            type(quantity) in (Decimal, str)):
+        raise ValueError('INVALID_ORDER_INTENT')
+    try:
+        count = money(quantity)
+    except (ValueError, InvalidOperation):
+        raise ValueError('INVALID_ORDER_INTENT') from None
     if (not re.fullmatch(re.escape(config.series_ticker) + r'-[A-Z0-9-]+', ticker) or side not in ('yes', 'no')
-            or type(quantity) is not int or quantity < 1
+            or (type(quantity) is not int and not fractional_remainder)
+            or count <= 0 or count != count.quantize(Decimal('.01'))
+            or (not fractional_remainder and count != int(count))
             or type(shard) is not int or shard < 0
             or type(attempt) is not int or not 0 <= attempt <= 1000):
         raise ValueError('INVALID_ORDER_INTENT')
@@ -117,7 +127,7 @@ def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0):
     if attempt:
         identity += f':retry:{attempt}'
     return dict(ticker=ticker, side='bid' if side == 'yes' else 'ask',
-        count=f'{quantity:.2f}', price=f'{price:.4f}',
+        count=f'{count:.2f}', price=f'{price:.4f}',
         client_order_id=str(uuid.uuid5(uuid.NAMESPACE_URL, identity)),
         exchange_index=shard, subaccount=config.subaccount,
         time_in_force='immediate_or_cancel', post_only=False, reduce_only=False,
@@ -361,6 +371,20 @@ def reconciled_order(order, intent, economic_side):
     if min(cost, fees) < 0 or cost > count or (count == 0 and cost != 0):
         raise RuntimeError('INVALID_FILL_ACCOUNTING')
     return {'filled': str(count), 'cost': str(cost), 'fees': str(fees), 'order_id': order['order_id']}
+
+
+def combined_entry_fill(entry, terminal):
+    """Account for every terminal IOC in one market, never just the last one."""
+    prior = entry.get('accumulated') or {}
+    filled = money(prior.get('filled', '0')) + money(terminal['filled'])
+    cost = money(prior.get('cost', '0')) + money(terminal['cost'])
+    fees = money(prior.get('fees', '0')) + money(terminal['fees'])
+    target = money(entry.get('target_contracts', entry['intent']['count']))
+    if (target <= 0 or filled < 0 or filled > target or min(cost, fees) < 0
+            or cost > filled):
+        raise RuntimeError('ENTRY_FILL_TOTAL_MISMATCH')
+    return {'filled': str(filled), 'cost': str(cost), 'fees': str(fees),
+            'order_id': terminal['order_id']}
 
 
 def reconciled_stop_order(order, intent, economic_side):

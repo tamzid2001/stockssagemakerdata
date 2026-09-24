@@ -13,7 +13,7 @@ import hashlib
 import time
 from decimal import Decimal
 
-from .kalshi_execution import COIN_SERIES, money, reconciled_order, reconciled_stop_order
+from .kalshi_execution import COIN_SERIES, combined_entry_fill, money, reconciled_order, reconciled_stop_order
 from .store import claim_transition
 
 SERIES = ('KXBTC15M', *sorted(COIN_SERIES))
@@ -151,7 +151,7 @@ class SharedAccountCoordinator:
             order = self.broker.find_order(entry['intent'], acknowledgement.get('order_id'))
             if order is None:
                 raise RuntimeError('ACCOUNT_INTENT_UNRESOLVED')
-            fill = reconciled_order(order, entry['intent'], entry['side'])
+            fill = combined_entry_fill(entry, reconciled_order(order, entry['intent'], entry['side']))
             pending = (entry.get('stop') or {}).get('pending')
             pending_filled = '0'
             if pending:

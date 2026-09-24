@@ -202,17 +202,24 @@ class LiveJournal(Store):
         self.change('acknowledged', entry['ticker'], update)
 
     def retry(self, completed, entry):
-        """Atomically close a proven zero-fill IOC and reserve its next attempt."""
+        """Fold a terminal IOC fill into the target before reserving only its remainder."""
         def update(state, previous):
             state = with_stats(state)
             active = state.get('active')
+            from .kalshi_execution import combined_entry_fill
             if (not active or active['intent'] != completed['intent']
-                    or completed.get('status') != 'unfilled'
-                    or money(completed.get('filled', '-1')) != 0
+                    or completed.get('status') != 'terminal'
                     or entry.get('attempt') != active.get('attempt', 0) + 1):
                 raise RuntimeError('RETRY_INTENT_MISMATCH')
+            total = combined_entry_fill(active, completed)
+            target = money(active.get('target_contracts', active['intent']['count']))
+            if (money(total['filled']) >= target or
+                    money(entry['intent']['count']) != target - money(total['filled']) or
+                    entry.get('accumulated') != {key: total[key] for key in ('filled', 'cost', 'fees')} or
+                    money(entry.get('target_contracts', '-1')) != target):
+                raise RuntimeError('RETRY_REMAINDER_MISMATCH')
             stats = state['stats']
-            stats.update(unfilled=stats['unfilled'] + 1,
+            stats.update(unfilled=stats['unfilled'] + (money(completed['filled']) == 0),
                 retries=stats['retries'] + 1,
                 intents=stats['intents'] + 1,
                 requested_contracts=str(money(stats['requested_contracts']) +
@@ -221,11 +228,29 @@ class LiveJournal(Store):
             acknowledgement = active.get('acknowledgement', {})
             history.append({'attempt': active.get('attempt', 0),
                 'client_order_id': active['intent']['client_order_id'],
-                'order_id': acknowledgement.get('order_id'), 'status': 'unfilled',
+                'order_id': acknowledgement.get('order_id'), 'status': 'partial' if money(completed['filled']) else 'unfilled',
                 'filled': completed['filled'], 'at': time.time()})
-            return {**state, 'active': entry, 'stats': stats}, {
-                **entry, 'attempt_history': history}
+            reserved = {**entry, 'previous_entry': {key: value for key, value in active.items()
+                if key != 'previous_entry'}}
+            return {**state, 'active': reserved, 'stats': stats}, {
+                **reserved, 'attempt_history': history}
         self.change('retry_intent', entry['ticker'], update)
+
+    def reject_retry(self, entry, code):
+        """A rejected top-up must never erase the already-filled position."""
+        def update(state, previous):
+            state = with_stats(state)
+            active = state.get('active') or {}
+            prior = active.get('previous_entry')
+            if active.get('intent') != entry['intent'] or not prior:
+                raise RuntimeError('RETRY_REJECTION_STATE_MISMATCH')
+            restored = {**prior, 'attempt': active['attempt'],
+                'retry_rejected_at': time.time(), 'retry_rejection_code': code}
+            state['stats']['rejected'] += 1
+            state['stats']['last_rejection_code'] = code
+            return {**state, 'active': restored}, {
+                **restored, 'attempt_history': (previous or {}).get('attempt_history', [])}
+        self.change('retry_rejected', entry['ticker'], update)
 
     def trigger_stop(self, entry, fill, at):
         """Persist the five-cent trigger and authoritative entry fill before selling."""
@@ -342,7 +367,11 @@ class LiveJournal(Store):
             acknowledgement = active.get('acknowledgement', {})
             stop = active.get('stop') or {}
             safe_active = {'ticker': active['ticker'], 'side': active['side'],
-                'status': active.get('status'), 'requested_contracts': active['intent']['count'],
+                'status': active.get('status'),
+                'target_contracts': active.get('target_contracts', active['intent']['count']),
+                'requested_contracts': active.get('target_contracts', active['intent']['count']),
+                'latest_order_contracts': active['intent']['count'],
+                'previously_reconciled_fills': (active.get('accumulated') or {}).get('filled', '0'),
                 'attempt': active.get('attempt', 0),
                 'limit_ask': active.get('quote', {}).get(active['side'] + '_ask'),
                 'acknowledged_fill': acknowledgement.get('acknowledged_fill'),
@@ -413,6 +442,7 @@ class Trader:
             raise RuntimeError('INSUFFICIENT_SHARD_FUNDS')
         entry = {'ticker': signal['market_id'], 'side': side, 'intent': intent,
                  'signal': signal, 'quote': quote, 'created_at': now,
+                 'target_contracts': intent['count'],
                  'attempt': 0,
                  'status': 'delivery_unknown' if self.broker.enabled else 'observed_no_order'}
         # Crash after this commit never permits resubmission of the intent.
@@ -445,12 +475,12 @@ class Trader:
         self.journal.acknowledge(entry, acknowledgement)
         return {**entry, 'status': 'acknowledged', 'acknowledgement': acknowledgement}
 
-    def retry_unfilled(self, entry, fill):
-        """Retry only an authoritatively zero-filled IOC with a fresh live ask."""
+    def retry_unfilled(self, entry, fill, total, market):
+        """Retry a terminal IOC for only the still-missing contracts."""
         if self.coordinator:
             self.coordinator.claim()
         try:
-            return self._retry_unfilled(entry, fill)
+            return self._retry_unfilled(entry, fill, total, market)
         finally:
             if self.coordinator:
                 self.coordinator.release()
@@ -547,12 +577,15 @@ class Trader:
             return 'stop_rejection_backoff'
         return self._submit_stop(entry, market)
 
-    def _retry_unfilled(self, entry, fill):
+    def _retry_unfilled(self, entry, fill, total, market):
         from .engine import stamp
         from .kalshi_execution import acknowledged_order, definitive_rejection, order_payload
-        completed = {**entry, **fill, 'status': 'unfilled'}
-        market = self.broker.market(entry['ticker'])
+        completed = {**fill, 'status': 'terminal', 'intent': entry['intent']}
         now = time.time()
+        if entry.get('retry_rejection_code') in ('KALSHI_HTTP_401', 'KALSHI_HTTP_403'):
+            return 'entry_authorization_rejected'
+        if now - entry.get('retry_rejected_at', 0) < 5:
+            return 'entry_rejection_backoff'
         try:
             close_at = stamp(market['close_time'])
         except (KeyError, TypeError, ValueError):
@@ -560,8 +593,10 @@ class Trader:
         signal = entry.get('signal', {})
         if (signal.get('agrees') is not True or market.get('status') != 'active'
                 or market.get('market_type') != 'binary' or now >= close_at - 5):
-            self.journal.finish(completed)
-            return 'unfilled'
+            if money(total['filled']) == 0:
+                self.journal.finish({**entry, **total, 'status': 'unfilled'})
+                return 'unfilled'
+            return 'partial_waiting_for_settlement'
         try:
             opened_at = stamp(market['open_time'])
         except (KeyError, TypeError, ValueError):
@@ -570,50 +605,63 @@ class Trader:
             raise RuntimeError('MARKET_CLOSE_TIME_CHANGED')
         orders, positions = self.broker.account()
         if self.coordinator:
-            self.coordinator.verify_positions(orders, positions)
-        elif orders or any(money(p['position_fp']) != 0 for p in positions):
-            raise RuntimeError('RETRY_ACCOUNT_NOT_FLAT')
+            actual = self.coordinator.verify_positions(orders, positions)
+            expected = money(total['filled']) * (1 if entry['side'] == 'yes' else -1)
+            if actual.get(entry['ticker'], money(0)) != expected:
+                return 'entry_position_read_lag'
+        else:
+            actual = {p['ticker']: money(p['position_fp']) for p in positions
+                      if money(p['position_fp']) != 0}
+            expected = money(total['filled']) * (1 if entry['side'] == 'yes' else -1)
+            if orders or actual != ({entry['ticker']: expected} if expected else {}):
+                return 'entry_position_read_lag'
         side = entry['side']
         try:
             ask = money(market[side + '_ask_dollars'])
         except (KeyError, TypeError, ValueError, InvalidOperation):
-            raise RuntimeError('EXECUTABLE_QUOTE_UNAVAILABLE') from None
-        quantity = int(money(entry['intent']['count']))
+            return 'entry_waiting_for_executable_quote'
+        target = money(entry.get('target_contracts', entry['intent']['count']))
+        remainder = target - money(total['filled'])
+        if remainder <= 0 or remainder != remainder.quantize(money('.01')):
+            raise RuntimeError('ENTRY_REMAINDER_INVALID')
+        quantity = int(remainder) if remainder == int(remainder) else remainder
         attempt = int(entry.get('attempt', 0)) + 1
         try:
             intent = order_payload(entry['ticker'], side, quantity, ask,
-                                   market['exchange_index'], self.config, attempt=attempt)
+                                   market['exchange_index'], self.config, attempt=attempt,
+                                   fractional_remainder=type(quantity) is not int)
         except ValueError as exc:
             if str(exc) == 'ORDER_RISK_LIMIT':
                 return 'retry_waiting_for_executable_quote'
             raise
         if self.broker.balance(market['exchange_index']) < quantity * (ask + money('.07')):
-            raise RuntimeError('INSUFFICIENT_SHARD_FUNDS')
+            return 'entry_waiting_for_shard_funds'
         quote = {'timestamp': int(now), 'received_at': now, 'timely': True,
                  side + '_ask': str(ask), 'source': 'authoritative_market_retry'}
         retry = {'ticker': entry['ticker'], 'side': side, 'intent': intent,
                  'signal': signal, 'quote': quote, 'created_at': now,
+                 'target_contracts': str(target),
+                 'accumulated': {key: total[key] for key in ('filled', 'cost', 'fees')},
                  'attempt': attempt, 'status': 'delivery_unknown'}
         # This transaction both accounts for the prior no-fill and reserves the
         # next unique client order ID. A crash cannot cause a duplicate POST.
         self.journal.retry(completed, retry)
-        self.journal.before_post()
-        if self.coordinator:
-            try:
+        try:
+            self.journal.before_post()
+            if self.coordinator:
                 self.coordinator.before_post()
-            except RuntimeError as exc:
-                self.journal.finish({**retry, 'status': 'rejected', 'rejection_code': str(exc)})
-                raise
+        except RuntimeError as exc:
+            self.journal.reject_retry(retry, str(exc))
+            raise
         if time.time() >= close_at - 5:
-            self.journal.finish({**retry, 'status': 'expired_before_submit'})
+            self.journal.reject_retry(retry, 'ENTRY_EXPIRED_BEFORE_POST')
             return 'retry_expired_before_submit'
         try:
             response = self.broker.submit(intent)
         except RuntimeError as exc:
             code = str(exc)
             if definitive_rejection(code):
-                self.journal.finish({**retry, 'status': 'rejected',
-                                     'rejection_code': code})
+                self.journal.reject_retry(retry, code)
             raise
         acknowledgement = acknowledged_order(response, intent)
         self.journal.acknowledge(retry, acknowledgement)
@@ -621,7 +669,7 @@ class Trader:
 
     def reconcile(self, *, allow_order_retry=True):
         from .engine import stamp
-        from .kalshi_execution import STOP_BID, reconciled_order
+        from .kalshi_execution import STOP_BID, combined_entry_fill, reconciled_order
         state = self.journal.state()
         entry = state.get('active')
         if not entry:
@@ -634,14 +682,26 @@ class Trader:
             # remains ambiguous and must block resubmission.
             return ('acknowledged_waiting_for_read_model' if acknowledgement
                     else 'unknown_delivery_blocked')
-        fill = reconciled_order(order, entry['intent'], entry['side'])
-        if money(fill['filled']) == 0:
-            if not allow_order_retry:
-                return 'zero_fill_retry_disabled'
-            return self.retry_unfilled(entry, fill)
+        terminal = reconciled_order(order, entry['intent'], entry['side'])
+        fill = combined_entry_fill(entry, terminal)
         market = self.broker.market(entry['ticker'])
         if entry.get('stop'):
             return self._reconcile_stop(entry, market, allow_order_retry=allow_order_retry)
+        target = money(entry.get('target_contracts', entry['intent']['count']))
+        if money(fill['filled']) < target:
+            if money(fill['filled']) and market.get('status') == 'active':
+                raw_bid = market.get(entry['side'] + '_bid_dollars')
+                if raw_bid is not None and money(raw_bid) <= STOP_BID:
+                    self.journal.trigger_stop(entry, fill, time.time())
+                    return self._reconcile_stop(self.journal.state()['active'], market)
+            if market.get('status') in ('settled', 'finalized') and market.get('result') in ('yes', 'no'):
+                if money(fill['filled']) == 0:
+                    self.journal.finish({**entry, **fill, 'status': 'unfilled'})
+                    return 'unfilled'
+                return self._settle_entry({**entry, **fill}, market)
+            if not allow_order_retry:
+                return 'entry_topup_retry_disabled'
+            return self.retry_unfilled(entry, terminal, fill, market)
         if market.get('status') not in ('settled', 'finalized') or market.get('result') not in ('yes', 'no'):
             orders, positions = self.broker.account()
             actual = {p['ticker']: money(p['position_fp']) for p in positions if money(p['position_fp']) != 0}
