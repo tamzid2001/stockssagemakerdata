@@ -49,7 +49,7 @@ def expected_positions(entries: list[tuple[str, dict]], actual: dict[str, Decima
         sign = 1 if entry['side'] == 'yes' else -1
         end = entry.get('signal', {}).get('market_end')
         if not isinstance(end, (int, float)):
-            raise RuntimeError('ACCOUNT_MARKET_END_UNVERIFIED')
+            raise RuntimeError('ACCOUNT_MARKET_END_UNVERIFIED')  # noqa: TRY004 - public failure code
         # Kalshi may clear the position before its settlement read model is
         # ready.  Until close, however, an exact position must be present.
         if now < end or ticker in actual:
