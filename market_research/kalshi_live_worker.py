@@ -91,10 +91,13 @@ def run(config, mode, duration):
               'authenticated_reads': True, 'resting_order_count': len(orders),
               'position_count': len(positions), 'orders_sent': 0}))
         return
-    journal = LiveJournal(config, broker.key_id, os.environ.get('GITHUB_RUN_ID', 'local'), broker.enabled)
+    journal = LiveJournal(config, broker.key_id, os.environ.get('GITHUB_RUN_ID', 'local'),
+        broker.enabled, shared_protocol=broker.enabled)
     journal.claim()
     session_baseline = journal.public_summary()
-    trader = Trader(config, broker, journal)
+    from .kalshi_shared_account import SharedAccountCoordinator
+    coordinator = SharedAccountCoordinator(journal, broker) if broker.enabled else None
+    trader = Trader(config, broker, journal, coordinator=coordinator)
     stopped = False
     def stop(*_):
         nonlocal stopped
@@ -131,9 +134,14 @@ def run(config, mode, duration):
                     # A proven zero-fill IOC is retried at roughly one-second
                     # cadence. Each cycle still authenticates the exact prior
                     # order before a uniquely identified replacement is sent.
-                    interval = 1 if status.startswith('retry_') else 20
+                    interval = 1 if status.startswith(('retry_', 'account_order_gate_')) else 20
                     if now - last_reconcile >= interval:
-                        status = trader.reconcile()
+                        try:
+                            status = trader.reconcile()
+                        except RuntimeError as exc:
+                            if str(exc) != 'LEASE_HELD':
+                                raise
+                            status = 'account_order_gate_wait'
                         summary = journal.public_summary()
                         print(json.dumps({'event': 'execution_heartbeat', 'mode': mode,
                             'status': status, 'worker_started_at': boot_at,
@@ -221,10 +229,9 @@ def run(config, mode, duration):
                             entry_at = s['signal_at'] + 60
                             quote = next((r for r in rows if r['timestamp'] == entry_at), None)
                             if quote and now <= entry_at + 30:
-                                # Any rejection is terminal for this market's FIRST signal.
-                                s['done'] = True
                                 try:
                                     entry = trader.enter(s, quote, now)
+                                    s['done'] = True
                                     acknowledgement = entry.get('acknowledgement', {})
                                     acknowledged_fill = acknowledgement.get('acknowledged_fill')
                                     print(json.dumps({'event': 'entry_order_acknowledged' if acknowledgement else 'entry_observed',
@@ -238,6 +245,12 @@ def run(config, mode, duration):
                                         'acknowledged_remaining': acknowledgement.get('acknowledged_remaining')}), flush=True)
                                 except (RuntimeError, ValueError, KeyError) as exc:
                                     code = str(exc) if re.fullmatch(r'[A-Z][A-Z0-9_]{3,80}', str(exc)) else 'EXECUTION_BLOCKED'
+                                    # A competing strategy's short account-admission
+                                    # lease may clear within this quote's 30s window.
+                                    # All other preflight/rejection outcomes remain
+                                    # terminal for the first signal.
+                                    if code != 'LEASE_HELD':
+                                        s['done'] = True
                                     persist_evidence(journal, ticker, {'kind': 'entry_blocked', 'error_type': type(exc).__name__,
                                         'code': code})
                                     print(json.dumps({'event': 'entry_blocked', 'ticker': ticker,
@@ -250,7 +263,7 @@ def run(config, mode, duration):
                             archived.add(ticker)
                     if store.at_capacity:
                         raise RuntimeError('LOCAL_EVIDENCE_CAPACITY_REACHED')
-                    time.sleep(1 if status.startswith('retry_') else 3)
+                    time.sleep(1 if status.startswith(('retry_', 'account_order_gate_')) else 3)
             finally:
                 near_close.stop()
                 collector.stop()
@@ -290,8 +303,6 @@ def main():
                     max_recovery_increases=args.max_recovery_increases)
     if not 1 <= args.duration_minutes <= 300:
         parser.error('Duration must be 1..300 minutes')
-    if config_type is CoinConfig and args.mode != 'config' and args.subaccount == 0:
-        parser.error('An existing dedicated coin subaccount is required for account access')
     if args.mode == 'config':
         print(json.dumps({'configuration': asdict(config), 'config_hash': config.fingerprint, 'orders_sent': 0}))
     else:

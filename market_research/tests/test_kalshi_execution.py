@@ -81,8 +81,15 @@ def test_coin_series_isolated_and_not_implicitly_live(series, credentials):
     assert not live_allowed(replace(config, subaccount=2), True, gated)
 
 
-def test_coin_requires_dedicated_existing_subaccount():
-    assert not live_allowed(CoinConfig(series_ticker='KXETH15M', subaccount=0), True, {})
+def test_coin_main_account_requires_its_own_approval():
+    config = CoinConfig(series_ticker='KXETH15M', subaccount=0)
+    assert not live_allowed(config, True, {})
+    env = {'QUANTURA_KALSHI_ETH_LIVE_ENABLED': 'true',
+           'QUANTURA_KALSHI_ETH_APPROVED_CONFIG': config.fingerprint,
+           'QUANTURA_KALSHI_ETH_APPROVED_SHA': 'a' * 40,
+           'QUANTURA_CODE_SHA': 'a' * 40}
+    assert live_allowed(config, True, env)
+    assert not live_allowed(replace(config, subaccount=1), True, env)
     with pytest.raises(ValueError, match='INVALID_COIN_CONFIGURATION'):
         CoinConfig(series_ticker='KXBTC15M', subaccount=1)
 
@@ -333,11 +340,14 @@ def test_live_claim_replaces_configuration_map_without_resetting_recovery():
     journal = LiveJournal.__new__(LiveJournal)
     journal.config = config
     journal.live = True
+    journal.shared_protocol = True
     journal.holder = 'next-worker'
     journal.ref = Ref()
     journal.fs = type('Firestore', (), {'transactional': staticmethod(lambda fn: fn)})()
     journal.transact = lambda operation: operation(tx)
     journal.claim()
+    assert tx.updated['shared_account_protocol'] == 1
+    assert tx.updated['shared_account_fence'] == tx.updated['lease']['fence']
     assert tx.updated['configuration'] == config.__dict__
     for key, value in recovering.items():
         assert tx.updated['state'][key] == value
@@ -718,6 +728,31 @@ def test_historical_daily_loss_does_not_block_but_foreign_positions_do(rig):
     broker.account = lambda: ([], [{'ticker': 'FOREIGN', 'position_fp': '1'}])
     with pytest.raises(RuntimeError, match='SUBACCOUNT_NOT_FLAT'): trader.enter(signal, quote, now)
     assert not broker.sent
+
+
+def test_shared_account_allows_attributed_foreign_position_and_own_settlement(rig):
+    trader, broker, journal, signal, quote, now = rig
+    calls = []
+    class Coordinator:
+        def claim(self): calls.append('claim')
+        def release(self): calls.append('release')
+        def before_post(self): calls.append('before_post')
+        def verify_positions(self, orders, positions):
+            calls.append('verify')
+            assert not orders
+            assert positions == [{'ticker': 'KXETH15M-OTHER', 'position_fp': '-1'}]
+    trader.coordinator = Coordinator()
+    original_account = broker.account
+    broker.account = lambda: ([], [{'ticker': 'KXETH15M-OTHER', 'position_fp': '-1'},
+        *original_account()[1]])
+    with pytest.raises(RuntimeError, match='KALSHI_DELIVERY_OR_RESPONSE_UNKNOWN'):
+        trader.enter(signal, quote, now)
+    assert calls == ['claim', 'verify', 'before_post', 'release'] and len(broker.sent) == 1
+    broker.order = final_order(broker.sent[0])
+    assert trader.reconcile() == 'held_to_settlement'
+    broker.settled = True
+    assert trader.reconcile() == 'settled'
+    assert money(journal.state()['net']) == Decimal('.4825')
 
 
 def test_99c_provisional_quote_cannot_close_position_or_increase_recovery(rig):

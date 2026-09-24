@@ -90,7 +90,7 @@ def live_allowed(config, requested, env=None):
     env = os.environ if env is None else env
     prefix = ('QUANTURA_KALSHI_' + config.series_ticker[2:-3] + '_'
               if isinstance(config, CoinConfig) else 'QUANTURA_KALSHI_')
-    return bool(requested and (not isinstance(config, CoinConfig) or config.subaccount > 0)
+    return bool(requested
         and env.get(prefix + 'LIVE_ENABLED') == 'true'
         and env.get(prefix + 'APPROVED_CONFIG') == config.fingerprint
         and re.fullmatch('[a-f0-9]{40}', env.get('QUANTURA_CODE_SHA', ''))

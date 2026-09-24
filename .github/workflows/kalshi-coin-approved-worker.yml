@@ -46,7 +46,7 @@ jobs:
       CUDA_VISIBLE_DEVICES: ''
       GRANITE_DEVICE: cpu
     steps:
-      - name: Validate bounded series, dedicated account, and approval
+      - name: Validate bounded series, shared account, and approval
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +54,6 @@ jobs:
           [[ "$WORKFLOW_FILE" == "kalshi-${COIN,,}-approved-trader.yml" ]]
           [[ "$MODE" =~ ^(verify|readiness|observe|live)$ ]]
           [[ "$SUBACCOUNT" =~ ^[0-9]+$ ]] && (( SUBACCOUNT >= 0 && SUBACCOUNT <= 63 ))
-          if [[ "$MODE" != verify ]]; then (( SUBACCOUNT >= 1 )); fi
           [[ "$HISTORY_MINUTES" =~ ^([1-9]|1[0-2])$ ]]
           [[ "$QUANTURA_CODE_SHA" =~ ^[a-f0-9]{40}$ ]]
           [[ "$DIRECTION_POLICY" =~ ^(confirmed|provisional_near_close)$ ]]
