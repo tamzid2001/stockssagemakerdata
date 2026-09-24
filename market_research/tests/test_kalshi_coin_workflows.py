@@ -1,4 +1,4 @@
-"""The five live templates remain independently approval-gated and off by default."""
+"""The five shared-main-account templates remain independently approval-gated."""
 from pathlib import Path
 import yaml
 
@@ -12,12 +12,14 @@ def test_each_coin_has_its_own_disabled_dispatch_and_series_identity():
     assert shared['jobs']['worker']['environment'] == 'quantura-kalshi-live'
     assert 'KX${COIN}15M' in (ROOT / 'kalshi-coin-approved-worker.yml').read_text()
     assert shared['jobs']['worker']['timeout-minutes'] <= 355
+    assert '(( SUBACCOUNT >= 1 ))' not in (ROOT / 'kalshi-coin-approved-worker.yml').read_text()
     for coin in COINS:
         workflow = yaml.safe_load((ROOT / f'kalshi-{coin.lower()}-approved-trader.yml').read_text())
         inputs = workflow[True]['workflow_dispatch']['inputs']
         assert inputs['mode']['default'] == 'verify'
         assert inputs['continuous']['default'] is False
         assert inputs['subaccount']['default'] == 0
+        assert 'dedicated subaccount' not in str(inputs['subaccount']['description']).lower()
         assert inputs['history_minutes']['default'] == '1'
         assert workflow['concurrency']['cancel-in-progress'] is False
         called = workflow['jobs']['worker']
@@ -38,6 +40,7 @@ def test_watchdog_restarts_only_explicitly_enabled_coin_without_duplicates():
     assert all('CONTINUOUS' in row['enabled'] for row in rows)
     text = path.read_text()
     assert "matrix.enabled == 'true'" in text
+    assert 'Number(e.SUBACCOUNT)<0' in text
     assert "e.MODE === 'live' && e.LIVE_ENABLED !== 'true'" in text
     for status in ('queued', 'in_progress', 'requested', 'waiting', 'pending'):
         assert status in text

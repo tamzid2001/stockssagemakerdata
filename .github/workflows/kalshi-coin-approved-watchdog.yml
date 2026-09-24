@@ -99,7 +99,7 @@ jobs:
                 e.WORKFLOW_FILE !== `kalshi-${e.COIN.toLowerCase()}-approved-trader.yml` ||
                 !['observe','live'].includes(e.MODE) ||
                 !/^[a-f0-9]{40}$/.test(e.APPROVED_SHA || '') ||
-                !Number.isInteger(Number(e.SUBACCOUNT)) || Number(e.SUBACCOUNT)<1 || Number(e.SUBACCOUNT)>63 ||
+                !Number.isInteger(Number(e.SUBACCOUNT)) || Number(e.SUBACCOUNT)<0 || Number(e.SUBACCOUNT)>63 ||
                 !/^(?:[1-9]|1[0-2])$/.test(e.HISTORY_MINUTES) ||
                 !['confirmed','provisional_near_close'].includes(e.DIRECTION_POLICY) ||
                 !Number.isSafeInteger(Number(e.STARTING_CONTRACTS)) || Number(e.STARTING_CONTRACTS)<1 ||

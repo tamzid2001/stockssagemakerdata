@@ -1,7 +1,6 @@
 """Private, fenced, bounded execution journal; never public Git or artifacts."""
 from dataclasses import asdict
 from decimal import InvalidOperation
-import hashlib
 import json
 import time
 
@@ -84,12 +83,16 @@ def approved_reconfiguration(existing, requested, state):
 
 
 class LiveJournal(Store):
-    def __init__(self, config, key_id, holder, live):
-        # Same credential/subaccount is serialized across ALL forecast timings.
-        identifier = hashlib.sha256(f'{key_id}:{config.subaccount}:{live}'.encode()).hexdigest()
+    def __init__(self, config, key_id, holder, live, *, shared_protocol=False):
+        from .kalshi_shared_account import strategy_session
+        # BTC retains its existing account document and durable recovery state.
+        # Each additional series has an independent fenced trade journal; order
+        # submission is coordinated separately at the account boundary.
+        identifier = strategy_session(key_id, config.subaccount, live,
+            getattr(config, 'series_ticker', 'KXBTC15M'))
         super().__init__(identifier, holder)
         self.ref = self.db.collection('kalshi_execution_sessions').document(identifier)
-        self.config, self.live = config, live
+        self.config, self.live, self.shared_protocol = config, live, shared_protocol
 
     def claim(self, configuration=None):
         @self.fs.transactional
@@ -106,6 +109,9 @@ class LiveJournal(Store):
             values = {'lease': lease, 'configuration': requested,
                 'paper_only': not self.live, 'state': state,
                 'enabled': old.get('enabled', True)}
+            if (self.live and getattr(self, 'shared_protocol', False) and
+                    getattr(self.config, 'series_ticker', 'KXBTC15M') == 'KXBTC15M'):
+                values.update(shared_account_protocol=1, shared_account_fence=lease['fence'])
             if snapshot.exists:
                 # update replaces the complete configuration map. A merge-set
                 # retains deleted nested keys and re-triggers the guard at the
@@ -277,10 +283,20 @@ class LiveJournal(Store):
 
 
 class Trader:
-    def __init__(self, config, broker, journal):
+    def __init__(self, config, broker, journal, coordinator=None):
         self.config, self.broker, self.journal = config, broker, journal
+        self.coordinator = coordinator
 
     def enter(self, signal, quote, now):
+        if self.coordinator:
+            self.coordinator.claim()
+        try:
+            return self._enter(signal, quote, now)
+        finally:
+            if self.coordinator:
+                self.coordinator.release()
+
+    def _enter(self, signal, quote, now):
         from .engine import stamp
         from .kalshi_execution import order_payload
         if (quote['timestamp'] != signal['signal_at'] + 60 or not quote.get('timely')
@@ -291,7 +307,9 @@ class Trader:
         if state.get('active'):
             raise RuntimeError('PRIOR_TRADE_UNRECONCILED')
         orders, positions = self.broker.account()
-        if orders or any(money(p['position_fp']) != 0 for p in positions):
+        if self.coordinator:
+            self.coordinator.verify_positions(orders, positions)
+        elif orders or any(money(p['position_fp']) != 0 for p in positions):
             raise RuntimeError('SUBACCOUNT_NOT_FLAT')
         market = self.broker.market(signal['market_id'])
         if (market.get('status') != 'active' or market.get('market_type') != 'binary'
@@ -319,6 +337,12 @@ class Trader:
             self.journal.finish(entry)
             return entry
         self.journal.before_post()
+        if self.coordinator:
+            try:
+                self.coordinator.before_post()
+            except RuntimeError as exc:
+                self.journal.finish({**entry, 'status': 'rejected', 'rejection_code': str(exc)})
+                raise
         if time.time() > quote['timestamp'] + 30 or time.time() >= signal['market_end'] - 5:
             self.journal.finish({**entry, 'status': 'expired_before_submit'})
             raise RuntimeError('ENTRY_EXPIRED_BEFORE_POST')
@@ -337,6 +361,15 @@ class Trader:
 
     def retry_unfilled(self, entry, fill):
         """Retry only an authoritatively zero-filled IOC with a fresh live ask."""
+        if self.coordinator:
+            self.coordinator.claim()
+        try:
+            return self._retry_unfilled(entry, fill)
+        finally:
+            if self.coordinator:
+                self.coordinator.release()
+
+    def _retry_unfilled(self, entry, fill):
         from .engine import stamp
         from .kalshi_execution import acknowledged_order, definitive_rejection, order_payload
         completed = {**entry, **fill, 'status': 'unfilled'}
@@ -358,7 +391,9 @@ class Trader:
         if close_at != signal.get('market_end') or close_at - opened_at != 900:
             raise RuntimeError('MARKET_CLOSE_TIME_CHANGED')
         orders, positions = self.broker.account()
-        if orders or any(money(p['position_fp']) != 0 for p in positions):
+        if self.coordinator:
+            self.coordinator.verify_positions(orders, positions)
+        elif orders or any(money(p['position_fp']) != 0 for p in positions):
             raise RuntimeError('RETRY_ACCOUNT_NOT_FLAT')
         side = entry['side']
         try:
@@ -385,6 +420,12 @@ class Trader:
         # next unique client order ID. A crash cannot cause a duplicate POST.
         self.journal.retry(completed, retry)
         self.journal.before_post()
+        if self.coordinator:
+            try:
+                self.coordinator.before_post()
+            except RuntimeError as exc:
+                self.journal.finish({**retry, 'status': 'rejected', 'rejection_code': str(exc)})
+                raise
         if time.time() >= close_at - 5:
             self.journal.finish({**retry, 'status': 'expired_before_submit'})
             return 'retry_expired_before_submit'
@@ -425,9 +466,10 @@ class Trader:
             orders, positions = self.broker.account()
             actual = {p['ticker']: money(p['position_fp']) for p in positions if money(p['position_fp']) != 0}
             expected = money(fill['filled']) * (1 if entry['side'] == 'yes' else -1)
-            if orders:
+            if orders and (not self.coordinator or any(o.get('ticker') == entry['ticker'] for o in orders)):
                 raise RuntimeError('POSITION_ACCOUNTING_MISMATCH')
-            if actual == {entry['ticker']: expected}:
+            if (actual.get(entry['ticker']) == expected if self.coordinator
+                    else actual == {entry['ticker']: expected}):
                 return 'held_to_settlement'
             # Kalshi's portfolio position can disappear after the official
             # market close before the market and settlement read models expose
@@ -439,7 +481,7 @@ class Trader:
                 close_at = stamp(market['close_time'])
             except (KeyError, TypeError, ValueError):
                 raise RuntimeError('MARKET_CLOSE_TIME_UNAVAILABLE') from None
-            if time.time() >= close_at and not actual:
+            if time.time() >= close_at and (entry['ticker'] not in actual if self.coordinator else not actual):
                 return 'settlement_accounting_pending'
             raise RuntimeError('POSITION_ACCOUNTING_MISMATCH')
         settlements = self.broker.pages('/portfolio/settlements', 'settlements', ticker=entry['ticker'])
@@ -457,7 +499,9 @@ class Trader:
                 or money(row['revenue']) / 100 != payout or money(row['fee_cost']) != money(fill['fees'])):
             raise RuntimeError('SETTLEMENT_RECONCILIATION_MISMATCH')
         orders, positions = self.broker.account()
-        if orders or any(money(p['position_fp']) != 0 for p in positions):
+        if ((orders and (not self.coordinator or any(o.get('ticker') == entry['ticker'] for o in orders)))
+                or (any(money(p['position_fp']) != 0 for p in positions) if not self.coordinator
+                    else any(p['ticker'] == entry['ticker'] and money(p['position_fp']) != 0 for p in positions))):
             raise RuntimeError('SETTLEMENT_NOT_FLAT')
         net = payout - money(fill['cost']) - money(fill['fees'])
         self.journal.finish({**entry, **fill, 'status': 'settled', 'net_pnl': str(net),
