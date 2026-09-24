@@ -194,7 +194,7 @@
                               <label class="label" for="ensemble-cutoff-mode">Data cutoff</label>
                               <select id="ensemble-cutoff-mode"><option value="latest">Latest available</option><option value="date">Calendar date and time</option><option value="relative">Minutes / hours / days ago</option></select>
                               <input id="ensemble-history-cutoff" type="datetime-local" step="60" aria-label="Data cutoff in your local timezone" hidden disabled />
-                              <div id="ensemble-relative-cutoff" class="ensemble-duration-control" hidden><input id="ensemble-history-lag" name="history_lag_amount" type="number" min="0" max="129600" step="1" value="0" aria-label="Data cutoff amount" /><select id="ensemble-history-lag-unit" name="history_lag_unit" aria-label="Data cutoff unit"><option value="minutes">Minutes ago</option><option value="hours">Hours ago</option><option value="days" selected>Days ago</option></select></div>
+                              <div id="ensemble-relative-cutoff" class="ensemble-duration-control" hidden><input id="ensemble-history-lag" name="history_lag_amount" type="number" min="0" step="1" value="0" aria-label="Data cutoff amount" /><select id="ensemble-history-lag-unit" name="history_lag_unit" aria-label="Data cutoff unit"><option value="minutes">Minutes ago</option><option value="hours">Hours ago</option><option value="days" selected>Days ago</option></select></div>
                               <small id="ensemble-timezone-label" class="muted">Times use your device timezone. Later prices overlay the forecast.</small>
                             </div>
                           </div>

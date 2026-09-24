@@ -454,8 +454,8 @@ async function materializeWorkspaceDataset(
 
 export function historyCutoffAt(value: unknown, now = Date.now()): number | undefined {
   if (value === undefined || value === 0) return undefined;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 129600) {
-    throw new PredictionMarketDataError("history_lag_invalid", "Choose a cutoff between now and 90 days ago.", 422);
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value * 60_000 > now) {
+    throw new PredictionMarketDataError("history_lag_invalid", "Choose a nonnegative cutoff duration within the available timeline.", 422);
   }
   return Math.floor(now / 60_000) * 60_000 - value * 60_000;
 }
@@ -465,8 +465,8 @@ export function absoluteHistoryCutoff(body: JsonRecord, now = Date.now()): numbe
   if (body.history_lag_minutes) throw new Error("history_cutoff_conflict");
   const value = text(body.history_cutoff_at, 100);
   const cutoff = Date.parse(value);
-  if (!/(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(cutoff) || cutoff > now || now - cutoff > 90 * 86400_000) {
-    throw new PredictionMarketDataError("history_cutoff_invalid", "Choose a timezone-aware cutoff within the last 90 days, not in the future.", 422);
+  if (!/(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(cutoff) || cutoff < 0 || cutoff > now) {
+    throw new PredictionMarketDataError("history_cutoff_invalid", "Choose a timezone-aware cutoff that is not in the future; source history may still be unavailable.", 422);
   }
   return cutoff;
 }

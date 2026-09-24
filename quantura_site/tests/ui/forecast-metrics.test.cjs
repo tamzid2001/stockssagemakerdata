@@ -60,9 +60,9 @@ test('missing intermediate observations never become invented outcomes',()=>{
 });
 test('forecast metrics use only matching observations without asking for extra inference',()=>{
   const dom=new JSDOM('<section id="metrics"></section>'),host=dom.window.document.getElementById('metrics'),j=job();
-  j.observations=[];render(host,j);assert.match(host.textContent,/Forecast quality/);assert.match(host.textContent,/No additional forecast/);
+  j.observations=[];render(host,j);assert.match(host.textContent,/Forecast quality/);assert.match(host.textContent,/No historical validation or second model run/);
   assert.doesNotMatch(host.textContent,/Not available/);assert.equal(host.querySelectorAll('dl > div').length,4);
-  render(host,job());assert.match(host.textContent,/3 \/ 3 timestamp-matched/);assert.match(host.textContent,/Small validation sample/);
+  render(host,job());assert.match(host.textContent,/3 \/ 3 timestamp-matched/);assert.match(host.textContent,/Small outcome sample/);
   const help=host.querySelector('button');help.click();assert.equal(help.getAttribute('aria-expanded'),'true');
   assert.equal(help.nextElementSibling.hidden,false);assert.match(host.textContent,/Weighted quantile loss/);
   help.focus();render(host,job());
@@ -70,26 +70,25 @@ test('forecast metrics use only matching observations without asking for extra i
   assert.equal(dom.window.document.activeElement,host.querySelector('button'));
   assert.doesNotMatch(host.textContent,/Brier|ensemble accuracy|Median absolute error|Forecast bias|WAPE|Directional accuracy|R²|MASE|coverage/i);dom.window.close();
 });
-test('legacy historical validation remains separate from the requested forecast',()=>{
+test('legacy historical validation is not displayed as this forecast quality',()=>{
   const dom=new JSDOM('<section></section>'),host=dom.window.document.querySelector('section'),j=job();
   j.observations=[];
   j.historical_validation={status:'completed',holdout_rows:3,training_rows:40,metrics:{count:3,point_count:3,mae:1.25,rmse:2,smape:.05,average_wql:.2}};
   render(host,j);
-  assert.deepEqual([...host.querySelectorAll('details dd')].map(el=>el.textContent),['1.25','2','5.00%','0.2']);
-  assert.equal(host.querySelector('details').open,false);
-  assert.match(host.textContent,/separate forecast/);assert.match(host.textContent,/40 earlier training values/);
-  assert.match(host.textContent,/No additional forecast/);
+  assert.equal(host.querySelector('details'),null);
+  assert.doesNotMatch(host.textContent,/1\.25|40 earlier training values|historical\/replay comparison/);
+  assert.match(host.textContent,/No historical validation or second model run/);
   assert.doesNotMatch(host.textContent,/Choose Reproduce/);
   dom.window.close();
 });
 test('normal forecasts do not request another historical run or invent unmatched metrics',()=>{
   const dom=new JSDOM('<section></section>'),host=dom.window.document.querySelector('section'),j=job();j.observations=[];
   for(const status of ['failed','insufficient_history','no_matching_outcomes',undefined]) {
-    j.historical_validation=status?{status,minimum_training_rows:32}:undefined;render(host,j);assert.match(host.textContent,/No additional forecast/);
+    j.historical_validation=status?{status,minimum_training_rows:32}:undefined;render(host,j);assert.match(host.textContent,/No historical validation or second model run/);
     assert.doesNotMatch(host.textContent,/Reproduce|retry|withhold validation/i);
     assert.equal(host.querySelectorAll('dd').length,4);assert.ok([...host.querySelectorAll('dd')].every(el=>el.textContent==='—'));
   }
   j.historical_validation={status:'completed',holdout_rows:3,training_rows:40,metrics:{count:3,point_count:0,mae:null,rmse:null,smape:null,average_wql:null}};
-  render(host,j);assert.match(host.textContent,/P50 was not requested/);assert.match(host.textContent,/all zero/);
+  render(host,j);assert.doesNotMatch(host.textContent,/P50 was not requested|all zero|historical\/replay comparison/);
   dom.window.close();
 });

@@ -200,7 +200,8 @@ test("minute cutoffs are strict, exclude the latest observations before choosing
   assert.equal(new Date(cutoff).toISOString(), "2026-09-12T16:00:00.000Z");
   assert.equal(historyCutoffAt(0, now), undefined);
   assert.equal(historyCutoffAt(2 * 1440, now), Math.floor(now / 60000) * 60000 - 2 * 86400000);
-  for (const v of [NaN, Infinity, -1, 1.5, 129601, "30", true, null]) assert.throws(() => historyCutoffAt(v, now));
+  assert.equal(historyCutoffAt(129601, now), Math.floor(now / 60000) * 60000 - 129601 * 60000);
+  for (const v of [NaN, Infinity, -1, 1.5, "30", true, null]) assert.throws(() => historyCutoffAt(v, now));
   const rows = Array.from({length:600}, (_,i) => ({timestamp:new Date(now-35_000-(599-i)*60_000).toISOString(),price:.4}));
   const selected = forecastObservationWindow(rows, 60_000, cutoff);
   assert.equal(selected.rows.length, 500);
@@ -373,10 +374,11 @@ test("free access includes configured foundation models without bypassing model 
   }
 });
 
-test("absolute local-time cutoffs become UTC with future, old and conflicting values rejected", () => {
+test("absolute local-time cutoffs become UTC without an arbitrary 90-day cap", () => {
   const now = Date.parse("2026-09-15T20:00:00Z");
   assert.equal(absoluteHistoryCutoff({history_cutoff_at:"2026-09-15T15:30:00-04:00"}, now), Date.parse("2026-09-15T19:30:00Z"));
-  for (const value of ["2026-09-15T21:00:00Z", "2020-01-01T00:00:00Z", "2026-09-15T15:30:00", "bad"]) assert.throws(() => absoluteHistoryCutoff({history_cutoff_at:value},now));
+  assert.equal(absoluteHistoryCutoff({history_cutoff_at:"2020-01-01T00:00:00Z"}, now), Date.parse("2020-01-01T00:00:00Z"));
+  for (const value of ["2026-09-15T21:00:00Z", "2026-09-15T15:30:00", "bad"]) assert.throws(() => absoluteHistoryCutoff({history_cutoff_at:value},now));
   assert.throws(() => absoluteHistoryCutoff({history_cutoff_at:"2026-09-15T15:30:00-04:00",history_lag_minutes:30},now), /conflict/);
   const minute = resolvePredictionEnd({prediction_end_at:"2026-09-15T16:00:00-04:00",calendar:"NONE"},"2026-09-15T19:15:00Z","1min");
   assert.equal(minute.prediction_length,45);
