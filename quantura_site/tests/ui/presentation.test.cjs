@@ -382,8 +382,10 @@ test('Quantura Forecast is the expanded primary form with exactly one submission
   const panel=document.querySelector('[data-panel="forecast"]');
   assert.equal(panel.querySelector('h2').textContent,'Quantura Forecast');
   assert.equal(panel.querySelector('#ensemble-forecast-settings').tagName,'SECTION');
-  assert.equal(panel.querySelectorAll('button[type="submit"]').length,1);
-  assert.equal(panel.querySelector('button[type="submit"]').textContent.trim(),'Run forecast');
+  assert.equal(panel.querySelectorAll('#ensemble-forecast-form button[type="submit"]').length,1);
+  assert.equal(panel.querySelector('#ensemble-forecast-form button[type="submit"]').textContent.trim(),'Run forecast');
+  assert.equal(panel.querySelector('#backtest-open').type,'button');
+  assert.equal(panel.querySelector('#backtest-dialog #backtest-run').type,'submit');
   assert.equal(panel.querySelector('#forecast-form'),null);
   assert.equal(panel.querySelector('#legacy-forecast-detail').hidden,true);
   assert.doesNotMatch(panel.textContent,/Advanced asynchronous forecast|Five-model probabilistic ensemble|Open this section/);

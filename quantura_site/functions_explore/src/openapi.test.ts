@@ -15,6 +15,14 @@ test("OpenAPI local schema references resolve", () => {
   visit(document);
 });
 
+test("backtest creation, result and strategy export document safe read/run scopes", () => {
+  const doc = buildOpenApiDocument() as any;
+  assert.equal(doc.paths["/backtests"].post["x-quantura-scope"], "backtests:run");
+  assert.equal(doc.paths["/backtests/{id}/strategy"].get["x-quantura-scope"], "backtests:read");
+  assert.equal(doc.components.schemas.BacktestStrategy.properties.type.const, "sma_crossover");
+  assert.equal(doc.paths["/backtests"].post.responses["201"].content["application/json"].example.data.live_eligible, false);
+});
+
 test("forecast API documents historical validation scores separately from future outcomes",()=>{
   const doc=buildOpenApiDocument() as any;
   const schema=doc.components.schemas.HistoricalForecastValidation;

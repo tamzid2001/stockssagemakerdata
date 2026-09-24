@@ -803,7 +803,7 @@
     BR: "en",
     AU: "en",
   });
-  const UI_I18N_TEXT = Object.freeze({
+  let UI_I18N_TEXT = Object.freeze({
     en: Object.freeze({
       nav_terminal: "Terminal",
       nav_research: "Research",
@@ -861,296 +861,6 @@
       language_arabic: "Arabic",
       language_bengali: "Bengali",
       question_placeholder: "Example: Is this stock overvalued vs peers, and what are the top near-term risks?",
-    }),
-    es: Object.freeze({
-      nav_terminal: "Terminal",
-      nav_research: "Investigacion",
-      nav_blog: "Blog",
-      nav_pricing: "Precios",
-      nav_contact: "Contacto",
-      nav_notifications: "Notificaciones",
-      sign_in: "Iniciar sesion",
-      sign_out: "Cerrar sesion",
-      dashboard: "Panel",
-      open_dashboard: "Abrir panel",
-      go_to_dashboard: "Ir al panel",
-      start_free: "Comenzar gratis",
-      logged_in: "Sesion iniciada",
-      logged_out: "Sesion cerrada",
-      not_signed_in: "No has iniciado sesion",
-      open_billing_portal: "Abrir portal de facturacion de Stripe",
-      signin_manage_billing: "Inicia sesion para gestionar la facturacion",
-      signin_set_profile: "Inicia sesion para configurar tu perfil publico del ranking.",
-      open_notifications: "Abrir notificaciones",
-      signin_manage_notifications: "Inicia sesion para gestionar notificaciones",
-      account: "Cuenta",
-      leaderboard_profile: "Perfil publico",
-      sidebar_forecast: "Forecast",
-      sidebar_trending: "Tendencias",
-      sidebar_news_data: "Noticias y datos",
-      sidebar_corporate_events: "Calendario de resultados",
-      sidebar_market_headlines: "Titulares del mercado",
-      sidebar_ask_gpt5: "Forecast Review",
-      sidebar_options: "Opciones",
-      sidebar_learn_more: "Mas informacion",
-      sidebar_screener: "Screener",
-      panel_forecast_title: "Quantura Forecast",
-      panel_forecast_subtitle: "Genera bandas de cuantiles para el ticker de tu grafico y guarda la ejecucion para volver a trazarla despues.",
-      panel_market_headlines_title: "Titulares del mercado",
-      panel_market_headlines_subtitle: "Titulares RSS atribuidos con seleccion de proveedor, enlaces de fuente y espacios publicitarios nativos entre grupos de articulos.",
-      panel_ticker_query_title: "Forecast Review",
-      panel_ticker_query_subtitle: "Analisis multi-modelo con contexto estructurado de Yahoo Finance.",
-      label_ticker: "Ticker",
-      label_timeframe: "Periodo",
-      button_load_chart: "Cargar grafico",
-      terminal_tip: "Consejo: elige un panel a la izquierda y luego haz clic en cualquier ticker para actualizar el grafico al instante.",
-      label_market_country: "Proveedor",
-      button_load_market_feed: "Cargar mercado",
-      label_response_language: "Idioma de respuesta",
-      label_question: "Pregunta",
-      button_ask_gpt5: "Preparar Forecast Review",
-      query_result: "Salida de Forecast Review",
-      language_selector_label: "Idioma",
-      language_auto: "Automatico",
-      language_english: "Ingles",
-      language_spanish: "Espanol",
-      language_french: "Frances",
-      language_german: "Aleman",
-      language_arabic: "Arabe",
-      language_bengali: "Bengali",
-      question_placeholder: "Ejemplo: Este valor esta sobrevalorado frente a sus pares y cuales son los principales riesgos a corto plazo?",
-    }),
-    fr: Object.freeze({
-      nav_terminal: "Terminal",
-      nav_research: "Recherche",
-      nav_blog: "Blog",
-      nav_pricing: "Tarifs",
-      nav_contact: "Contact",
-      nav_notifications: "Notifications",
-      sign_in: "Se connecter",
-      sign_out: "Se deconnecter",
-      dashboard: "Tableau de bord",
-      open_dashboard: "Ouvrir le tableau de bord",
-      go_to_dashboard: "Aller au tableau de bord",
-      start_free: "Commencer gratuitement",
-      logged_in: "Connecte",
-      logged_out: "Deconnecte",
-      not_signed_in: "Non connecte",
-      open_billing_portal: "Ouvrir le portail de facturation Stripe",
-      signin_manage_billing: "Connectez-vous pour gerer la facturation",
-      signin_set_profile: "Connectez-vous pour configurer votre profil public du classement.",
-      open_notifications: "Ouvrir les notifications",
-      signin_manage_notifications: "Connectez-vous pour gerer les notifications",
-      account: "Compte",
-      leaderboard_profile: "Profil public",
-      sidebar_forecast: "Forecast",
-      sidebar_trending: "Tendances",
-      sidebar_news_data: "Actualites et donnees",
-      sidebar_corporate_events: "Calendrier des resultats",
-      sidebar_market_headlines: "Titres du marche",
-      sidebar_ask_gpt5: "Forecast Review",
-      sidebar_options: "Options",
-      sidebar_learn_more: "En savoir plus",
-      sidebar_screener: "Screener",
-      panel_forecast_title: "Quantura Forecast",
-      panel_forecast_subtitle: "Generez des bandes de quantiles pour le ticker de votre graphique et enregistrez l'execution pour la recharger plus tard.",
-      panel_market_headlines_title: "Titres du marche",
-      panel_market_headlines_subtitle: "Titres RSS attribues avec selection du fournisseur, liens source et emplacements publicitaires natifs entre groupes d articles.",
-      panel_ticker_query_title: "Forecast Review",
-      panel_ticker_query_subtitle: "Analyse multi-modeles avec contexte Yahoo Finance structure.",
-      label_ticker: "Ticker",
-      label_timeframe: "Horizon",
-      button_load_chart: "Charger le graphique",
-      terminal_tip: "Astuce: choisissez un panneau a gauche puis cliquez sur un ticker pour mettre a jour le graphique immediatement.",
-      label_market_country: "Source",
-      button_load_market_feed: "Charger le flux marche",
-      label_response_language: "Langue de reponse",
-      label_question: "Question",
-      button_ask_gpt5: "Preparer Forecast Review",
-      query_result: "Sortie Forecast Review",
-      language_selector_label: "Langue",
-      language_auto: "Auto",
-      language_english: "Anglais",
-      language_spanish: "Espagnol",
-      language_french: "Francais",
-      language_german: "Allemand",
-      language_arabic: "Arabe",
-      language_bengali: "Bengali",
-      question_placeholder: "Exemple: Cette action est-elle survaluee par rapport a ses pairs et quels sont les principaux risques a court terme?",
-    }),
-    de: Object.freeze({
-      nav_terminal: "Terminal",
-      nav_research: "Research",
-      nav_blog: "Blog",
-      nav_pricing: "Preise",
-      nav_contact: "Kontakt",
-      nav_notifications: "Benachrichtigungen",
-      sign_in: "Anmelden",
-      sign_out: "Abmelden",
-      dashboard: "Dashboard",
-      open_dashboard: "Dashboard offnen",
-      go_to_dashboard: "Zum Dashboard",
-      start_free: "Kostenlos starten",
-      logged_in: "Angemeldet",
-      logged_out: "Abgemeldet",
-      not_signed_in: "Nicht angemeldet",
-      open_billing_portal: "Stripe-Abrechnungsportal offnen",
-      signin_manage_billing: "Zum Verwalten der Abrechnung anmelden",
-      signin_set_profile: "Melden Sie sich an, um Ihr offentliches Profil einzurichten.",
-      open_notifications: "Benachrichtigungen offnen",
-      signin_manage_notifications: "Zum Verwalten von Benachrichtigungen anmelden",
-      account: "Konto",
-      leaderboard_profile: "Offentliches Profil",
-      sidebar_forecast: "Forecast",
-      sidebar_trending: "Trending",
-      sidebar_news_data: "News und Daten",
-      sidebar_corporate_events: "Ergebnis-Kalender",
-      sidebar_market_headlines: "Markt-Schlagzeilen",
-      sidebar_ask_gpt5: "Forecast Review",
-      sidebar_options: "Optionen",
-      sidebar_learn_more: "Mehr erfahren",
-      sidebar_screener: "Screener",
-      panel_forecast_title: "Quantura Forecast",
-      panel_forecast_subtitle: "Erzeuge Quantil-Bander fur den Ticker in deinem Chart und speichere den Lauf fur spatere Vergleiche.",
-      panel_market_headlines_title: "Top-Markt-Schlagzeilen",
-      panel_market_headlines_subtitle: "Zugeordnete RSS-Marktschlagzeilen mit Anbieterauswahl, Quellenlinks und nativen Anzeigenplatzen zwischen Artikelgruppen.",
-      panel_ticker_query_title: "Forecast Review",
-      panel_ticker_query_subtitle: "Multi-Provider-Analyse mit strukturiertem Yahoo-Finance-Kontext.",
-      label_ticker: "Ticker",
-      label_timeframe: "Zeitrahmen",
-      button_load_chart: "Chart laden",
-      terminal_tip: "Tipp: Wahle links ein Panel und klicke dann auf einen Ticker, um den Chart sofort zu aktualisieren.",
-      label_market_country: "Quelle",
-      button_load_market_feed: "Markt-Feed laden",
-      label_response_language: "Antwortsprache",
-      label_question: "Frage",
-      button_ask_gpt5: "Forecast Review vorbereiten",
-      query_result: "Forecast Review Ausgabe",
-      language_selector_label: "Sprache",
-      language_auto: "Auto",
-      language_english: "Englisch",
-      language_spanish: "Spanisch",
-      language_french: "Franzosisch",
-      language_german: "Deutsch",
-      language_arabic: "Arabisch",
-      language_bengali: "Bengalisch",
-      question_placeholder: "Beispiel: Ist diese Aktie gegenuber Peers uberbewertet und was sind die wichtigsten kurzfristigen Risiken?",
-    }),
-    ar: Object.freeze({
-      nav_terminal: "المحطة",
-      nav_research: "الابحاث",
-      nav_blog: "المدونة",
-      nav_pricing: "الاسعار",
-      nav_contact: "تواصل",
-      nav_notifications: "الاشعارات",
-      sign_in: "تسجيل الدخول",
-      sign_out: "تسجيل الخروج",
-      dashboard: "لوحة التحكم",
-      open_dashboard: "فتح لوحة التحكم",
-      go_to_dashboard: "اذهب الى لوحة التحكم",
-      start_free: "ابدأ مجانا",
-      logged_in: "تم تسجيل الدخول",
-      logged_out: "تم تسجيل الخروج",
-      not_signed_in: "غير مسجل الدخول",
-      open_billing_portal: "فتح بوابة فواتير Stripe",
-      signin_manage_billing: "سجل الدخول لادارة الفواتير",
-      signin_set_profile: "سجل الدخول لاعداد ملفك العام في لوحة المتصدرين.",
-      open_notifications: "فتح الاشعارات",
-      signin_manage_notifications: "سجل الدخول لادارة الاشعارات",
-      account: "الحساب",
-      leaderboard_profile: "الملف العام",
-      sidebar_forecast: "Forecast",
-      sidebar_trending: "الترند",
-      sidebar_news_data: "الاخبار والبيانات",
-      sidebar_corporate_events: "تقويم الأرباح",
-      sidebar_market_headlines: "عناوين السوق",
-      sidebar_ask_gpt5: "Forecast Review",
-      sidebar_options: "الخيارات",
-      sidebar_learn_more: "اعرف المزيد",
-      sidebar_screener: "الفلتر",
-      panel_forecast_title: "Quantura Forecast",
-      panel_forecast_subtitle: "انشئ نطاقات الكوانتايل للرمز في الرسم واحفظ التشغيل لاعادة عرضه لاحقا.",
-      panel_market_headlines_title: "ابرز عناوين السوق",
-      panel_market_headlines_subtitle: "عناوين RSS منسوبة مع اختيار المزود وروابط المصدر ومواضع اعلانات اصلية بين مجموعات المقالات.",
-      panel_ticker_query_title: "Forecast Review",
-      panel_ticker_query_subtitle: "تحليل متعدد النماذج مع سياق Yahoo Finance المنظم.",
-      label_ticker: "الرمز",
-      label_timeframe: "الاطار الزمني",
-      button_load_chart: "تحميل الرسم",
-      terminal_tip: "نصيحة: اختر لوحة من اليسار ثم اضغط على اي رمز لتحديث الرسم فورا.",
-      label_market_country: "المزود",
-      button_load_market_feed: "تحميل موجز السوق",
-      label_response_language: "لغة الاجابة",
-      label_question: "السؤال",
-      button_ask_gpt5: "تحضير Forecast Review",
-      query_result: "مخرجات Forecast Review",
-      language_selector_label: "اللغة",
-      language_auto: "تلقائي",
-      language_english: "الانجليزية",
-      language_spanish: "الاسبانية",
-      language_french: "الفرنسية",
-      language_german: "الالمانية",
-      language_arabic: "العربية",
-      language_bengali: "البنغالية",
-      question_placeholder: "مثال: هل هذا السهم مبالغ في تقييمه مقارنة بنظرائه وما اهم المخاطر القريبة؟",
-    }),
-    bn: Object.freeze({
-      nav_terminal: "টার্মিনাল",
-      nav_research: "গবেষণা",
-      nav_blog: "ব্লগ",
-      nav_pricing: "মূল্য",
-      nav_contact: "যোগাযোগ",
-      nav_notifications: "নোটিফিকেশন",
-      sign_in: "সাইন ইন",
-      sign_out: "সাইন আউট",
-      dashboard: "ড্যাশবোর্ড",
-      open_dashboard: "ড্যাশবোর্ড খুলুন",
-      go_to_dashboard: "ড্যাশবোর্ডে যান",
-      start_free: "ফ্রি শুরু করুন",
-      logged_in: "লগড ইন",
-      logged_out: "লগড আউট",
-      not_signed_in: "সাইন ইন করা হয়নি",
-      open_billing_portal: "Stripe বিলিং পোর্টাল খুলুন",
-      signin_manage_billing: "বিলিং পরিচালনা করতে সাইন ইন করুন",
-      signin_set_profile: "আপনার পাবলিক প্রোফাইল সেট করতে সাইন ইন করুন।",
-      open_notifications: "নোটিফিকেশন খুলুন",
-      signin_manage_notifications: "নোটিফিকেশন পরিচালনা করতে সাইন ইন করুন",
-      account: "অ্যাকাউন্ট",
-      leaderboard_profile: "পাবলিক প্রোফাইল",
-      sidebar_forecast: "Forecast",
-      sidebar_trending: "ট্রেন্ডিং",
-      sidebar_news_data: "খবর ও ডেটা",
-      sidebar_corporate_events: "আর্নিংস ক্যালেন্ডার",
-      sidebar_market_headlines: "মার্কেট হেডলাইন",
-      sidebar_ask_gpt5: "Forecast Review",
-      sidebar_options: "অপশন",
-      sidebar_learn_more: "আরও জানুন",
-      sidebar_screener: "স্ক্রিনার",
-      panel_forecast_title: "Quantura Forecast",
-      panel_forecast_subtitle: "চার্টে থাকা টিকারের জন্য কোয়ান্টাইল ব্যান্ড তৈরি করুন এবং পরে পুনরায় দেখার জন্য রান সংরক্ষণ করুন।",
-      panel_market_headlines_title: "শীর্ষ মার্কেট হেডলাইন",
-      panel_market_headlines_subtitle: "অ্যাট্রিবিউটেড RSS মার্কেট হেডলাইন, প্রোভাইডার নির্বাচন, সোর্স লিংক এবং আর্টিকেল গ্রুপের মাঝে নেটিভ অ্যাড স্লট।",
-      panel_ticker_query_title: "Forecast Review",
-      panel_ticker_query_subtitle: "স্ট্রাকচার্ড Yahoo Finance কনটেক্সটে মাল্টি-মডেল বিশ্লেষণ।",
-      label_ticker: "টিকার",
-      label_timeframe: "টাইমফ্রেম",
-      button_load_chart: "চার্ট লোড করুন",
-      terminal_tip: "টিপ: বামে একটি প্যানেল বেছে নিন, তারপর যেকোনো টিকারে ক্লিক করলে চার্ট সাথে সাথে আপডেট হবে।",
-      label_market_country: "সোর্স",
-      button_load_market_feed: "মার্কেট ফিড লোড করুন",
-      label_response_language: "উত্তরের ভাষা",
-      label_question: "প্রশ্ন",
-      button_ask_gpt5: "Forecast Review প্রস্তুত করুন",
-      query_result: "Forecast Review আউটপুট",
-      language_selector_label: "ভাষা",
-      language_auto: "অটো",
-      language_english: "ইংরেজি",
-      language_spanish: "স্প্যানিশ",
-      language_french: "ফরাসি",
-      language_german: "জার্মান",
-      language_arabic: "আরবি",
-      language_bengali: "বাংলা",
-      question_placeholder: "উদাহরণ: এই স্টকটি সহকর্মীদের তুলনায় বেশি মূল্যায়িত কি না, এবং নিকটমেয়াদি প্রধান ঝুঁকি কী?",
     }),
   });
   const UI_I18N_SELECTOR_MAP = Object.freeze({
@@ -1255,386 +965,11 @@
       requirePath: true,
     },
   });
-  const UNSPLASH_CACHE_KEY = "quantura_unsplash_gallery_v1";
-  const UNSPLASH_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
-  const UNSPLASH_FALLBACK_IMAGES = [
-    {
-      url: "https://images.unsplash.com/photo-1535320903710-d993d3d77d29?auto=format&fit=crop&w=1280&q=80",
-      alt: "Finance workspace with market charts",
-      link: "https://unsplash.com/photos/laptop-computer-on-glass-top-table-near-window-nA0UDNDbxys",
-      photographer: "Adeolu Eletu",
-      photographerLink: "https://unsplash.com/@adeolueletu",
-    },
-    {
-      url: "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=1280&q=80",
-      alt: "Stock market dashboard on laptop",
-      link: "https://unsplash.com/photos/macbook-air-near-white-paper-BStWzy4M7vA",
-      photographer: "Austin Distel",
-      photographerLink: "https://unsplash.com/@austindistel",
-    },
-    {
-      url: "https://images.unsplash.com/photo-1642790106117-e829e14a795f?auto=format&fit=crop&w=1280&q=80",
-      alt: "Tablet with candlestick chart",
-      link: "https://unsplash.com/photos/black-and-white-smartphone-on-brown-wooden-table-8wVYO8rK1j0",
-      photographer: "Tech Daily",
-      photographerLink: "https://unsplash.com/@techdailyca",
-    },
-    {
-      url: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1280&q=80",
-      alt: "Financial team reviewing growth metrics",
-      link: "https://unsplash.com/photos/people-sitting-in-front-of-computer-MYbhN8KaaEc",
-      photographer: "Campaign Creators",
-      photographerLink: "https://unsplash.com/@campaign_creators",
-    },
-  ];
-  const DEFAULT_AI_AGENTS = [
-    {
-      id: "quantura-oracle",
-      name: "Quantura Oracle",
-      description: "High-probability blue chips.",
-      strategy: "quality_blue_chip",
-      holdings: ["AAPL", "MSFT", "GOOGL", "V", "LLY", "COST"],
-      returns: { "1m": 0.019, "3m": 0.057, "6m": 0.11, "1y": 0.183, "5y": 0.745, max: 0.745 },
-      rationale:
-        "This basket emphasizes high free cash flow consistency, durable balance sheets, and resilient earnings cadence. It is designed for steadier compounding across market regimes.",
-      modelId: "gpt-5-mini",
-      modelProvider: "openai",
-      modelTier: "Core",
-    },
-    {
-      id: "quantura-velocity",
-      name: "Quantura Velocity",
-      description: "Momentum and volatility leaders.",
-      strategy: "momentum_volatility",
-      holdings: ["NVDA", "TSLA", "AMD", "PLTR", "META", "AVGO"],
-      returns: { "1m": 0.034, "3m": 0.102, "6m": 0.186, "1y": 0.322, "5y": 1.18, max: 1.18 },
-      rationale:
-        "Names are selected for strong relative strength, liquidity, and acceleration in trend metrics. The agent favors upside capture over downside smoothness.",
-      modelId: "gpt-5",
-      modelProvider: "openai",
-      modelTier: "Pro",
-    },
-    {
-      id: "quantura-dividend-king",
-      name: "Quantura Dividend King",
-      description: "Yield and stability.",
-      strategy: "dividend_stability",
-      holdings: ["JNJ", "KO", "PEP", "XOM", "CVX", "UNH"],
-      returns: { "1m": 0.012, "3m": 0.033, "6m": 0.064, "1y": 0.121, "5y": 0.392, max: 0.392 },
-      rationale:
-        "The portfolio tilts toward durable payout profiles and lower drawdown sensitivity. It is tuned for investors prioritizing consistency and downside control.",
-      modelId: "gpt-5-mini",
-      modelProvider: "openai",
-      modelTier: "Core",
-    },
-    {
-      id: "quantura-horizon",
-      name: "Quantura Horizon",
-      description: "Long-term growth from Quantura Horizon scoring.",
-      strategy: "prophet_growth",
-      holdings: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "LLY"],
-      returns: { "1m": 0.026, "3m": 0.078, "6m": 0.142, "1y": 0.251, "5y": 0.984, max: 0.984 },
-      rationale:
-        "Quantura Horizon trend structure favors names with stable long-horizon slope and persistent seasonality. The set is filtered to avoid negative lower-bound outcomes.",
-      modelId: "gpt-5",
-      modelProvider: "openai",
-      modelTier: "Pro",
-    },
-    {
-      id: "quantura-contrarian",
-      name: "Quantura Contrarian",
-      description: "Oversold rebound opportunities.",
-      strategy: "contrarian_rebound",
-      holdings: ["NKE", "DIS", "PYPL", "SBUX", "BA", "INTC"],
-      returns: { "1m": 0.016, "3m": 0.049, "6m": 0.091, "1y": 0.164, "5y": 0.46, max: 0.46 },
-      rationale:
-        "This set targets deep pullbacks with improving momentum breadth and valuation support. It is tuned for mean-reversion windows with defined upside asymmetry.",
-      modelId: "gpt-5.2",
-      modelProvider: "openai",
-      modelTier: "Desk",
-    },
-    {
-      id: "quantura-alphagen",
-      name: "Quantura AlphaGen",
-      description: "Balanced multi-factor alpha basket.",
-      strategy: "multi_factor",
-      holdings: ["AAPL", "NVDA", "JPM", "XOM", "COST", "CAT"],
-      returns: { "1m": 0.021, "3m": 0.061, "6m": 0.116, "1y": 0.198, "5y": 0.71, max: 0.71 },
-      rationale:
-        "AlphaGen blends quality, momentum, valuation, and macro sensitivity into one portfolio. The goal is balanced risk-adjusted return through factor diversification.",
-      modelId: "gpt-5-mini",
-      modelProvider: "openai",
-      modelTier: "Core",
-    },
-    {
-      id: "quantura-deepvalue",
-      name: "Quantura DeepValue",
-      description: "Valuation compression reversals.",
-      strategy: "deep_value",
-      holdings: ["BAC", "CVX", "INTC", "BA", "C", "F"],
-      returns: { "1m": 0.014, "3m": 0.041, "6m": 0.083, "1y": 0.146, "5y": 0.402, max: 0.402 },
-      rationale:
-        "DeepValue looks for discounted multiples with stabilization signals in earnings and cash flow. The portfolio is built for re-rating potential rather than headline momentum.",
-      modelId: "gpt-5",
-      modelProvider: "openai",
-      modelTier: "Pro",
-    },
-    {
-      id: "quantura-momenta",
-      name: "Quantura Momenta",
-      description: "Trend persistence and breakout continuation.",
-      strategy: "trend_following",
-      holdings: ["NVDA", "AVGO", "META", "AMD", "CRM", "MSFT"],
-      returns: { "1m": 0.031, "3m": 0.094, "6m": 0.171, "1y": 0.302, "5y": 1.05, max: 1.05 },
-      rationale:
-        "Momenta emphasizes high-conviction trend continuation where breadth and liquidity remain supportive. It is optimized for sustained breakout environments.",
-      modelId: "gpt-5.2",
-      modelProvider: "openai",
-      modelTier: "Desk",
-    },
-    {
-      id: "preset-pelosi-radar",
-      name: "Pelosi Radar",
-      description: "Crossover from widely tracked Pelosi-style holdings.",
-      strategy: "celebrity_portfolio",
-      holdings: ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "PANW"],
-      returns: { "1m": 0.028, "3m": 0.085, "6m": 0.151, "1y": 0.264, "5y": 0.99, max: 0.99 },
-      rationale:
-        "Preset built from high-liquidity names commonly discussed in public-trade trackers tied to Nancy Pelosi themed searches.",
-      modelId: "gpt-5.2",
-      modelProvider: "openai",
-      modelTier: "Desk",
-    },
-    {
-      id: "preset-bezos-growth",
-      name: "Bezos Growth",
-      description: "Mega-cap growth stack from Bezos-themed screens.",
-      strategy: "celebrity_portfolio",
-      holdings: ["AMZN", "MSFT", "GOOGL", "NVDA", "META", "SHOP"],
-      returns: { "1m": 0.024, "3m": 0.074, "6m": 0.137, "1y": 0.232, "5y": 0.88, max: 0.88 },
-      rationale:
-        "Focuses on cloud, commerce, and AI infrastructure names frequently associated with Jeff Bezos portfolio-interest queries.",
-      modelId: "gpt-5",
-      modelProvider: "openai",
-      modelTier: "Pro",
-    },
-    {
-      id: "preset-cnbc-desk",
-      name: "CNBC Desk",
-      description: "High-velocity names that dominate financial media flow.",
-      strategy: "media_signal",
-      holdings: ["NVDA", "TSLA", "AAPL", "AMD", "PLTR", "META"],
-      returns: { "1m": 0.03, "3m": 0.09, "6m": 0.16, "1y": 0.289, "5y": 1.04, max: 1.04 },
-      rationale:
-        "Uses media-intensity themes from CNBC-style market coverage where momentum and liquidity concentration are highest.",
-      modelId: "gpt-5-mini",
-      modelProvider: "openai",
-      modelTier: "Core",
-    },
-    {
-      id: "preset-bloomberg-macro",
-      name: "Bloomberg Macro",
-      description: "Cross-sector macro leaders from Bloomberg-style themes.",
-      strategy: "media_signal",
-      holdings: ["AAPL", "MSFT", "NVDA", "JPM", "XOM", "UNH"],
-      returns: { "1m": 0.018, "3m": 0.058, "6m": 0.108, "1y": 0.191, "5y": 0.67, max: 0.67 },
-      rationale:
-        "Blends tech leadership with macro-sensitive financials and energy, mirroring recurring Bloomberg market narratives.",
-      modelId: "gpt-5-mini",
-      modelProvider: "openai",
-      modelTier: "Core",
-    },
-    {
-      id: "preset-blackrock-core",
-      name: "BlackRock Core",
-      description: "Institutional core equity basket.",
-      strategy: "institutional_portfolio",
-      holdings: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
-      returns: { "1m": 0.02, "3m": 0.064, "6m": 0.121, "1y": 0.212, "5y": 0.79, max: 0.79 },
-      rationale:
-        "Tracks liquid institutional leaders aligned with broad asset-management allocation patterns in BlackRock-themed screens.",
-      modelId: "gpt-5",
-      modelProvider: "openai",
-      modelTier: "Pro",
-    },
-    {
-      id: "preset-vanguard-factor",
-      name: "Vanguard Factor",
-      description: "Low-friction quality and profitability blend.",
-      strategy: "institutional_portfolio",
-      holdings: ["AAPL", "MSFT", "BRK.B", "JPM", "LLY", "COST"],
-      returns: { "1m": 0.016, "3m": 0.049, "6m": 0.097, "1y": 0.176, "5y": 0.62, max: 0.62 },
-      rationale:
-        "Designed for consistency-first investors inspired by index-heavy Vanguard-style core factor exposure.",
-      modelId: "gpt-5-mini",
-      modelProvider: "openai",
-      modelTier: "Core",
-    },
-    {
-      id: "preset-ark-disruptors",
-      name: "ARK Disruptors",
-      description: "High-beta innovation and disruption stack.",
-      strategy: "institutional_portfolio",
-      holdings: ["TSLA", "COIN", "ROKU", "SQ", "PATH", "CRSP"],
-      returns: { "1m": 0.033, "3m": 0.103, "6m": 0.186, "1y": 0.318, "5y": 1.22, max: 1.22 },
-      rationale:
-        "Captures disruptive-growth themes frequently associated with ARK Invest screens and innovation-centric flows.",
-      modelId: "gpt-5.2",
-      modelProvider: "openai",
-      modelTier: "Desk",
-    },
-    {
-      id: "preset-hedgefund-consensus",
-      name: "Hedge Fund Consensus",
-      description: "Concentrated consensus megacap picks.",
-      strategy: "institutional_portfolio",
-      holdings: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
-      returns: { "1m": 0.021, "3m": 0.067, "6m": 0.129, "1y": 0.224, "5y": 0.82, max: 0.82 },
-      rationale:
-        "Consensus-weighted megacap exposure based on recurring overlap across hedge fund and prime-broker commentary themes.",
-      modelId: "gpt-5",
-      modelProvider: "openai",
-      modelTier: "Pro",
-    },
-  ];
-  const ADMIN_SCREENER_PRESET_RUNS = [
-    {
-      id: "pelosi-tracker",
-      title: "Nancy Pelosi Portfolio Tracker",
-      notes: "Nancy Pelosi stock portfolio",
-      modelUsed: "gpt-5.2",
-      symbols: ["NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "PANW"],
-    },
-    {
-      id: "bezos-favorites",
-      title: "Jeff Bezos Favorite Stocks",
-      notes: "Jeff Bezos favorite stocks",
-      modelUsed: "gpt-5",
-      symbols: ["AMZN", "MSFT", "GOOGL", "NVDA", "META", "SHOP"],
-    },
-    {
-      id: "cnbc-theme",
-      title: "CNBC Market Leaders",
-      notes: "Top CNBC discussed growth stocks",
-      modelUsed: "gpt-5-mini",
-      symbols: ["NVDA", "TSLA", "AAPL", "AMD", "PLTR", "META"],
-    },
-    {
-      id: "bloomberg-theme",
-      title: "Bloomberg Macro Focus",
-      notes: "Bloomberg market favorites and macro leaders",
-      modelUsed: "gpt-5-mini",
-      symbols: ["AAPL", "MSFT", "NVDA", "JPM", "XOM", "UNH"],
-    },
-    {
-      id: "blackrock-core",
-      title: "BlackRock Core Exposure",
-      notes: "BlackRock top holdings style portfolio",
-      modelUsed: "gpt-5",
-      symbols: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
-    },
-    {
-      id: "vanguard-factor",
-      title: "Vanguard Quality Factor",
-      notes: "Vanguard core holdings and quality factor ideas",
-      modelUsed: "gpt-5-mini",
-      symbols: ["AAPL", "MSFT", "BRK.B", "JPM", "LLY", "COST"],
-    },
-    {
-      id: "ark-disruptors",
-      title: "ARK Innovation Disruptors",
-      notes: "ARK Invest disruptive innovation stocks",
-      modelUsed: "gpt-5.2",
-      symbols: ["TSLA", "COIN", "ROKU", "SQ", "PATH", "CRSP"],
-    },
-    {
-      id: "hedge-fund-consensus",
-      title: "Hedge Fund Consensus Mega Caps",
-      notes: "Most common hedge fund long positions this quarter",
-      modelUsed: "gpt-5",
-      symbols: ["AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL"],
-    },
-  ];
 
   const hydrateUnsplashGallery = async (functionsClient) => {
-    const gallery = document.getElementById("unsplash-grid");
-    if (!gallery) return;
-
-    const cards = Array.from(gallery.querySelectorAll("[data-unsplash-slot]"));
-    if (!cards.length) return;
-
-    const applyPhotos = (photos) => {
-      if (!Array.isArray(photos) || !photos.length) return;
-      cards.forEach((card, idx) => {
-        const photo = photos[idx % photos.length];
-        if (!photo || !photo.url) return;
-        const img = card.querySelector("[data-unsplash-img]");
-        if (img) {
-          img.src = photo.url;
-          img.alt = photo.alt || "Market imagery from Unsplash";
-          img.loading = "lazy";
-          img.decoding = "async";
-        }
-        const creditLink = card.querySelector("[data-unsplash-credit]");
-        if (creditLink) {
-          const creditText = photo.photographer
-            ? `Photo by ${photo.photographer} on Unsplash`
-            : "Photo on Unsplash";
-          creditLink.textContent = creditText;
-          creditLink.href = photo.photographerLink || photo.link || "https://unsplash.com/";
-          creditLink.setAttribute("target", "_blank");
-          creditLink.setAttribute("rel", "noopener noreferrer");
-        }
-      });
-    };
-
-    try {
-      const raw = sessionStorage.getItem(UNSPLASH_CACHE_KEY);
-      if (raw) {
-        const cached = JSON.parse(raw);
-        if (
-          cached &&
-          Array.isArray(cached.photos) &&
-          cached.timestamp &&
-          Date.now() - Number(cached.timestamp) < UNSPLASH_CACHE_TTL_MS
-        ) {
-          applyPhotos(cached.photos);
-          return;
-        }
-      }
-    } catch (error) {
-      // Ignore cache read failures and continue to fetch.
-    }
-
-    applyPhotos(UNSPLASH_FALLBACK_IMAGES);
-
-    if (!functionsClient || typeof functionsClient.httpsCallable !== "function") return;
-
-    const rawQuery = String(gallery.dataset.unsplashQuery || "stock market, trading desk");
-    const count = Math.max(1, Math.min(8, Number(gallery.dataset.unsplashCount || cards.length || 4)));
-
-    try {
-      const getGallery = functionsClient.httpsCallable("get_unsplash_gallery");
-      const result = await getGallery({ query: rawQuery, count });
-      const payload = result?.data && typeof result.data === "object" ? result.data : {};
-      const photos = Array.isArray(payload.photos) ? payload.photos : [];
-
-      if (!photos.length) return;
-      applyPhotos(photos);
-      try {
-        sessionStorage.setItem(
-          UNSPLASH_CACHE_KEY,
-          JSON.stringify({
-            timestamp: Date.now(),
-            photos,
-          })
-        );
-      } catch (error) {
-        // Ignore cache write failures.
-      }
-    } catch (error) {
-      // Keep fallback visuals when API is unavailable.
-    }
+    if (!document.getElementById("unsplash-grid")) return;
+    const gallery = await import("/unsplash-gallery.js?v=20260924a").catch(() => null);
+    if (gallery) await gallery.hydrateUnsplashGallery(functionsClient);
   };
 
 
@@ -5549,6 +4884,16 @@
     state.preferredCountry = code;
   };
 
+  let uiI18nCatalogPromise = null;
+  const loadUiI18nCatalog = () => {
+    if (uiI18nCatalogPromise) return uiI18nCatalogPromise;
+    uiI18nCatalogPromise = import("/ui-i18n-catalog.js?v=20260924a").then(({ packs }) => {
+      UI_I18N_TEXT = Object.freeze({ ...UI_I18N_TEXT, ...packs });
+      applyUiTranslations(state.preferredLanguage || "en");
+    }).catch(() => { uiI18nCatalogPromise = null; });
+    return uiI18nCatalogPromise;
+  };
+
   const applyLanguagePreference = (languageCode, { persist = true } = {}) => {
     const normalized = normalizeLanguageCode(languageCode);
     const resolved = normalized === "auto" ? resolveLanguageFromNavigator() : normalized;
@@ -5560,6 +4905,7 @@
       ui.tickerQueryLanguage.value = resolved;
     }
     applyUiTranslations(resolved);
+    if (resolved !== "en" && !UI_I18N_TEXT[resolved]) void loadUiI18nCatalog();
     if (persist) safeLocalStorageSet(LANGUAGE_PREFERENCE_KEY, normalized);
   };
 
@@ -14466,6 +13812,34 @@
     return payload;
   };
 
+  // The backtest builder shares the established Firebase/session API transport.
+  // It never receives credentials and cannot submit a live order.
+  window.QuanturaBacktestBridge = Object.freeze({
+    request: apiRequestJson,
+    ensureSession: () => ensureSessionUser({ reason: "backtest_requires_session", message: "Start a guest session or sign in to run a backtest." }),
+    workspaceId: () => state.activeWorkspaceId || state.user?.uid || "",
+    source: () => {
+      const type = String(ui.ensembleSourceType?.value || "ticker");
+      if (type === "prediction_market") {
+        const selected = window.QuanturaMarketSelection;
+        if (!selected?.contract_id || !["kalshi", "polymarket_us"].includes(selected.source)) return null;
+        return { type, provider: selected.source, symbol: selected.symbol, contract_id: selected.contract_id };
+      }
+      if (type !== "ticker") return null;
+      const symbol = normalizeTicker(ui.ensembleTicker?.value || "");
+      if (!symbol) return null;
+      return { type, symbol, provider: String(document.getElementById("ensemble-provider")?.value || "auto") };
+    },
+  });
+  document.getElementById("backtest-open")?.addEventListener("click", async () => {
+    try {
+      const builder = await import("/backtest-builder.js?v=20260924a");
+      builder.openBacktest();
+    } catch (error) {
+      showToast(error?.message || "Backtest builder is temporarily unavailable.", "warn");
+    }
+  });
+
   // Reuse the application's Firebase/session bridge; never expose ID tokens.
   window.QuanturaScreenerAccount = {
     request: (path, options) => {
@@ -21083,337 +20457,15 @@
     activate(defaultTab?.dataset.screenerFilterTab || "descriptive");
   };
 
-  const EXTRA_FUNDAMENTAL_FILTER_FIELDS = [
-    {
-      name: "filterPriceCash",
-      label: "Price/Cash",
-      options: [
-        { value: "", label: "Any" },
-        { value: "low", label: "Low (<3)" },
-        { value: "u5", label: "Under 5" },
-        { value: "u10", label: "Under 10" },
-        { value: "o20", label: "Over 20" },
-        { value: "o50", label: "Over 50" },
-      ],
-    },
-    {
-      name: "filterPriceFcf",
-      label: "Price/Free Cash Flow",
-      options: [
-        { value: "", label: "Any" },
-        { value: "low", label: "Low (<15)" },
-        { value: "u20", label: "Under 20" },
-        { value: "u50", label: "Under 50" },
-        { value: "o50", label: "Over 50" },
-        { value: "o100", label: "Over 100" },
-      ],
-    },
-    {
-      name: "filterEvEbitda",
-      label: "EV/EBITDA",
-      options: [
-        { value: "", label: "Any" },
-        { value: "negative", label: "Negative (<0)" },
-        { value: "low", label: "Low (<15)" },
-        { value: "profitable", label: "Profitable (>0)" },
-        { value: "high", label: "High (>50)" },
-        { value: "u20", label: "Under 20" },
-        { value: "o20", label: "Over 20" },
-      ],
-    },
-    {
-      name: "filterEvSales",
-      label: "EV/Sales",
-      options: [
-        { value: "", label: "Any" },
-        { value: "negative", label: "Negative (<0)" },
-        { value: "low", label: "Low (<1)" },
-        { value: "positive", label: "Positive (>0)" },
-        { value: "high", label: "High (>10)" },
-        { value: "u2", label: "Under 2" },
-        { value: "o5", label: "Over 5" },
-      ],
-    },
-    {
-      name: "filterDividendGrowth",
-      label: "Dividend Growth",
-      options: [
-        { value: "", label: "Any" },
-        { value: "1ypos", label: "1 Year Positive" },
-        { value: "1yo5", label: "1 Year Over 5%" },
-        { value: "3ypos", label: "3 Years Positive" },
-        { value: "3yo10", label: "3 Years Over 10%" },
-        { value: "5ypos", label: "5 Years Positive" },
-        { value: "cy5", label: "Growing 5+ Years" },
-      ],
-    },
-    {
-      name: "filterEpsGrowthThisYear",
-      label: "EPS Growth This Year",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "poslow", label: "Positive Low (0-10%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterEpsGrowthNextYear",
-      label: "EPS Growth Next Year",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "poslow", label: "Positive Low (0-10%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterEpsGrowthQoq",
-      label: "EPS Growth Qtr/Qtr",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "poslow", label: "Positive Low (0-10%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterEpsGrowthTtm",
-      label: "EPS Growth TTM",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterEpsGrowth3Years",
-      label: "EPS Growth 3Y",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterEpsGrowth5Years",
-      label: "EPS Growth 5Y",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterEpsGrowthNext5Years",
-      label: "EPS Growth Next 5Y",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "poslow", label: "Positive Low (<10%)" },
-        { value: "high", label: "High (>25%)" },
-      ],
-    },
-    {
-      name: "filterSalesGrowthQoq",
-      label: "Sales Growth Qtr/Qtr",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "poslow", label: "Positive Low (0-10%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterSalesGrowthTtm",
-      label: "Sales Growth TTM",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "poslow", label: "Positive Low (0-10%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterSalesGrowth3Years",
-      label: "Sales Growth 3Y",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterSalesGrowth5Years",
-      label: "Sales Growth 5Y",
-      options: [
-        { value: "", label: "Any" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o10", label: "Over 10%" },
-      ],
-    },
-    {
-      name: "filterEarningsRevenueSurprise",
-      label: "Earnings & Revenue Surprise",
-      options: [
-        { value: "", label: "Any" },
-        { value: "bp", label: "Both positive (>0%)" },
-        { value: "bm", label: "Both met (0%)" },
-        { value: "bn", label: "Both negative (<0%)" },
-        { value: "ep", label: "EPS Positive" },
-        { value: "en", label: "EPS Negative" },
-        { value: "rp", label: "Revenue Positive" },
-        { value: "rn", label: "Revenue Negative" },
-      ],
-    },
-    {
-      name: "filterRoi",
-      label: "Return on Invested Capital",
-      options: [
-        { value: "", label: "Any" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "verypos", label: "Very Positive (>25%)" },
-        { value: "o10", label: "Over +10%" },
-        { value: "o25", label: "Over +25%" },
-      ],
-    },
-    {
-      name: "filterCurrentRatio",
-      label: "Current Ratio",
-      options: [
-        { value: "", label: "Any" },
-        { value: "high", label: "High (>3)" },
-        { value: "low", label: "Low (<1)" },
-        { value: "u1", label: "Under 1" },
-        { value: "o2", label: "Over 2" },
-      ],
-    },
-    {
-      name: "filterQuickRatio",
-      label: "Quick Ratio",
-      options: [
-        { value: "", label: "Any" },
-        { value: "high", label: "High (>3)" },
-        { value: "low", label: "Low (<0.5)" },
-        { value: "u1", label: "Under 1" },
-        { value: "o2", label: "Over 2" },
-      ],
-    },
-    {
-      name: "filterLtDebtEquity",
-      label: "LT Debt/Equity",
-      options: [
-        { value: "", label: "Any" },
-        { value: "high", label: "High (>0.5)" },
-        { value: "low", label: "Low (<0.1)" },
-        { value: "u0.5", label: "Under 0.5" },
-        { value: "o1", label: "Over 1" },
-      ],
-    },
-    {
-      name: "filterGrossMargin",
-      label: "Gross Margin",
-      options: [
-        { value: "", label: "Any" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "high", label: "High (>50%)" },
-        { value: "o30", label: "Over 30%" },
-        { value: "o50", label: "Over 50%" },
-      ],
-    },
-    {
-      name: "filterOperatingMargin",
-      label: "Operating Margin",
-      options: [
-        { value: "", label: "Any" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "veryneg", label: "Very Negative (<-20%)" },
-        { value: "high", label: "High (>25%)" },
-        { value: "o20", label: "Over 20%" },
-      ],
-    },
-    {
-      name: "filterPayoutRatio",
-      label: "Payout Ratio",
-      options: [
-        { value: "", label: "Any" },
-        { value: "none", label: "None (0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "low", label: "Low (<20%)" },
-        { value: "high", label: "High (>50%)" },
-      ],
-    },
-    {
-      name: "filterInsiderOwnership",
-      label: "Insider Ownership",
-      options: [
-        { value: "", label: "Any" },
-        { value: "low", label: "Low (<5%)" },
-        { value: "high", label: "High (>30%)" },
-        { value: "veryhigh", label: "Very High (>50%)" },
-      ],
-    },
-    {
-      name: "filterInsiderTransactions",
-      label: "Insider Transactions",
-      options: [
-        { value: "", label: "Any" },
-        { value: "veryneg", label: "Very Negative (<-20%)" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "verypos", label: "Very Positive (>20%)" },
-      ],
-    },
-    {
-      name: "filterInstitutionalOwnership",
-      label: "Institutional Ownership",
-      options: [
-        { value: "", label: "Any" },
-        { value: "low", label: "Low (<5%)" },
-        { value: "high", label: "High (>90%)" },
-        { value: "o50", label: "Over 50%" },
-      ],
-    },
-    {
-      name: "filterInstitutionalTransactions",
-      label: "Institutional Transactions",
-      options: [
-        { value: "", label: "Any" },
-        { value: "veryneg", label: "Very Negative (<-20%)" },
-        { value: "neg", label: "Negative (<0%)" },
-        { value: "pos", label: "Positive (>0%)" },
-        { value: "verypos", label: "Very Positive (>20%)" },
-      ],
-    },
-  ];
-
-  const hydrateFundamentalFilterFields = () => {
+  const hydrateFundamentalFilterFields = async () => {
     const groups = Array.from(document.querySelectorAll('[data-screener-filter-group="fundamental"] .screener-filter-grid'));
     if (!groups.length) return;
+    const catalog = await import("/screener-legacy-filters.js?v=20260924a").catch(() => null);
+    if (!catalog) {
+      groups.forEach(grid => { grid.dataset.optionalFiltersUnavailable = "true"; });
+      return;
+    }
+    const { EXTRA_FUNDAMENTAL_FILTER_FIELDS } = catalog;
 
     const makeId = (name, idx) =>
       `screener-extra-${String(name || "")
@@ -23141,6 +22193,7 @@
   const seedDefaultAIAgents = async (db, workspaceId) => {
     if (!state.user || !workspaceId) return;
     if (state.aiDefaultsSeededWorkspaceId === workspaceId) return;
+    const { DEFAULT_AI_AGENTS } = await import("/admin-seed-data.js?v=20260924a");
     const collection = db.collection("users").doc(workspaceId).collection("ai_agents");
     const writes = DEFAULT_AI_AGENTS.map((agent) =>
       collection.doc(`default_${agent.id}`).set(
@@ -23199,6 +22252,8 @@
     const marker = await markerRef.get();
     const seedVersion = "2026-02-17-social-presets-v1";
     if (marker.exists && String(marker.data()?.version || "") === seedVersion) return;
+
+    const { ADMIN_SCREENER_PRESET_RUNS } = await import("/admin-seed-data.js?v=20260924a");
 
     const batch = db.batch();
     const now = firebase.firestore.FieldValue.serverTimestamp();

@@ -246,8 +246,57 @@
 
                           <div class="ensemble-primary-actions">
                             <button id="ensemble-run-button" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run forecast</span></button>
+                            <button id="backtest-open" class="cta secondary" type="button" aria-haspopup="dialog" aria-controls="backtest-dialog"><i class="iconoir-graph-up" aria-hidden="true"></i><span>Backtest</span></button>
                           </div>
                         </form>
+                        <dialog id="backtest-dialog" class="backtest-dialog" aria-labelledby="backtest-title">
+                          <div class="backtest-shell">
+                            <header class="backtest-header">
+                              <div><p class="small muted">Quantura Research</p><h2 id="backtest-title">Create a backtest</h2><p class="small muted">Test a versioned strategy on observed market history. Simulated fills are not live orders.</p></div>
+                              <button id="backtest-close" class="task-chip" type="button" aria-label="Close backtest builder"><i class="iconoir-xmark" aria-hidden="true"></i><span>Close</span></button>
+                            </header>
+                            <div class="backtest-layout">
+                              <form id="backtest-form" class="backtest-form">
+                                <section class="backtest-panel" aria-labelledby="backtest-market-title">
+                                  <h3 id="backtest-market-title">Market & history</h3>
+                                  <p id="backtest-source-summary" class="small muted">Select a ticker or one event contract in Q Search first.</p>
+                                  <div class="backtest-fields">
+                                    <div class="field"><label class="label" for="backtest-frequency">Observed interval</label><select id="backtest-frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">1 minute</option></select></div>
+                                    <div class="field"><label class="label" for="backtest-history-phase">Game history</label><select id="backtest-history-phase"><option value="both">Pregame + in-game</option><option value="pregame">Pregame only</option><option value="in_game">In-game only</option></select></div>
+                                    <div class="field"><label class="label" for="backtest-end">History through (your timezone)</label><input id="backtest-end" type="datetime-local" /><span class="small muted">Leave blank for latest. Up to 500 real observed bars.</span></div>
+                                  </div>
+                                </section>
+                                <section class="backtest-panel" aria-labelledby="backtest-strategy-title">
+                                  <h3 id="backtest-strategy-title">Default strategy · SMA crossover</h3>
+                                  <p class="small muted">After a completed bar, buy on the next observed bar when the fast average exceeds the slow average; exit when it falls below. No future bar is used for a decision.</p>
+                                  <div class="backtest-fields">
+                                    <div class="field"><label class="label" for="backtest-fast">Fast observations</label><input id="backtest-fast" type="number" min="2" max="100" step="1" value="10" required /></div>
+                                    <div class="field"><label class="label" for="backtest-slow">Slow observations</label><input id="backtest-slow" type="number" min="3" max="200" step="1" value="30" required /></div>
+                                  </div>
+                                </section>
+                                <section class="backtest-panel" aria-labelledby="backtest-execution-title">
+                                  <h3 id="backtest-execution-title">Simulation assumptions</h3>
+                                  <div class="backtest-fields">
+                                    <div class="field"><label class="label" for="backtest-capital">Starting capital ($)</label><input id="backtest-capital" type="number" min="10" max="1000000" step="1" value="1000" required /></div>
+                                    <div class="field"><label class="label" for="backtest-fraction">Capital per entry (%)</label><input id="backtest-fraction" type="number" min="1" max="100" step="1" value="100" required /></div>
+                                    <div class="field"><label class="label" for="backtest-commission">Commission (basis points)</label><input id="backtest-commission" type="number" min="0" max="1000" step="1" value="10" required /></div>
+                                    <div class="field"><label class="label" for="backtest-slippage">Slippage (basis points)</label><input id="backtest-slippage" type="number" min="0" max="1000" step="1" value="5" required /></div>
+                                  </div>
+                                  <p class="small muted">Event-market fills use the next observed display quote as a research proxy, not a verified executable bid/ask. Exported strategies are never sent to a live trader automatically.</p>
+                                </section>
+                                <div class="backtest-actions"><button id="backtest-run" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run backtest</span></button><button id="backtest-reset" class="task-chip" type="button">Reset defaults</button></div>
+                              </form>
+                              <section class="backtest-panel backtest-results" aria-labelledby="backtest-results-title">
+                                <div class="forecast-section-heading"><h3 id="backtest-results-title">Results</h3><span id="backtest-result-id" class="small muted"></span></div>
+                                <p id="backtest-status" role="status" aria-live="polite">Configure and run a historical simulation.</p>
+                                <div id="backtest-metrics" class="backtest-metrics" hidden></div>
+                                <div id="backtest-equity" class="backtest-equity" aria-label="Equity curve" hidden></div>
+                                <div id="backtest-trades" class="backtest-trades" hidden></div>
+                                <div class="backtest-actions"><button id="backtest-download" class="task-chip" type="button" hidden><i class="iconoir-download" aria-hidden="true"></i><span>Download result JSON</span></button><button id="backtest-strategy-download" class="task-chip" type="button" hidden><i class="iconoir-code" aria-hidden="true"></i><span>Export strategy JSON</span></button></div>
+                              </section>
+                            </div>
+                          </div>
+                        </dialog>
                         <dialog id="ensemble-csv-help" class="ensemble-help-dialog" aria-labelledby="ensemble-csv-help-title">
                           <div class="forecast-section-heading"><h3 id="ensemble-csv-help-title">Forecast your own time series</h3><button id="ensemble-csv-help-close" class="task-chip" type="button">Close</button></div>
                           <p>Upload a CSV with a header row, a date/time column and one numeric target. Select both columns after upload. Use 40–10,000 rows, at most 2 MB. Values must be finite; missing values are rejected, never invented.</p>

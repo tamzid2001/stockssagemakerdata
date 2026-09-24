@@ -12,6 +12,7 @@ import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
 import { registerPlatformApiRoutes } from "./platformApiRoutes";
+import { registerBacktestRoutes } from "./backtestRoutes";
 import { registerSupportChatRoutes } from "./supportChat";
 import { kalshiPerps, registerKalshiPerpsRoutes } from "./kalshiPerps";
 import { authenticatePlatformRequest, requireWorkspacePermission, resolveWorkspaceAccess } from "./apiAccess";
@@ -686,6 +687,7 @@ registerPlatformApiRoutes(ROUTES, {
   auth,
   publicOrigin: PUBLIC_ORIGIN,
 });
+registerBacktestRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
 registerScreenerAlertRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
 registerSupportChatRoutes(ROUTES, {
   db, auth, publicOrigin: PUBLIC_ORIGIN,
