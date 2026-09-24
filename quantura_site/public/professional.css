@@ -773,6 +773,18 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .backtest-fields input, .backtest-fields select { width: 100%; max-width: 100%; min-height: 40px; box-sizing: border-box; }
 .backtest-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .backtest-actions .cta, .backtest-actions .task-chip { width: auto; min-height: 40px; }
+.backtest-models { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 12px 0; }
+.backtest-model { display: grid; gap: 5px; min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); font-size: .82rem; }
+.backtest-model label { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.backtest-model input[type="number"] { min-height: 36px; }
+.backtest-model[aria-disabled="true"] { opacity: .55; }
+.backtest-rules { display: grid; gap: 8px; margin: 10px 0; }
+.backtest-rule { display: grid; grid-template-columns: minmax(82px, auto) repeat(2, minmax(100px, 1fr)) auto; align-items: end; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); }
+.backtest-rule strong { align-self: center; font-size: .82rem; }
+.backtest-rule .field { min-width: 0; }
+.backtest-rule .field label { font-size: .72rem; }
+.backtest-rule select, .backtest-rule input { width: 100%; min-width: 0; min-height: 36px; }
+.backtest-rule button { min-height: 36px; }
 .backtest-results { position: sticky; top: 104px; }
 .backtest-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
 .backtest-metrics > div { display: flex; flex-direction: column; gap: 3px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; }
@@ -783,7 +795,8 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .backtest-table-wrap th, .backtest-table-wrap td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
 .backtest-dialog :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 @media (max-width: 850px) { .backtest-layout { grid-template-columns: 1fr; } .backtest-results { position: static; } }
-@media (max-width: 450px) { .backtest-fields { grid-template-columns: 1fr; } .backtest-shell { padding: 10px; } .backtest-header .task-chip span { display: none; } }
+@media (max-width: 650px) { .backtest-rule { grid-template-columns: repeat(2, minmax(0, 1fr)); } .backtest-rule strong { grid-column: 1 / -1; } }
+@media (max-width: 450px) { .backtest-fields { grid-template-columns: 1fr; } .backtest-shell { padding: 10px; } .backtest-header .task-chip span { display: none; } .backtest-models { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .market-search-form :is(input, select, button), .ensemble-model-card :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .ensemble-model-card select { width: 100%; text-overflow: ellipsis; }
 @media (min-width: 769px) {

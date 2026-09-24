@@ -33,7 +33,19 @@ test('builder loads only on demand and does not send live orders', () => {
   assert.match(css, /\.backtest-dialog\s*\{[^}]*100dvh/s);
 });
 
-test('modal submits the selected ticker, versioned strategy and local cutoff through authenticated API bridge', async () => {
+test('forecast header uses browser locale and has no notifications or language control', () => {
+  const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  for (const folder of ['pages', 'functions_ssr/templates']) {
+    const dom = new JSDOM(fs.readFileSync(path.join(root, folder, 'forecasting.html'), 'utf8'));
+    assert.equal(dom.window.document.querySelector('#language-select'), null);
+    assert.equal(dom.window.document.querySelector('#header-notifications'), null);
+    dom.window.close();
+  }
+  assert.match(app, /applyLanguagePreference\("auto", \{ persist: false \}\)/);
+  assert.doesNotMatch(app, /ensureHeaderNotificationsCta/);
+});
+
+test('modal stacks quantile rules and queues the selected forecast through authenticated API bridge', async () => {
   const dom = new JSDOM(fs.readFileSync(path.join(root, 'pages/forecasting.html'), 'utf8'), { url: 'https://quantura.studio/forecasting' });
   const previousWindow = global.window, previousDocument = global.document;
   global.window = dom.window;
@@ -45,9 +57,18 @@ test('modal submits the selected ticker, versioned strategy and local cutoff thr
     ensureSession: async () => {}, workspaceId: () => 'ws_test',
     source: () => ({ type: 'ticker', symbol: 'SPY', provider: 'auto' }),
     request: async (path, options) => {
-      submitted = { path, options };
-      return { data: { id: 'bt_test', provider: 'alpaca', fill_model: 'next_observed_bar_open',
-        metrics: { observed_bars: 50, trades: 0, wins: 0, losses: 0, win_rate_pct: null, net_pnl: 0, return_pct: 0, max_drawdown: 0, fees: 0, longest_winning_streak: 0, longest_losing_streak: 0 },
+      if (path.startsWith('/api/v1/ensemble-forecasts/models')) return { data: { models: [
+        { id: 'prophet', name: 'Meta Prophet', available: true, default_weight: 1,
+          minimum_observed_context: 2, quantile_support: { type: 'requested' } },
+      ] } };
+      if (path === '/api/v1/backtests') {
+        submitted = { path, options };
+        return { data: { backtest_id: 'bt_test', status: 'queued' } };
+      }
+      return { data: { id: 'bt_test', status: 'completed', provider: 'alpaca', fill_model: 'next_observed_bar_open',
+        metrics: { forecast_windows: 2, matched_forecast_bars: 20, observed_bars: 148, trades: 0, wins: 0, losses: 0,
+          win_rate_pct: null, net_pnl: 0, return_pct: 0, max_drawdown: 0, fees: 0,
+          longest_winning_streak: 0, longest_losing_streak: 0 }, forecast_windows: [],
         trades: [], equity_curve: [{ timestamp: '2026-09-01T00:00:00Z', equity: 1000 }] } };
     },
   };
@@ -55,6 +76,9 @@ test('modal submits the selected ticker, versioned strategy and local cutoff thr
     const module = await import(`file://${path.join(root, 'public/backtest-builder.js')}`);
     module.openBacktest();
     assert.equal(dom.window.document.getElementById('backtest-dialog').open, true);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    dom.window.document.querySelector('[data-add-backtest-rule="trailing_stop"]').click();
+    assert.equal(dom.window.document.querySelectorAll('.backtest-rule').length, 4);
     dom.window.document.getElementById('backtest-frequency').value = '1Hour';
     dom.window.document.getElementById('backtest-end').value = '2026-09-01T15:30';
     dom.window.document.getElementById('backtest-form').dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
@@ -63,9 +87,14 @@ test('modal submits the selected ticker, versioned strategy and local cutoff thr
     assert.equal(submitted.options.method, 'POST');
     assert.equal(submitted.options.body.source.symbol, 'SPY');
     assert.equal(submitted.options.body.source.frequency, '1Hour');
-    assert.equal(submitted.options.body.strategy.schema_version, 1);
+    assert.equal(submitted.options.body.strategy.schema_version, 2);
+    assert.equal(submitted.options.body.strategy.type, 'quantile_rules');
+    assert.deepEqual(submitted.options.body.strategy.rules.map(rule => rule.kind),
+      ['entry', 'take_profit', 'stop_loss', 'trailing_stop']);
+    assert.equal(submitted.options.body.forecast.models.prophet.weight, 1);
+    assert.equal(submitted.options.body.replay.evaluation_windows, 2);
     assert.equal(submitted.options.body.workspace_id, 'ws_test');
-    assert.match(dom.window.document.getElementById('backtest-status').textContent, /50 observed bars/);
+    assert.match(dom.window.document.getElementById('backtest-status').textContent, /2 walk-forward forecasts/);
   } finally {
     global.window = previousWindow;
     global.document = previousDocument;

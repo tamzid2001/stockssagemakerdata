@@ -9,7 +9,7 @@
     "lint": "node scripts/lint-client.mjs",
     "typecheck": "npm --prefix functions_explore run build",
     "test:ui": "node --test tests/ui/*.test.cjs",
-    "test": "uvx pytest tests -q && npm --prefix functions_explore test",
+    "test": "uv run --no-project --with pytest --with numpy --with pandas --with pandas-market-calendars --with httpx python -m pytest tests -q && npm --prefix functions_explore test",
     "build:observability": "node ./scripts/build-vercel-observability.mjs",
     "build:rnweb": "node ./rnweb/build-rnw.mjs"
   },

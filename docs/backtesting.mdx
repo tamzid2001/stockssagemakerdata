@@ -5,9 +5,9 @@ description: "Build, inspect and export a bounded historical strategy test."
 
 # Backtesting
 
-On **Q Forecast**, select a stock ticker or one Kalshi/Polymarket US contract, then choose **Backtest** beside **Run forecast**. The full-screen builder starts with a 10/30-observation simple-moving-average crossover. Adjust the observed interval, historical cutoff, averages, capital allocation, commission and slippage before running. Results show trades, equity, net P&L, win rate and maximum drawdown. The form uses up to 500 real observed bars.
+On **Q Forecast**, select a stock ticker or one Kalshi/Polymarket US contract, then choose **Backtest** beside **Run forecast**. The full-screen builder selects the forecast models, weights, quantiles and horizon before stacking entry, take-profit, stop-loss and trailing-stop blocks. Its default long strategy enters when the observed close crosses upward through forecast P10, takes profit at P50 and stops at P01. You can combine 1–4 entry blocks with **ALL** or **ANY** logic and 1–6 exit blocks; exit blocks use **OR** logic. A quantile used in a rule must be among the requested, model-supported forecast quantiles.
 
-The signal for bar *t* uses only completed closes through *t*. A simulated entry or signal exit occurs at the next observed bar's open. A final open position is liquidated at the last observed close. Unavailable intervals are not filled. For prediction-market contracts, the next observed display quote is a **research proxy**, not a verified executable bid or ask; do not interpret the simulated P&L as live fills.
+The worker runs bounded walk-forward forecasts from observed bars available at each cutoff. A signal uses only the completed close and previously produced ensemble quantiles for that timestamp. A simulated entry or exit fills at the **next observed bar's open**; a final open position is liquidated at the last observed close. If several exits signal together, stop-loss takes precedence, then trailing stop, then take-profit. Up to 2,000 genuine bars may be fetched; each of up to eight windows uses 2–500 prior context bars. Missing intervals are not filled. For prediction-market contracts, the next observed display quote is a **research proxy**, not a verified executable bid or ask; do not interpret simulated P&L as live fills.
 
 ## API
 
@@ -17,14 +17,14 @@ Use a Firebase session or a Quantura API key. `backtests:run` plus current works
 curl -X POST 'https://quantura.studio/api/v1/backtests' \
   -H 'Authorization: Bearer YOUR_QUANTURA_API_KEY' \
   -H 'Content-Type: application/json' \
-  -d '{"source":{"type":"ticker","symbol":"SPY","provider":"auto","frequency":"1Day"},"strategy":{"schema_version":1,"type":"sma_crossover","fast_period":10,"slow_period":30},"execution":{"starting_capital":1000,"position_fraction":1,"commission_bps":10,"slippage_bps":5}}'
+  -d '{"source":{"type":"ticker","symbol":"SPY","provider":"auto","frequency":"1Day"},"forecast":{"prediction_length":10,"quantiles":[0.01,0.1,0.5],"models":{"prophet":{"enabled":true,"weight":1}},"failure_policy":"fail"},"replay":{"context_rows":128,"evaluation_windows":2},"strategy":{"schema_version":2,"type":"quantile_rules","entry_logic":"all","rules":[{"id":"entry_p10","kind":"entry","condition":"crosses_above","quantile":0.1},{"id":"take_p50","kind":"take_profit","target_mode":"quantile","quantile":0.5},{"id":"stop_p01","kind":"stop_loss","target_mode":"quantile","quantile":0.01}]},"execution":{"starting_capital":1000,"position_fraction":1,"commission_bps":10,"slippage_bps":5}}'
 ```
 
-The response is HTTP 201 with `data.id`, `data.metrics`, `data.trades`, `data.equity_curve`, `data.fill_model`, and a SHA-256 `data_hash` of the observed input bars. Use:
+The response is **HTTP 202** with `data.backtest_id`, `data.status: "queued"`, `data.status_url` and `data.result_url`. Poll the result endpoint for per-window progress. Once completed, it contains only final ensemble quantiles, matched observations, simulated trades, an equity curve, metrics, assumptions, and a SHA-256 `data_hash` of the input bars. Individual model prediction arrays are not published. Use:
 
 - `GET /api/v1/backtests/strategy-schema` for the versioned JSON Schema and defaults.
 - `GET /api/v1/backtests?workspace_id=...` for recent authorized runs.
-- `GET /api/v1/backtests/{id}` for an authorized full result.
+- `GET /api/v1/backtests/{id}` for status, progress, or an authorized completed result.
 - `GET /api/v1/backtests/{id}/strategy` for a reusable JSON configuration.
 
 An exported strategy is **not** a live-trading instruction. `live_eligible` is `false`; it contains no exchange credentials, order authorization or deployment switch. A live system must separately review the market, fill model, risk controls and user approval. Backtest returns are historical simulations, not guarantees.

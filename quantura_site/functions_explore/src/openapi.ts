@@ -1,4 +1,5 @@
-import { BACKTEST_STRATEGY_SCHEMA } from "./backtestEngine";
+import { DEFAULT_BACKTEST_EXECUTION } from "./backtestEngine";
+import { DEFAULT_QUANTILE_REPLAY, DEFAULT_QUANTILE_STRATEGY, QUANTILE_STRATEGY_SCHEMA } from "./quantileBacktestConfig";
 
 const errorSchema = {
   type: "object",
@@ -20,9 +21,9 @@ const OPERATION_TITLES: Record<string, string> = {
   getMyAccess: "Get the Authenticated User's Effective API, Plan, and Workspace Access",
   getCapabilities: "Get the Authenticated User's Effective Quantura Product Capabilities",
   getBacktestStrategySchema: "Get the Versioned Backtest Strategy JSON Schema and Safe Defaults",
-  createBacktest: "Run and Save a Bounded Historical Strategy Backtest for an Authorized Workspace",
+  createBacktest: "Queue a Point-in-Time Quantile Forecast Backtest for an Authorized Workspace",
   listBacktests: "List Saved Backtests in an Authorized Workspace",
-  getBacktest: "Read One Authorized Backtest's Trades, Equity Curve, and Assumptions",
+  getBacktest: "Poll One Authorized Quantile Backtest and Read Its Completed Simulation",
   exportBacktestStrategy: "Export an Immutable Backtest Strategy Configuration for Separate Live Review",
   listWorkspaces: "List Every Workspace the Authenticated User Can Currently Access",
   createWorkspace: "Create a New Workspace Owned by the Authenticated User",
@@ -159,10 +160,11 @@ function successExample(operationId: string): unknown {
   switch (operationId) {
     case "getMyAccess": return { data: { user: { id: "usr_example", email: "developer@example.com" }, token_scopes: ["account:read", "workspaces:read", "datasets:read"], personal_plan: "pro", workspaces: [workspace] }, meta: successMeta() };
     case "getCapabilities": return { data: { forecasting: true, screener: true, historical_data: true, options: true, sports: true, dataset_download: true, backtesting: true, collaboration: true, sagemaker: true }, meta: successMeta() };
-    case "getBacktestStrategySchema": return { data: { schema: BACKTEST_STRATEGY_SCHEMA, default_strategy: { schema_version: 1, type: "sma_crossover", fast_period: 10, slow_period: 30 }, default_execution: { starting_capital: 1000, position_fraction: 1, commission_bps: 10, slippage_bps: 5 }, live_eligible: false }, meta: successMeta() };
-    case "createBacktest": case "getBacktest": return { data: { id: "bt_0123456789abcdef0123456789abcdef", workspace_id: workspace.id, source: { type: "ticker", symbol: "SPY", provider: "auto", frequency: "1Day" }, provider: "alpaca", strategy: { schema_version: 1, type: "sma_crossover", fast_period: 10, slow_period: 30 }, execution: { starting_capital: 1000, position_fraction: 1, commission_bps: 10, slippage_bps: 5 }, fill_model: "next_observed_bar_open", data_hash: "0123456789abcdef", live_eligible: false, metrics: { observed_bars: 500, trades: 8, wins: 5, losses: 3, win_rate_pct: 62.5, net_pnl: 42.18, return_pct: 4.218, max_drawdown: 26.2, fees: 5.6 }, trades: [{ entry_at: "2026-09-01T13:30:00.000Z", exit_at: "2026-09-03T13:30:00.000Z", shares: 1, pnl: 3.2 }], equity_curve: [{ timestamp: "2026-09-01T20:00:00.000Z", equity: 1000 }] }, meta: successMeta() };
+    case "getBacktestStrategySchema": return { data: { schema: QUANTILE_STRATEGY_SCHEMA, default_strategy: DEFAULT_QUANTILE_STRATEGY, default_replay: DEFAULT_QUANTILE_REPLAY, default_execution: DEFAULT_BACKTEST_EXECUTION, model_capabilities_url: "/api/v1/ensemble-forecasts/models", live_eligible: false }, meta: successMeta() };
+    case "createBacktest": return { data: { backtest_id: "bt_0123456789abcdef0123456789abcdef", status: "queued", created_at: "2026-09-23T20:00:00.000Z", status_url: "/api/v1/backtests/bt_0123456789abcdef0123456789abcdef", result_url: "/api/v1/backtests/bt_0123456789abcdef0123456789abcdef" }, meta: successMeta() };
+    case "getBacktest": return { data: { id: "bt_0123456789abcdef0123456789abcdef", status: "completed", workspace_id: workspace.id, source: { type: "ticker", symbol: "SPY", provider: "auto", frequency: "1Day" }, provider: "alpaca", strategy: DEFAULT_QUANTILE_STRATEGY, replay: DEFAULT_QUANTILE_REPLAY, fill_model: "next_observed_bar_open", data_hash: "0123456789abcdef", live_eligible: false, metrics: { observed_bars: 500, forecast_windows: 2, matched_forecast_bars: 60, trades: 8, wins: 5, losses: 3, win_rate_pct: 62.5, net_pnl: 42.18, return_pct: 4.218, max_drawdown: 26.2, fees: 5.6 }, forecast_windows: [{ number: 1, cutoff_at: "2026-09-01T20:00:00.000Z", training_rows: 128, predictions: [{ timestamp: "2026-09-02T20:00:00.000Z", quantiles: { "0.01": 500, "0.1": 510, "0.5": 530 } }] }], trades: [{ entry_at: "2026-09-03T13:30:00.000Z", exit_at: "2026-09-04T13:30:00.000Z", shares: 1, pnl: 3.2, entry_rule_ids: ["entry_p10"], exit_rule_id: "take_p50" }], equity_curve: [{ timestamp: "2026-09-01T20:00:00.000Z", equity: 1000 }] }, meta: successMeta() };
     case "listBacktests": return { data: [{ id: "bt_0123456789abcdef0123456789abcdef", workspace_id: workspace.id, created_at: "2026-09-23T20:00:00.000Z", metrics: { trades: 8, net_pnl: 42.18 }, live_eligible: false }], meta: successMeta(1) };
-    case "exportBacktestStrategy": return { data: { schema_version: 1, backtest_id: "bt_0123456789abcdef0123456789abcdef", strategy: { schema_version: 1, type: "sma_crossover", fast_period: 10, slow_period: 30 }, source: { type: "ticker", symbol: "SPY", provider: "auto", frequency: "1Day" }, execution: { starting_capital: 1000, position_fraction: 1, commission_bps: 10, slippage_bps: 5 }, fill_model: "next_observed_bar_open", live_eligible: false }, meta: successMeta() };
+    case "exportBacktestStrategy": return { data: { schema_version: 2, backtest_id: "bt_0123456789abcdef0123456789abcdef", strategy: DEFAULT_QUANTILE_STRATEGY, source: { type: "ticker", symbol: "SPY", provider: "auto", frequency: "1Day" }, replay: DEFAULT_QUANTILE_REPLAY, execution: DEFAULT_BACKTEST_EXECUTION, fill_model: "next_observed_bar_open", live_eligible: false }, meta: successMeta() };
     case "listWorkspaces": return { data: [workspace], meta: successMeta(1) };
     case "createWorkspace": case "getWorkspace": case "updateWorkspace": return { data: workspace, meta: successMeta() };
     case "listWorkspacePermissions": return { data: ["workspace.read", "workspace.settings.read", "csv.list", "csv.read", "csv.download"], meta: successMeta(5) };
@@ -276,25 +278,25 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
       { name: "Datasets", description: "Licensing-aware catalog and schema metadata." },
       { name: "Forecasts", description: "Prospective forecasts and immutable probability trajectories." },
       { name: "Ensemble Forecasts", description: "Asynchronous probabilistic time-series ensemble jobs and reproducible presets." },
-      { name: "Backtests", description: "Bounded, saved historical simulations and versioned strategy exports; never live order execution." },
+      { name: "Backtests", description: "Asynchronous point-in-time ensemble-quantile simulations and versioned strategy exports; never live order execution." },
     ],
     paths: {
       "/backtests/strategy-schema": {
         get: { tags: ["Backtests"], operationId: "getBacktestStrategySchema", "x-quantura-scope": "backtests:read",
-          responses: { "200": { description: "JSON Schema and default SMA-crossover settings." }, ...commonErrors } },
+          responses: { "200": { description: "Quantile-rule JSON Schema, default blocks, and bounded replay settings." }, ...commonErrors } },
       },
       "/backtests": {
         get: { tags: ["Backtests"], operationId: "listBacktests", "x-quantura-scope": "backtests:read",
           parameters: [{ name: "workspace_id", in: "query", required: false, schema: { type: "string" } }],
           responses: { "200": { description: "Up to 50 recent authorized saved backtests." }, ...commonErrors } },
         post: { tags: ["Backtests"], operationId: "createBacktest", "x-quantura-scope": "backtests:run",
-          description: "Fetches up to 500 actual provider bars, runs a deterministic completed-bar SMA simulation, and atomically saves the immutable configuration, data hash, trades and equity curve. Requires current forecast.create workspace permission and monthly allowance. Prediction-market quotes are research fill proxies, not executable bids/asks. Does not launch a live order.",
-          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/BacktestRequest" }, example: { source: { type: "ticker", symbol: "SPY", provider: "auto", frequency: "1Day" }, strategy: { schema_version: 1, type: "sma_crossover", fast_period: 10, slow_period: 30 }, execution: { starting_capital: 1000, position_fraction: 1, commission_bps: 10, slippage_bps: 5 } } } } },
-          responses: { "201": { description: "Completed, saved historical simulation with metrics, trades and equity curve." }, "422": { description: "Unsupported source, malformed strategy or insufficient observed history.", content: { "application/json": { schema: errorSchema } } }, ...commonErrors } },
+          description: "Queues a durable worker. Each historical window produces final ensemble quantiles from prior real bars only. Entry blocks use requested forecast quantiles; quantile/percentage targets and trailing stops use completed observed closes, with fills at the next observed bar. No live orders. Requires forecast.create and monthly allowance; event-market display quotes are not executable bids or asks.",
+          requestBody: { required: true, content: { "application/json": { schema: { $ref: "#/components/schemas/BacktestRequest" }, example: { source: { type: "ticker", symbol: "SPY", provider: "auto", frequency: "1Day" }, forecast: { prediction_length: 30, quantiles: [.01, .1, .25, .5, .75, .9, .99], models: { prophet: { enabled: true, weight: 1 } }, failure_policy: "fail" }, replay: { context_rows: 128, evaluation_windows: 2 }, strategy: DEFAULT_QUANTILE_STRATEGY, execution: DEFAULT_BACKTEST_EXECUTION } } } },
+          responses: { "202": { description: "Durable quantile backtest queued; poll status_url for progress and the completed result." }, "422": { description: "Unsupported source, incompatible rule stack or insufficient observed history.", content: { "application/json": { schema: errorSchema } } }, ...commonErrors } },
       },
       "/backtests/{id}": {
         get: { tags: ["Backtests"], operationId: "getBacktest", "x-quantura-scope": "backtests:read", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
-          responses: { "200": { description: "Full authorized historical result with source, assumptions and data hash." }, "404": { description: "Backtest not found." }, ...commonErrors } },
+          responses: { "200": { description: "Queued/running progress, or final ensemble quantiles, simulated trades, equity curve and assumptions." }, "404": { description: "Backtest not found." }, ...commonErrors } },
       },
       "/backtests/{id}/strategy": {
         get: { tags: ["Backtests"], operationId: "exportBacktestStrategy", "x-quantura-scope": "backtests:read", parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
@@ -625,9 +627,18 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
         bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "Quantura API key" },
       },
       schemas: {
-        BacktestStrategy: BACKTEST_STRATEGY_SCHEMA,
-        BacktestRequest: { type: "object", additionalProperties: false, required: ["source", "strategy"], properties: {
+        BacktestStrategy: QUANTILE_STRATEGY_SCHEMA,
+        BacktestRequest: { type: "object", additionalProperties: false, required: ["source", "forecast", "replay", "strategy"], properties: {
           workspace_id: { type: "string" }, strategy: { $ref: "#/components/schemas/BacktestStrategy" },
+          forecast: { type: "object", additionalProperties: false, required: ["prediction_length", "quantiles", "models"], properties: {
+            prediction_length: { type: "integer", minimum: 1, maximum: 60 },
+            quantiles: { type: "array", minItems: 1, maxItems: 21, uniqueItems: true, items: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 } },
+            models: { type: "object", additionalProperties: false, properties: { prophet: { $ref: "#/components/schemas/ModelSelection" }, toto: { $ref: "#/components/schemas/ModelSelection" }, granite: { $ref: "#/components/schemas/ModelSelection" }, chronos: { $ref: "#/components/schemas/ModelSelection" }, timesfm: { $ref: "#/components/schemas/ModelSelection" } } },
+            toto_variant: { type: "string", enum: ["4m", "22m", "313m", "1b", "2.5b"] }, failure_policy: { type: "string", enum: ["fail", "renormalize"] },
+          } },
+          replay: { type: "object", additionalProperties: false, required: ["context_rows", "evaluation_windows"], properties: {
+            context_rows: { type: "integer", minimum: 2, maximum: 500 }, evaluation_windows: { type: "integer", minimum: 1, maximum: 8 },
+          } },
           source: { oneOf: [
             { type: "object", additionalProperties: false, required: ["type", "symbol"], properties: { type: { const: "ticker" }, symbol: { type: "string" }, provider: { type: "string", enum: ["auto", "alpaca", "yahoo"] }, frequency: { type: "string", enum: ["1Day", "1Hour", "1Min"] }, end: { type: "string", format: "date-time" } } },
             { type: "object", additionalProperties: false, required: ["type", "provider", "symbol", "contract_id"], properties: { type: { const: "prediction_market" }, provider: { type: "string", enum: ["kalshi", "polymarket_us"] }, symbol: { type: "string" }, contract_id: { type: "string" }, frequency: { type: "string", enum: ["1min", "1h", "1D"] }, history_phase: { type: "string", enum: ["both", "pregame", "in_game"] }, end: { type: "string", format: "date-time" } } },

@@ -66,18 +66,6 @@
         </a>
         <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
-          <div class="language-picker">
-            <label class="language-picker-label" for="language-select">Language</label>
-            <select id="language-select" class="status-select language-select" aria-label="Language">
-              <option value="auto">Auto</option>
-              <option value="en">English</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-              <option value="ar">Arabic</option>
-              <option value="bn">Bengali</option>
-            </select>
-          </div>
           <span id="header-user-status" class="pill">Logged Out</span>
 
         </div>
@@ -252,7 +240,7 @@
                         <dialog id="backtest-dialog" class="backtest-dialog" aria-labelledby="backtest-title">
                           <div class="backtest-shell">
                             <header class="backtest-header">
-                              <div><p class="small muted">Quantura Research</p><h2 id="backtest-title">Create a backtest</h2><p class="small muted">Test a versioned strategy on observed market history. Simulated fills are not live orders.</p></div>
+                              <div><p class="small muted">Quantura Research</p><h2 id="backtest-title">Quantile backtest</h2><p class="small muted">Walk forward through historical data, produce ensemble quantiles, then test your rule blocks on later observed closes. Research simulation only.</p></div>
                               <button id="backtest-close" class="task-chip" type="button" aria-label="Close backtest builder"><i class="iconoir-xmark" aria-hidden="true"></i><span>Close</span></button>
                             </header>
                             <div class="backtest-layout">
@@ -263,26 +251,40 @@
                                   <div class="backtest-fields">
                                     <div class="field"><label class="label" for="backtest-frequency">Observed interval</label><select id="backtest-frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">1 minute</option></select></div>
                                     <div class="field"><label class="label" for="backtest-history-phase">Game history</label><select id="backtest-history-phase"><option value="both">Pregame + in-game</option><option value="pregame">Pregame only</option><option value="in_game">In-game only</option></select></div>
-                                    <div class="field"><label class="label" for="backtest-end">History through (your timezone)</label><input id="backtest-end" type="datetime-local" /><span class="small muted">Leave blank for latest. Up to 500 real observed bars.</span></div>
+                                    <div class="field"><label class="label" for="backtest-end">History through (your timezone)</label><input id="backtest-end" type="datetime-local" /><span class="small muted">Leave blank for latest. Up to 2,000 genuine bars; no missing values are filled.</span></div>
                                   </div>
+                                </section>
+                                <section class="backtest-panel" aria-labelledby="backtest-forecast-title">
+                                  <h3 id="backtest-forecast-title">1 · Produce quantile forecasts</h3>
+                                  <p class="small muted">Each window trains only on bars through its historical cutoff. Windows do not overlap; every model runs sequentially in the worker.</p>
+                                  <div class="backtest-fields">
+                                    <div class="field"><label class="label" for="backtest-horizon">Forecast steps per window</label><input id="backtest-horizon" type="number" min="1" max="60" step="1" value="30" required /></div>
+                                    <div class="field"><label class="label" for="backtest-windows">Walk-forward windows</label><input id="backtest-windows" type="number" min="1" max="8" step="1" value="2" required /></div>
+                                    <div class="field"><label class="label" for="backtest-context">Observed input bars per window</label><input id="backtest-context" type="number" min="2" max="500" step="1" value="128" required /></div>
+                                    <div class="field"><label class="label" for="backtest-failure-policy">Model failure</label><select id="backtest-failure-policy"><option value="fail">Fail this backtest</option><option value="renormalize">Exclude failed model and disclose</option></select></div>
+                                  </div>
+                                  <div id="backtest-models" class="backtest-models" aria-label="Forecast models"></div>
+                                  <div class="field"><label class="label" for="backtest-toto-variant">Toto checkpoint</label><select id="backtest-toto-variant"></select></div>
+                                  <div class="field"><label class="label" for="backtest-quantiles">Forecast quantiles (comma-separated decimals)</label><input id="backtest-quantiles" type="text" value="0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99" spellcheck="false" /><span class="small muted">Only requested and model-supported quantiles can be used by rule blocks.</span></div>
+                                  <p id="backtest-capabilities" class="small muted" role="status">Loading model capabilities when opened…</p>
                                 </section>
                                 <section class="backtest-panel" aria-labelledby="backtest-strategy-title">
-                                  <h3 id="backtest-strategy-title">Default strategy · SMA crossover</h3>
-                                  <p class="small muted">After a completed bar, buy on the next observed bar when the fast average exceeds the slow average; exit when it falls below. No future bar is used for a decision.</p>
-                                  <div class="backtest-fields">
-                                    <div class="field"><label class="label" for="backtest-fast">Fast observations</label><input id="backtest-fast" type="number" min="2" max="100" step="1" value="10" required /></div>
-                                    <div class="field"><label class="label" for="backtest-slow">Slow observations</label><input id="backtest-slow" type="number" min="3" max="200" step="1" value="30" required /></div>
-                                  </div>
+                                  <h3 id="backtest-strategy-title">2 · Stack decision rules</h3>
+                                  <p class="small muted">Long-only. Entry blocks combine as selected; exit blocks use the first qualifying completed close. Stop-loss wins a simultaneous tie, then trailing stop, then take-profit.</p>
+                                  <div class="field"><label class="label" for="backtest-entry-logic">Entry blocks</label><select id="backtest-entry-logic"><option value="all">ALL must match</option><option value="any">ANY may match</option></select></div>
+                                  <div id="backtest-rules" class="backtest-rules" aria-label="Backtest rule blocks"></div>
+                                  <div class="backtest-actions"><button type="button" class="task-chip" data-add-backtest-rule="entry">+ Entry</button><button type="button" class="task-chip" data-add-backtest-rule="take_profit">+ Take-profit</button><button type="button" class="task-chip" data-add-backtest-rule="stop_loss">+ Stop-loss</button><button type="button" class="task-chip" data-add-backtest-rule="trailing_stop">+ Trailing stop</button></div>
+                                  <p id="backtest-rule-status" class="small muted" role="status" aria-live="polite">The default example crosses upward through P10, takes profit at P50, and stops at P01.</p>
                                 </section>
                                 <section class="backtest-panel" aria-labelledby="backtest-execution-title">
-                                  <h3 id="backtest-execution-title">Simulation assumptions</h3>
+                                  <h3 id="backtest-execution-title">3 · Simulation assumptions</h3>
                                   <div class="backtest-fields">
                                     <div class="field"><label class="label" for="backtest-capital">Starting capital ($)</label><input id="backtest-capital" type="number" min="10" max="1000000" step="1" value="1000" required /></div>
                                     <div class="field"><label class="label" for="backtest-fraction">Capital per entry (%)</label><input id="backtest-fraction" type="number" min="1" max="100" step="1" value="100" required /></div>
                                     <div class="field"><label class="label" for="backtest-commission">Commission (basis points)</label><input id="backtest-commission" type="number" min="0" max="1000" step="1" value="10" required /></div>
                                     <div class="field"><label class="label" for="backtest-slippage">Slippage (basis points)</label><input id="backtest-slippage" type="number" min="0" max="1000" step="1" value="5" required /></div>
                                   </div>
-                                  <p class="small muted">Event-market fills use the next observed display quote as a research proxy, not a verified executable bid/ask. Exported strategies are never sent to a live trader automatically.</p>
+                                  <p class="small muted">Signals compare a completed observed close with that timestamp's forecast quantiles; fills use the next observed bar. Event-market fills use display quotes as a proxy, not verified executable bid/ask. No live order is placed.</p>
                                 </section>
                                 <div class="backtest-actions"><button id="backtest-run" class="cta" type="submit"><i class="iconoir-play" aria-hidden="true"></i><span>Run backtest</span></button><button id="backtest-reset" class="task-chip" type="button">Reset defaults</button></div>
                               </form>
@@ -291,6 +293,7 @@
                                 <p id="backtest-status" role="status" aria-live="polite">Configure and run a historical simulation.</p>
                                 <div id="backtest-metrics" class="backtest-metrics" hidden></div>
                                 <div id="backtest-equity" class="backtest-equity" aria-label="Equity curve" hidden></div>
+                                <div id="backtest-forecast-windows" class="backtest-trades" hidden></div>
                                 <div id="backtest-trades" class="backtest-trades" hidden></div>
                                 <div class="backtest-actions"><button id="backtest-download" class="task-chip" type="button" hidden><i class="iconoir-download" aria-hidden="true"></i><span>Download result JSON</span></button><button id="backtest-strategy-download" class="task-chip" type="button" hidden><i class="iconoir-code" aria-hidden="true"></i><span>Export strategy JSON</span></button></div>
                               </section>
