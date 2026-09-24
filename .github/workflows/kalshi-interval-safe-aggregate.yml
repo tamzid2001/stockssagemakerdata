@@ -1,0 +1,59 @@
+name: Kalshi Non-BTC 15m Safe Aggregate
+run-name: Interval first-minute P90 replay · ${{ inputs.series }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      series:
+        type: choice
+        required: true
+        options: [KXBNB15M, KXCOPPER15M, KXDOGE15M, KXETH15M, KXGOLD15M, KXHYPE15M, KXNATGAS15M, KXNEAR15M, KXSILVER15M, KXSOL15M, KXWTI15M, KXXRP15M, KXZEC15M]
+      campaign_id:
+        type: string
+        required: true
+        description: Exact frozen encrypted replay campaign ID
+      report_key:
+        type: string
+        required: true
+        description: Exact frozen compact report key
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interval-safe-aggregate-${{ inputs.series }}-${{ inputs.campaign_id }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate reader and replay logic
+        run: |
+          python -m pip install pytest==8.4.2 cryptography==50.0.1 firebase-admin==7.1.0 numpy==2.5.2 pandas==2.3.3 httpx==0.28.1 pandas-market-calendars==5.4.0
+          python -m pytest -q market_research/tests/test_btc_bucket_report.py market_research/tests/test_interval_safe_aggregate.py
+      - name: Read encrypted replay and emit safe aggregate
+        env:
+          SERIES: ${{ inputs.series }}
+          CAMPAIGN_ID: ${{ inputs.campaign_id }}
+          REPORT_KEY: ${{ inputs.report_key }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: |
+          python -m market_research.interval_safe_aggregate \
+            --series "$SERIES" --campaign-id "$CAMPAIGN_ID" --report-key "$REPORT_KEY" \
+            --output "$RUNNER_TEMP/interval-safe-aggregate.json"
+      - name: Upload sanitized aggregate
+        uses: actions/upload-artifact@v7
+        with:
+          name: interval-safe-aggregate-${{ inputs.series }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/interval-safe-aggregate.json
+          retention-days: 7
+          compression-level: 9
