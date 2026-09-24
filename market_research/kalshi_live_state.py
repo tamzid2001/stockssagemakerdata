@@ -46,6 +46,21 @@ def approved_reconfiguration(existing, requested, state):
         'recovery_multiplier': existing.get('recovery_multiplier', '2.5')}
     if normalized == requested:
         return {**state, 'recovery_increases': state.get('recovery_increases', 0)}
+    # Firestore set(..., merge=True) merged the v4 configuration map into an
+    # older v2/v3 map, retaining retired risk-limit keys. Those keys are not
+    # active v4 settings. Strip only the exact previously approved legacy
+    # values; never treat a changed live sizing field as a harmless cleanup.
+    if normalized.get('version') == requested['version']:
+        stale = set(normalized) - set(requested)
+        if stale and stale <= {'max_contracts', 'max_order_dollars', 'daily_loss_dollars'}:
+            if 'max_contracts' in stale and normalized['max_contracts'] != 100:
+                raise RuntimeError('LEGACY_CAP_MIGRATION_NOT_APPROVED')
+            if any(normalized[key] != '100' for key in stale & {'max_order_dollars', 'daily_loss_dollars'}):
+                raise RuntimeError('LEGACY_DOLLAR_LIMIT_MIGRATION_NOT_APPROVED')
+            for key in stale:
+                normalized.pop(key)
+            if normalized == requested:
+                return {**state, 'recovery_increases': state.get('recovery_increases', 0)}
     legacy = normalized.get('version') in (LEGACY_VERSION, CAPPED_VERSION)
     if legacy:
         if (normalized.get('max_order_dollars') != '100'
@@ -79,7 +94,8 @@ class LiveJournal(Store):
     def claim(self, configuration=None):
         @self.fs.transactional
         def update(tx):
-            old = self.ref.get(transaction=tx).to_dict() or {}
+            snapshot = self.ref.get(transaction=tx)
+            old = snapshot.to_dict() or {}
             requested = asdict(self.config)
             existing = old.get('configuration')
             state = with_stats(old.get('state', {'size': self.config.starting_contracts,
@@ -87,9 +103,16 @@ class LiveJournal(Store):
             if existing:
                 state = approved_reconfiguration(existing, requested, state)
             lease = claim_transition(old.get('lease', {}), self.holder, time.time())
-            tx.set(self.ref, {'lease': lease, 'configuration': requested,
+            values = {'lease': lease, 'configuration': requested,
                 'paper_only': not self.live, 'state': state,
-                'enabled': old.get('enabled', True)}, merge=True)
+                'enabled': old.get('enabled', True)}
+            if snapshot.exists:
+                # update replaces the complete configuration map. A merge-set
+                # retains deleted nested keys and re-triggers the guard at the
+                # next 5-hour handoff while a recovery cycle is still open.
+                tx.update(self.ref, values)
+            else:
+                tx.set(self.ref, values)
             return lease['fence']
         self.fence = self.transact(update)
 

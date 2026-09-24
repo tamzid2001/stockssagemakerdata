@@ -272,6 +272,55 @@ def test_v3_session_migrates_only_when_flat_and_cycle_zero():
         approved_reconfiguration({**old, 'max_contracts': 50}, new.__dict__, flat)
 
 
+def test_v4_stale_firestore_merge_keys_do_not_interrupt_an_unchanged_recovery():
+    """A retired map key is not a risk change, even with a held position."""
+    config = Config()
+    merged = {**config.__dict__, 'max_contracts': 100,
+              'max_order_dollars': '100', 'daily_loss_dollars': '100'}
+    recovering = {'size': 2, 'cycle': '-0.416800', 'net': '23.369600',
+                  'active': {'ticker': TICKER}, 'recovery_increases': 1}
+    assert approved_reconfiguration(merged, config.__dict__, recovering) == recovering
+    for changed in ({**merged, 'starting_contracts': 10},
+                    {**merged, 'history_minutes': 2}):
+        with pytest.raises(RuntimeError, match='LIVE_CONFIG_CHANGE_REQUIRES_RECOVERY_ZERO'):
+            approved_reconfiguration(changed, config.__dict__, recovering)
+    with pytest.raises(RuntimeError, match='LEGACY_CAP_MIGRATION_NOT_APPROVED'):
+        approved_reconfiguration({**merged, 'max_contracts': 200}, config.__dict__, recovering)
+
+
+def test_live_claim_replaces_configuration_map_without_resetting_recovery():
+    from market_research.kalshi_live_state import LiveJournal
+
+    config = Config()
+    recovering = {'size': 2, 'cycle': '-0.416800', 'net': '23.369600',
+                  'active': {'ticker': TICKER}, 'recovery_increases': 1}
+    old = {'configuration': {**config.__dict__, 'max_contracts': 100,
+                             'max_order_dollars': '100', 'daily_loss_dollars': '100'},
+           'state': recovering, 'lease': {'expires': 0}, 'enabled': True}
+    class Snapshot:
+        exists = True
+        def to_dict(self): return old
+    class Ref:
+        def get(self, transaction=None): return Snapshot()
+    class Tx:
+        def __init__(self): self.updated = None
+        def update(self, ref, value): self.updated = value
+        def set(self, *args, **kwargs): raise AssertionError('merge-set would keep retired map keys')
+    tx = Tx()
+    journal = LiveJournal.__new__(LiveJournal)
+    journal.config = config
+    journal.live = True
+    journal.holder = 'next-worker'
+    journal.ref = Ref()
+    journal.fs = type('Firestore', (), {'transactional': staticmethod(lambda fn: fn)})()
+    journal.transact = lambda operation: operation(tx)
+    journal.claim()
+    assert tx.updated['configuration'] == config.__dict__
+    for key, value in recovering.items():
+        assert tx.updated['state'][key] == value
+    assert journal.fence == 1
+
+
 class MemoryJournal:
     def __init__(self):
         self.value = {'size': 1, 'cycle': '0', 'net': '0', 'active': None}
