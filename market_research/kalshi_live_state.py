@@ -53,8 +53,8 @@ def approved_reconfiguration(existing, requested, state):
             raise RuntimeError('LEGACY_DOLLAR_LIMIT_MIGRATION_NOT_APPROVED')
         normalized.pop('max_order_dollars')
         normalized.pop('daily_loss_dollars')
-        if existing.get('version') == LEGACY_VERSION:
-            if normalized.get('max_contracts') != 100:
+        if 'max_contracts' in normalized:
+            if normalized['max_contracts'] != 100:
                 raise RuntimeError('LEGACY_CAP_MIGRATION_NOT_APPROVED')
             normalized.pop('max_contracts')
         normalized['version'] = requested['version']
