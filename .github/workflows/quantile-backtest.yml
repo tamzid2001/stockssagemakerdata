@@ -1,0 +1,109 @@
+name: Quantura Quantile Backtest Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      backtest_job_id:
+        description: "Server-generated backtest ID only; leave blank for a safe test"
+        required: false
+        type: string
+      environment:
+        description: "Backend environment"
+        required: true
+        type: choice
+        options: [production, development, test]
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantile-backtest-${{ inputs.backtest_job_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ${{ fromJSON(vars.ENSEMBLE_FORECAST_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 240
+    env:
+      PYTHONUNBUFFERED: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      QUANTURA_ENSEMBLE_WORKER_TOKEN: ${{ secrets.QUANTURA_ENSEMBLE_WORKER_TOKEN }}
+      QUANTURA_WORKER_API_BASE: ${{ vars.QUANTURA_WORKER_API_BASE || 'https://quantura.studio' }}
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      ALLOW_NONCOMMERCIAL_TIMESFM: ${{ vars.ALLOW_NONCOMMERCIAL_TIMESFM || 'false' }}
+      BACKTEST_JOB_ID: ${{ inputs.backtest_job_id }}
+
+    steps:
+      - name: Checkout authoritative code
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install bounded smoke dependencies
+        if: ${{ inputs.backtest_job_id == '' }}
+        run: python -m pip install --disable-pip-version-check numpy pandas pandas-market-calendars httpx pytest
+
+      - name: Install locked inference environment
+        if: ${{ inputs.backtest_job_id != '' }}
+        run: python -m pip install --no-cache-dir --disable-pip-version-check --requirement requirements-ensemble-forecast.lock
+
+      - name: Test quantile rule engine without customer data
+        if: ${{ inputs.backtest_job_id == '' }}
+        run: python -m pytest -q ensemble_forecasting/tests/test_quantile_backtest.py
+
+      - name: Validate claimed job inputs and secret presence
+        if: ${{ inputs.backtest_job_id != '' }}
+        run: |
+          python - <<'PY'
+          import os, re
+          identifier = os.environ.get("BACKTEST_JOB_ID", "")
+          if not re.fullmatch(r"bt_[a-f0-9]{32}", identifier):
+              raise SystemExit("backtest_job_id is invalid")
+          if len(os.environ.get("QUANTURA_ENSEMBLE_WORKER_TOKEN", "")) < 32:
+              raise SystemExit("Backtest worker authentication is missing")
+          if not os.environ.get("HF_TOKEN"):
+              raise SystemExit("HF_TOKEN is required for real model inference")
+          print("Backtest ID and secret presence validated")
+          PY
+
+      - name: Claim and execute sequential rolling forecasts
+        if: ${{ inputs.backtest_job_id != '' }}
+        run: |
+          mkdir -p artifacts
+          python -m ensemble_forecasting.backtest_cli --backtest-job-id "${BACKTEST_JOB_ID}" | tee artifacts/backtest-receipt.json
+
+      - name: Report startup failure without overwriting an active job
+        if: ${{ failure() && inputs.backtest_job_id != '' }}
+        run: |
+          python - <<'PY'
+          import json, os, re, urllib.request
+          from urllib.parse import urlparse
+          identifier = os.environ.get("BACKTEST_JOB_ID", "")
+          base = os.environ.get("QUANTURA_WORKER_API_BASE", "").rstrip("/")
+          if not re.fullmatch(r"bt_[a-f0-9]{32}", identifier) or urlparse(base).scheme != "https":
+              raise SystemExit("Invalid worker destination")
+          request = urllib.request.Request(base+"/api/internal/backtests/"+identifier+"/fail",
+              data=json.dumps({"code":"BACKTEST_WORKER_STARTUP_FAILED","retryable":True,"only_if_queued":True}).encode(),
+              headers={"Authorization":"Bearer "+os.environ["QUANTURA_ENSEMBLE_WORKER_TOKEN"],"Content-Type":"application/json"},method="POST")
+          try:
+              with urllib.request.urlopen(request,timeout=20) as response:
+                  print("Startup failure notification delivered:",response.status)
+          except Exception:
+              print("Startup failure notification unavailable; job lease remains authoritative")
+          PY
+
+      - name: Upload small result receipt, not model weights or source history
+        if: ${{ always() && inputs.backtest_job_id != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantile-backtest-${{ inputs.backtest_job_id }}
+          path: artifacts/backtest-receipt.json
+          if-no-files-found: warn
+          retention-days: 14

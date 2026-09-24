@@ -19,8 +19,10 @@ test("backtest creation, result and strategy export document safe read/run scope
   const doc = buildOpenApiDocument() as any;
   assert.equal(doc.paths["/backtests"].post["x-quantura-scope"], "backtests:run");
   assert.equal(doc.paths["/backtests/{id}/strategy"].get["x-quantura-scope"], "backtests:read");
-  assert.equal(doc.components.schemas.BacktestStrategy.properties.type.const, "sma_crossover");
-  assert.equal(doc.paths["/backtests"].post.responses["201"].content["application/json"].example.data.live_eligible, false);
+  assert.equal(doc.components.schemas.BacktestStrategy.properties.type.const, "quantile_rules");
+  assert.equal(doc.components.schemas.BacktestStrategy.properties.schema_version.const, 2);
+  assert.equal(doc.paths["/backtests"].post.responses["202"].content["application/json"].example.data.status, "queued");
+  assert.equal(doc.paths["/backtests/{id}/strategy"].get.responses["200"].content["application/json"].example.data.live_eligible, false);
 });
 
 test("forecast API documents historical validation scores separately from future outcomes",()=>{

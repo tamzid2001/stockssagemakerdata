@@ -3384,7 +3384,6 @@
       updateMaintenanceModeUi(Boolean(flags.maintenanceMode));
       updateDynamicPromoBanner(String(flags.promoBannerText || "").trim());
       renderServerPromoBanner();
-      ensureHeaderNotificationsCta();
       const headerNotificationsLink = document.getElementById("header-notifications");
       if (headerNotificationsLink) headerNotificationsLink.classList.toggle("hidden", !flags.pushEnabled);
       refreshScreenerModelUi();
@@ -4916,26 +4915,8 @@
   };
 
   const initializeLanguageControls = async () => {
-    const storedLanguage = normalizeLanguageCode(safeLocalStorageGet(LANGUAGE_PREFERENCE_KEY) || "");
-    const urlLanguage = (() => {
-      try {
-        const params = new URLSearchParams(window.location.search);
-        return normalizeLanguageCode(params.get("lang") || "");
-      } catch (error) {
-        return "auto";
-      }
-    })();
-    const nextLanguage = urlLanguage !== "auto" ? urlLanguage : storedLanguage !== "auto" ? storedLanguage : "auto";
-    applyLanguagePreference(nextLanguage, { persist: true });
-
-    if (ui.languageSelect && ui.languageSelect.dataset.bound !== "1") {
-      ui.languageSelect.value = nextLanguage;
-      ui.languageSelect.addEventListener("change", () => {
-        const selected = normalizeLanguageCode(ui.languageSelect.value || "auto");
-        applyLanguagePreference(selected, { persist: true });
-      });
-      ui.languageSelect.dataset.bound = "1";
-    }
+    // The browser locale is authoritative; there is no manual header selector.
+    applyLanguagePreference("auto", { persist: false });
 
     const storedCountry = normalizeCountryCode(safeLocalStorageGet(COUNTRY_PREFERENCE_KEY) || "");
     const urlCountry = (() => {
@@ -4953,11 +4934,6 @@
       country = locale ? normalizeCountryCode(locale) : "US";
     }
     applyCountryPreference(country || "US", { persist: true });
-    if (storedLanguage === "auto" || !storedLanguage) {
-      const best = resolveLanguageFromCountry(country || "US");
-      applyLanguagePreference(best, { persist: false });
-      if (ui.languageSelect) ui.languageSelect.value = "auto";
-    }
   };
 
     const readCookie = (name) => {
@@ -6591,7 +6567,6 @@
       setEmailAuthMode("signin");
     }
     ensureProfileFeedbackButtons();
-    ensureHeaderNotificationsCta();
     document.querySelectorAll("[data-profile-guest]").forEach((section) => {
       section.hidden = accountAuthed;
       section.classList.toggle("hidden", accountAuthed);
@@ -9135,31 +9110,6 @@
         if (text === "solve now") node.remove();
       });
     });
-  };
-
-  const ensureHeaderNotificationsCta = () => {
-    const actions = document.querySelector(".header .nav-actions");
-    if (!actions) return;
-    let link = document.getElementById("header-notifications");
-    if (!link) {
-      link = document.createElement("a");
-      link.id = "header-notifications";
-      link.className = "cta secondary icon-only";
-      link.setAttribute("data-analytics", "nav_notifications");
-      const authButton = actions.querySelector("#header-auth");
-      if (authButton?.parentElement === actions) {
-        actions.insertBefore(link, authButton);
-      } else {
-        actions.appendChild(link);
-      }
-	      ui.headerNotifications = link;
-    }
-    const authed = hasFullAccount();
-    link.href = authed ? "/screener#saved-alerts" : "/account";
-    link.innerHTML = `${icon("bell-notification")}<span>Notifications</span>`;
-    link.classList.remove("icon-only");
-    link.setAttribute("title", "Notifications");
-    link.setAttribute("aria-label", authed ? "Open notifications" : "Sign in to manage notifications");
   };
 
   const renderNotificationLog = () => {
@@ -13818,6 +13768,11 @@
     request: apiRequestJson,
     ensureSession: () => ensureSessionUser({ reason: "backtest_requires_session", message: "Start a guest session or sign in to run a backtest." }),
     workspaceId: () => state.activeWorkspaceId || state.user?.uid || "",
+    forecastDefaults: () => ({
+      models: getEnsembleSelections(),
+      quantiles: getEnsembleQuantiles(),
+      prediction_length: Number(document.getElementById("ensemble-prediction-length")?.value || 30),
+    }),
     source: () => {
       const type = String(ui.ensembleSourceType?.value || "ticker");
       if (type === "prediction_market") {
@@ -13833,7 +13788,7 @@
   });
   document.getElementById("backtest-open")?.addEventListener("click", async () => {
     try {
-      const builder = await import("/backtest-builder.js?v=20260924a");
+      const builder = await import("/backtest-builder.js?v=20260924b");
       builder.openBacktest();
     } catch (error) {
       showToast(error?.message || "Backtest builder is temporarily unavailable.", "warn");
@@ -24769,7 +24724,6 @@
       initializeToggleSelects();
       bindSolveNowModalTriggers();
       removeHeaderSolveNowCta();
-      ensureHeaderNotificationsCta();
       ensureSidebarCollapseToggle();
       bindMobileNav();
       bindMobileSidebarDrawer();
