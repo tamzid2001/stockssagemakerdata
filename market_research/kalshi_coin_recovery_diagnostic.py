@@ -16,7 +16,9 @@ from .kalshi_shared_account import SERIES
 def safe_trade(row):
     intent = row.get('intent') or {}
     return {'ticker': row.get('ticker'), 'created_at': row.get('created_at'),
-        'status': row.get('status'), 'requested': intent.get('count'),
+        'status': row.get('status'),
+        'requested': row.get('target_contracts', intent.get('count')),
+        'latest_order_requested': intent.get('count'),
         'filled': row.get('filled'), 'attempt': row.get('attempt'),
         'net_pnl': row.get('net_pnl')}
 
@@ -57,6 +59,9 @@ def inspect(subaccount, limit, lookback_hours):
                 'configured_max_increases': saved_config.get('max_recovery_increases'),
                 'next_contracts': state.get('size'), 'recovery_increases': state.get('recovery_increases'),
                 'recovery_cycle_pnl': state.get('cycle'),
+                'stop_triggers': (state.get('stats') or {}).get('stop_triggers', 0),
+                'stop_attempts': (state.get('stats') or {}).get('stop_attempts', 0),
+                'stopped': (state.get('stats') or {}).get('stopped', 0),
                 'active': {'ticker': active.get('ticker'), 'requested':
                     (active.get('intent') or {}).get('count')} if active else None,
                 'trades_newest_first': trades, 'recent_exchange_fills': fills[-limit:]}), flush=True)

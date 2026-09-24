@@ -11,7 +11,8 @@ def test_safe_trade_exposes_requested_versus_filled_without_order_ids():
         'intent': {'count': '5.00', 'client_order_id': 'private-id'},
         'filled': '2.00', 'attempt': 1, 'net_pnl': '-.7', 'secret': 'never-log'}
     assert safe_trade(row) == {'ticker': 'KXZEC15M-TEST', 'created_at': 123,
-        'status': 'settled', 'requested': '5.00', 'filled': '2.00',
+        'status': 'settled', 'requested': '5.00', 'latest_order_requested': '5.00',
+        'filled': '2.00',
         'attempt': 1, 'net_pnl': '-.7'}
 
 
