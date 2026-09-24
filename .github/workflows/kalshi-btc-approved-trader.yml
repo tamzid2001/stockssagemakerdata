@@ -9,6 +9,8 @@ on:
       - 'market_research/tests/test_kalshi_provisional_direction.py'
       - 'market_research/tests/test_kalshi_execution.py'
       - 'market_research/tests/test_kalshi_live_workflow.py'
+      - 'market_research/tests/test_kalshi_stop_exit.py'
+      - 'market_research/tests/test_kalshi_shared_account.py'
       - '.github/workflows/kalshi-btc-approved-*.yml'
   workflow_dispatch:
     inputs:
@@ -111,7 +113,7 @@ jobs:
             python -m pip install pytest==8.4.2 pyyaml==6.0.2
           fi
       - name: Offline execution and restart tests
-        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_provisional_direction.py -q
+        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_provisional_direction.py market_research/tests/test_kalshi_stop_exit.py market_research/tests/test_kalshi_shared_account.py -q
       - name: Display exact configuration for approval (no secrets)
         run: python -m market_research.kalshi_live_worker --mode config --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-recovery-increases "$MAX_RECOVERY_INCREASES"
       - name: Readiness or explicitly selected worker

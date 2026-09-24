@@ -3,6 +3,7 @@ from dataclasses import asdict
 from decimal import InvalidOperation
 import json
 import time
+import uuid
 
 from .store import Store, claim_transition
 from .kalshi_execution import recovery, money
@@ -15,7 +16,8 @@ CAPPED_VERSION = 'btc-p90-sticky-hold-live-v3'
 
 def empty_stats():
     return {'intents': 0, 'retries': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
-            'settled': 0, 'wins': 0, 'losses': 0, 'breakeven': 0,
+            'settled': 0, 'stopped': 0, 'stop_triggers': 0, 'stop_attempts': 0,
+            'wins': 0, 'losses': 0, 'breakeven': 0,
             'requested_contracts': '0', 'filled_contracts': '0'}
 
 
@@ -24,7 +26,8 @@ def with_stats(state):
 
 
 SESSION_COUNT_FIELDS = ('intents', 'retries', 'acknowledged', 'rejected', 'unfilled',
-                        'settled', 'wins', 'losses', 'breakeven')
+                        'settled', 'stopped', 'stop_triggers', 'stop_attempts',
+                        'wins', 'losses', 'breakeven')
 SESSION_DECIMAL_FIELDS = ('requested_contracts', 'filled_contracts')
 
 
@@ -160,7 +163,7 @@ class LiveJournal(Store):
             market_ref = self.ref.collection('markets').document(ticker)
             previous = market_ref.get(transaction=tx)
             state, row = update(root['state'], previous.to_dict() if previous.exists else None)
-            if event in ('intent', 'retry_intent') and root.get('enabled') is not True:
+            if event in ('intent', 'retry_intent', 'stop_intent') and root.get('enabled') is not True:
                 raise RuntimeError('LIVE_KILL_SWITCH_DISABLED')
             if len(json.dumps(state)) > 60000 or len(json.dumps(row)) > 60000:
                 raise ValueError('BOUNDED_EXECUTION_STATE_REQUIRED')
@@ -224,6 +227,84 @@ class LiveJournal(Store):
                 **entry, 'attempt_history': history}
         self.change('retry_intent', entry['ticker'], update)
 
+    def trigger_stop(self, entry, fill, at):
+        """Persist the five-cent trigger and authoritative entry fill before selling."""
+        def update(state, previous):
+            state = with_stats(state)
+            active = state.get('active')
+            if not active or active['intent'] != entry['intent'] or active.get('stop'):
+                raise RuntimeError('STOP_TRIGGER_STATE_MISMATCH')
+            if money(fill['filled']) <= 0:
+                raise RuntimeError('STOP_REQUIRES_FILLED_ENTRY')
+            active = {**active, **fill, 'stop': {'threshold': '0.05',
+                'triggered_at': at, 'sold': '0', 'proceeds': '0', 'fees': '0',
+                'attempt': 0, 'pending': None}}
+            state['stats']['stop_triggers'] += 1
+            return {**state, 'active': active}, active
+        self.change('stop_triggered', entry['ticker'], update)
+
+    def reserve_stop_order(self, entry, intent):
+        def update(state, previous):
+            state = with_stats(state)
+            active = state.get('active')
+            stop = (active or {}).get('stop') or {}
+            if (not active or active['intent'] != entry['intent'] or not stop
+                    or stop.get('pending') or money(stop['sold']) >= money(active['filled'])):
+                raise RuntimeError('STOP_INTENT_STATE_MISMATCH')
+            attempt = stop['attempt'] + 1
+            if intent['client_order_id'] != str(uuid.uuid5(uuid.NAMESPACE_URL,
+                    f"{entry['intent']['client_order_id']}:stop:{attempt}")):
+                raise RuntimeError('STOP_INTENT_IDENTITY_MISMATCH')
+            stop = {**stop, 'attempt': attempt, 'pending': {'intent': intent, 'at': time.time()}}
+            active = {**active, 'stop': stop}
+            state['stats']['stop_attempts'] += 1
+            return {**state, 'active': active}, active
+        self.change('stop_intent', entry['ticker'], update)
+
+    def acknowledge_stop_order(self, entry, intent, acknowledgement):
+        def update(state, previous):
+            active = state.get('active')
+            pending = ((active or {}).get('stop') or {}).get('pending')
+            if not active or active['intent'] != entry['intent'] or not pending or pending['intent'] != intent:
+                raise RuntimeError('STOP_ACK_STATE_MISMATCH')
+            if pending.get('acknowledgement') and pending['acknowledgement'] != acknowledgement:
+                raise RuntimeError('STOP_ACK_IMMUTABLE')
+            pending = {**pending, 'acknowledgement': acknowledgement}
+            active = {**active, 'stop': {**active['stop'], 'pending': pending}}
+            return {**state, 'active': active}, active
+        self.change('stop_acknowledged', entry['ticker'], update)
+
+    def reconcile_stop_order(self, entry, intent, result):
+        """Account one terminal IOC exactly once; keep only bounded totals."""
+        def update(state, previous):
+            active = state.get('active')
+            stop = (active or {}).get('stop') or {}
+            pending = stop.get('pending')
+            if not active or active['intent'] != entry['intent'] or not pending or pending['intent'] != intent:
+                raise RuntimeError('STOP_RECONCILIATION_STATE_MISMATCH')
+            sold = money(stop['sold']) + money(result['filled'])
+            if sold > money(active['filled']):
+                raise RuntimeError('STOP_OVERSELL_UNVERIFIED')
+            stop = {**stop, 'sold': str(sold),
+                'proceeds': str(money(stop['proceeds']) + money(result['proceeds'])),
+                'fees': str(money(stop['fees']) + money(result['fees'])),
+                'pending': None, 'last_order_id': result.get('order_id')}
+            active = {**active, 'stop': stop}
+            return {**state, 'active': active}, active
+        self.change('stop_reconciled', entry['ticker'], update)
+
+    def reject_stop_order(self, entry, intent, code):
+        def update(state, previous):
+            active = state.get('active')
+            stop = (active or {}).get('stop') or {}
+            pending = stop.get('pending')
+            if not active or active['intent'] != entry['intent'] or not pending or pending['intent'] != intent:
+                raise RuntimeError('STOP_REJECTION_STATE_MISMATCH')
+            active = {**active, 'stop': {**stop, 'pending': None,
+                'last_rejection_code': code, 'last_rejection_at': time.time()}}
+            return {**state, 'active': active}, active
+        self.change('stop_rejected', entry['ticker'], update)
+
     def finish(self, entry, net=None):
         def update(state, previous):
             state = with_stats(state)
@@ -236,14 +317,15 @@ class LiveJournal(Store):
                 stats['last_rejection_code'] = entry.get('rejection_code')
             elif status == 'unfilled':
                 stats['unfilled'] += 1
-            elif status == 'settled':
-                stats['settled'] += 1
+            elif status in ('settled', 'stopped'):
+                stats[status] += 1
                 stats['filled_contracts'] = str(money(stats['filled_contracts']) +
                                                 money(entry['filled']))
                 value = money(net)
                 stats['wins' if value > 0 else 'losses' if value < 0 else 'breakeven'] += 1
                 stats['last_settlement'] = {'ticker': entry['ticker'], 'side': entry['side'],
-                    'contracts': entry['filled'], 'net_pnl': str(value), 'at': time.time()}
+                    'contracts': entry['filled'], 'net_pnl': str(value), 'at': time.time(),
+                    'exit_kind': status}
             if net is not None:
                 state = recovery(state, net, self.config)
                 day = time.strftime('%Y-%m-%d', time.gmtime())
@@ -258,13 +340,17 @@ class LiveJournal(Store):
         safe_active = None
         if active:
             acknowledgement = active.get('acknowledgement', {})
+            stop = active.get('stop') or {}
             safe_active = {'ticker': active['ticker'], 'side': active['side'],
                 'status': active.get('status'), 'requested_contracts': active['intent']['count'],
                 'attempt': active.get('attempt', 0),
                 'limit_ask': active.get('quote', {}).get(active['side'] + '_ask'),
                 'acknowledged_fill': acknowledgement.get('acknowledged_fill'),
                 'acknowledged_remaining': acknowledgement.get('acknowledged_remaining'),
-                'created_at': active.get('created_at')}
+                'created_at': active.get('created_at'),
+                'stop_triggered': bool(stop), 'stop_sold_contracts': stop.get('sold'),
+                'stop_attempts': stop.get('attempt'),
+                'stop_order_pending': bool(stop.get('pending'))}
         return {'active': safe_active, 'next_contracts': state.get('size'),
                 'recovery_increases': state.get('recovery_increases', 0),
                 'maximum_recovery_increases': self.config.max_recovery_increases,
@@ -369,6 +455,98 @@ class Trader:
             if self.coordinator:
                 self.coordinator.release()
 
+    def _stop_position(self, entry):
+        orders, positions = self.broker.account()
+        own = [p for p in positions if p['ticker'] == entry['ticker'] and money(p['position_fp']) != 0]
+        if len(own) > 1 or any(o.get('ticker') == entry['ticker'] for o in orders):
+            raise RuntimeError('STOP_ACCOUNT_POSITION_AMBIGUOUS')
+        if not self.coordinator and (orders or any(p['ticker'] != entry['ticker'] and
+                money(p['position_fp']) != 0 for p in positions)):
+            raise RuntimeError('STOP_FOREIGN_ACCOUNT_ACTIVITY')
+        return money(own[0]['position_fp']) if own else money(0)
+
+    def _submit_stop(self, entry, market):
+        from .engine import stamp
+        from .kalshi_execution import acknowledged_order, stop_exit_payload
+        stop = entry['stop']
+        if market.get('status') != 'active' or time.time() >= stamp(market['close_time']) - 5:
+            return 'stop_waiting_for_settlement'
+        raw_bid = market.get(entry['side'] + '_bid_dollars')
+        if raw_bid is None or money(raw_bid) <= 0:
+            return 'stop_waiting_for_executable_bid'
+        remaining = money(entry['filled']) - money(stop['sold'])
+        expected = remaining * (1 if entry['side'] == 'yes' else -1)
+        if self.coordinator:
+            self.coordinator.claim()
+        try:
+            orders, positions = self.broker.account()
+            if self.coordinator:
+                actual = self.coordinator.verify_positions(orders, positions)
+                if actual.get(entry['ticker'], money(0)) != expected:
+                    return 'stop_position_read_lag'
+            elif self._stop_position(entry) != expected:
+                return 'stop_position_read_lag'
+            intent = stop_exit_payload(entry, remaining, raw_bid,
+                market['exchange_index'], self.config, attempt=stop['attempt'] + 1)
+            self.journal.reserve_stop_order(entry, intent)
+            self.journal.before_post()
+            if self.coordinator:
+                self.coordinator.before_post()
+            # Never resubmit this intent after an ambiguous delivery. A later
+            # authenticated terminal order read is required for another try.
+            try:
+                response = self.broker.submit(intent)
+            except RuntimeError as exc:
+                from .kalshi_execution import definitive_rejection
+                if definitive_rejection(str(exc)):
+                    self.journal.reject_stop_order(entry, intent, str(exc))
+                    return 'stop_definitive_rejection_retry_wait'
+                raise
+            self.journal.acknowledge_stop_order(entry, intent, acknowledged_order(response, intent))
+            return 'stop_exit_acknowledged'
+        finally:
+            if self.coordinator:
+                self.coordinator.release()
+
+    def _reconcile_stop(self, entry, market, *, allow_order_retry=True):
+        from .kalshi_execution import reconciled_stop_order
+        stop = entry['stop']
+        pending = stop.get('pending')
+        if pending:
+            intent = pending['intent']
+            acknowledgement = pending.get('acknowledgement') or {}
+            order = self.broker.find_order(intent, acknowledgement.get('order_id'))
+            if order is None:
+                return 'stop_unknown_delivery_blocked'
+            try:
+                terminal = reconciled_stop_order(order, intent, entry['side'])
+            except RuntimeError as exc:
+                if str(exc) == 'STOP_ORDER_NOT_TERMINAL':
+                    return 'stop_order_read_lag'
+                raise
+            fill = self.broker.exit_fill_summary(intent, entry['side'], terminal)
+            if fill is None:
+                return 'stop_fills_read_lag'
+            self.journal.reconcile_stop_order(entry, intent, {**fill, 'order_id': terminal['order_id']})
+            entry = self.journal.state()['active']
+            stop = entry['stop']
+        remaining = money(entry['filled']) - money(stop['sold'])
+        if remaining < 0:
+            raise RuntimeError('STOP_OVERSELL_UNVERIFIED')
+        if remaining == 0:
+            if self._stop_position(entry) != 0:
+                return 'stop_flat_read_lag'
+            net = money(stop['proceeds']) - money(entry['cost']) - money(entry['fees']) - money(stop['fees'])
+            self.journal.finish({**entry, 'status': 'stopped', 'net_pnl': str(net)}, net)
+            return 'stopped'
+        if market.get('status') in ('settled', 'finalized') and market.get('result') in ('yes', 'no'):
+            return self._settle_entry(entry, market)
+        if not allow_order_retry:
+            return 'stop_retry_disabled'
+        if stop.get('last_rejection_at') and time.time() - stop['last_rejection_at'] < 1:
+            return 'stop_rejection_backoff'
+        return self._submit_stop(entry, market)
+
     def _retry_unfilled(self, entry, fill):
         from .engine import stamp
         from .kalshi_execution import acknowledged_order, definitive_rejection, order_payload
@@ -443,7 +621,7 @@ class Trader:
 
     def reconcile(self, *, allow_order_retry=True):
         from .engine import stamp
-        from .kalshi_execution import reconciled_order
+        from .kalshi_execution import STOP_BID, reconciled_order
         state = self.journal.state()
         entry = state.get('active')
         if not entry:
@@ -462,6 +640,8 @@ class Trader:
                 return 'zero_fill_retry_disabled'
             return self.retry_unfilled(entry, fill)
         market = self.broker.market(entry['ticker'])
+        if entry.get('stop'):
+            return self._reconcile_stop(entry, market, allow_order_retry=allow_order_retry)
         if market.get('status') not in ('settled', 'finalized') or market.get('result') not in ('yes', 'no'):
             orders, positions = self.broker.account()
             actual = {p['ticker']: money(p['position_fp']) for p in positions if money(p['position_fp']) != 0}
@@ -470,6 +650,11 @@ class Trader:
                 raise RuntimeError('POSITION_ACCOUNTING_MISMATCH')
             if (actual.get(entry['ticker']) == expected if self.coordinator
                     else actual == {entry['ticker']: expected}):
+                if allow_order_retry and self.broker.enabled and market.get('status') == 'active':
+                    raw_bid = market.get(entry['side'] + '_bid_dollars')
+                    if raw_bid is not None and money(raw_bid) <= STOP_BID:
+                        self.journal.trigger_stop(entry, fill, time.time())
+                        return self._reconcile_stop(self.journal.state()['active'], market)
                 return 'held_to_settlement'
             # Kalshi's portfolio position can disappear after the official
             # market close before the market and settlement read models expose
@@ -484,6 +669,14 @@ class Trader:
             if time.time() >= close_at and (entry['ticker'] not in actual if self.coordinator else not actual):
                 return 'settlement_accounting_pending'
             raise RuntimeError('POSITION_ACCOUNTING_MISMATCH')
+        return self._settle_entry({**entry, **fill}, market)
+
+    def _settle_entry(self, entry, market):
+        """Settle unsold remainder after fully reconciling every stop IOC."""
+        stop = entry.get('stop') or {}
+        remaining = money(entry['filled']) - money(stop.get('sold', '0'))
+        if remaining < 0:
+            raise RuntimeError('STOP_OVERSELL_UNVERIFIED')
         settlements = self.broker.pages('/portfolio/settlements', 'settlements', ticker=entry['ticker'])
         rows = [s for s in settlements if s['ticker'] == entry['ticker'] and s.get('exchange_index') == entry['intent']['exchange_index']]
         if not rows:
@@ -492,18 +685,19 @@ class Trader:
             raise RuntimeError('AMBIGUOUS_ACCOUNT_SETTLEMENT')
         row = rows[0]
         side, other = entry['side'], 'no' if entry['side'] == 'yes' else 'yes'
-        payout = money(fill['filled']) if market['result'] == side else money(0)
-        if (row['market_result'] != market['result'] or money(row[side + '_count_fp']) != money(fill['filled'])
+        payout = remaining if market['result'] == side else money(0)
+        if (row['market_result'] != market['result'] or money(row[side + '_count_fp']) != remaining
                 or money(row[other + '_count_fp']) != 0
-                or money(row[side + '_total_cost_dollars']) != money(fill['cost'])
-                or money(row['revenue']) / 100 != payout or money(row['fee_cost']) != money(fill['fees'])):
+                or money(row['revenue']) / 100 != payout
+                or (not stop and (money(row[side + '_total_cost_dollars']) != money(entry['cost'])
+                    or money(row['fee_cost']) != money(entry['fees'])))):
             raise RuntimeError('SETTLEMENT_RECONCILIATION_MISMATCH')
         orders, positions = self.broker.account()
         if ((orders and (not self.coordinator or any(o.get('ticker') == entry['ticker'] for o in orders)))
                 or (any(money(p['position_fp']) != 0 for p in positions) if not self.coordinator
                     else any(p['ticker'] == entry['ticker'] and money(p['position_fp']) != 0 for p in positions))):
             raise RuntimeError('SETTLEMENT_NOT_FLAT')
-        net = payout - money(fill['cost']) - money(fill['fees'])
-        self.journal.finish({**entry, **fill, 'status': 'settled', 'net_pnl': str(net),
+        net = payout + money(stop.get('proceeds', '0')) - money(entry['cost']) - money(entry['fees']) - money(stop.get('fees', '0'))
+        self.journal.finish({**entry, 'status': 'settled', 'net_pnl': str(net),
                              'settlement': row}, net)
         return 'settled'

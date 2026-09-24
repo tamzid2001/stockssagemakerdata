@@ -13,7 +13,7 @@ import hashlib
 import time
 from decimal import Decimal
 
-from .kalshi_execution import COIN_SERIES, money, reconciled_order
+from .kalshi_execution import COIN_SERIES, money, reconciled_order, reconciled_stop_order
 from .store import claim_transition
 
 SERIES = ('KXBTC15M', *sorted(COIN_SERIES))
@@ -43,7 +43,11 @@ def expected_positions(entries: list[tuple[str, dict]], actual: dict[str, Decima
     """Require every live position to match one durable, exact exchange fill."""
     expected = {}
     for ticker, entry in entries:
-        fill = money(entry['filled'])
+        stop = entry.get('stop') or {}
+        fill = (money(entry['filled']) - money(stop.get('sold', '0'))
+                - money(entry.get('pending_stop_filled', '0')))
+        if fill < 0:
+            raise RuntimeError('ACCOUNT_STOP_OVERSELL_UNVERIFIED')
         if fill <= 0:
             continue
         sign = 1 if entry['side'] == 'yes' else -1
@@ -148,7 +152,16 @@ class SharedAccountCoordinator:
             if order is None:
                 raise RuntimeError('ACCOUNT_INTENT_UNRESOLVED')
             fill = reconciled_order(order, entry['intent'], entry['side'])
-            entries.append((ticker, {**entry, **fill}))
+            pending = (entry.get('stop') or {}).get('pending')
+            pending_filled = '0'
+            if pending:
+                acknowledgement = pending.get('acknowledgement') or {}
+                exit_order = self.broker.find_order(pending['intent'], acknowledgement.get('order_id'))
+                if exit_order is None:
+                    raise RuntimeError('ACCOUNT_STOP_INTENT_UNRESOLVED')
+                pending_filled = reconciled_stop_order(exit_order, pending['intent'],
+                    entry['side'])['filled']
+            entries.append((ticker, {**entry, **fill, 'pending_stop_filled': pending_filled}))
 
         if expected_positions(entries, actual, time.time()) != actual:
             raise RuntimeError('ACCOUNT_POSITION_UNVERIFIED')

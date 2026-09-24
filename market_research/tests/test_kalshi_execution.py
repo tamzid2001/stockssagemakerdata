@@ -630,12 +630,14 @@ def test_session_statistics_start_fresh_without_resetting_lifetime_state():
                'filled_contracts': '2.00', 'realized_net_pnl': '.4736'}
     assert session_statistics(baseline, baseline) == {
         'intents': 0, 'retries': 0, 'acknowledged': 0, 'rejected': 0, 'unfilled': 0,
-        'settled': 0, 'wins': 0, 'losses': 0, 'breakeven': 0,
+        'settled': 0, 'stopped': 0, 'stop_triggers': 0, 'stop_attempts': 0,
+        'wins': 0, 'losses': 0, 'breakeven': 0,
         'requested_contracts': '0.00', 'filled_contracts': '0.00',
         'realized_net_pnl': '0.0000'}
     assert session_statistics(current, baseline) == {
         'intents': 1, 'retries': 0, 'acknowledged': 1, 'rejected': 0, 'unfilled': 0,
-        'settled': 1, 'wins': 1, 'losses': 0, 'breakeven': 0,
+        'settled': 1, 'stopped': 0, 'stop_triggers': 0, 'stop_attempts': 0,
+        'wins': 1, 'losses': 0, 'breakeven': 0,
         'requested_contracts': '1.00', 'filled_contracts': '1.00',
         'realized_net_pnl': '0.2368'}
 
