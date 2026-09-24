@@ -6,6 +6,7 @@ client order IDs, raw exchange responses, or full Firestore documents.
 
 import argparse
 import json
+import time
 
 from .kalshi_execution import Config, CoinConfig, KalshiExecution
 from .kalshi_live_state import LiveJournal
@@ -20,12 +21,23 @@ def safe_trade(row):
         'net_pnl': row.get('net_pnl')}
 
 
-def inspect(subaccount, limit):
+def safe_fill(row):
+    """Only exchange execution facts; never disclose private order identifiers."""
+    return {'ticker': row.get('ticker'), 'created_time': row.get('created_time'),
+        'action': row.get('action'), 'outcome_side': row.get('outcome_side'),
+        'book_side': row.get('book_side'), 'count': row.get('count_fp'),
+        'yes_price': row.get('yes_price_dollars'), 'no_price': row.get('no_price_dollars')}
+
+
+def inspect(subaccount, limit, lookback_hours):
     broker = KalshiExecution(Config(subaccount=subaccount), requested_live=False)
     try:
         orders, positions = broker.account()
+        recent_fills = broker.pages('/portfolio/fills', 'fills',
+            min_ts=int(time.time()) - lookback_hours * 3600)
         print(json.dumps({'event': 'account_read_only', 'writes_authorized': broker.enabled,
-            'resting_orders': len(orders), 'open_positions': len(positions)}), flush=True)
+            'resting_orders': len(orders), 'open_positions': len(positions),
+            'recent_exchange_fill_records': len(recent_fills)}), flush=True)
         for series in SERIES:
             config = (Config(subaccount=subaccount) if series == 'KXBTC15M'
                 else CoinConfig(series, subaccount=subaccount))
@@ -37,6 +49,8 @@ def inspect(subaccount, limit):
             rows = journal.ref.collection('markets').order_by('created_at',
                 direction=journal.fs.Query.DESCENDING).limit(limit).stream()
             trades = [safe_trade(snapshot.to_dict() or {}) for snapshot in rows]
+            fills = [safe_fill(row) for row in recent_fills
+                if str(row.get('ticker', '')).startswith(series + '-')]
             print(json.dumps({'event': 'series_recovery_audit', 'series': series,
                 'session_exists': bool(root), 'configured_start': saved_config.get('starting_contracts'),
                 'configured_multiplier': saved_config.get('recovery_multiplier'),
@@ -45,7 +59,7 @@ def inspect(subaccount, limit):
                 'recovery_cycle_pnl': state.get('cycle'),
                 'active': {'ticker': active.get('ticker'), 'requested':
                     (active.get('intent') or {}).get('count')} if active else None,
-                'trades_newest_first': trades}), flush=True)
+                'trades_newest_first': trades, 'recent_exchange_fills': fills[-limit:]}), flush=True)
     finally:
         broker.client.close()
 
@@ -54,10 +68,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--subaccount', type=int, default=0)
     parser.add_argument('--limit', type=int, default=25)
+    parser.add_argument('--lookback-hours', type=int, default=4)
     args = parser.parse_args()
-    if not 0 <= args.subaccount <= 63 or not 1 <= args.limit <= 50:
-        parser.error('Subaccount must be 0..63 and limit must be 1..50')
-    inspect(args.subaccount, args.limit)
+    if (not 0 <= args.subaccount <= 63 or not 1 <= args.limit <= 50
+            or not 1 <= args.lookback_hours <= 24):
+        parser.error('Subaccount must be 0..63, limit 1..50, and lookback 1..24 hours')
+    inspect(args.subaccount, args.limit, args.lookback_hours)
 
 
 if __name__ == '__main__':

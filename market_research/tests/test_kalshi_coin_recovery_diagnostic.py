@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from market_research.kalshi_coin_recovery_diagnostic import safe_trade
+from market_research.kalshi_coin_recovery_diagnostic import safe_fill, safe_trade
 
 
 def test_safe_trade_exposes_requested_versus_filled_without_order_ids():
@@ -23,3 +23,14 @@ def test_workflow_has_no_live_order_approval_or_write_capability():
     assert 'workflow_dispatch' in workflow[True]
     assert 'QUANTURA_KALSHI_' not in content
     assert 'kalshi_live_worker' not in content
+
+
+def test_safe_fill_exposes_count_but_not_exchange_order_identity():
+    row = {'ticker': 'KXZEC15M-TEST', 'created_time': '2026-09-24T22:33:00Z',
+        'action': 'buy', 'outcome_side': 'yes', 'book_side': 'bid',
+        'count_fp': '2.00', 'yes_price_dollars': '.63', 'no_price_dollars': '.37',
+        'order_id': 'private-order', 'fill_id': 'private-fill'}
+    assert safe_fill(row) == {'ticker': 'KXZEC15M-TEST',
+        'created_time': '2026-09-24T22:33:00Z', 'action': 'buy',
+        'outcome_side': 'yes', 'book_side': 'bid', 'count': '2.00',
+        'yes_price': '.63', 'no_price': '.37'}
