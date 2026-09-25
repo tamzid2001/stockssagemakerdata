@@ -247,8 +247,9 @@
                               <form id="backtest-form" class="backtest-form">
                                 <section class="backtest-panel" aria-labelledby="backtest-market-title">
                                   <h3 id="backtest-market-title">Market & history</h3>
-                                  <p id="backtest-source-summary" class="small muted">Select a ticker or one event contract in Q Search first.</p>
+                                  <p id="backtest-source-summary" class="small muted">Enter a stock ticker below, or select one event contract in Q Search.</p>
                                   <div class="backtest-fields">
+                                    <div class="field"><label class="label" for="backtest-ticker">Stock ticker</label><input id="backtest-ticker" name="backtest_ticker" type="text" placeholder="e.g., SPY" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20" /><span class="small muted">Enter a ticker to backtest a stock. Leave blank to use a selected Kalshi or Polymarket contract.</span></div>
                                     <div class="field"><label class="label" for="backtest-frequency">Observed interval</label><select id="backtest-frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">1 minute</option></select></div>
                                     <div class="field"><label class="label" for="backtest-history-phase">Game history</label><select id="backtest-history-phase"><option value="both">Pregame + in-game</option><option value="pregame">Pregame only</option><option value="in_game">In-game only</option></select></div>
                                     <div class="field"><label class="label" for="backtest-end">History through (your timezone)</label><input id="backtest-end" type="datetime-local" /><span class="small muted">Leave blank for latest. Up to 2,000 genuine bars; no missing values are filled.</span></div>

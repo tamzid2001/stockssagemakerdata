@@ -158,14 +158,18 @@ import { forecastObservationWindow, forecastObservationLimit, PredictionMarketDa
 
 test("website Toto is revision-pinned and user input cannot override model identity", () => {
   const config=normalizeEnsembleConfiguration({models:{prophet:{enabled:false,weight:0},toto:{enabled:true,weight:1}},quantiles:[.1,.5,.9]},'research');
-  const revision='51a2812bbe449437c01b79c0e425ed578f335f5b';
-  assert.deepEqual(approvedModelCheckpoints(config),{toto:'Datadog/Toto-2.0-2.5B'});
+  const revision='8306a9801cf98c0f5ffe4b2dcc8f496e616d84d9';
+  assert.equal(config.toto_variant,'4m');
+  assert.deepEqual(approvedModelCheckpoints(config),{toto:'Datadog/Toto-2.0-4m'});
   assert.deepEqual(approvedModelRevisions(config),{toto:revision});
   const model=(publicModelCapabilities('research').models as any[]).find(m=>m.id==='toto');
-  assert.equal(model.name,'Toto 2.0 2.5B');
+  assert.equal(model.name,'Toto 2.0 4M');
+  assert.equal(model.default_variant,'4m');
   assert.equal(model.checkpoint_revision,revision);
   assert.equal(model.minimum_observed_context,32);
   assert.throws(()=>normalizeEnsembleConfiguration({models:{toto:{enabled:true,weight:1}},quantiles:[.5],model_revisions:{toto:revision}},'research'),/configuration_field_unsupported/);
+  const largest=normalizeEnsembleConfiguration({toto_variant:'2.5b',models:{prophet:{enabled:false,weight:0},toto:{enabled:true,weight:1}},quantiles:[.1,.5,.9]},'research');
+  assert.deepEqual(approvedModelCheckpoints(largest),{toto:'Datadog/Toto-2.0-2.5B'});
   const legacy=publicEnsembleJob('old',{request:{},model_checkpoints:{toto:'Datadog/Toto-2.0-4m'}});
   assert.deepEqual(legacy.model_checkpoints,{toto:'Datadog/Toto-2.0-4m'});
   assert.deepEqual(legacy.model_revisions,{});

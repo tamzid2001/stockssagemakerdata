@@ -13788,7 +13788,7 @@
   });
   document.getElementById("backtest-open")?.addEventListener("click", async () => {
     try {
-      const builder = await import("/backtest-builder.js?v=20260924b");
+      const builder = await import("/backtest-builder.js?v=20260925a");
       builder.openBacktest();
     } catch (error) {
       showToast(error?.message || "Backtest builder is temporarily unavailable.", "warn");

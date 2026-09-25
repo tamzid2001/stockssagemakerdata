@@ -15,7 +15,7 @@ Choose **Calendar date and time** for Data cutoff or Forecast until. Times are d
 
 Choose **Upload your own CSV** to parse a CSV of at most 2 MB / 10,000 rows. Select the timestamp and numeric target columns and observed interval. At least 40 unique valid rows are required for this upload workflow. ISO dates are UTC dates; minute-resolution local date-times use your device timezone; timestamps with seconds need an explicit offset. The upload is sent through the existing immutable inline-series API, not a new public file URL. Missing dates or values fail validation, and duplicate timestamps deterministically retain the last supplied value.
 
-Advanced settings offers approved, revision-pinned `toto_variant` values `4m`, `22m`, `313m`, `1b`, `2.5b`, from smallest to largest. Default remains `2.5b`. Arbitrary checkpoint IDs are rejected. Larger models require more memory/startup time; TimesFM's separate access and commercial-license checks still apply.
+Advanced settings offers approved, revision-pinned `toto_variant` values `4m`, `22m`, `313m`, `1b`, `2.5b`, from smallest to largest. The default is `4m`. Arbitrary checkpoint IDs are rejected. Larger models require more memory/startup time; TimesFM's separate access and commercial-license checks still apply.
 
 ## First-row observed quote
 
@@ -26,7 +26,7 @@ Daily stock charts align closes by exchange session date, while intraday bars us
 Quantura's ensemble supports these stable model identifiers:
 
 - `prophet` — Meta Prophet
-- `toto` — Datadog Toto 2.0 2.5B
+- `toto` — Datadog Toto 2.0 (4M by default; larger approved variants are selectable)
 - `granite` — IBM Granite PatchTST-FM-r2
 - `chronos` — Amazon Chronos-2
 - `timesfm` — Google TimesFM 3.0
@@ -162,9 +162,9 @@ The chart uses the browser's timezone and AM/PM formatting. The summary compares
 
 Provider rate limits, missing history and unsupported side selections return explicit safe errors rather than a generic invalid-request message. Five registered models does not mean five participated: licensing, selected models, quantile capability and reported failures determine actual effective weights.
 
-Toto 2.0 2.5B requires **32 genuinely observed values** for its final context patch. Its capability response exposes `minimum_observed_context: 32`. A strict (`fail`) request with less history returns HTTP 422 `MODEL_CONTEXT_TOO_SHORT` before spending a compute quota. With explicit `renormalize`, eligible remaining models may execute and Toto is recorded as unavailable/failed, never as a participant. If no remaining model supports a requested quantile, the API returns 422 even under `renormalize`. Two observed values permit an attempt with compatible models; they cannot guarantee all five models participate.
+Toto 2.0 requires **32 genuinely observed values** for its final context patch. Its capability response exposes `minimum_observed_context: 32`. A strict (`fail`) request with less history returns HTTP 422 `MODEL_CONTEXT_TOO_SHORT` before spending a compute quota. With explicit `renormalize`, eligible remaining models may execute and Toto is recorded as unavailable/failed, never as a participant. If no remaining model supports a requested quantile, the API returns 422 even under `renormalize`. Two observed values permit an attempt with compatible models; they cannot guarantee all five models participate.
 
-New forecasts use the immutable Toto checkpoint revision exposed as `checkpoint_revision` by model capabilities and saved in job `model_revisions`. Reproducing a saved 4M or 313M job retains its old checkpoint and saved revision; changing the default does not rewrite its history. Research runs with only 1–12 minute observations still exclude Toto. A quote-by-quote study must have at least 32 genuine observations and separately validate event-time forecasting before claiming a five-model result.
+New forecasts use the immutable Toto checkpoint revision exposed as `checkpoint_revision` by model capabilities and saved in job `model_revisions`. Reproducing a saved forecast retains its original Toto variant and revision; changing the default does not rewrite its history. Research runs with only 1–12 minute observations still exclude Toto. A quote-by-quote study must have at least 32 genuine observations and separately validate event-time forecasting before claiming a five-model result.
 
 The larger Toto checkpoint increases memory use and loading time. Forecasts remain asynchronous, with sequential model execution on the CPU worker; a larger parameter count is not a claim of better forecasting accuracy. Context is a maximum number of **observed rows**, not necessarily elapsed minutes or calendar days when history contains gaps or closed sessions.
 
