@@ -511,12 +511,11 @@ class Trader:
         if self.coordinator:
             self.coordinator.claim()
         try:
-            orders, positions = self.broker.account()
-            if self.coordinator:
-                actual = self.coordinator.verify_positions(orders, positions)
-                if actual.get(entry['ticker'], money(0)) != expected:
-                    return 'stop_position_read_lag'
-            elif self._stop_position(entry) != expected:
+            # A reduce-only exit is fenced and scoped to this exact ticker.
+            # Another series' newly acknowledged IOC can be absent from its
+            # order read model; that must block *new exposure*, not prevent
+            # this series from reducing an independently verified position.
+            if self._stop_position(entry) != expected:
                 return 'stop_position_read_lag'
             intent = stop_exit_payload(entry, remaining, raw_bid,
                 market['exchange_index'], self.config, attempt=stop['attempt'] + 1)
@@ -566,17 +565,7 @@ class Trader:
             if market.get('status') == 'active' and time.time() < stamp(market['close_time']):
                 expected = (money(entry['filled']) - money(stop['sold']) -
                     money(fill['filled'])) * (1 if entry['side'] == 'yes' else -1)
-                if self.coordinator:
-                    orders, positions = self.broker.account()
-                    try:
-                        actual = self.coordinator.verify_positions(orders, positions)
-                    except RuntimeError as exc:
-                        if str(exc) == 'ACCOUNT_POSITION_UNVERIFIED':
-                            return 'stop_position_read_lag'
-                        raise
-                    if actual.get(entry['ticker'], money(0)) != expected:
-                        return 'stop_position_read_lag'
-                elif self._stop_position(entry) != expected:
+                if self._stop_position(entry) != expected:
                     return 'stop_position_read_lag'
             self.journal.reconcile_stop_order(entry, intent, {**fill, 'order_id': terminal['order_id']})
             entry = self.journal.state()['active']

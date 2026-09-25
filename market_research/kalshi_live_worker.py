@@ -77,6 +77,22 @@ def persist_evidence(journal, ticker, value):
     return checksum
 
 
+def reconcile_status(trader):
+    """Wait for authenticated read models without repeating an uncertain IOC.
+
+    The shared-account verifier remains fail-closed for new exposure. A
+    pending stop in another series must not terminate this worker's lease.
+    """
+    try:
+        return trader.reconcile()
+    except RuntimeError as exc:
+        if str(exc) == 'LEASE_HELD':
+            return 'account_order_gate_wait'
+        if str(exc) == 'ACCOUNT_STOP_INTENT_UNRESOLVED':
+            return 'account_stop_intent_read_lag'
+        raise
+
+
 def run(config, mode, duration):
     from .engine import stamp
     from .interval_markets import KalshiIntervalProvider
@@ -116,6 +132,7 @@ def run(config, mode, duration):
     reconciled_directions = set()
     last_renew = last_reconcile = last_health = last_heartbeat = 0
     status = 'starting'
+    phase = 'worker_setup'
     try:
         with tempfile.TemporaryDirectory(prefix='kalshi-minute-live-') as directory:
             store = LocalStore(journal.session, journal.holder, directory, capacity_bytes=100*1024*1024)
@@ -129,6 +146,7 @@ def run(config, mode, duration):
                 while not stopped and time.time() < deadline:
                     now = int(time.time())
                     if now - last_renew >= 25:
+                        phase = 'lease_renewal'
                         journal.renew()
                         last_renew = now
                     # Check every active entry/stop at roughly one-second cadence.
@@ -137,13 +155,9 @@ def run(config, mode, duration):
                     active_position = bool(journal.state().get('active')) if broker.enabled else False
                     interval = 1 if active_position else 20
                     if now - last_reconcile >= interval:
+                        phase = 'position_reconciliation'
                         previous_status = status
-                        try:
-                            status = trader.reconcile()
-                        except RuntimeError as exc:
-                            if str(exc) != 'LEASE_HELD':
-                                raise
-                            status = 'account_order_gate_wait'
+                        status = reconcile_status(trader)
                         if now - last_heartbeat >= 20 or status != previous_status:
                             summary = journal.public_summary()
                             print(json.dumps({'event': 'execution_heartbeat', 'mode': mode,
@@ -152,6 +166,7 @@ def run(config, mode, duration):
                                 **summary}), flush=True)
                             last_heartbeat = now
                         last_reconcile = now
+                    phase = 'collector_snapshot'
                     lifecycle = store.values('btc_lifecycle')
                     minute_rows = store.values('btc_minutes')
                     settlements = store.values('btc_settlements')
@@ -169,6 +184,7 @@ def run(config, mode, duration):
                             persist_evidence(journal, ticker, reconciliation(snapshots[ticker], official))
                             reconciled_directions.add(identity)
                     if now - last_health >= 60:
+                        phase = 'health_checkpoint'
                         journal.health({'mode': mode, 'orders_enabled': broker.enabled,
                             'latest_minute_at': max((r['timestamp'] for r in minute_rows), default=None),
                             'minute_collector': store._get('checkpoints', 'btc_collector_health'),
@@ -176,6 +192,7 @@ def run(config, mode, duration):
                             'forecast_attempts': len(attempts), 'completed_forecast_pairs': len(pairs),
                             'entry_reconciliation': status, 'boot_at': boot_at})
                         last_health = now
+                    phase = 'forecast_processing'
                     if worker:
                         try:
                             result = result_queue.get_nowait()
@@ -196,6 +213,7 @@ def run(config, mode, duration):
                             worker.terminate(); worker.join(); worker = None
                             persist_evidence(journal, computing, {'kind': 'forecast_failure', 'code': failure})
                     for row in lifecycle:
+                        phase = 'market_processing'
                         market, ticker = row['market'], row['market_id']
                         opened, end = row['open_at'], row['close_at']
                         rows = sorted((r for r in minute_rows if r['market_id'] == ticker), key=lambda r:r['timestamp'])
@@ -267,6 +285,7 @@ def run(config, mode, duration):
                             archived.add(ticker)
                     if store.at_capacity:
                         raise RuntimeError('LOCAL_EVIDENCE_CAPACITY_REACHED')
+                    phase = 'sleep'
                     time.sleep(1 if broker.enabled and active_position else 3)
             finally:
                 near_close.stop()
@@ -281,6 +300,12 @@ def run(config, mode, duration):
         journal.renew()
         journal.release()
         print(json.dumps({'event': 'durable_handoff_ready', 'elapsed_seconds': time.monotonic()-started}), flush=True)
+    except Exception as exc:
+        # A safe phase label makes SDK errors (for example InvalidArgument)
+        # diagnosable without logging authenticated response bodies or keys.
+        print(json.dumps({'event': 'worker_phase_failed', 'phase': phase,
+            'error_type': type(exc).__name__}), flush=True)
+        raise
     finally:
         broker.client.close()
 

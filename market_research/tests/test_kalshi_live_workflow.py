@@ -1,7 +1,25 @@
 from pathlib import Path
 import yaml
+import pytest
+
+from market_research.kalshi_live_worker import reconcile_status
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_transient_cross_series_stop_read_lag_does_not_kill_worker():
+    class Trader:
+        def __init__(self, code):
+            self.code = code
+        def reconcile(self):
+            if self.code:
+                raise RuntimeError(self.code)
+            return 'held_to_settlement'
+    assert reconcile_status(Trader('ACCOUNT_STOP_INTENT_UNRESOLVED')) == 'account_stop_intent_read_lag'
+    assert reconcile_status(Trader('LEASE_HELD')) == 'account_order_gate_wait'
+    assert reconcile_status(Trader(None)) == 'held_to_settlement'
+    with pytest.raises(RuntimeError, match='ACCOUNT_POSITION_UNVERIFIED'):
+        reconcile_status(Trader('ACCOUNT_POSITION_UNVERIFIED'))
 
 
 def test_live_workflow_defaults_off_pinned_code_and_no_public_state():

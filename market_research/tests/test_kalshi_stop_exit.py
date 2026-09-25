@@ -291,6 +291,43 @@ def test_stop_fill_waits_for_account_position_to_decrease(monkeypatch):
     assert trader.reconcile() == 'stopped'
 
 
+def test_shared_account_stop_is_not_blocked_by_other_series_order_read_lag(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup('no', 'KXDOGE15M')
+    class Coordinator:
+        def claim(self):
+            pass
+        def release(self):
+            pass
+        def before_post(self):
+            pass
+        def verify_positions(self, *_):
+            raise RuntimeError('ACCOUNT_STOP_INTENT_UNRESOLVED')
+    trader.coordinator = Coordinator()
+    original_account = broker.account
+    broker.account = lambda: ([], original_account()[1] + [
+        {'ticker': 'KXETH15M-OTHER', 'position_fp': '2.00'}])
+    # The DOGE stop can reduce only the exact DOGE position. ETH's transient
+    # order-read gap still blocks new entries in the full account verifier.
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    assert broker.submitted[0]['reduce_only'] is True
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    assert money(journal.state()['active']['stop']['sold']) == Decimal('1')
+
+
+def test_shared_account_stop_still_requires_exact_own_position(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup('no', 'KXDOGE15M')
+    trader.coordinator = type('Coordinator', (), {'claim': lambda self: None,
+        'release': lambda self: None})()
+    journal.trigger_stop(journal.state()['active'],
+        {'filled': '1', 'cost': '.50', 'fees': '.02'}, time.time())
+    broker.account = lambda: ([], [{'ticker': journal.state()['active']['ticker'],
+        'position_fp': '-0.50'}])
+    assert trader.reconcile() == 'stop_position_read_lag'
+    assert broker.submitted == []
+
+
 def test_stop_partial_fill_can_settle_residual(monkeypatch):
     monkeypatch.setattr(time, 'time', lambda: 1800000000)
     trader, broker, journal = setup(fills=(Decimal('.50'),))
