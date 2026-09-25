@@ -2,7 +2,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from market_research.alpaca_spy_strategy import (
-    MinuteBar, active_window, entry_signal, exit_reason, nearest_atm_contract,
+    MinuteBar, active_window, confirmed_entry_signal, entry_signal, exit_reason,
+    nearest_atm_contract,
     tradable_windows,
 )
 
@@ -30,6 +31,14 @@ def test_completed_minute_close_crosses_p90_in_both_directions():
     assert entry_signal(MinuteBar(at(14, 31), 506, 507, 505), MinuteBar(at(14, 32), 504, 506, 503), levels) == 'put'
     assert entry_signal(MinuteBar(at(14, 31), 504, 505, 503), MinuteBar(at(14, 32), 506, 507, 504), levels) == 'call'
     assert entry_signal(MinuteBar(at(14, 31), 506, 507, 505), MinuteBar(at(14, 33), 504, 506, 503), levels) is None
+
+
+def test_entry_requires_the_next_completed_minute_to_confirm_the_cross():
+    forecast = rows((at(14, 33), 500, 505))
+    pending = {'kind': 'put', 'crossed_at': at(14, 32).isoformat(), 'stop_p90': 505}
+    assert confirmed_entry_signal(pending, MinuteBar(at(14, 33), 504, 506, 503), forecast) == ('put', 505)
+    assert confirmed_entry_signal(pending, MinuteBar(at(14, 33), 506, 507, 504), forecast) is None
+    assert confirmed_entry_signal(pending, MinuteBar(at(14, 34), 504, 506, 503), forecast) is None
 
 
 def test_put_stops_conservatively_before_median_target_and_call_stops_at_p90():

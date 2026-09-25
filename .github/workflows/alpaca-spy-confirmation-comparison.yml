@@ -1,0 +1,78 @@
+name: Alpaca SPY P90 Confirmation Comparison
+on:
+  workflow_dispatch:
+    inputs:
+      forecast_run_id:
+        description: 'Completed Alpaca SPY Intraday Options Backtest run containing immutable window forecasts'
+        required: true
+        type: string
+      days_json:
+        description: 'JSON array of NYSE dates'
+        required: true
+        type: string
+      horizons_json:
+        description: 'JSON array from 15, 30, 45, 60'
+        required: true
+        type: string
+      feed:
+        description: 'Must match the source forecast artifacts'
+        required: true
+        type: choice
+        options: [sip, iex]
+        default: sip
+permissions:
+  contents: read
+  actions: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        day: ${{ fromJSON(inputs.days_json) }}
+        horizon: ${{ fromJSON(inputs.horizons_json) }}
+    env:
+      DAY: ${{ matrix.day }}
+      HORIZON: ${{ matrix.horizon }}
+      FEED: ${{ inputs.feed }}
+      FORECAST_RUN_ID: ${{ inputs.forecast_run_id }}
+      GH_TOKEN: ${{ github.token }}
+      ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+      ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install pinned replay environment
+        run: python -m pip install --disable-pip-version-check --require-hashes -r market_research/requirements.lock
+      - name: Verify strategy and comparison tests
+        run: python -m pytest -q market_research/tests/test_alpaca_spy_intraday_backtest.py market_research/tests/test_alpaca_spy_confirmation_compare.py market_research/tests/test_alpaca_spy_strategy.py
+      - name: Download exact forecast matrices
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$FORECAST_RUN_ID" =~ ^[0-9]{8,20}$ ]]
+          gh run download "$FORECAST_RUN_ID" \
+            --pattern "spy-intraday-$DAY-$HORIZON-$FORECAST_RUN_ID" \
+            --dir "inputs/$DAY-$HORIZON"
+      - name: Replay paired P90 entry rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m market_research.alpaca_spy_confirmation_compare \
+            --day "$DAY" --horizon "$HORIZON" --feed "$FEED" \
+            --input-dir "inputs/$DAY-$HORIZON/spy-intraday-$DAY-$HORIZON-$FORECAST_RUN_ID" \
+            --output-dir "artifacts/$DAY-$HORIZON"
+      - name: Upload comparison and per-window audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spy-confirmation-${{ matrix.day }}-${{ matrix.horizon }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.day }}-${{ matrix.horizon }}/
+          retention-days: 14
+          if-no-files-found: ignore

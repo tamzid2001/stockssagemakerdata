@@ -14,7 +14,8 @@ import math
 from pathlib import Path
 
 from .alpaca_spy_strategy import (
-    MAX_PREMIUM_DOLLARS, NEW_YORK, MinuteBar, Window, entry_signal, exit_reason,
+    MAX_PREMIUM_DOLLARS, NEW_YORK, MinuteBar, Window, confirmed_entry_signal,
+    entry_signal, exit_reason,
     forecast_levels,
 )
 from .alpaca_spy_worker import AlpacaAPI
@@ -267,8 +268,11 @@ def replay_window(api: AlpacaAPI, bars: list[MinuteBar], contracts: list[dict],
 
 
 def replay_underlying_window(bars: list[MinuteBar], window: Window, *, feed: str,
-                             forecast_fn=forecast_window) -> dict:
+                             forecast_fn=forecast_window,
+                             confirmation_minutes: int = 0) -> dict:
     """Price the signal in SPY dollars/share, never as a fictitious option fill."""
+    if confirmation_minutes not in (0, 1):
+        raise ValueError('UNSUPPORTED_CONFIRMATION_MINUTES')
     origin = window.start.astimezone(timezone.utc)
     end = window.end.astimezone(timezone.utc)
     horizon = int((end - origin).total_seconds() // 60)
@@ -278,7 +282,7 @@ def replay_underlying_window(bars: list[MinuteBar], window: Window, *, feed: str
         'history_first': history[0].end.isoformat() if history else None,
         'history_last': history[-1].end.isoformat() if history else None,
         'price_type': 'next_observed_spy_minute_open', 'signals': [], 'trades': [],
-        'signals_skipped': {}}
+        'signals_skipped': {}, 'confirmation_minutes': confirmation_minutes}
     if len(history) != 500:
         return {**record, 'status': 'insufficient_observed_history'}
     if history[-1].end != origin:
@@ -310,6 +314,7 @@ def replay_underlying_window(bars: list[MinuteBar], window: Window, *, feed: str
     next_opens = {bar.end - timedelta(minutes=1): bar.open
                   for bar in bars if bar.open is not None}
     position = None
+    pending = None
     previous = None
     for bar in observed:
         if position:
@@ -332,22 +337,52 @@ def replay_underlying_window(bars: list[MinuteBar], window: Window, *, feed: str
                 position = None
                 if exit_open is None:
                     break
-        elif previous and bar.end >= available_at and bar.end < end:
+        else:
+            confirmation = (confirmed_entry_signal(pending, bar, predictions)
+                if confirmation_minutes and pending else None)
+            if confirmation and bar.end >= available_at and bar.end < end:
+                kind, crossed_p90 = confirmation
+                entry_open = next_opens.get(bar.end)
+                if entry_open is None:
+                    record['signals_skipped']['entry_open_missing'] = (
+                        record['signals_skipped'].get('entry_open_missing', 0) + 1)
+                else:
+                    position = {'kind': kind, 'crossed_at': pending['crossed_at'],
+                        'signal_at': bar.end.isoformat(), 'signal_spy_close': bar.close,
+                        'stop_p90': crossed_p90, 'entry_at': bar.end.isoformat(),
+                        'entry_spy_open': entry_open}
+                pending = None
+                previous = bar
+                continue
+            if pending:
+                record['signals_skipped']['confirmation_failed'] = (
+                    record['signals_skipped'].get('confirmation_failed', 0) + 1)
+                pending = None
+            if not (previous and bar.end >= available_at and bar.end < end):
+                previous = bar
+                continue
             kind = entry_signal(previous, bar, predictions)
             if kind:
                 level = forecast_levels(predictions, bar.end)
                 signal = {'kind': kind, 'at': bar.end.isoformat(),
                     'spy_close': bar.close, 'p90': level[1] if level else None}
                 record['signals'].append(signal)
-                entry_open = next_opens.get(bar.end)
-                if entry_open is None:
-                    record['signals_skipped']['entry_open_missing'] = (
-                        record['signals_skipped'].get('entry_open_missing', 0) + 1)
+                if confirmation_minutes:
+                    pending = {'kind': kind, 'crossed_at': bar.end.isoformat(),
+                        'stop_p90': level[1]}
                 else:
-                    position = {'kind': kind, 'signal_at': bar.end.isoformat(),
-                        'signal_spy_close': bar.close, 'stop_p90': level[1],
-                        'entry_at': bar.end.isoformat(), 'entry_spy_open': entry_open}
+                    entry_open = next_opens.get(bar.end)
+                    if entry_open is None:
+                        record['signals_skipped']['entry_open_missing'] = (
+                            record['signals_skipped'].get('entry_open_missing', 0) + 1)
+                    else:
+                        position = {'kind': kind, 'signal_at': bar.end.isoformat(),
+                            'signal_spy_close': bar.close, 'stop_p90': level[1],
+                            'entry_at': bar.end.isoformat(), 'entry_spy_open': entry_open}
         previous = bar
+    if pending:
+        record['signals_skipped']['confirmation_not_observed'] = (
+            record['signals_skipped'].get('confirmation_not_observed', 0) + 1)
     if position:
         exit_open = next_opens.get(end)
         trade = {**position, 'exit_signal_at': end.isoformat(),
