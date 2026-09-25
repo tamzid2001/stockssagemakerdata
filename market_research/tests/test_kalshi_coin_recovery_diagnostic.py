@@ -16,6 +16,18 @@ def test_safe_trade_exposes_requested_versus_filled_without_order_ids():
         'attempt': 1, 'net_pnl': '-.7'}
 
 
+def test_safe_trade_reports_stop_timing_without_pending_order_identity():
+    row = {'ticker': 'KXZEC15M-TEST', 'intent': {'count': '1.00'},
+        'signal': {'market_end': 100}, 'stop': {'triggered_at': 78,
+            'attempt': 0, 'sold': '0', 'pending': {'intent': {
+                'client_order_id': 'private-id'}}}}
+    result = safe_trade(row)
+    assert {key: result[key] for key in ('market_end', 'stop_triggered_at',
+        'stop_attempt', 'stop_sold')} == {'market_end': 100,
+        'stop_triggered_at': 78, 'stop_attempt': 0, 'stop_sold': '0'}
+    assert 'private-id' not in str(result)
+
+
 def test_workflow_has_no_live_order_approval_or_write_capability():
     path = Path(__file__).resolve().parents[2] / '.github/workflows/kalshi-coin-recovery-diagnostic.yml'
     content = path.read_text()

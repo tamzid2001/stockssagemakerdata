@@ -625,11 +625,13 @@ def test_five_cent_stop_retries_partial_exit_until_account_is_flat(monkeypatch):
     broker.market = lambda _: {'ticker': TICKER, 'exchange_index': 7, 'market_type': 'binary',
         'status': 'active', 'open_time': iso(now - 300), 'close_time': iso(now + 600),
         'yes_ask_dollars': '.5000', 'yes_bid_dollars': '.0500'}
-    broker.account = lambda: ([], [{'ticker': TICKER, 'position_fp': str(
-        money('5') - money(journal.state()['active']['stop']['sold']))}]
-        if journal.state()['active'] and
-        money(journal.state()['active']['stop']['sold']) < 5 else [])
     exits = {}
+    def account_after_exchange_fills():
+        remaining = money('5') - sum((money(row['fill_count_fp']) for row in exits.values()),
+            Decimal('0'))
+        return [], ([{'ticker': TICKER, 'position_fp': str(remaining)}]
+            if journal.state()['active'] and remaining > 0 else [])
+    broker.account = account_after_exchange_fills
     broker.find_order = lambda intent, order_id=None: (exits.get(intent['client_order_id'])
         if intent.get('reduce_only') else final_order(entry['intent'], count='5.00'))
     def submit(intent):
@@ -652,6 +654,12 @@ def test_five_cent_stop_retries_partial_exit_until_account_is_flat(monkeypatch):
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert journal.state()['active']['stop']['sold'] == '2.00'
     assert journal.state()['active']['stop']['pending']['intent']['count'] == '3.00'
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.market = lambda _: {'ticker': TICKER, 'exchange_index': 7,
+        'status': 'settled', 'result': 'yes'}
+    broker.pages = lambda path, key, **params: [{'ticker': TICKER,
+        'exchange_index': 7, 'market_result': 'yes', 'yes_count_fp': '5.00',
+        'no_count_fp': '5.00', 'revenue': 0}]
     assert trader.reconcile() == 'stopped'
     assert journal.state()['active'] is None
     assert len(exits) == 2

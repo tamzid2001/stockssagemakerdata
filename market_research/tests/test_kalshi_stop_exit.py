@@ -47,9 +47,16 @@ class Broker:
             action='buy', price='.50', fees='.02')
 
     def _order(self, intent, count, *, action, price, fees='0'):
+        # V2's legacy action/outcome fields follow the YES book, not the
+        # economic side of the strategy's position.
+        if intent.get('reduce_only'):
+            action = 'sell' if intent['side'] == 'ask' else 'buy'
+            outcome_side = 'no' if intent['side'] == 'ask' else 'yes'
+        else:
+            outcome_side = self.entry['side']
         return {'client_order_id': intent['client_order_id'], 'ticker': intent['ticker'],
             'exchange_index': intent['exchange_index'], 'subaccount_number': intent['subaccount'],
-            'book_side': intent['side'], 'outcome_side': self.entry['side'], 'action': action,
+            'book_side': intent['side'], 'outcome_side': outcome_side, 'action': action,
             'fill_count_fp': str(count), 'remaining_count_fp': '0',
             'status': 'executed' if count else 'canceled',
             'taker_fill_cost_dollars': str(count * money(price)),
@@ -100,8 +107,10 @@ class Broker:
         remaining = money(self.entry['intent']['count']) - self.sold
         side, other = self.entry['side'], 'no' if self.entry['side'] == 'yes' else 'yes'
         return [{'ticker': self.entry['ticker'], 'exchange_index': 2,
-            'market_result': self.result, side + '_count_fp': str(remaining),
-            other + '_count_fp': '0', 'revenue': int(remaining * 100) if self.result == side else 0,
+            'market_result': self.result,
+            side + '_count_fp': self.entry['intent']['count'],
+            other + '_count_fp': str(self.sold),
+            'revenue': int((remaining if self.result == side else 0) * 100),
             side + '_total_cost_dollars': '.50', 'fee_cost': '.02'}]
 
 
@@ -127,6 +136,8 @@ def test_stop_closes_each_series_and_side_with_recovery(side, series, monkeypatc
     assert intent['reduce_only'] is True and intent['time_in_force'] == 'immediate_or_cancel'
     assert intent['side'] == ('ask' if side == 'yes' else 'bid')
     assert intent['price'] == ('0.0500' if side == 'yes' else '0.9500')
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
     assert journal.state()['active'] is None
     assert money(journal.state()['net']) == Decimal('-.471')
@@ -141,6 +152,8 @@ def test_partial_stop_retries_only_remaining_quantity(monkeypatch):
     assert broker.submitted[1]['count'] == '0.50'
     assert broker.submitted[0]['client_order_id'] != broker.submitted[1]['client_order_id']
     assert journal.state()['active']['stop']['sold'] == '0.50'
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
     assert len(broker.submitted) == 2
 
@@ -155,6 +168,8 @@ def test_latched_stop_reprices_partial_remainder_at_latest_bid(side, expected_pr
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert broker.submitted[1]['count'] == '0.50'
     assert broker.submitted[1]['price'] == expected_price
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
     assert journal.state()['active'] is None
 
@@ -165,6 +180,8 @@ def test_zero_fill_retries_with_new_durable_client_id(monkeypatch):
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert journal.state()['active']['stop']['attempt'] == 2
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
 
 
@@ -224,6 +241,56 @@ def test_no_side_exit_limit_tracks_current_bid_below_threshold():
     assert intent['price'] == '0.9700' and intent['count'] == '0.50'
 
 
+def test_protective_stop_may_submit_in_final_five_seconds(monkeypatch):
+    from market_research.engine import iso
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, _ = setup(bid='.05')
+    original_market = broker.market
+    broker.market = lambda ticker: {**original_market(ticker),
+        'close_time': iso(1800000003)}
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    assert broker.submitted[0]['reduce_only'] is True
+
+
+def test_stop_waits_without_an_executable_bid(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup(bid='0')
+    assert trader.reconcile() == 'stop_waiting_for_executable_bid'
+    assert journal.state()['active']['stop']['pending'] is None
+    assert broker.submitted == []
+    broker.settled = True
+    assert trader.reconcile() == 'settled'
+    assert journal.state()['active'] is None
+
+
+def test_repeated_zero_fill_stop_orders_do_not_crash_worker(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup(fills=(Decimal('0'),) * 3)
+    for _ in range(3):
+        assert trader.reconcile() == 'stop_exit_acknowledged'
+        assert journal.state()['active']['stop']['pending'] is not None
+    assert len(broker.submitted) == 3
+    broker.settled = True
+    assert trader.reconcile() == 'settled'
+    assert journal.state()['active'] is None
+
+
+def test_stop_fill_waits_for_account_position_to_decrease(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup()
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    authoritative_account = broker.account
+    broker.account = lambda: ([], [{'ticker': journal.state()['active']['ticker'],
+        'position_fp': '1.00'}])
+    assert trader.reconcile() == 'stop_position_read_lag'
+    assert journal.state()['active']['stop']['sold'] == '0'
+    assert journal.state()['active']['stop']['pending'] is not None
+    broker.account = authoritative_account
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
+    assert trader.reconcile() == 'stopped'
+
+
 def test_stop_partial_fill_can_settle_residual(monkeypatch):
     monkeypatch.setattr(time, 'time', lambda: 1800000000)
     trader, broker, journal = setup(fills=(Decimal('.50'),))
@@ -232,6 +299,17 @@ def test_stop_partial_fill_can_settle_residual(monkeypatch):
     assert trader.reconcile() == 'settled'
     assert journal.state()['active'] is None
     assert money(journal.state()['net']) == Decimal('.004')
+
+
+def test_partial_v2_stop_reconciles_offsetting_no_at_settlement(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup('yes', fills=(Decimal('.20'),))
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    broker.result = 'no'
+    broker.settled = True
+    assert trader.reconcile() == 'settled'
+    assert journal.state()['active'] is None
+    assert money(journal.state()['net']) == Decimal('-.511')
 
 
 def test_account_attribution_nets_reconciled_and_pending_stop_fills():
@@ -248,7 +326,7 @@ def test_exit_proceeds_use_authenticated_fills_not_trigger_quote():
     terminal = {'order_id': 'stop-order-id', 'filled': '1', 'fees': '.003'}
     fill = {'fill_id': 'fill-1', 'order_id': 'stop-order-id', 'ticker': intent['ticker'],
         'exchange_index': 2, 'subaccount_number': 0, 'book_side': 'bid',
-        'outcome_side': 'no', 'action': 'sell', 'count_fp': '1',
+        'outcome_side': 'yes', 'action': 'buy', 'count_fp': '1',
         'no_price_dollars': '.0475', 'fee_cost': '.003'}
     broker = KalshiExecution.__new__(KalshiExecution)
     broker.config = trader.config
@@ -261,3 +339,29 @@ def test_exit_proceeds_use_authenticated_fills_not_trigger_quote():
     broker.pages = lambda path, key, **params: [fill, fill]
     with pytest.raises(RuntimeError, match='STOP_EXIT_FILL_IDENTITY_MISMATCH'):
         broker.exit_fill_summary(intent, 'no', terminal)
+
+
+def test_real_v2_yes_stop_legacy_labels_are_not_economic_direction():
+    from market_research.kalshi_execution import reconciled_stop_order
+    trader, _, journal = setup('yes')
+    intent = stop_exit_payload(journal.state()['active'], Decimal('1'), '.05', 2,
+        trader.config, attempt=1)
+    order = {'client_order_id': intent['client_order_id'], 'ticker': intent['ticker'],
+        'exchange_index': 2, 'subaccount_number': 0, 'book_side': 'ask',
+        'outcome_side': 'no', 'action': 'sell', 'fill_count_fp': '.20',
+        'remaining_count_fp': '0', 'status': 'canceled',
+        'taker_fees_dollars': '.001', 'maker_fees_dollars': '0', 'order_id': 'stop-order-id'}
+    terminal = reconciled_stop_order(order, intent, 'yes')
+    assert money(terminal['filled']) == Decimal('.20')
+    fill = {'fill_id': 'fill-1', 'order_id': 'stop-order-id', 'ticker': intent['ticker'],
+        'exchange_index': 2, 'subaccount_number': 0, 'book_side': 'ask',
+        'outcome_side': 'no', 'action': 'sell', 'count_fp': '.20',
+        'yes_price_dollars': '.05', 'fee_cost': '.001'}
+    broker = KalshiExecution.__new__(KalshiExecution)
+    broker.config = trader.config
+    broker.pages = lambda path, key, **params: [fill]
+    result = broker.exit_fill_summary(intent, 'yes', terminal)
+    assert money(result['proceeds']) == Decimal('.01')
+    order['action'] = 'buy'
+    with pytest.raises(RuntimeError, match='STOP_EXIT_DIRECTION_UNVERIFIED'):
+        reconciled_stop_order(order, intent, 'yes')

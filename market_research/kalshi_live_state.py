@@ -499,7 +499,9 @@ class Trader:
         from .engine import stamp
         from .kalshi_execution import acknowledged_order, stop_exit_payload
         stop = entry['stop']
-        if market.get('status') != 'active' or time.time() >= stamp(market['close_time']) - 5:
+        # Entries stop five seconds early, but an already-triggered protective
+        # exit should remain eligible until the exchange actually closes.
+        if market.get('status') != 'active' or time.time() >= stamp(market['close_time']):
             return 'stop_waiting_for_settlement'
         raw_bid = market.get(entry['side'] + '_bid_dollars')
         if raw_bid is None or money(raw_bid) <= 0:
@@ -557,6 +559,25 @@ class Trader:
             fill = self.broker.exit_fill_summary(intent, entry['side'], terminal)
             if fill is None:
                 return 'stop_fills_read_lag'
+            # A terminal fill is not enough by itself: the portfolio position
+            # must have decreased by exactly that quantity before recording a
+            # realized exit. Kalshi's position read model may lag order/fills.
+            from .engine import stamp
+            if market.get('status') == 'active' and time.time() < stamp(market['close_time']):
+                expected = (money(entry['filled']) - money(stop['sold']) -
+                    money(fill['filled'])) * (1 if entry['side'] == 'yes' else -1)
+                if self.coordinator:
+                    orders, positions = self.broker.account()
+                    try:
+                        actual = self.coordinator.verify_positions(orders, positions)
+                    except RuntimeError as exc:
+                        if str(exc) == 'ACCOUNT_POSITION_UNVERIFIED':
+                            return 'stop_position_read_lag'
+                        raise
+                    if actual.get(entry['ticker'], money(0)) != expected:
+                        return 'stop_position_read_lag'
+                elif self._stop_position(entry) != expected:
+                    return 'stop_position_read_lag'
             self.journal.reconcile_stop_order(entry, intent, {**fill, 'order_id': terminal['order_id']})
             entry = self.journal.state()['active']
             stop = entry['stop']
@@ -566,9 +587,13 @@ class Trader:
         if remaining == 0:
             if self._stop_position(entry) != 0:
                 return 'stop_flat_read_lag'
-            net = money(stop['proceeds']) - money(entry['cost']) - money(entry['fees']) - money(stop['fees'])
-            self.journal.finish({**entry, 'status': 'stopped', 'net_pnl': str(net)}, net)
-            return 'stopped'
+            # V2 records opposite-book fills as offsetting YES/NO counts in
+            # settlement. A zero net position alone cannot prove how those
+            # counts were settled, so keep the journal until the authoritative
+            # settlement row confirms the exit and final P&L.
+            if market.get('status') in ('settled', 'finalized') and market.get('result') in ('yes', 'no'):
+                return self._settle_entry(entry, market)
+            return 'stop_hedged_waiting_for_settlement'
         if market.get('status') in ('settled', 'finalized') and market.get('result') in ('yes', 'no'):
             return self._settle_entry(entry, market)
         if not allow_order_retry:
@@ -746,8 +771,11 @@ class Trader:
         row = rows[0]
         side, other = entry['side'], 'no' if entry['side'] == 'yes' else 'yes'
         payout = remaining if market['result'] == side else money(0)
-        if (row['market_result'] != market['result'] or money(row[side + '_count_fp']) != remaining
-                or money(row[other + '_count_fp']) != 0
+        # V2 reports gross matched YES/NO counts, while settlement revenue
+        # follows their net exposure: entry quantity minus opposite-book exits.
+        if (row['market_result'] != market['result']
+                or money(row[side + '_count_fp']) != money(entry['filled'])
+                or money(row[other + '_count_fp']) != money(stop.get('sold', '0'))
                 or money(row['revenue']) / 100 != payout
                 or (not stop and (money(row[side + '_total_cost_dollars']) != money(entry['cost'])
                     or money(row['fee_cost']) != money(entry['fees'])))):
@@ -758,6 +786,7 @@ class Trader:
                     else any(p['ticker'] == entry['ticker'] and money(p['position_fp']) != 0 for p in positions))):
             raise RuntimeError('SETTLEMENT_NOT_FLAT')
         net = payout + money(stop.get('proceeds', '0')) - money(entry['cost']) - money(entry['fees']) - money(stop.get('fees', '0'))
-        self.journal.finish({**entry, 'status': 'settled', 'net_pnl': str(net),
+        exit_kind = 'stopped' if stop and remaining == 0 else 'settled'
+        self.journal.finish({**entry, 'status': exit_kind, 'net_pnl': str(net),
                              'settlement': row}, net)
-        return 'settled'
+        return exit_kind
