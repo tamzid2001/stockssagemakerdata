@@ -37,7 +37,12 @@ def stock_minutes(api: AlpacaAPI, day: date, feed: str) -> list[MinuteBar]:
     if feed not in ('iex', 'sip'):
         raise ValueError('STOCK_FEED_MUST_BE_IEX_OR_SIP')
     start = datetime.combine(day - timedelta(days=16), datetime.min.time(), timezone.utc)
-    end = datetime.combine(day + timedelta(days=1), datetime.min.time(), timezone.utc)
+    # Alpaca's delayed SIP entitlement rejects an explicit end in the
+    # not-yet-entitled portion of the current day (including tomorrow).
+    end = min(datetime.combine(day + timedelta(days=1), datetime.min.time(), timezone.utc),
+              datetime.now(timezone.utc) - timedelta(minutes=16))
+    if end <= start:
+        raise ValueError('STOCK_HISTORY_NOT_YET_AVAILABLE')
     token = ''
     found: dict[datetime, MinuteBar] = {}
     while True:
@@ -426,6 +431,9 @@ def run(day: date, horizon: int, output: Path, *, feed: str, data_only: bool = F
     closing = schedule.iloc[0]['market_close'].to_pydatetime().astimezone(NEW_YORK)
     if opening.hour != 9 or opening.minute != 30 or closing.hour < 16:
         raise ValueError('EARLY_CLOSE_EXCLUDED')
+    if day == datetime.now(NEW_YORK).date() and datetime.now(timezone.utc) < (
+            opening + timedelta(hours=6, minutes=16)).astimezone(timezone.utc):
+        raise ValueError('DAY_NOT_FULLY_DELAYED')
     api = AlpacaAPI('paper')
     output.mkdir(parents=True, exist_ok=True)
     try:

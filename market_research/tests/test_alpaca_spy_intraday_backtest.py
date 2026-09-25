@@ -2,9 +2,20 @@ from datetime import datetime, timedelta, timezone
 
 from market_research.alpaca_spy_intraday_backtest import (
     first_observed_price, replay_underlying_window, replay_window,
-    summarize, summarize_underlying,
+    stock_minutes, summarize, summarize_underlying,
 )
-from market_research.alpaca_spy_strategy import MinuteBar, Window
+from market_research.alpaca_spy_strategy import NEW_YORK, MinuteBar, Window
+
+
+def test_current_day_sip_request_stops_before_delayed_entitlement_boundary():
+    observed = {}
+    class API:
+        def request(self, method, path, *, data, params):
+            observed.update(params)
+            return {'bars': []}
+    stock_minutes(API(), datetime.now(NEW_YORK).date(), 'sip')
+    requested_end = datetime.fromisoformat(observed['end'])
+    assert requested_end <= datetime.now(timezone.utc) - timedelta(minutes=15)
 
 
 def test_option_price_requires_observed_bar_in_bounded_window():
