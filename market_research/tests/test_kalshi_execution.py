@@ -654,6 +654,12 @@ def test_five_cent_stop_retries_partial_exit_until_account_is_flat(monkeypatch):
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert journal.state()['active']['stop']['sold'] == '2.00'
     assert journal.state()['active']['stop']['pending']['intent']['count'] == '3.00'
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.market = lambda _: {'ticker': TICKER, 'exchange_index': 7,
+        'status': 'settled', 'result': 'yes'}
+    broker.pages = lambda path, key, **params: [{'ticker': TICKER,
+        'exchange_index': 7, 'market_result': 'yes', 'yes_count_fp': '5.00',
+        'no_count_fp': '5.00', 'revenue': 500}]
     assert trader.reconcile() == 'stopped'
     assert journal.state()['active'] is None
     assert len(exits) == 2

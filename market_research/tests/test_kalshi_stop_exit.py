@@ -107,8 +107,11 @@ class Broker:
         remaining = money(self.entry['intent']['count']) - self.sold
         side, other = self.entry['side'], 'no' if self.entry['side'] == 'yes' else 'yes'
         return [{'ticker': self.entry['ticker'], 'exchange_index': 2,
-            'market_result': self.result, side + '_count_fp': str(remaining),
-            other + '_count_fp': '0', 'revenue': int(remaining * 100) if self.result == side else 0,
+            'market_result': self.result,
+            side + '_count_fp': self.entry['intent']['count'],
+            other + '_count_fp': str(self.sold),
+            'revenue': int((money(self.entry['intent']['count']) if self.result == side
+                else self.sold) * 100),
             side + '_total_cost_dollars': '.50', 'fee_cost': '.02'}]
 
 
@@ -134,6 +137,8 @@ def test_stop_closes_each_series_and_side_with_recovery(side, series, monkeypatc
     assert intent['reduce_only'] is True and intent['time_in_force'] == 'immediate_or_cancel'
     assert intent['side'] == ('ask' if side == 'yes' else 'bid')
     assert intent['price'] == ('0.0500' if side == 'yes' else '0.9500')
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
     assert journal.state()['active'] is None
     assert money(journal.state()['net']) == Decimal('-.471')
@@ -148,6 +153,8 @@ def test_partial_stop_retries_only_remaining_quantity(monkeypatch):
     assert broker.submitted[1]['count'] == '0.50'
     assert broker.submitted[0]['client_order_id'] != broker.submitted[1]['client_order_id']
     assert journal.state()['active']['stop']['sold'] == '0.50'
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
     assert len(broker.submitted) == 2
 
@@ -162,6 +169,8 @@ def test_latched_stop_reprices_partial_remainder_at_latest_bid(side, expected_pr
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert broker.submitted[1]['count'] == '0.50'
     assert broker.submitted[1]['price'] == expected_price
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
     assert journal.state()['active'] is None
 
@@ -172,6 +181,8 @@ def test_zero_fill_retries_with_new_durable_client_id(monkeypatch):
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert trader.reconcile() == 'stop_exit_acknowledged'
     assert journal.state()['active']['stop']['attempt'] == 2
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
 
 
@@ -261,6 +272,8 @@ def test_stop_fill_waits_for_account_position_to_decrease(monkeypatch):
     assert journal.state()['active']['stop']['sold'] == '0'
     assert journal.state()['active']['stop']['pending'] is not None
     broker.account = authoritative_account
+    assert trader.reconcile() == 'stop_hedged_waiting_for_settlement'
+    broker.settled = True
     assert trader.reconcile() == 'stopped'
 
 
@@ -272,6 +285,17 @@ def test_stop_partial_fill_can_settle_residual(monkeypatch):
     assert trader.reconcile() == 'settled'
     assert journal.state()['active'] is None
     assert money(journal.state()['net']) == Decimal('.004')
+
+
+def test_partial_v2_stop_reconciles_offsetting_no_at_settlement(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup('yes', fills=(Decimal('.20'),))
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    broker.result = 'no'
+    broker.settled = True
+    assert trader.reconcile() == 'settled'
+    assert journal.state()['active'] is None
+    assert money(journal.state()['net']) == Decimal('-.511')
 
 
 def test_account_attribution_nets_reconciled_and_pending_stop_fills():

@@ -587,9 +587,13 @@ class Trader:
         if remaining == 0:
             if self._stop_position(entry) != 0:
                 return 'stop_flat_read_lag'
-            net = money(stop['proceeds']) - money(entry['cost']) - money(entry['fees']) - money(stop['fees'])
-            self.journal.finish({**entry, 'status': 'stopped', 'net_pnl': str(net)}, net)
-            return 'stopped'
+            # V2 ASK/BID can leave offsetting YES and NO contracts even when
+            # the net portfolio position is zero. They settle to a fixed
+            # payout, but cash is not released yet. Do not mark the trade
+            # realized or clear its journal before authenticated settlement.
+            if market.get('status') in ('settled', 'finalized') and market.get('result') in ('yes', 'no'):
+                return self._settle_entry(entry, market)
+            return 'stop_hedged_waiting_for_settlement'
         if market.get('status') in ('settled', 'finalized') and market.get('result') in ('yes', 'no'):
             return self._settle_entry(entry, market)
         if not allow_order_retry:
@@ -767,9 +771,15 @@ class Trader:
         row = rows[0]
         side, other = entry['side'], 'no' if entry['side'] == 'yes' else 'yes'
         payout = remaining if market['result'] == side else money(0)
-        if (row['market_result'] != market['result'] or money(row[side + '_count_fp']) != remaining
-                or money(row[other + '_count_fp']) != 0
-                or money(row['revenue']) / 100 != payout
+        # A V2 opposite-book reduce-only match can remain as a YES/NO pair in
+        # the settlement record. Its net exposure is the unsold remainder;
+        # the paired contracts contribute the same payout in either outcome.
+        actual_payout = (money(entry['filled']) if market['result'] == side
+            else money(stop.get('sold', '0')))
+        if (row['market_result'] != market['result']
+                or money(row[side + '_count_fp']) != money(entry['filled'])
+                or money(row[other + '_count_fp']) != money(stop.get('sold', '0'))
+                or money(row['revenue']) / 100 != actual_payout
                 or (not stop and (money(row[side + '_total_cost_dollars']) != money(entry['cost'])
                     or money(row['fee_cost']) != money(entry['fees'])))):
             raise RuntimeError('SETTLEMENT_RECONCILIATION_MISMATCH')
@@ -779,6 +789,7 @@ class Trader:
                     else any(p['ticker'] == entry['ticker'] and money(p['position_fp']) != 0 for p in positions))):
             raise RuntimeError('SETTLEMENT_NOT_FLAT')
         net = payout + money(stop.get('proceeds', '0')) - money(entry['cost']) - money(entry['fees']) - money(stop.get('fees', '0'))
-        self.journal.finish({**entry, 'status': 'settled', 'net_pnl': str(net),
+        exit_kind = 'stopped' if stop and remaining == 0 else 'settled'
+        self.journal.finish({**entry, 'status': exit_kind, 'net_pnl': str(net),
                              'settlement': row}, net)
-        return 'settled'
+        return exit_kind
