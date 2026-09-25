@@ -176,6 +176,8 @@ def replay_window(api: AlpacaAPI, bars: list[MinuteBar], contracts: list[dict],
             'error_code': getattr(exc, 'code', None)}
     predictions = forecast['predictions']
     record['forecast_hash'] = forecast['result_hash']
+    record['prediction_sha256'] = hashlib.sha256(json.dumps(
+        predictions, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     record['model_runs'] = [{k: row.get(k) for k in ('model', 'checkpoint', 'status', 'duration_seconds')}
         for row in forecast['model_runs']]
     record['predictions'] = predictions
@@ -291,6 +293,8 @@ def replay_underlying_window(bars: list[MinuteBar], window: Window, *, feed: str
             'error_type': type(exc).__name__, 'error_code': getattr(exc, 'code', None)}
     predictions = forecast['predictions']
     record['forecast_hash'] = forecast['result_hash']
+    record['prediction_sha256'] = hashlib.sha256(json.dumps(
+        predictions, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     record['model_runs'] = [{k: row.get(k) for k in
         ('model', 'checkpoint', 'status', 'duration_seconds')}
         for row in forecast['model_runs']]
