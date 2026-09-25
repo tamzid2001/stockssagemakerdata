@@ -250,6 +250,20 @@ def test_stop_waits_without_an_executable_bid(monkeypatch):
     assert broker.submitted == []
 
 
+def test_stop_fill_waits_for_account_position_to_decrease(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup()
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    authoritative_account = broker.account
+    broker.account = lambda: ([], [{'ticker': journal.state()['active']['ticker'],
+        'position_fp': '1.00'}])
+    assert trader.reconcile() == 'stop_position_read_lag'
+    assert journal.state()['active']['stop']['sold'] == '0'
+    assert journal.state()['active']['stop']['pending'] is not None
+    broker.account = authoritative_account
+    assert trader.reconcile() == 'stopped'
+
+
 def test_stop_partial_fill_can_settle_residual(monkeypatch):
     monkeypatch.setattr(time, 'time', lambda: 1800000000)
     trader, broker, journal = setup(fills=(Decimal('.50'),))
