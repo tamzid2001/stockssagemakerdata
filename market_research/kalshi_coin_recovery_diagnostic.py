@@ -98,7 +98,8 @@ def inspect(subaccount, limit, lookback_hours):
                         if active_position else '0',
                     'settlement': {'result': active_settlement.get('market_result'),
                         'yes_count': active_settlement.get('yes_count_fp'),
-                        'no_count': active_settlement.get('no_count_fp')}
+                        'no_count': active_settlement.get('no_count_fp'),
+                        'revenue_cents': active_settlement.get('revenue')}
                         if active_settlement else None} if active else None,
                 'trades_newest_first': trades, 'recent_exchange_fills': fills[-limit:]}), flush=True)
     finally:
