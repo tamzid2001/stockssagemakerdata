@@ -16,6 +16,12 @@ on:
         type: choice
         options: [iex, sip]
         default: iex
+      pricing:
+        description: 'Underlying SPY dollar change per share, or option trade-bar proxy (requires option history entitlement)'
+        required: true
+        type: choice
+        options: [underlying, option_bars]
+        default: underlying
       data_only:
         description: 'Check historical bar and contract coverage without model inference'
         required: true
@@ -37,6 +43,7 @@ jobs:
       DAY: ${{ matrix.day }}
       HORIZON: ${{ matrix.horizon }}
       FEED: ${{ inputs.feed }}
+      PRICING: ${{ inputs.pricing }}
       DATA_ONLY: ${{ inputs.data_only }}
       ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
       ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
@@ -65,7 +72,7 @@ jobs:
           HF_HOME: ${{ runner.temp }}/spy-intraday-model-cache
         run: |
           set -euo pipefail
-          args=(--day "$DAY" --horizon "$HORIZON" --feed "$FEED" --output "artifacts/$DAY-$HORIZON")
+          args=(--day "$DAY" --horizon "$HORIZON" --feed "$FEED" --pricing "$PRICING" --output "artifacts/$DAY-$HORIZON")
           if [[ "$DATA_ONLY" == true ]]; then args+=(--data-only); fi
           python -m market_research.alpaca_spy_intraday_backtest "${args[@]}"
       - name: Upload complete or partial immutable research output

@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 from market_research.alpaca_spy_intraday_backtest import (
-    first_observed_price, replay_window, summarize,
+    first_observed_price, replay_underlying_window, replay_window,
+    summarize, summarize_underlying,
 )
 from market_research.alpaca_spy_strategy import MinuteBar, Window
 
@@ -83,3 +84,29 @@ def test_forbidden_option_history_records_signal_without_inventing_pnl(monkeypat
     assert summary['underlying_cross_signals'] == 3
     assert summary['net_pnl_trade_bar_proxy_usd_before_costs'] is None
     assert not summary['complete']
+
+
+def test_underlying_replay_uses_next_open_and_static_crossed_p90():
+    origin = datetime(2026, 9, 25, 13, 30, tzinfo=timezone.utc)
+    history = [MinuteBar(origin - timedelta(minutes=499 - i), 100, 100, 100, 100)
+               for i in range(500)]
+    future = []
+    for i in range(1, 17):
+        close = {1: 101, 2: 99, 3: 98, 4: 94}.get(i, 94)
+        opening = {3: 98, 5: 94}.get(i, close)
+        future.append(MinuteBar(origin + timedelta(minutes=i), close,
+            close, close, opening))
+    def forecast(rows, horizon):
+        assert rows == history and horizon == 15
+        return {'predictions': [{'timestamp': (origin + timedelta(minutes=i)).isoformat(),
+                'quantiles': {'0.5': 95, '0.9': 100}} for i in range(1, 16)],
+            'runtime_seconds': 0, 'result_hash': 'hash', 'model_runs': []}
+    result = replay_underlying_window(history + future,
+        Window(origin, origin + timedelta(minutes=15)), feed='iex', forecast_fn=forecast)
+    summary = summarize_underlying([result])
+    assert result['status'] == 'replayed'
+    assert result['trades'][0]['entry_spy_open'] == 98
+    assert result['trades'][0]['exit_spy_open'] == 94
+    assert result['trades'][0]['exit_reason'] == 'median_target'
+    assert summary['net_directional_spy_change_usd_per_share'] == 4
+    assert summary['wins'] == 1 and summary['trade_count'] == 1

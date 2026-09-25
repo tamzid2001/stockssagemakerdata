@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .alpaca_spy_strategy import (
     MAX_PREMIUM_DOLLARS, NEW_YORK, MinuteBar, Window, entry_signal, exit_reason,
+    forecast_levels,
 )
 from .alpaca_spy_worker import AlpacaAPI
 
@@ -47,8 +48,8 @@ def stock_minutes(api: AlpacaAPI, day: date, feed: str) -> list[MinuteBar]:
         response = api.request('GET', '/v2/stocks/SPY/bars', data=True, params=params)
         for row in response.get('bars') or []:
             bar = MinuteBar(timestamp(row['t']) + timedelta(minutes=1),
-                float(row['c']), float(row['h']), float(row['l']))
-            if not all(math.isfinite(v) and v > 0 for v in (bar.close, bar.high, bar.low)):
+                float(row['c']), float(row['h']), float(row['l']), float(row['o']))
+            if not all(math.isfinite(v) and v > 0 for v in (bar.open, bar.close, bar.high, bar.low)):
                 raise ValueError('INVALID_SPY_BAR')
             if bar.end in found and found[bar.end] != bar:
                 raise ValueError('CONFLICTING_SPY_BAR')
@@ -258,6 +259,129 @@ def replay_window(api: AlpacaAPI, bars: list[MinuteBar], contracts: list[dict],
     return {**record, 'status': 'replayed'}
 
 
+def replay_underlying_window(bars: list[MinuteBar], window: Window, *, feed: str,
+                             forecast_fn=forecast_window) -> dict:
+    """Price the signal in SPY dollars/share, never as a fictitious option fill."""
+    origin = window.start.astimezone(timezone.utc)
+    end = window.end.astimezone(timezone.utc)
+    horizon = int((end - origin).total_seconds() // 60)
+    history = [bar for bar in bars if bar.end <= origin][-500:]
+    record = {'origin': origin.isoformat(), 'end': end.isoformat(),
+        'horizon_minutes': horizon, 'stock_feed': feed, 'history_count': len(history),
+        'history_first': history[0].end.isoformat() if history else None,
+        'history_last': history[-1].end.isoformat() if history else None,
+        'price_type': 'next_observed_spy_minute_open', 'signals': [], 'trades': [],
+        'signals_skipped': {}}
+    if len(history) != 500:
+        return {**record, 'status': 'insufficient_observed_history'}
+    if history[-1].end != origin:
+        return {**record, 'status': 'origin_minute_missing'}
+    record['history_sha256'] = hashlib.sha256(json.dumps(
+        [(bar.end.isoformat(), bar.close) for bar in history],
+        separators=(',', ':')).encode()).hexdigest()
+    try:
+        forecast = forecast_fn(history, horizon)
+    except Exception as exc:
+        return {**record, 'status': 'forecast_failed',
+            'error_type': type(exc).__name__, 'error_code': getattr(exc, 'code', None)}
+    predictions = forecast['predictions']
+    record['forecast_hash'] = forecast['result_hash']
+    record['model_runs'] = [{k: row.get(k) for k in
+        ('model', 'checkpoint', 'status', 'duration_seconds')}
+        for row in forecast['model_runs']]
+    record['predictions'] = predictions
+    runtime = float(forecast['runtime_seconds'])
+    record['inference_seconds'] = runtime
+    available_at = origin + timedelta(seconds=runtime)
+    record['earliest_actionable_at'] = available_at.isoformat()
+    observed = [bar for bar in bars if origin < bar.end <= end]
+    record['future_observed_count'] = len(observed)
+    # A completed bar ending at t can only be traded using the next bar's
+    # observed open at t. Sparse provider minutes are not interpolated.
+    next_opens = {bar.end - timedelta(minutes=1): bar.open
+                  for bar in bars if bar.open is not None}
+    position = None
+    previous = None
+    for bar in observed:
+        if position:
+            reason = exit_reason(position['kind'], bar, predictions, window,
+                                 stop_level=position['stop_p90'])
+            if reason:
+                exit_open = next_opens.get(bar.end)
+                trade = {**position, 'exit_signal_at': bar.end.isoformat(),
+                    'exit_reason': reason, 'exit_at': bar.end.isoformat() if exit_open else None,
+                    'exit_spy_open': exit_open}
+                if exit_open is None:
+                    trade.update(status='exit_unpriced', pnl_underlying_usd_per_share=None)
+                    record['status'] = 'exit_open_missing'
+                else:
+                    sign = 1 if position['kind'] == 'call' else -1
+                    trade.update(status='priced_underlying',
+                        pnl_underlying_usd_per_share=round(
+                            sign * (exit_open - position['entry_spy_open']), 6))
+                record['trades'].append(trade)
+                position = None
+                if exit_open is None:
+                    break
+        elif previous and bar.end >= available_at and bar.end < end:
+            kind = entry_signal(previous, bar, predictions)
+            if kind:
+                level = forecast_levels(predictions, bar.end)
+                signal = {'kind': kind, 'at': bar.end.isoformat(),
+                    'spy_close': bar.close, 'p90': level[1] if level else None}
+                record['signals'].append(signal)
+                entry_open = next_opens.get(bar.end)
+                if entry_open is None:
+                    record['signals_skipped']['entry_open_missing'] = (
+                        record['signals_skipped'].get('entry_open_missing', 0) + 1)
+                else:
+                    position = {'kind': kind, 'signal_at': bar.end.isoformat(),
+                        'signal_spy_close': bar.close, 'stop_p90': level[1],
+                        'entry_at': bar.end.isoformat(), 'entry_spy_open': entry_open}
+        previous = bar
+    if position:
+        exit_open = next_opens.get(end)
+        trade = {**position, 'exit_signal_at': end.isoformat(),
+            'exit_reason': 'window_end', 'exit_at': end.isoformat() if exit_open else None,
+            'exit_spy_open': exit_open}
+        if exit_open is None:
+            trade.update(status='exit_unpriced', pnl_underlying_usd_per_share=None)
+            record['status'] = 'exit_open_missing'
+        else:
+            sign = 1 if position['kind'] == 'call' else -1
+            trade.update(status='priced_underlying',
+                pnl_underlying_usd_per_share=round(
+                    sign * (exit_open - position['entry_spy_open']), 6))
+        record['trades'].append(trade)
+    return {**record, 'status': record.get('status', 'replayed')}
+
+
+def summarize_underlying(windows: list[dict]) -> dict:
+    trades = [trade for row in windows for trade in row.get('trades', [])]
+    priced = [trade for trade in trades if trade['status'] == 'priced_underlying']
+    equity = peak = drawdown = 0.0
+    wins = losses = 0
+    for trade in priced:
+        pnl = trade['pnl_underlying_usd_per_share']
+        equity += pnl
+        peak = max(peak, equity)
+        drawdown = max(drawdown, peak - equity)
+        wins += pnl > 0
+        losses += pnl < 0
+    return {'planned_forecasts': len(windows),
+        'completed_forecasts': sum(row['status'] == 'replayed' for row in windows),
+        'forecast_failures': sum(row['status'] == 'forecast_failed' for row in windows),
+        'underlying_cross_signals': sum(len(row.get('signals', [])) for row in windows),
+        'trade_count': len(trades), 'priced_trade_count': len(priced),
+        'unpriced_trade_count': len(trades) - len(priced),
+        'wins': wins, 'losses': losses,
+        'win_rate': wins / (wins + losses) if wins + losses else None,
+        'net_directional_spy_change_usd_per_share': round(equity, 6) if priced else None,
+        'closed_trade_drawdown_usd_per_share': round(drawdown, 6) if priced else None,
+        'complete': len(windows) > 0 and all(row['status'] == 'replayed' for row in windows)
+            and len(priced) == len(trades)}
+
+
 def summarize(windows: list[dict]) -> dict:
     trades = [trade for row in windows for trade in row.get('trades', [])]
     priced = [trade for trade in trades if trade['status'] == 'priced_trade_bar_proxy']
@@ -285,11 +409,14 @@ def summarize(windows: list[dict]) -> dict:
             and not any(row.get('option_history_error') for row in windows)}
 
 
-def run(day: date, horizon: int, output: Path, *, feed: str, data_only: bool = False) -> dict:
+def run(day: date, horizon: int, output: Path, *, feed: str, data_only: bool = False,
+        pricing: str = 'underlying') -> dict:
     import pandas_market_calendars as mcal
 
     if horizon not in HORIZONS:
         raise ValueError('UNSUPPORTED_HORIZON')
+    if pricing not in ('underlying', 'option_bars'):
+        raise ValueError('UNSUPPORTED_PRICING')
     if day > datetime.now(NEW_YORK).date():
         raise ValueError('FUTURE_DAY_NOT_BACKTESTABLE')
     schedule = mcal.get_calendar('NYSE').schedule(start_date=day, end_date=day)
@@ -303,7 +430,7 @@ def run(day: date, horizon: int, output: Path, *, feed: str, data_only: bool = F
     output.mkdir(parents=True, exist_ok=True)
     try:
         bars = stock_minutes(api, day, feed)
-        contracts = listed_contracts(api, day)
+        contracts = listed_contracts(api, day) if pricing == 'option_bars' else []
         origins = [opening + timedelta(hours=i) for i in range(6)]
         windows = [Window(origin, origin + timedelta(minutes=horizon)) for origin in origins]
         coverage = [{'origin': origin.isoformat(),
@@ -311,28 +438,39 @@ def run(day: date, horizon: int, output: Path, *, feed: str, data_only: bool = F
             for origin in origins]
         if data_only:
             report = {'day': day.isoformat(), 'horizon_minutes': horizon, 'stock_feed': feed,
-                'stock_observed_minutes': len(bars), 'listed_expiring_contracts': len(contracts),
+                'stock_observed_minutes': len(bars),
+                'listed_expiring_contracts': len(contracts) if pricing == 'option_bars' else None,
                 'coverage': coverage, 'orders_sent': 0, 'mode': 'data_only'}
             (output / 'coverage.json').write_text(json.dumps(report, indent=2))
             return report
         results = []
         for index, window in enumerate(windows):
-            record = replay_window(api, bars, contracts, window, feed=feed)
+            record = (replay_underlying_window(bars, window, feed=feed)
+                if pricing == 'underlying' else replay_window(api, bars, contracts, window, feed=feed))
             results.append(record)
             (output / f'window-{index:02d}.json').write_text(json.dumps(record, indent=2, default=str))
             print(json.dumps({'event': 'spy_backtest_window', 'day': day.isoformat(),
                 'horizon': horizon, 'origin': record['origin'], 'status': record['status'],
                 'trade_count': len(record['trades'])}), flush=True)
         report = {'day': day.isoformat(), 'horizon_minutes': horizon, 'stock_feed': feed,
-            'stock_observed_minutes': len(bars), 'listed_expiring_contracts': len(contracts),
-            'coverage': coverage, 'summary': summarize(results), 'orders_sent': 0,
-            'limitations': [
+            'stock_observed_minutes': len(bars),
+            'listed_expiring_contracts': len(contracts) if pricing == 'option_bars' else None,
+            'pricing': pricing, 'coverage': coverage,
+            'summary': summarize_underlying(results) if pricing == 'underlying' else summarize(results),
+            'orders_sent': 0,
+            'limitations': ([
+                'Results are signed SPY price changes in dollars per share, not option returns or fills.',
+                'Historical option ask/bid and the $200 option-premium rule are not evaluated.',
+                'Entries and exits use the next observed one-minute SPY open after a completed-bar signal.',
+                'First actionable signal is delayed by measured model inference runtime.',
+                'IEX is a single-exchange feed; absent one-minute bars are never filled synthetically.',
+            ] if pricing == 'underlying' else [
                 'Historical option bars contain trades, not executable bid/ask quotes or verified fills.',
                 'Dollar P&L is a trade-bar-open proxy before fees, spread and slippage; not realized brokerage return.',
                 'The $200 entry cap uses the option trade-bar open, not the historical ask.',
                 'First actionable signal is delayed by measured model inference runtime.',
                 'Missing stock minutes and option bars are never filled or priced synthetically.',
-            ]}
+            ])}
         (output / 'summary.json').write_text(json.dumps(report, indent=2, default=str))
         return report
     finally:
@@ -344,10 +482,12 @@ def main():
     parser.add_argument('--day', type=date.fromisoformat, required=True)
     parser.add_argument('--horizon', type=int, choices=HORIZONS, required=True)
     parser.add_argument('--feed', choices=('iex', 'sip'), default='iex')
+    parser.add_argument('--pricing', choices=('underlying', 'option_bars'), default='underlying')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--data-only', action='store_true')
     args = parser.parse_args()
-    report = run(args.day, args.horizon, args.output, feed=args.feed, data_only=args.data_only)
+    report = run(args.day, args.horizon, args.output, feed=args.feed,
+                 data_only=args.data_only, pricing=args.pricing)
     print(json.dumps({'event': 'spy_backtest_complete', 'report': report}, default=str), flush=True)
 
 
