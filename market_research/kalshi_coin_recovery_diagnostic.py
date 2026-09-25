@@ -53,6 +53,14 @@ def inspect(subaccount, limit, lookback_hours):
             trades = [safe_trade(snapshot.to_dict() or {}) for snapshot in rows]
             fills = [safe_fill(row) for row in recent_fills
                 if str(row.get('ticker', '')).startswith(series + '-')]
+            stop = active.get('stop') or {}
+            pending = stop.get('pending') or {}
+            stop_intent = pending.get('intent') or {}
+            stop_ack = pending.get('acknowledgement') or {}
+            stop_order = (broker.find_order(stop_intent, stop_ack.get('order_id'))
+                if stop_intent else None)
+            active_position = next((row for row in positions
+                if row.get('ticker') == active.get('ticker')), None)
             print(json.dumps({'event': 'series_recovery_audit', 'series': series,
                 'session_exists': bool(root), 'configured_start': saved_config.get('starting_contracts'),
                 'configured_multiplier': saved_config.get('recovery_multiplier'),
@@ -63,7 +71,20 @@ def inspect(subaccount, limit, lookback_hours):
                 'stop_attempts': (state.get('stats') or {}).get('stop_attempts', 0),
                 'stopped': (state.get('stats') or {}).get('stopped', 0),
                 'active': {'ticker': active.get('ticker'), 'requested':
-                    (active.get('intent') or {}).get('count')} if active else None,
+                    (active.get('intent') or {}).get('count'), 'side': active.get('side'),
+                    'filled': active.get('filled'), 'stop_sold': stop.get('sold'),
+                    'stop_attempt': stop.get('attempt'),
+                    'pending_stop': {'book_side': stop_intent.get('side'),
+                        'count': stop_intent.get('count'),
+                        'order_book_side': stop_order.get('book_side') if stop_order else None,
+                        'order_action': stop_order.get('action') if stop_order else None,
+                        'order_outcome_side': stop_order.get('outcome_side') if stop_order else None,
+                        'order_fill_count': stop_order.get('fill_count_fp') if stop_order else None,
+                        'order_remaining_count': stop_order.get('remaining_count_fp') if stop_order else None,
+                        'order_status': stop_order.get('status') if stop_order else None}
+                        if pending else None,
+                    'exchange_position': active_position.get('position_fp')
+                        if active_position else '0'} if active else None,
                 'trades_newest_first': trades, 'recent_exchange_fills': fills[-limit:]}), flush=True)
     finally:
         broker.client.close()
