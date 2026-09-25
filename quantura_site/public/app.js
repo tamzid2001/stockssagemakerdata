@@ -14122,6 +14122,7 @@
           field: "close",
           limit: historyLimit,
           frequency: String(data.get("ticker_frequency") || "1Day"),
+          session: String(data.get("ticker_session") || "extended"),
         };
     if (sourceType === "workspace_dataset" && !source.dataset_id) throw new Error("Enter a workspace dataset ID.");
     if (sourceType === "ticker" && !source.symbol) throw new Error("Choose a market in Q Search before running a forecast.");
@@ -14489,6 +14490,7 @@
       set("ensemble-ticker", configuration.source.symbol);
       set("ensemble-provider", configuration.source.provider);
       if (configuration.source.type === "ticker") set("ensemble-ticker-frequency", configuration.source.frequency);
+      if (configuration.source.type === "ticker") set("ensemble-ticker-session", configuration.source.session || "extended");
       if (configuration.source.type === "kalshi_perp") set("ensemble-ticker-frequency", ({"1D":"1Day","1h":"1Hour","1min":"1Min"})[configuration.source.frequency]);
       if (configuration.source.type === "prediction_market") set("ensemble-market-frequency", configuration.source.frequency);
       set("ensemble-history-phase", configuration.source.history_phase || "both");

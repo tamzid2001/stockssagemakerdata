@@ -104,7 +104,7 @@ function sendData(res: Response, data: unknown, requestId: string, meta: JsonRec
 }
 
 export async function tickerOverlayRows(source: JsonRecord, frequency: string, cutoff: number, now = Date.now(), fetchHistory = fetchStockHistoryData) {
-  const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || "regular", adjustment: source.adjustment || "raw", feed: source.feed || undefined, limit: 500 };
+  const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || (frequency === "1D" ? "regular" : "extended"), adjustment: source.adjustment || "raw", feed: source.feed || undefined, limit: 500 };
   const requests = [fetchHistory({ ...common, start: new Date(Math.max(cutoff - 60000, now - 7 * 86400_000)).toISOString(), timeframe: "1Min" })];
   if (frequency !== "1min") requests.push(fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe: frequency === "1D" ? "1Day" : "1Hour", limit: 2000 }));
   // A rate-limited minute endpoint must not hide available daily/hourly closes,
@@ -540,7 +540,7 @@ async function materializeSource(
       end: cutoff === undefined ? source.end || new Date().toISOString() : new Date(Math.min(cutoff, Date.parse(String(source.end || "")) || cutoff)).toISOString(),
       timeframe: source.frequency || "1Day",
       adjustment: source.adjustment || "raw",
-      session: source.session || "regular",
+      session: source.session || (source.frequency === "1Day" ? "regular" : "extended"),
       feed: source.feed || undefined,
       // Provider download buckets are coarser than the requested forecast size.
       // Fetch a sufficient bucket, then take exactly the latest eligible N rows.

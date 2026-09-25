@@ -85,12 +85,15 @@ test("validation rejects non-finite scores, impossible sample sizes and a leakin
 test("stock overlays include completed minute closes beside hourly forecasts, without partial bars",async()=>{
   const cutoff=Date.parse('2026-09-16T14:00:00Z'), now=Date.parse('2026-09-16T16:01:30Z');
   const calls:string[]=[];
+  const sessions:string[]=[];
   const fetchHistory:any=async(request:any)=>{
     calls.push(request.timeframe);
+    sessions.push(request.session);
     return {rows:request.timeframe==='1Min' ? [{timestamp:'2026-09-16T16:00:00Z',close:101},{timestamp:'2026-09-16T16:01:00Z',close:999}] : [{timestamp:'2026-09-16T14:00:00Z',close:100},{timestamp:'2026-09-16T16:00:00Z',close:999}]};
   };
   const rows=await tickerOverlayRows({symbol:'PLTR',provider:'alpaca'},'1h',cutoff,now,fetchHistory);
   assert.deepEqual(calls,['1Min','1Hour']);
+  assert.deepEqual(sessions,['extended','extended']);
   assert.deepEqual(rows.map(r=>[r.timestamp,r.target]),[['2026-09-16T15:00:00.000Z',100],['2026-09-16T16:01:00.000Z',101]]);
 });
 test("stock overlays preserve price basis and daily closes despite minute rate limits",async()=>{
