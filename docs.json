@@ -66,6 +66,7 @@
               "docs/ensemble-forecasting",
               "docs/quantura-forecasts-methodology",
               "docs/quantura-forecasts-operations",
+              "docs/alpaca-spy-options-worker",
               "docs/gitlab-observability",
               "docs/repository-size-maintenance"
             ]

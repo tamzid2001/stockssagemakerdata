@@ -1,0 +1,14 @@
+---
+title: SPY hourly options worker
+description: Operational controls for the separate SPY 0DTE options pilot.
+---
+
+The SPY options worker is separate from the public forecasting API. Its watchdog may run throughout the week, but option entry is limited to NYSE trading days from 9:30 a.m. through 3:30 p.m. New York time. It uses completed one-minute SPY bars, runs the five-model hourly ensemble, and evaluates only timestamp-aligned P50/P90 rows. The first completed minute anchors the forecast; no prior-day close is relabeled as the market open.
+
+The worker selects the nearest listed same-day SPY strike for the applicable call or put. It **skips** the signal if the current ask is stale or the one-contract premium exceeds **$200** (ask × 100). It never substitutes a farther out-of-the-money contract merely because that one is cheaper. One filled contract is the maximum open position. A broker-accepted but unfilled order is not counted as a position.
+
+On a completed SPY minute close crossing down through forecast P90, the worker attempts a long put. It exits at P50, on a P90 stop, or at the end of that hourly window. Crossing up through P90 attempts a long call, which exits on a return through P90 or at the end of the window. All open positions are submitted for exit by 3:30 p.m. ET (30 minutes before an ordinary close, adjusted for early closes). Exchange or connectivity failures can prevent a fill, so this is an **exit attempt and alert condition**, not a guaranteed flat position.
+
+`alpaca-spy-options-worker.yml` has three manual modes: `verify` sends no orders; `paper` uses Alpaca paper trading; `live` requires a separately pinned approved commit, `QUANTURA_ALPACA_LIVE_ENABLED=true`, live credentials, and live SIP/OPRA market-data entitlements. Live options require at least level-2 approval. `alpaca-spy-options-watchdog.yml` dispatches one segment when `QUANTURA_ALPACA_CONTINUOUS=true` and its mode is set to `paper` or `live`; the default is not continuous. The worker journal and lease use Firestore. Verify the broker's actual position and options order history before enabling live mode.
+
+The paper feed uses IEX stock bars and indicative option quotes. These are not equivalent to consolidated SIP and OPRA live data, so paper fills do not establish live execution quality. A delayed or stale option quote causes a skipped entry. Five-model inference on a fresh GitHub-hosted CPU runner may take too long for an hourly strategy; use a tested persistent runner with a private model cache and measure end-to-end latency before live approval.

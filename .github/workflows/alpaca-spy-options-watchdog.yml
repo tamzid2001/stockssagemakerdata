@@ -1,0 +1,47 @@
+name: Alpaca SPY 0DTE Options Watchdog
+on:
+  workflow_dispatch:
+  schedule:
+    # Cover both EDT and EST; JavaScript checks the actual New York clock.
+    - cron: '*/5 13-21 * * 1-5'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: alpaca-spy-0dte-watchdog
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: vars.QUANTURA_ALPACA_CONTINUOUS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          MODE: ${{ vars.QUANTURA_ALPACA_WATCHDOG_MODE || 'paper' }}
+          LIVE_ENABLED: ${{ vars.QUANTURA_ALPACA_LIVE_ENABLED || 'false' }}
+          APPROVED_SHA: ${{ vars.QUANTURA_ALPACA_APPROVED_SHA || '' }}
+        with:
+          script: |
+            const clock = new Intl.DateTimeFormat('en-US', {timeZone:'America/New_York',
+              hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+            const part = name => Number(clock.find(value => value.type === name)?.value);
+            const minuteOfDay = part('hour')*60 + part('minute');
+            // Keep a recovery window after the 15:30 cutoff so a failed
+            // exit can be reconciled and retried by a replacement worker.
+            if(minuteOfDay < 9*60+20 || minuteOfDay >= 15*60+45) {
+              core.info('Outside SPY option worker hours; no dispatch.');return;
+            }
+            const mode = process.env.MODE;
+            if(!['paper','live'].includes(mode)) throw new Error('Invalid watchdog mode');
+            if(mode === 'live' && (process.env.LIVE_ENABLED !== 'true' || !/^[a-f0-9]{40}$/.test(process.env.APPROVED_SHA))) {
+              throw new Error('Live options approval is incomplete');
+            }
+            const workflow_id='alpaca-spy-options-worker.yml';
+            for(const status of ['queued','in_progress','requested','waiting','pending']) {
+              const {data}=await github.rest.actions.listWorkflowRuns({...context.repo,workflow_id,status,per_page:1});
+              if(data.workflow_runs.length) {core.info('Worker already running or queued; no duplicate.');return;}
+            }
+            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,
+              ref:context.payload.repository.default_branch,inputs:{mode}});
+            core.info('Dispatched one SPY options worker segment.');
