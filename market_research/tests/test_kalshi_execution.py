@@ -556,9 +556,10 @@ def test_partial_entry_retries_exact_remainder_for_each_series(series, initial_f
     journal = MemoryJournal()
     journal.value['size'] = 5
     broker = Broker(journal, now - 300)
+    latest_ask = {'value': '.5000'}
     broker.market = lambda _: {'ticker': ticker, 'exchange_index': 7, 'market_type': 'binary',
         'status': 'active', 'open_time': iso(now - 300), 'close_time': iso(now + 600),
-        'yes_ask_dollars': '.5000', 'yes_bid_dollars': '.4000'}
+        'yes_ask_dollars': latest_ask['value'], 'yes_bid_dollars': '.4000'}
     broker.account = lambda: ([], [{'ticker': ticker, 'position_fp': str(
         money(broker.order['fill_count_fp']) + money(getattr(broker, 'prior_fill', '0')))}]
         if broker.order and (money(broker.order['fill_count_fp']) +
@@ -571,10 +572,12 @@ def test_partial_entry_retries_exact_remainder_for_each_series(series, initial_f
         trader.enter(signal, quote, now)
     first = broker.sent[0]
     broker.order = final_order(first, count=initial_fill)
+    latest_ask['value'] = '.5300'
     with pytest.raises(RuntimeError, match='KALSHI_DELIVERY_OR_RESPONSE_UNKNOWN'):
         trader.reconcile()
     second = broker.sent[1]
     assert first['count'] == '5.00' and second['count'] == remaining
+    assert second['price'] == '0.5300'
     assert first['client_order_id'] != second['client_order_id']
     assert journal.state()['active']['accumulated']['filled'] == initial_fill
     broker.prior_fill = initial_fill

@@ -135,7 +135,7 @@ def order_payload(ticker, side, quantity, ask, shard, config, *, attempt=0,
 
 
 def stop_exit_payload(entry, quantity, bid, shard, config, *, attempt):
-    """Reduce the held economic side; V2 prices and directions use the YES book."""
+    """Reduce the held economic side at the current bid; V2 uses the YES book."""
     ticker, side = entry['ticker'], entry['side']
     if (not re.fullmatch(re.escape(config.series_ticker) + r'-[A-Z0-9-]+', ticker)
             or side not in ('yes', 'no') or type(shard) is not int or shard < 0 or type(attempt) is not int
@@ -144,8 +144,10 @@ def stop_exit_payload(entry, quantity, bid, shard, config, *, attempt):
     count = money(quantity)
     if count <= 0 or count != count.quantize(Decimal('.01')):
         raise ValueError('INVALID_STOP_EXIT_COUNT')
-    economic_limit = min(STOP_BID, money(bid))
-    if not 0 < economic_limit <= STOP_BID:
+    # Five cents latches the stop; it is not a cap on later exit prices. A
+    # rebounding bid should improve the next IOC limit for the unsold balance.
+    economic_limit = money(bid)
+    if not 0 < economic_limit < 1:
         raise ValueError('STOP_EXIT_PRICE_UNAVAILABLE')
     yes_limit = economic_limit if side == 'yes' else 1 - economic_limit
     if yes_limit != yes_limit.quantize(Decimal('.0001')):

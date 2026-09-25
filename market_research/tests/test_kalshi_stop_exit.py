@@ -145,6 +145,20 @@ def test_partial_stop_retries_only_remaining_quantity(monkeypatch):
     assert len(broker.submitted) == 2
 
 
+@pytest.mark.parametrize('side,expected_price', [('yes', '0.0800'), ('no', '0.9200')])
+def test_latched_stop_reprices_partial_remainder_at_latest_bid(side, expected_price, monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup(side, fills=(Decimal('.50'), Decimal('.50')))
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    assert broker.submitted[0]['price'] == ('0.0500' if side == 'yes' else '0.9500')
+    broker.bid = '.08'
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    assert broker.submitted[1]['count'] == '0.50'
+    assert broker.submitted[1]['price'] == expected_price
+    assert trader.reconcile() == 'stopped'
+    assert journal.state()['active'] is None
+
+
 def test_zero_fill_retries_with_new_durable_client_id(monkeypatch):
     monkeypatch.setattr(time, 'time', lambda: 1800000000)
     trader, broker, journal = setup(fills=(Decimal('0'), Decimal('1')))

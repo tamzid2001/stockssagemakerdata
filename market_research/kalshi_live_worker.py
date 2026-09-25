@@ -131,13 +131,11 @@ def run(config, mode, duration):
                     if now - last_renew >= 25:
                         journal.renew()
                         last_renew = now
-                    # Proven zero- or partial-fill IOCs retry only their remaining
-                    # quantity at roughly one-second cadence. Authenticate each
-                    # terminal order before reserving the next unique intent.
+                    # Check every active entry/stop at roughly one-second cadence.
+                    # Retry only the reconciled remainder with a fresh quote and
+                    # client ID; never blindly repeat an ambiguous delivery.
                     active_position = bool(journal.state().get('active')) if broker.enabled else False
-                    interval = (1 if status.startswith(('retry_', 'entry_', 'partial_', 'stop_', 'account_order_gate_'))
-                        or (active_position and bool((journal.state().get('active') or {}).get('stop')))
-                        else 2 if active_position else 20)
+                    interval = 1 if active_position else 20
                     if now - last_reconcile >= interval:
                         previous_status = status
                         try:
