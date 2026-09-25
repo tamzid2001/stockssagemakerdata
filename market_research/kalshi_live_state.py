@@ -587,10 +587,10 @@ class Trader:
         if remaining == 0:
             if self._stop_position(entry) != 0:
                 return 'stop_flat_read_lag'
-            # V2 ASK/BID can leave offsetting YES and NO contracts even when
-            # the net portfolio position is zero. They settle to a fixed
-            # payout, but cash is not released yet. Do not mark the trade
-            # realized or clear its journal before authenticated settlement.
+            # V2 records opposite-book fills as offsetting YES/NO counts in
+            # settlement. A zero net position alone cannot prove how those
+            # counts were settled, so keep the journal until the authoritative
+            # settlement row confirms the exit and final P&L.
             if market.get('status') in ('settled', 'finalized') and market.get('result') in ('yes', 'no'):
                 return self._settle_entry(entry, market)
             return 'stop_hedged_waiting_for_settlement'
@@ -771,15 +771,12 @@ class Trader:
         row = rows[0]
         side, other = entry['side'], 'no' if entry['side'] == 'yes' else 'yes'
         payout = remaining if market['result'] == side else money(0)
-        # A V2 opposite-book reduce-only match can remain as a YES/NO pair in
-        # the settlement record. Its net exposure is the unsold remainder;
-        # the paired contracts contribute the same payout in either outcome.
-        actual_payout = (money(entry['filled']) if market['result'] == side
-            else money(stop.get('sold', '0')))
+        # V2 reports gross matched YES/NO counts, while settlement revenue
+        # follows their net exposure: entry quantity minus opposite-book exits.
         if (row['market_result'] != market['result']
                 or money(row[side + '_count_fp']) != money(entry['filled'])
                 or money(row[other + '_count_fp']) != money(stop.get('sold', '0'))
-                or money(row['revenue']) / 100 != actual_payout
+                or money(row['revenue']) / 100 != payout
                 or (not stop and (money(row[side + '_total_cost_dollars']) != money(entry['cost'])
                     or money(row['fee_cost']) != money(entry['fees'])))):
             raise RuntimeError('SETTLEMENT_RECONCILIATION_MISMATCH')

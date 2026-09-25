@@ -659,7 +659,7 @@ def test_five_cent_stop_retries_partial_exit_until_account_is_flat(monkeypatch):
         'status': 'settled', 'result': 'yes'}
     broker.pages = lambda path, key, **params: [{'ticker': TICKER,
         'exchange_index': 7, 'market_result': 'yes', 'yes_count_fp': '5.00',
-        'no_count_fp': '5.00', 'revenue': 500}]
+        'no_count_fp': '5.00', 'revenue': 0}]
     assert trader.reconcile() == 'stopped'
     assert journal.state()['active'] is None
     assert len(exits) == 2

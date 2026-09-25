@@ -110,8 +110,7 @@ class Broker:
             'market_result': self.result,
             side + '_count_fp': self.entry['intent']['count'],
             other + '_count_fp': str(self.sold),
-            'revenue': int((money(self.entry['intent']['count']) if self.result == side
-                else self.sold) * 100),
+            'revenue': int((remaining if self.result == side else 0) * 100),
             side + '_total_cost_dollars': '.50', 'fee_cost': '.02'}]
 
 
@@ -259,6 +258,21 @@ def test_stop_waits_without_an_executable_bid(monkeypatch):
     assert trader.reconcile() == 'stop_waiting_for_executable_bid'
     assert journal.state()['active']['stop']['pending'] is None
     assert broker.submitted == []
+    broker.settled = True
+    assert trader.reconcile() == 'settled'
+    assert journal.state()['active'] is None
+
+
+def test_repeated_zero_fill_stop_orders_do_not_crash_worker(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup(fills=(Decimal('0'),) * 3)
+    for _ in range(3):
+        assert trader.reconcile() == 'stop_exit_acknowledged'
+        assert journal.state()['active']['stop']['pending'] is not None
+    assert len(broker.submitted) == 3
+    broker.settled = True
+    assert trader.reconcile() == 'settled'
+    assert journal.state()['active'] is None
 
 
 def test_stop_fill_waits_for_account_position_to_decrease(monkeypatch):
