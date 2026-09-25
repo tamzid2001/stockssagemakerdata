@@ -46,7 +46,7 @@
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/forecast-controls.js?v=20260923-neutral"></script>
     <script defer src="/forecast-metrics.js?v=20260920-forecast-only"></script>
-    <script defer src="/app.js?v=20260923-neutral"></script>
+    <script defer src="/app.js?v=20260925-extended-hours"></script>
     <script defer src="/q-market.js?v=20260921-q-search"></script>
     <script defer src="/q-download.js?v=20260921-q-search"></script>
     <script defer src="/market-search.js?v=20260921-q-search"></script>
@@ -148,6 +148,7 @@
                               <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
                             </div>
                             <div class="field" data-ensemble-source="ticker kalshi_perp"><label class="label" for="ensemble-ticker-frequency">Observed bars</label><select id="ensemble-ticker-frequency" name="ticker_frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">Minute</option></select></div>
+                            <div class="field" data-ensemble-source="ticker"><label class="label" for="ensemble-ticker-session">Stock trading hours</label><select id="ensemble-ticker-session" name="ticker_session"><option value="extended" selected>Premarket + regular + after-hours</option><option value="regular">Regular hours only</option></select><small class="muted">Intraday forecasts use observed extended-hours bars when the provider has them. Hourly bars are used only after their hour has completed.</small></div>
                             <div class="field" data-ensemble-source="workspace_dataset" hidden>
                               <label class="label" for="ensemble-dataset-id">Workspace dataset ID</label>
                               <input id="ensemble-dataset-id" name="dataset_id" placeholder="Saved Forecast Foundry dataset ID" autocomplete="off" />

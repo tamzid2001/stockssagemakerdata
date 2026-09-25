@@ -219,6 +219,7 @@ test('primary form builds prediction-market minute and single-model requests wit
   assert.deepEqual(JSON.parse(JSON.stringify(request.models)),{prophet:{enabled:true,weight:1}});
   w.document.getElementById('ensemble-source-type').value='ticker';w.document.getElementById('ensemble-ticker').value='MSFT';
   const stock=w.build();assert.equal(stock.source.symbol,'MSFT');assert.equal(stock.source.limit,500);assert.equal(stock.source.start,undefined);
+  assert.equal(stock.source.session,'extended');
   w.document.getElementById('ensemble-history-lag').value='30';
   w.document.getElementById('ensemble-cutoff-mode').value='relative';
   w.document.getElementById('ensemble-history-lag-unit').value='minutes';
@@ -228,6 +229,10 @@ test('primary form builds prediction-market minute and single-model requests wit
   assert.equal(w.build().history_lag_minutes,2880);
   w.document.getElementById('ensemble-ticker-frequency').value='1Hour';
   assert.equal(w.build().frequency,'1h');assert.equal(w.build().horizon_mode,'frequency_periods');
+  assert.equal(w.build().source.session,'extended');
+  w.document.getElementById('ensemble-ticker-session').value='regular';
+  assert.equal(w.build().source.session,'regular');
+  w.document.getElementById('ensemble-ticker-session').value='extended';
   w.document.getElementById('ensemble-source-type').value='prediction_market';
   w.document.getElementById('ensemble-history-phase').value='in_game';
   w.document.getElementById('ensemble-history-lookback').value='60';
