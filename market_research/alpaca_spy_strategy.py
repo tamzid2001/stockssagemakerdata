@@ -29,6 +29,7 @@ class MinuteBar:
     close: float
     high: float
     low: float
+    open: float | None = None
 
 
 def tradable_windows(market_open: datetime, market_close: datetime) -> tuple[Window, ...]:
@@ -82,7 +83,8 @@ def entry_signal(previous: MinuteBar, current: MinuteBar, rows: Iterable[Mapping
     return None
 
 
-def exit_reason(kind: str, bar: MinuteBar, rows: Iterable[Mapping], window: Window) -> str | None:
+def exit_reason(kind: str, bar: MinuteBar, rows: Iterable[Mapping], window: Window,
+                *, stop_level: float | None = None) -> str | None:
     """Stop-first on a bar that also touches the put's median target."""
     if bar.end.astimezone(NEW_YORK) >= window.end:
         return "window_end"
@@ -90,13 +92,14 @@ def exit_reason(kind: str, bar: MinuteBar, rows: Iterable[Mapping], window: Wind
     if levels is None:
         return None
     p50, p90 = levels
+    stop = p90 if stop_level is None else stop_level
     if kind == "put":
-        if bar.high >= p90:
+        if bar.high >= stop:
             return "p90_stop"
         if bar.low <= p50:
             return "median_target"
     elif kind == "call":
-        if bar.low <= p90:
+        if bar.low <= stop:
             return "p90_stop"
     else:
         raise ValueError("option kind must be call or put")
