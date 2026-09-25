@@ -17,6 +17,8 @@ test('one accessible full-screen backtest builder follows the primary forecast a
     assert.equal(modal?.tagName, 'DIALOG');
     assert.equal(modal?.getAttribute('aria-labelledby'), 'backtest-title');
     assert.ok(modal?.querySelector('#backtest-form #backtest-run'));
+    assert.equal(modal?.querySelector('label[for="backtest-ticker"]')?.textContent, 'Stock ticker');
+    assert.equal(modal?.querySelector('#backtest-ticker')?.getAttribute('maxlength'), '20');
     assert.ok(modal?.querySelector('#backtest-history-phase'));
     assert.ok(modal?.querySelector('#backtest-strategy-download'));
     dom.window.close();
@@ -53,9 +55,10 @@ test('modal stacks quantile rules and queues the selected forecast through authe
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
   dom.window.HTMLDialogElement.prototype.close = function () { this.open = false; };
   let submitted;
+  let pageSource = { type: 'ticker', symbol: 'SPY', provider: 'auto' };
   dom.window.QuanturaBacktestBridge = {
     ensureSession: async () => {}, workspaceId: () => 'ws_test',
-    source: () => ({ type: 'ticker', symbol: 'SPY', provider: 'auto' }),
+    source: () => pageSource,
     request: async (path, options) => {
       if (path.startsWith('/api/v1/ensemble-forecasts/models')) return { data: { models: [
         { id: 'prophet', name: 'Meta Prophet', available: true, default_weight: 1,
@@ -76,6 +79,11 @@ test('modal stacks quantile rules and queues the selected forecast through authe
     const module = await import(`file://${path.join(root, 'public/backtest-builder.js')}`);
     module.openBacktest();
     assert.equal(dom.window.document.getElementById('backtest-dialog').open, true);
+    const ticker = dom.window.document.getElementById('backtest-ticker');
+    assert.equal(ticker.value, 'SPY');
+    ticker.value = 'QQQ';
+    ticker.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.match(dom.window.document.getElementById('backtest-source-summary').textContent, /QQQ/);
     await new Promise(resolve => setTimeout(resolve, 10));
     dom.window.document.querySelector('[data-add-backtest-rule="trailing_stop"]').click();
     assert.equal(dom.window.document.querySelectorAll('.backtest-rule').length, 4);
@@ -85,7 +93,8 @@ test('modal stacks quantile rules and queues the selected forecast through authe
     await new Promise(resolve => setTimeout(resolve, 30));
     assert.equal(submitted.path, '/api/v1/backtests');
     assert.equal(submitted.options.method, 'POST');
-    assert.equal(submitted.options.body.source.symbol, 'SPY');
+    assert.equal(submitted.options.body.source.symbol, 'QQQ');
+    assert.equal(submitted.options.body.source.provider, 'auto');
     assert.equal(submitted.options.body.source.frequency, '1Hour');
     assert.equal(submitted.options.body.strategy.schema_version, 2);
     assert.equal(submitted.options.body.strategy.type, 'quantile_rules');
@@ -95,6 +104,15 @@ test('modal stacks quantile rules and queues the selected forecast through authe
     assert.equal(submitted.options.body.replay.evaluation_windows, 2);
     assert.equal(submitted.options.body.workspace_id, 'ws_test');
     assert.match(dom.window.document.getElementById('backtest-status').textContent, /2 walk-forward forecasts/);
+    pageSource = { type: 'prediction_market', provider: 'kalshi', symbol: 'KXBTC15M', contract_id: 'KXBTC15M-TEST' };
+    dom.window.dispatchEvent(new dom.window.Event('quantura:market-selected'));
+    assert.equal(ticker.value, '');
+    assert.equal(dom.window.document.getElementById('backtest-history-phase').closest('.field').hidden, false);
+    submitted = null;
+    dom.window.document.getElementById('backtest-form').dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+    await new Promise(resolve => setTimeout(resolve, 30));
+    assert.equal(submitted.options.body.source.type, 'prediction_market');
+    assert.equal(submitted.options.body.source.contract_id, 'KXBTC15M-TEST');
   } finally {
     global.window = previousWindow;
     global.document = previousDocument;

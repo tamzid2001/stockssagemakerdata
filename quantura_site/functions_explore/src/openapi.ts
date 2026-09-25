@@ -634,7 +634,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
             prediction_length: { type: "integer", minimum: 1, maximum: 60 },
             quantiles: { type: "array", minItems: 1, maxItems: 21, uniqueItems: true, items: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 } },
             models: { type: "object", additionalProperties: false, properties: { prophet: { $ref: "#/components/schemas/ModelSelection" }, toto: { $ref: "#/components/schemas/ModelSelection" }, granite: { $ref: "#/components/schemas/ModelSelection" }, chronos: { $ref: "#/components/schemas/ModelSelection" }, timesfm: { $ref: "#/components/schemas/ModelSelection" } } },
-            toto_variant: { type: "string", enum: ["4m", "22m", "313m", "1b", "2.5b"] }, failure_policy: { type: "string", enum: ["fail", "renormalize"] },
+            toto_variant: { type: "string", enum: ["4m", "22m", "313m", "1b", "2.5b"], default: "4m" }, failure_policy: { type: "string", enum: ["fail", "renormalize"] },
           } },
           replay: { type: "object", additionalProperties: false, required: ["context_rows", "evaluation_windows"], properties: {
             context_rows: { type: "integer", minimum: 2, maximum: 500 }, evaluation_windows: { type: "integer", minimum: 1, maximum: 8 },
@@ -738,7 +738,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
               type: "object", required: ["source"], properties: {
                 workspace_id: { type: "string" },
                 history_lag_minutes: { type: "integer", minimum: 0, default: 0, description: "Input cutoff before request time, in minutes (hours × 60; days × 1440). Select up to 500 observations BEFORE cutoff. Source retention still applies. Positive values create a historical replay, not a previously published forecast. Later observations are separate overlays." },
-                toto_variant: {type:"string",enum:["4m","22m","313m","1b","2.5b"],default:"2.5b",description:"Approved Toto size, smallest to largest. Only relevant when Toto is enabled. The server pins the checkpoint and revision, including in the cache identity; clients cannot submit arbitrary model repositories. All sizes require at least 32 observed values."},
+                toto_variant: {type:"string",enum:["4m","22m","313m","1b","2.5b"],default:"4m",description:"Approved Toto size, smallest to largest. Only relevant when Toto is enabled. The server pins the checkpoint and revision, including in the cache identity; clients cannot submit arbitrary model repositories. All sizes require at least 32 observed values."},
                 history_cutoff_at: {type:"string",format:"date-time",description:"Optional past absolute cutoff with timezone offset (ISO 8601), subject to available source history. Cannot be combined with a positive history_lag_minutes. Browser calendar values convert from the user's device timezone to UTC."},
                 prediction_end_at: {type:"string",format:"date-time",description:"Optional absolute end date/time. After input materialization, the server derives the number of forecast bars up through this time (rounded up to the next observation interval), still subject to 512 and model-specific limits. NYSE daily forecasts use real exchange sessions in the selected calendar window. Overrides prediction_length."},
                 source: {

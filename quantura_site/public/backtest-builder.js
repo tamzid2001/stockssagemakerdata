@@ -127,12 +127,29 @@ function validateUi(show = true) {
   }
 }
 
+function selectedSource() {
+  const symbol = String(byId("backtest-ticker")?.value || "").trim().toUpperCase();
+  if (symbol) {
+    if (!/^[A-Z0-9.^=-]{1,20}$/.test(symbol)) throw new Error("Enter a valid stock ticker (up to 20 letters, numbers, or ticker symbols).");
+    const pageSource = bridge()?.source();
+    return { type: "ticker", symbol, provider: pageSource?.type === "ticker" && pageSource.symbol === symbol ? pageSource.provider || "auto" : "auto" };
+  }
+  const pageSource = bridge()?.source();
+  return pageSource?.type === "prediction_market" ? pageSource : null;
+}
+
 function updateSource() {
-  const source = bridge()?.source();
   const summary = byId("backtest-source-summary"), button = byId("backtest-run"), phase = byId("backtest-history-phase");
   if (!summary || !button) return;
+  let source;
+  try { source = selectedSource(); }
+  catch (error) {
+    summary.textContent = error.message;
+    button.disabled = true;
+    return;
+  }
   if (!source) {
-    summary.textContent = "Select a stock ticker or an individual Kalshi / Polymarket US contract in Q Search first. Uploaded CSVs are not supported here.";
+    summary.textContent = "Enter a stock ticker above or select an individual Kalshi / Polymarket US contract in Q Search. Uploaded CSVs are not supported here.";
     button.disabled = true;
     return;
   }
@@ -140,6 +157,12 @@ function updateSource() {
     `${source.symbol} · ${source.provider} · selected contract ${source.contract_id}`;
   phase.closest(".field").hidden = source.type !== "prediction_market";
   button.disabled = false;
+}
+
+function syncSelectedMarket() {
+  const source = bridge()?.source();
+  byId("backtest-ticker").value = source?.type === "ticker" ? source.symbol : "";
+  updateSource();
 }
 
 function renderModels(defaults = {}) {
@@ -241,7 +264,8 @@ function init() {
   const dialog = byId("backtest-dialog");
   byId("backtest-close")?.addEventListener("click", () => dialog.close());
   dialog?.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
-  window.addEventListener("quantura:market-selected", updateSource);
+  window.addEventListener("quantura:market-selected", syncSelectedMarket);
+  byId("backtest-ticker")?.addEventListener("input", updateSource);
   byId("backtest-rules")?.addEventListener("click", event => {
     const remove = event.target.closest("[data-remove-rule]");
     if (!remove) return;
@@ -298,8 +322,8 @@ function init() {
     status.textContent = "Validating source and observed bars → Creating durable quantile backtest…";
     try {
       await session.ensureSession();
-      const source = session.source();
-      if (!source) throw new Error("Select a supported market in Q Search first.");
+      const source = selectedSource();
+      if (!source) throw new Error("Enter a stock ticker or select a supported market in Q Search first.");
       const frequency = byId("backtest-frequency").value;
       source.frequency = source.type === "ticker" ? frequency : ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" })[frequency];
       if (source.type === "prediction_market") source.history_phase = byId("backtest-history-phase").value;
@@ -324,7 +348,7 @@ function init() {
       await poll();
     } catch (error) {
       status.textContent = `${error.message || "Backtest could not be started."}${error.code ? ` (${error.code})` : ""}${error.requestId ? ` · Reference ${error.requestId}` : ""}`;
-    } finally { button.disabled = !session.source(); }
+    } finally { updateSource(); }
   });
 }
 
@@ -333,7 +357,7 @@ export function openBacktest() {
   const source = bridge()?.source();
   const mainFrequency = source?.type === "prediction_market" ? byId("ensemble-market-frequency")?.value : byId("ensemble-ticker-frequency")?.value;
   byId("backtest-frequency").value = ({ "1D": "1Day", "1h": "1Hour", "1min": "1Min" })[mainFrequency] || mainFrequency || "1Day";
-  updateSource();
+  syncSelectedMarket();
   byId("backtest-dialog")?.showModal();
   byId("backtest-close")?.focus();
   if (!capabilities) loadCapabilities().catch(error => { byId("backtest-capabilities").textContent = error.message || "Model capabilities are unavailable."; });
