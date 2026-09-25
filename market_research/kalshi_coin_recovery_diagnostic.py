@@ -16,15 +16,17 @@ from .kalshi_shared_account import SERIES
 def safe_trade(row):
     intent = row.get('intent') or {}
     stop = row.get('stop') or {}
-    return {'ticker': row.get('ticker'), 'created_at': row.get('created_at'),
+    result = {'ticker': row.get('ticker'), 'created_at': row.get('created_at'),
         'status': row.get('status'),
         'requested': row.get('target_contracts', intent.get('count')),
         'latest_order_requested': intent.get('count'),
         'filled': row.get('filled'), 'attempt': row.get('attempt'),
-        'net_pnl': row.get('net_pnl'),
-        'market_end': (row.get('signal') or {}).get('market_end'),
-        'stop_triggered_at': stop.get('triggered_at'),
-        'stop_attempt': stop.get('attempt'), 'stop_sold': stop.get('sold')}
+        'net_pnl': row.get('net_pnl')}
+    if stop:
+        result.update(market_end=(row.get('signal') or {}).get('market_end'),
+            stop_triggered_at=stop.get('triggered_at'),
+            stop_attempt=stop.get('attempt'), stop_sold=stop.get('sold'))
+    return result
 
 
 def safe_fill(row):
