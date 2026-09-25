@@ -231,6 +231,25 @@ def test_no_side_exit_limit_tracks_current_bid_below_threshold():
     assert intent['price'] == '0.9700' and intent['count'] == '0.50'
 
 
+def test_protective_stop_may_submit_in_final_five_seconds(monkeypatch):
+    from market_research.engine import iso
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, _ = setup(bid='.05')
+    original_market = broker.market
+    broker.market = lambda ticker: {**original_market(ticker),
+        'close_time': iso(1800000003)}
+    assert trader.reconcile() == 'stop_exit_acknowledged'
+    assert broker.submitted[0]['reduce_only'] is True
+
+
+def test_stop_waits_without_an_executable_bid(monkeypatch):
+    monkeypatch.setattr(time, 'time', lambda: 1800000000)
+    trader, broker, journal = setup(bid='0')
+    assert trader.reconcile() == 'stop_waiting_for_executable_bid'
+    assert journal.state()['active']['stop']['pending'] is None
+    assert broker.submitted == []
+
+
 def test_stop_partial_fill_can_settle_residual(monkeypatch):
     monkeypatch.setattr(time, 'time', lambda: 1800000000)
     trader, broker, journal = setup(fills=(Decimal('.50'),))
