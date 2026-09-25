@@ -19,7 +19,7 @@ import time
 from zoneinfo import ZoneInfo
 
 from .alpaca_spy_strategy import (
-    MAX_PREMIUM_DOLLARS, NEW_YORK, MinuteBar, active_window, confirmed_entry_signal,
+    MAX_PREMIUM_DOLLARS, NEW_YORK, MinuteBar, active_window,
     entry_bar_is_fresh, entry_signal, exit_reason, forecast_levels,
     nearest_atm_contract, tradable_windows,
 )
@@ -377,6 +377,9 @@ def run(mode: str, duration_minutes: int):
         return
     journal = Journal(mode, str(account['id']), str(day))
     journal.claim()
+    # Discard a pending confirmation written by an older paper worker. Entry
+    # now depends on the first completed close crossing P90, not a second bar.
+    journal.update(pending_entry=None)
     heartbeat_stop = threading.Event()
     heartbeat_failure: list[Exception] = []
 
@@ -464,29 +467,13 @@ def run(mode: str, duration_minutes: int):
                     exit_position(api, journal, active, reason, latest)
             elif not active and forecast and len(recent) >= 2 and latest.end >= datetime.fromisoformat(forecast['forecast_at']) \
                     and entry_bar_is_fresh(now, latest.end) and now.astimezone(NEW_YORK) < window.end-timedelta(minutes=5):
-                pending = journal.load().get('pending_entry') or None
-                if pending and pending.get('window') != window.start.isoformat():
-                    pending = None
-                confirmation = confirmed_entry_signal(pending, latest, forecast['predictions'])
-                if confirmation:
-                    kind, crossed_p90 = confirmation
-                    # Clear before placing the order; a restart cannot create
-                    # a second entry from the same one-minute confirmation.
-                    journal.update(pending_entry=None)
-                    event('entry_confirmed', kind=kind, crossed_at=pending['crossed_at'],
-                          confirmed_at=latest.end.isoformat(), stop_p90=crossed_p90)
-                    enter(api, journal, window, kind, latest, stop_p90=crossed_p90)
-                else:
-                    kind = entry_signal(recent[-2], latest, forecast['predictions'])
+                kind = entry_signal(recent[-2], latest, forecast['predictions'])
+                if kind:
                     levels = forecast_levels(forecast['predictions'], latest.end)
-                    next_pending = ({'window': window.start.isoformat(), 'kind': kind,
-                        'crossed_at': latest.end.isoformat(), 'stop_p90': levels[1]}
-                        if kind and levels else None)
-                    if next_pending != pending:
-                        journal.update(pending_entry=next_pending)
-                    if next_pending:
-                        event('entry_confirmation_pending', kind=kind,
-                              crossed_at=latest.end.isoformat(), stop_p90=levels[1])
+                    if levels:
+                        event('entry_crossed', kind=kind, crossed_at=latest.end.isoformat(),
+                              stop_p90=levels[1])
+                        enter(api, journal, window, kind, latest, stop_p90=levels[1])
             event('minute_heartbeat', mode=mode, window=window.start.isoformat(),
                   bar_end=latest.end.isoformat(), position=bool(journal.load().get('active')))
             time.sleep(5)
@@ -507,7 +494,7 @@ def main():
         event('configuration', symbol='SPY', expiration='same_day', max_contracts=1,
               max_premium_dollars=str(MAX_PREMIUM_DOLLARS), hourly_windows='09:30–15:30 America/New_York',
               prediction_length_minutes=60, minimum_observed_spy_minutes=500,
-              entry_confirmation_minutes=1, maximum_entry_bar_age_seconds=20,
+              entry_confirmation_minutes=0, maximum_entry_bar_age_seconds=20,
               paper_endpoint='paper-api.alpaca.markets', live_gate_required=True, orders_sent=0)
         return
     try:
