@@ -105,6 +105,14 @@ def confirmed_entry_signal(pending: Mapping | None, current: MinuteBar,
     return None
 
 
+def entry_bar_is_fresh(now: datetime, bar_end: datetime) -> bool:
+    """A confirmed close is actionable only near the next minute's open."""
+    if now.tzinfo is None or bar_end.tzinfo is None:
+        return False
+    age = now - bar_end
+    return timedelta(0) <= age <= timedelta(seconds=20)
+
+
 def exit_reason(kind: str, bar: MinuteBar, rows: Iterable[Mapping], window: Window,
                 *, stop_level: float | None = None) -> str | None:
     """Stop-first on a bar that also touches the put's median target."""

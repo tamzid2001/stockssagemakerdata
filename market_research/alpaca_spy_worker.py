@@ -20,7 +20,8 @@ from zoneinfo import ZoneInfo
 
 from .alpaca_spy_strategy import (
     MAX_PREMIUM_DOLLARS, NEW_YORK, MinuteBar, active_window, confirmed_entry_signal,
-    entry_signal, exit_reason, forecast_levels, nearest_atm_contract, tradable_windows,
+    entry_bar_is_fresh, entry_signal, exit_reason, forecast_levels,
+    nearest_atm_contract, tradable_windows,
 )
 
 
@@ -184,7 +185,7 @@ def forecast_at(api: AlpacaAPI, window, journal: Journal):
     history = api.stock_bars(end=now, limit=1000)[-500:]
     if not history or history[-1].end < window.start + timedelta(minutes=1):
         raise RuntimeError('WINDOW_FIRST_MINUTE_NOT_COMPLETE')
-    if len(history) < 40:
+    if len(history) != 500:
         raise RuntimeError('INSUFFICIENT_REAL_SPY_MINUTES')
     from ensemble_forecasting.worker import execute_job
     from ensemble_forecasting.capabilities import timesfm_availability
@@ -434,7 +435,8 @@ def run(mode: str, duration_minutes: int):
                 try:
                     forecast = forecast_at(api, window, journal)
                 except Exception as exc:
-                    event('forecast_unavailable', code=type(exc).__name__)
+                    code = str(exc) if str(exc).isupper() else type(exc).__name__
+                    event('forecast_unavailable', code=code)
                     # The first bar is expected to be absent at exactly 09:30.
                     # Retry that condition promptly, but back off model errors.
                     forecast_failure_until = time.monotonic() + (5 if str(exc) == 'WINDOW_FIRST_MINUTE_NOT_COMPLETE' else 300)
@@ -461,7 +463,7 @@ def run(mode: str, duration_minutes: int):
                 if reason:
                     exit_position(api, journal, active, reason, latest)
             elif not active and forecast and len(recent) >= 2 and latest.end >= datetime.fromisoformat(forecast['forecast_at']) \
-                    and now - latest.end < timedelta(minutes=2) and now.astimezone(NEW_YORK) < window.end-timedelta(minutes=5):
+                    and entry_bar_is_fresh(now, latest.end) and now.astimezone(NEW_YORK) < window.end-timedelta(minutes=5):
                 pending = journal.load().get('pending_entry') or None
                 if pending and pending.get('window') != window.start.isoformat():
                     pending = None
@@ -504,6 +506,8 @@ def main():
     if args.mode == 'verify':
         event('configuration', symbol='SPY', expiration='same_day', max_contracts=1,
               max_premium_dollars=str(MAX_PREMIUM_DOLLARS), hourly_windows='09:30–15:30 America/New_York',
+              prediction_length_minutes=60, minimum_observed_spy_minutes=500,
+              entry_confirmation_minutes=1, maximum_entry_bar_age_seconds=20,
               paper_endpoint='paper-api.alpaca.markets', live_gate_required=True, orders_sent=0)
         return
     try:
