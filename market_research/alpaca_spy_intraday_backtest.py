@@ -86,7 +86,11 @@ def listed_contracts(api: AlpacaAPI, day: date) -> list[dict]:
 
 def option_minutes(api: AlpacaAPI, symbol: str, day: date) -> dict[datetime, float]:
     start = datetime.combine(day, datetime.min.time(), NEW_YORK).astimezone(timezone.utc)
-    end = start + timedelta(days=1)
+    # Accounts without real-time OPRA may only request bars at least 15 minutes
+    # old. Do not ask the provider for the still-future remainder of today.
+    end = min(start + timedelta(days=1), datetime.now(timezone.utc) - timedelta(minutes=16))
+    if end <= start:
+        return {}
     token = ''
     found = {}
     while True:
@@ -151,7 +155,8 @@ def replay_window(api: AlpacaAPI, bars: list[MinuteBar], contracts: list[dict],
         'horizon_minutes': horizon, 'stock_feed': feed, 'history_count': len(history),
         'history_first': history[0].end.isoformat() if history else None,
         'history_last': history[-1].end.isoformat() if history else None,
-        'trades': [], 'signals_skipped': {}, 'option_price_type': 'historical_trade_bar_open_proxy'}
+        'trades': [], 'signals': [], 'signals_skipped': {},
+        'option_price_type': 'historical_trade_bar_open_proxy'}
     if len(history) != 500:
         return {**record, 'status': 'insufficient_observed_history'}
     if history[-1].end != origin:
@@ -175,6 +180,7 @@ def replay_window(api: AlpacaAPI, bars: list[MinuteBar], contracts: list[dict],
     observed = [bar for bar in bars if origin < bar.end <= window.end.astimezone(timezone.utc)]
     record['future_observed_count'] = len(observed)
     option_cache: dict[str, dict[datetime, float]] = {}
+    option_history_forbidden = False
     position = None
     previous = None
     for bar in observed:
@@ -194,6 +200,8 @@ def replay_window(api: AlpacaAPI, bars: list[MinuteBar], contracts: list[dict],
         elif previous and bar.end >= available_at and bar.end < window.end.astimezone(timezone.utc):
             kind = entry_signal(previous, bar, predictions)
             if kind:
+                signal = {'kind': kind, 'at': bar.end.isoformat(), 'spy_close': bar.close}
+                record['signals'].append(signal)
                 eligible = [row for row in contracts if row.get('type') == kind and
                     row.get('expiration_date') == window.start.date().isoformat() and
                     row.get('underlying_symbol') == 'SPY' and
@@ -206,20 +214,33 @@ def replay_window(api: AlpacaAPI, bars: list[MinuteBar], contracts: list[dict],
                         not (float(row['strike_price']) <= bar.close if kind == 'call'
                              else float(row['strike_price']) >= bar.close), row['symbol']))
                     symbol = nearest['symbol']
-                    if symbol not in option_cache:
-                        option_cache[symbol] = option_minutes(api, symbol, window.start.date())
-                    price = first_observed_price(option_cache[symbol], bar.end)
-                    if price is None:
-                        reason = 'option_entry_bar_missing'
-                    elif price[1] * 100 > float(MAX_PREMIUM_DOLLARS):
-                        reason = 'option_bar_premium_above_200'
+                    signal['contract_symbol'] = symbol
+                    if option_history_forbidden:
+                        reason = 'option_history_forbidden'
                     else:
-                        position = {'kind': kind, 'symbol': symbol,
-                            'strike': float(nearest['strike_price']),
-                            'signal_at': bar.end.isoformat(), 'signal_spy_close': bar.close,
-                            'entry_bar_at': price[0].isoformat(), 'entry_bar_open': price[1],
-                            'premium_proxy_usd': round(price[1] * 100, 4)}
-                        reason = None
+                        if symbol not in option_cache:
+                            try:
+                                option_cache[symbol] = option_minutes(api, symbol, window.start.date())
+                            except RuntimeError as exc:
+                                if str(exc) != 'ALPACA_HTTP_403':
+                                    raise
+                                option_history_forbidden = True
+                                record['option_history_error'] = 'ALPACA_HTTP_403'
+                        price = (first_observed_price(option_cache[symbol], bar.end)
+                            if symbol in option_cache else None)
+                        if option_history_forbidden:
+                            reason = 'option_history_forbidden'
+                        elif price is None:
+                            reason = 'option_entry_bar_missing'
+                        elif price[1] * 100 > float(MAX_PREMIUM_DOLLARS):
+                            reason = 'option_bar_premium_above_200'
+                        else:
+                            position = {'kind': kind, 'symbol': symbol,
+                                'strike': float(nearest['strike_price']),
+                                'signal_at': bar.end.isoformat(), 'signal_spy_close': bar.close,
+                                'entry_bar_at': price[0].isoformat(), 'entry_bar_open': price[1],
+                                'premium_proxy_usd': round(price[1] * 100, 4)}
+                            reason = None
                 if reason:
                     record['signals_skipped'][reason] = record['signals_skipped'].get(reason, 0) + 1
         previous = bar
@@ -251,6 +272,8 @@ def summarize(windows: list[dict]) -> dict:
         losses += trade['pnl_proxy_usd'] < 0
     return {'planned_forecasts': len(windows), 'completed_forecasts': sum(row['status'] == 'replayed' for row in windows),
         'forecast_failures': sum(row['status'] == 'forecast_failed' for row in windows),
+        'underlying_cross_signals': sum(len(row.get('signals', [])) for row in windows),
+        'option_history_forbidden_windows': sum(row.get('option_history_error') == 'ALPACA_HTTP_403' for row in windows),
         'trade_count': len(trades), 'priced_trade_count': len(priced),
         'unpriced_trade_count': len(trades) - len(priced), 'wins': wins, 'losses': losses,
         'win_rate': wins / (wins + losses) if wins + losses else None,
@@ -258,7 +281,8 @@ def summarize(windows: list[dict]) -> dict:
         'closed_trade_drawdown_proxy_usd': round(drawdown, 4) if priced else None,
         'minimum_starting_cash_proxy_usd': round(capital, 4) if priced else None,
         'complete': len(windows) > 0 and all(row['status'] == 'replayed' for row in windows)
-            and len(priced) == len(trades)}
+            and len(priced) == len(trades)
+            and not any(row.get('option_history_error') for row in windows)}
 
 
 def run(day: date, horizon: int, output: Path, *, feed: str, data_only: bool = False) -> dict:
