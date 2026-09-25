@@ -39,7 +39,9 @@ jobs:
       APPROVED_CONFIG: ${{ inputs.approved_config }}
       LIVE_ENABLED: ${{ inputs.live_enabled }}
       CONTINUOUS_GATE: ${{ inputs.continuous_gate }}
-      QUANTURA_CODE_SHA: ${{ inputs.code_ref || (inputs.mode == 'live' && inputs.approved_sha) || github.sha }}
+      # A still-running predecessor may dispatch its pinned old code_ref. Its
+      # continuous live successor must instead resolve the current approved SHA.
+      QUANTURA_CODE_SHA: ${{ (inputs.mode == 'live' && inputs.continuous && inputs.approved_sha) || inputs.code_ref || (inputs.mode == 'live' && inputs.approved_sha) || github.sha }}
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
       TOKENIZERS_PARALLELISM: 'false'
