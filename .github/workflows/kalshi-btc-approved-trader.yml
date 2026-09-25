@@ -73,7 +73,9 @@ jobs:
       STARTING_CONTRACTS: ${{ inputs.starting_contracts || 1 }}
       RECOVERY_MULTIPLIER: ${{ inputs.recovery_multiplier || 2.5 }}
       MAX_RECOVERY_INCREASES: ${{ inputs.max_recovery_increases || '3' }}
-      QUANTURA_CODE_SHA: ${{ inputs.code_ref || (inputs.mode == 'live' && vars.QUANTURA_KALSHI_APPROVED_SHA) || github.sha }}
+      # A still-running predecessor may dispatch its pinned old code_ref. Its
+      # continuous live successor must instead resolve the current approved SHA.
+      QUANTURA_CODE_SHA: ${{ (inputs.mode == 'live' && inputs.continuous && vars.QUANTURA_KALSHI_APPROVED_SHA) || inputs.code_ref || (inputs.mode == 'live' && vars.QUANTURA_KALSHI_APPROVED_SHA) || github.sha }}
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
       TOKENIZERS_PARALLELISM: 'false'

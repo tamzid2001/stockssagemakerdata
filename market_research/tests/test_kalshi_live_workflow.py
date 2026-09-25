@@ -23,6 +23,7 @@ def test_live_workflow_defaults_off_pinned_code_and_no_public_state():
     assert workflow['concurrency']['cancel-in-progress'] is False
     assert workflow['jobs']['worker']['timeout-minutes'] <= 355
     assert workflow['permissions']['contents'] == 'read'
+    assert "inputs.mode == 'live' && inputs.continuous && vars.QUANTURA_KALSHI_APPROVED_SHA" in text
     assert "inputs.code_ref || (inputs.mode == 'live' && vars.QUANTURA_KALSHI_APPROVED_SHA) || github.sha" in text
     assert 'ref: ${{ env.QUANTURA_CODE_SHA }}' in text
     assert 'name: Validate live approval reference' in text
