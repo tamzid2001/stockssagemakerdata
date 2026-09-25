@@ -42,6 +42,15 @@ def test_put_stops_conservatively_before_median_target_and_call_stops_at_p90():
     assert exit_reason('call', MinuteBar(at(15, 30), 501, 502, 500), forecast, window) == 'window_end'
 
 
+def test_stop_can_remain_at_the_p90_crossed_on_entry():
+    forecast = rows((at(14, 32), 500, 505))
+    window = tradable_windows(at(13, 30), at(20))[1]
+    bar = MinuteBar(at(14, 32), 504, 504, 502)
+    assert exit_reason('call', bar, forecast, window) == 'p90_stop'
+    assert exit_reason('call', bar, forecast, window, stop_level=501) is None
+    assert exit_reason('put', bar, forecast, window, stop_level=503) == 'p90_stop'
+
+
 def test_nearest_atm_option_must_be_recent_and_cost_no_more_than_200():
     contracts = [
         {'symbol': 'SPY260925C00500000', 'type': 'call', 'expiration_date': '2026-09-25', 'tradable': True, 'underlying_symbol': 'SPY', 'strike_price': '500'},

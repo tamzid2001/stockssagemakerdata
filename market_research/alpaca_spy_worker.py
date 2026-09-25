@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 from .alpaca_spy_strategy import (
     MAX_PREMIUM_DOLLARS, NEW_YORK, MinuteBar, active_window, entry_signal,
-    exit_reason, nearest_atm_contract, tradable_windows,
+    exit_reason, forecast_levels, nearest_atm_contract, tradable_windows,
 )
 
 
@@ -287,7 +287,8 @@ def owned_position(api: AlpacaAPI, journal: Journal):
     return active
 
 
-def enter(api: AlpacaAPI, journal: Journal, window, kind: str, bar: MinuteBar):
+def enter(api: AlpacaAPI, journal: Journal, window, kind: str, bar: MinuteBar,
+          *, stop_p90: float | None = None):
     if owned_position(api, journal):
         return
     account = api.account()
@@ -319,7 +320,8 @@ def enter(api: AlpacaAPI, journal: Journal, window, kind: str, bar: MinuteBar):
         'type': 'limit', 'limit_price': str(ask), 'time_in_force': 'day', 'extended_hours': False})
     if Decimal(str(order.get('filled_qty') or 0)) == 1:
         journal.update(active={'symbol': symbol, 'kind': kind, 'window': window.start.isoformat(),
-            'entry_id': identifier, 'entered_at': datetime.now(timezone.utc).isoformat()}, intent=None)
+            'entry_id': identifier, 'entered_at': datetime.now(timezone.utc).isoformat(),
+            'stop_p90': stop_p90}, intent=None)
         event('entry_filled', kind=kind, contract=symbol, premium=order.get('filled_avg_price'))
     else:
         journal.update(intent=None)
@@ -454,14 +456,17 @@ def run(mode: str, duration_minutes: int):
                 # forecast after a failed or unavailable model run.
                 exit_position(api, journal, active, 'forecast_unavailable', latest)
             elif active and forecast:
-                reason = exit_reason(active['kind'], latest, forecast['predictions'], window)
+                reason = exit_reason(active['kind'], latest, forecast['predictions'], window,
+                                     stop_level=active.get('stop_p90'))
                 if reason:
                     exit_position(api, journal, active, reason, latest)
             elif not active and forecast and len(recent) >= 2 and latest.end >= datetime.fromisoformat(forecast['forecast_at']) \
                     and now - latest.end < timedelta(minutes=2) and now.astimezone(NEW_YORK) < window.end-timedelta(minutes=5):
                 kind = entry_signal(recent[-2], latest, forecast['predictions'])
                 if kind:
-                    enter(api, journal, window, kind, latest)
+                    levels = forecast_levels(forecast['predictions'], latest.end)
+                    if levels:
+                        enter(api, journal, window, kind, latest, stop_p90=levels[1])
             event('minute_heartbeat', mode=mode, window=window.start.isoformat(),
                   bar_end=latest.end.isoformat(), position=bool(journal.load().get('active')))
             time.sleep(5)
