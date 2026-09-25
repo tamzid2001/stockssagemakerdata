@@ -105,8 +105,8 @@ def test_forecast_is_anchored_to_the_latest_real_completed_minute(monkeypatch):
 
     window = tradable_windows(at(13, 30), at(20))[0]
     anchor = window.start + timedelta(minutes=1)
-    history = [MinuteBar(anchor - timedelta(minutes=39-index), 500, 501, 499)
-               for index in range(40)]
+    history = [MinuteBar(anchor - timedelta(minutes=499-index), 500, 501, 499)
+               for index in range(500)]
     class BarsAPI:
         def stock_bars(self, **_kwargs):
             return history
@@ -122,7 +122,7 @@ def test_forecast_is_anchored_to_the_latest_real_completed_minute(monkeypatch):
                     ('prophet', 'toto', 'granite', 'chronos', 'timesfm')]}
     monkeypatch.setattr(engine, 'execute_job', fake_execute)
     result = worker.forecast_at(BarsAPI(), window, ForecastJournal())
-    assert result['input_count'] == 40
+    assert result['input_count'] == 500
     assert result['predictions'][0]['timestamp'] == (anchor + timedelta(minutes=1)).isoformat()
 
 
@@ -131,9 +131,21 @@ def test_prior_day_close_cannot_anchor_a_new_hourly_forecast():
     window = tradable_windows(at(13, 30), at(20))[0]
     class PriorCloseAPI:
         def stock_bars(self, **_kwargs):
-            return [MinuteBar(window.start - timedelta(hours=17), 500, 501, 499)] * 40
+            return [MinuteBar(window.start - timedelta(hours=17), 500, 501, 499)] * 500
     with pytest.raises(RuntimeError, match='WINDOW_FIRST_MINUTE_NOT_COMPLETE'):
         worker.forecast_at(PriorCloseAPI(), window, Journal())
+
+
+def test_paper_forecast_requires_500_observed_minutes():
+    from datetime import timedelta
+    window = tradable_windows(at(13, 30), at(20))[0]
+    anchor = window.start + timedelta(minutes=1)
+    class ShortHistoryAPI:
+        def stock_bars(self, **_kwargs):
+            return [MinuteBar(anchor - timedelta(minutes=39-index), 500, 501, 499)
+                    for index in range(40)]
+    with pytest.raises(RuntimeError, match='INSUFFICIENT_REAL_SPY_MINUTES'):
+        worker.forecast_at(ShortHistoryAPI(), window, Journal())
 
 
 def test_exact_200_premium_is_allowed_but_above_is_not(monkeypatch):
