@@ -83,6 +83,28 @@ def entry_signal(previous: MinuteBar, current: MinuteBar, rows: Iterable[Mapping
     return None
 
 
+def confirmed_entry_signal(pending: Mapping | None, current: MinuteBar,
+                           rows: Iterable[Mapping]) -> tuple[str, float] | None:
+    """Confirm the next completed minute still closes beyond the crossed P90."""
+    if not pending or pending.get('kind') not in {'put', 'call'}:
+        return None
+    try:
+        crossed_at = datetime.fromisoformat(str(pending['crossed_at']))
+        crossed_p90 = float(pending['stop_p90'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if crossed_at.tzinfo is None or current.end - crossed_at != timedelta(minutes=1):
+        return None
+    levels = forecast_levels(rows, current.end)
+    if levels is None or not 0 < crossed_p90:
+        return None
+    kind = str(pending['kind'])
+    if (kind == 'put' and current.close < levels[1]) or (
+            kind == 'call' and current.close > levels[1]):
+        return kind, crossed_p90
+    return None
+
+
 def exit_reason(kind: str, bar: MinuteBar, rows: Iterable[Mapping], window: Window,
                 *, stop_level: float | None = None) -> str | None:
     """Stop-first on a bar that also touches the put's median target."""

@@ -59,6 +59,23 @@ def test_optimizer_timeout_never_returns_fake_or_partial_forecast(monkeypatch):
     assert str(error.value)=='prophet:MODEL_INFERENCE_FAILED'
 
 
+def test_predictive_samples_are_reproducible_without_changing_caller_rng(monkeypatch):
+    class FakeProphet:
+        def __init__(self,**kw):pass
+        def fit(self,*a,**kw):pass
+        def predictive_samples(self,future):
+            return {'yhat':np.random.normal(size=(len(future),500))}
+    monkeypatch.setitem(sys.modules,'prophet',SimpleNamespace(Prophet=FakeProphet))
+    args=inputs([.42,.44,.46])
+    np.random.seed(1234)
+    first=ProphetAdapter().forecast(*args)
+    next_draw=np.random.random()
+    np.random.seed(1234)
+    second=ProphetAdapter().forecast(*args)
+    assert np.random.random()==next_draw
+    np.testing.assert_array_equal(first.quantile_matrix,second.quantile_matrix)
+
+
 # Anonymized numeric cases from the five failing two-minute markets, both sides,
 # plus flat/boundary windows. No credentials or private archive records included.
 REGRESSION_PAIRS = ((.59,.47),(.42,.54),(.53,.5),(.48,.51),(.58,.47),(.43,.54),

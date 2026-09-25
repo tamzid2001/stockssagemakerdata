@@ -2,9 +2,20 @@ from datetime import datetime, timedelta, timezone
 
 from market_research.alpaca_spy_intraday_backtest import (
     first_observed_price, replay_underlying_window, replay_window,
-    summarize, summarize_underlying,
+    stock_minutes, summarize, summarize_underlying,
 )
-from market_research.alpaca_spy_strategy import MinuteBar, Window
+from market_research.alpaca_spy_strategy import NEW_YORK, MinuteBar, Window
+
+
+def test_current_day_sip_request_stops_before_delayed_entitlement_boundary():
+    observed = {}
+    class API:
+        def request(self, method, path, *, data, params):
+            observed.update(params)
+            return {'bars': []}
+    stock_minutes(API(), datetime.now(NEW_YORK).date(), 'sip')
+    requested_end = datetime.fromisoformat(observed['end'])
+    assert requested_end <= datetime.now(timezone.utc) - timedelta(minutes=15)
 
 
 def test_option_price_requires_observed_bar_in_bounded_window():
@@ -93,7 +104,7 @@ def test_underlying_replay_uses_next_open_and_static_crossed_p90():
     future = []
     for i in range(1, 17):
         close = {1: 101, 2: 99, 3: 98, 4: 94}.get(i, 94)
-        opening = {3: 98, 5: 94}.get(i, close)
+        opening = {3: 98, 4: 97, 5: 94}.get(i, close)
         future.append(MinuteBar(origin + timedelta(minutes=i), close,
             close, close, opening))
     def forecast(rows, horizon):
@@ -110,3 +121,12 @@ def test_underlying_replay_uses_next_open_and_static_crossed_p90():
     assert result['trades'][0]['exit_reason'] == 'median_target'
     assert summary['net_directional_spy_change_usd_per_share'] == 4
     assert summary['wins'] == 1 and summary['trade_count'] == 1
+
+    confirmed = replay_underlying_window(history + future,
+        Window(origin, origin + timedelta(minutes=15)), feed='iex',
+        forecast_fn=forecast, confirmation_minutes=1)
+    confirmed_summary = summarize_underlying([confirmed])
+    assert confirmed['trades'][0]['crossed_at'] == (origin + timedelta(minutes=2)).isoformat()
+    assert confirmed['trades'][0]['entry_at'] == (origin + timedelta(minutes=3)).isoformat()
+    assert confirmed_summary['trade_count'] == 1
+    assert confirmed_summary['net_directional_spy_change_usd_per_share'] == 3

@@ -68,9 +68,18 @@ class ProphetAdapter(ForecastAdapter):
             future = pd.DataFrame(
                 {"ds": pd.to_datetime(list(timestamps), utc=True).tz_convert(None)}
             )
-            samples = np.asarray(
-                model.predictive_samples(future)["yhat"], dtype=np.float64
-            )
+            # Prophet's posterior predictive draw uses NumPy's process RNG.
+            # Seed only this draw from the immutable prepared dataset, then
+            # restore the caller's RNG so retries reproduce the quantiles
+            # without perturbing other sequential model adapters.
+            rng_state = np.random.get_state()
+            try:
+                np.random.seed(int(series.dataset_hash[:8], 16))
+                samples = np.asarray(
+                    model.predictive_samples(future)["yhat"], dtype=np.float64
+                )
+            finally:
+                np.random.set_state(rng_state)
         except Exception as exc:
             raise ModelExecutionError(
                 self.model_id, "MODEL_INFERENCE_FAILED", retryable=False
