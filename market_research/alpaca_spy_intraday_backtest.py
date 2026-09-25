@@ -23,7 +23,20 @@ from .alpaca_spy_worker import AlpacaAPI
 
 QUANTILES = (0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99)
 MODELS = ('prophet', 'toto', 'granite', 'chronos', 'timesfm')
-HORIZONS = (15, 30, 45, 60)
+HORIZONS = (15, 30, 45, 60, 360)
+
+
+def study_windows(opening: datetime, closing: datetime, horizon: int) -> list[Window]:
+    """Compare hourly studies with one immutable, full-session 360-minute forecast."""
+    if horizon not in HORIZONS:
+        raise ValueError('UNSUPPORTED_HORIZON')
+    if horizon == 360:
+        end = opening + timedelta(minutes=horizon)
+        if end > closing - timedelta(minutes=30):
+            raise ValueError('FULL_SESSION_HORIZON_EXCEEDS_TRADABLE_WINDOW')
+        return [Window(opening, end)]
+    return [Window(opening + timedelta(hours=i),
+                   opening + timedelta(hours=i, minutes=horizon)) for i in range(6)]
 
 
 def timestamp(value: str) -> datetime:
@@ -478,11 +491,10 @@ def run(day: date, horizon: int, output: Path, *, feed: str, data_only: bool = F
     try:
         bars = stock_minutes(api, day, feed)
         contracts = listed_contracts(api, day) if pricing == 'option_bars' else []
-        origins = [opening + timedelta(hours=i) for i in range(6)]
-        windows = [Window(origin, origin + timedelta(minutes=horizon)) for origin in origins]
-        coverage = [{'origin': origin.isoformat(),
-            'history_count': len([bar for bar in bars if bar.end <= origin])}
-            for origin in origins]
+        windows = study_windows(opening, closing, horizon)
+        coverage = [{'origin': window.start.isoformat(),
+            'history_count': len([bar for bar in bars if bar.end <= window.start])}
+            for window in windows]
         if data_only:
             report = {'day': day.isoformat(), 'horizon_minutes': horizon, 'stock_feed': feed,
                 'stock_observed_minutes': len(bars),

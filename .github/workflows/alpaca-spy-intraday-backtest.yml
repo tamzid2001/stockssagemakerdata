@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       horizons_json:
-        description: 'JSON array from 15, 30, 45, 60, e.g. [60]'
+        description: 'JSON array from 15, 30, 45, 60, 360; 360 makes one 9:30–15:30 forecast'
         required: true
         type: string
       feed:

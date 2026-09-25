@@ -2,9 +2,18 @@ from datetime import datetime, timedelta, timezone
 
 from market_research.alpaca_spy_intraday_backtest import (
     first_observed_price, replay_underlying_window, replay_window,
-    stock_minutes, summarize, summarize_underlying,
+    stock_minutes, study_windows, summarize, summarize_underlying,
 )
 from market_research.alpaca_spy_strategy import NEW_YORK, MinuteBar, Window
+
+
+def test_360_minute_study_forecasts_once_from_open_and_exits_before_close():
+    opening = datetime(2026, 9, 25, 9, 30, tzinfo=NEW_YORK)
+    closing = opening.replace(hour=16, minute=0)
+    full_day = study_windows(opening, closing, 360)
+    assert full_day == [Window(opening, opening.replace(hour=15, minute=30))]
+    assert len(study_windows(opening, closing, 60)) == 6
+    assert study_windows(opening, closing, 60)[-1].end == full_day[0].end
 
 
 def test_current_day_sip_request_stops_before_delayed_entitlement_boundary():
