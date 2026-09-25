@@ -499,7 +499,9 @@ class Trader:
         from .engine import stamp
         from .kalshi_execution import acknowledged_order, stop_exit_payload
         stop = entry['stop']
-        if market.get('status') != 'active' or time.time() >= stamp(market['close_time']) - 5:
+        # Entries stop five seconds early, but an already-triggered protective
+        # exit should remain eligible until the exchange actually closes.
+        if market.get('status') != 'active' or time.time() >= stamp(market['close_time']):
             return 'stop_waiting_for_settlement'
         raw_bid = market.get(entry['side'] + '_bid_dollars')
         if raw_bid is None or money(raw_bid) <= 0:
@@ -557,6 +559,25 @@ class Trader:
             fill = self.broker.exit_fill_summary(intent, entry['side'], terminal)
             if fill is None:
                 return 'stop_fills_read_lag'
+            # A terminal fill is not enough by itself: the portfolio position
+            # must have decreased by exactly that quantity before recording a
+            # realized exit. Kalshi's position read model may lag order/fills.
+            from .engine import stamp
+            if market.get('status') == 'active' and time.time() < stamp(market['close_time']):
+                expected = (money(entry['filled']) - money(stop['sold']) -
+                    money(fill['filled'])) * (1 if entry['side'] == 'yes' else -1)
+                if self.coordinator:
+                    orders, positions = self.broker.account()
+                    try:
+                        actual = self.coordinator.verify_positions(orders, positions)
+                    except RuntimeError as exc:
+                        if str(exc) == 'ACCOUNT_POSITION_UNVERIFIED':
+                            return 'stop_position_read_lag'
+                        raise
+                    if actual.get(entry['ticker'], money(0)) != expected:
+                        return 'stop_position_read_lag'
+                elif self._stop_position(entry) != expected:
+                    return 'stop_position_read_lag'
             self.journal.reconcile_stop_order(entry, intent, {**fill, 'order_id': terminal['order_id']})
             entry = self.journal.state()['active']
             stop = entry['stop']

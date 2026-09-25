@@ -61,6 +61,11 @@ def inspect(subaccount, limit, lookback_hours):
                 if stop_intent else None)
             active_position = next((row for row in positions
                 if row.get('ticker') == active.get('ticker')), None)
+            active_settlements = (broker.pages('/portfolio/settlements', 'settlements',
+                ticker=active['ticker']) if active else [])
+            active_settlement = next((row for row in active_settlements
+                if row.get('ticker') == active.get('ticker') and
+                row.get('exchange_index') == (active.get('intent') or {}).get('exchange_index')), None)
             print(json.dumps({'event': 'series_recovery_audit', 'series': series,
                 'session_exists': bool(root), 'configured_start': saved_config.get('starting_contracts'),
                 'configured_multiplier': saved_config.get('recovery_multiplier'),
@@ -84,7 +89,11 @@ def inspect(subaccount, limit, lookback_hours):
                         'order_status': stop_order.get('status') if stop_order else None}
                         if pending else None,
                     'exchange_position': active_position.get('position_fp')
-                        if active_position else '0'} if active else None,
+                        if active_position else '0',
+                    'settlement': {'result': active_settlement.get('market_result'),
+                        'yes_count': active_settlement.get('yes_count_fp'),
+                        'no_count': active_settlement.get('no_count_fp')}
+                        if active_settlement else None} if active else None,
                 'trades_newest_first': trades, 'recent_exchange_fills': fills[-limit:]}), flush=True)
     finally:
         broker.client.close()

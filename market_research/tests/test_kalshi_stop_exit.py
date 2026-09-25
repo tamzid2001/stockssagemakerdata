@@ -47,9 +47,16 @@ class Broker:
             action='buy', price='.50', fees='.02')
 
     def _order(self, intent, count, *, action, price, fees='0'):
+        # V2's legacy action/outcome fields follow the YES book, not the
+        # economic side of the strategy's position.
+        if intent.get('reduce_only'):
+            action = 'sell' if intent['side'] == 'ask' else 'buy'
+            outcome_side = 'no' if intent['side'] == 'ask' else 'yes'
+        else:
+            outcome_side = self.entry['side']
         return {'client_order_id': intent['client_order_id'], 'ticker': intent['ticker'],
             'exchange_index': intent['exchange_index'], 'subaccount_number': intent['subaccount'],
-            'book_side': intent['side'], 'outcome_side': self.entry['side'], 'action': action,
+            'book_side': intent['side'], 'outcome_side': outcome_side, 'action': action,
             'fill_count_fp': str(count), 'remaining_count_fp': '0',
             'status': 'executed' if count else 'canceled',
             'taker_fill_cost_dollars': str(count * money(price)),
@@ -248,7 +255,7 @@ def test_exit_proceeds_use_authenticated_fills_not_trigger_quote():
     terminal = {'order_id': 'stop-order-id', 'filled': '1', 'fees': '.003'}
     fill = {'fill_id': 'fill-1', 'order_id': 'stop-order-id', 'ticker': intent['ticker'],
         'exchange_index': 2, 'subaccount_number': 0, 'book_side': 'bid',
-        'outcome_side': 'no', 'action': 'sell', 'count_fp': '1',
+        'outcome_side': 'yes', 'action': 'buy', 'count_fp': '1',
         'no_price_dollars': '.0475', 'fee_cost': '.003'}
     broker = KalshiExecution.__new__(KalshiExecution)
     broker.config = trader.config
@@ -261,3 +268,29 @@ def test_exit_proceeds_use_authenticated_fills_not_trigger_quote():
     broker.pages = lambda path, key, **params: [fill, fill]
     with pytest.raises(RuntimeError, match='STOP_EXIT_FILL_IDENTITY_MISMATCH'):
         broker.exit_fill_summary(intent, 'no', terminal)
+
+
+def test_real_v2_yes_stop_legacy_labels_are_not_economic_direction():
+    from market_research.kalshi_execution import reconciled_stop_order
+    trader, _, journal = setup('yes')
+    intent = stop_exit_payload(journal.state()['active'], Decimal('1'), '.05', 2,
+        trader.config, attempt=1)
+    order = {'client_order_id': intent['client_order_id'], 'ticker': intent['ticker'],
+        'exchange_index': 2, 'subaccount_number': 0, 'book_side': 'ask',
+        'outcome_side': 'no', 'action': 'sell', 'fill_count_fp': '.20',
+        'remaining_count_fp': '0', 'status': 'canceled',
+        'taker_fees_dollars': '.001', 'maker_fees_dollars': '0', 'order_id': 'stop-order-id'}
+    terminal = reconciled_stop_order(order, intent, 'yes')
+    assert money(terminal['filled']) == Decimal('.20')
+    fill = {'fill_id': 'fill-1', 'order_id': 'stop-order-id', 'ticker': intent['ticker'],
+        'exchange_index': 2, 'subaccount_number': 0, 'book_side': 'ask',
+        'outcome_side': 'no', 'action': 'sell', 'count_fp': '.20',
+        'yes_price_dollars': '.05', 'fee_cost': '.001'}
+    broker = KalshiExecution.__new__(KalshiExecution)
+    broker.config = trader.config
+    broker.pages = lambda path, key, **params: [fill]
+    result = broker.exit_fill_summary(intent, 'yes', terminal)
+    assert money(result['proceeds']) == Decimal('.01')
+    order['action'] = 'buy'
+    with pytest.raises(RuntimeError, match='STOP_EXIT_DIRECTION_UNVERIFIED'):
+        reconciled_stop_order(order, intent, 'yes')

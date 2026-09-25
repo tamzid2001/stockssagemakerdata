@@ -289,6 +289,13 @@ class KalshiExecution:
 
     def exit_fill_summary(self, intent, side, terminal):
         """Price a sell from authenticated fills, never from the triggering quote."""
+        # V2's book_side is authoritative. Its legacy action/outcome_side
+        # describe the YES book rather than the economic position: an ASK
+        # reducing YES can be reported as (sell, NO).
+        expected_book = 'ask' if side == 'yes' else 'bid'
+        expected_action = 'sell' if side == 'yes' else 'buy'
+        if intent.get('side') != expected_book:
+            raise RuntimeError('STOP_EXIT_DIRECTION_UNVERIFIED')
         expected = money(terminal['filled'])
         if expected == 0:
             return {'filled': '0', 'proceeds': '0', 'fees': '0'}
@@ -302,8 +309,9 @@ class KalshiExecution:
                     or row.get('ticker') != intent['ticker']
                     or row.get('exchange_index') != intent['exchange_index']
                     or row.get('subaccount_number') != intent['subaccount']
-                    or row.get('book_side') != intent['side']
-                    or row.get('outcome_side') != side or row.get('action') != 'sell'):
+                    or row.get('book_side') != expected_book
+                    or row.get('action') != expected_action
+                    or row.get('outcome_side') not in ('yes', 'no')):
                 raise RuntimeError('STOP_EXIT_FILL_IDENTITY_MISMATCH')
             seen.add(fill_id)
             quantity = money(row['count_fp'])
@@ -391,6 +399,10 @@ def combined_entry_fill(entry, terminal):
 
 def reconciled_stop_order(order, intent, economic_side):
     """Require a terminal, same-position reduce-only exit before another IOC."""
+    expected_book = 'ask' if economic_side == 'yes' else 'bid'
+    expected_action = 'sell' if economic_side == 'yes' else 'buy'
+    if economic_side not in ('yes', 'no') or intent.get('side') != expected_book:
+        raise RuntimeError('STOP_EXIT_DIRECTION_UNVERIFIED')
     if (not intent.get('reduce_only') or order.get('client_order_id') != intent['client_order_id']
             or order.get('ticker') != intent['ticker']
             or order.get('exchange_index') != intent['exchange_index']
@@ -400,7 +412,8 @@ def reconciled_stop_order(order, intent, economic_side):
     count, remaining = money(order['fill_count_fp']), money(order['remaining_count_fp'])
     if not 0 <= count <= money(intent['count']) or remaining != 0 or order.get('status') not in ('executed', 'canceled'):
         raise RuntimeError('STOP_ORDER_NOT_TERMINAL')
-    if count and (order.get('outcome_side') != economic_side or order.get('action') != 'sell'):
+    if count and (order.get('action') != expected_action
+            or order.get('outcome_side') not in ('yes', 'no')):
         raise RuntimeError('STOP_EXIT_DIRECTION_UNVERIFIED')
     fees = money(order['taker_fees_dollars']) + money(order['maker_fees_dollars'])
     if fees < 0:
