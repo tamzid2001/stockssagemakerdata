@@ -1522,7 +1522,7 @@ export const PREDICTION_MARKET_CAPABILITIES = {
  * Old events remain in /events; their markets must be joined from /historical.
  * Outcome annotations stay in metadata, never in the historical model target.
  */
-export async function kalshiResearchCatalog(seriesTicker = "", cursor = "", mode: "live" | "historical" = "historical") {
+export async function kalshiResearchCatalog(seriesTicker = "", cursor = "", mode: "live" | "premarket" | "historical" = "historical") {
   if (cursor.length > 2048 || /[\x00-\x1f]/.test(cursor)) throw new PredictionMarketDataError("invalid_cursor", "Invalid catalog cursor.");
   let seriesPayload = cached<JsonRecord>("kalshi:research-series");
   if (!seriesPayload) {
@@ -1540,7 +1540,7 @@ export async function kalshiResearchCatalog(seriesTicker = "", cursor = "", mode
   if (!/^[A-Z0-9._-]{1,120}$/.test(seriesTicker) || !summaries.some(s => s.ticker === seriesTicker)) {
     throw new PredictionMarketDataError("invalid_series", "Choose an existing Kalshi Sports series.");
   }
-  const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/events`, { series_ticker: seriesTicker, status: mode === "live" ? "open" : "settled", limit: mode === "live" ? 200 : 1,
+  const { payload } = await fetchJson(queryUrl(`${KALSHI_API}/events`, { series_ticker: seriesTicker, status: mode === "historical" ? "settled" : "open", limit: mode === "historical" ? 1 : 200,
     with_nested_markets: true, with_milestones: true, cursor }));
   const events = asArray(payload.events).map(asRecord).filter((e): e is JsonRecord => !!e);
   const items: PredictionMarketContract[] = [];
@@ -1549,9 +1549,9 @@ export async function kalshiResearchCatalog(seriesTicker = "", cursor = "", mode
     if (text(event.series_ticker) !== seriesTicker || !/^[A-Z0-9._-]{1,180}$/.test(eventTicker)) continue;
     const markets = new Map<string, JsonRecord>();
     asArray(event.markets).map(asRecord).filter((m): m is JsonRecord => !!m).forEach(m => markets.set(text(m.ticker), { ...m, source_tier: "live" }));
-    if (mode === "live") {
+    if (mode !== "historical") {
       items.push(...normalizeKalshiEvent({ event, markets: [...markets.values()], milestones: payload.milestones }, "Sports")
-        .filter(c => isMoneyline(c) && gameTiming(c) === "in_progress"));
+        .filter(c => isMoneyline(c) && gameTiming(c) === (mode === "premarket" ? "upcoming" : "in_progress")));
       continue;
     }
     const archived = await fetchJson(queryUrl(`${KALSHI_API}/historical/markets`, { event_ticker: eventTicker, limit: 1000 }));
@@ -1577,14 +1577,14 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
     try {
       if (req.query.source === "kalshi") {
         const mode = text(req.query.mode || "historical", 20);
-        if (mode !== "live" && mode !== "historical") throw new PredictionMarketDataError("invalid_mode", "Choose live or historical.");
+        if (mode !== "live" && mode !== "historical" && mode !== "premarket") throw new PredictionMarketDataError("invalid_mode", "Choose premarket, live or historical.");
         res.setHeader("Cache-Control", "public, max-age=30");
         res.status(200).json(await kalshiResearchCatalog(String(req.query.series_ticker || ""), String(req.query.cursor || ""), mode));
         return;
       }
       if (req.query.source && req.query.source !== "polymarket_us") throw new PredictionMarketDataError("invalid_source", "Choose Polymarket US or Kalshi.");
       const mode = text(req.query.mode || "live", 20);
-      if (!["live", "historical"].includes(mode)) throw new PredictionMarketDataError("invalid_mode", "Choose live or historical.");
+      if (!["live", "premarket", "historical"].includes(mode)) throw new PredictionMarketDataError("invalid_mode", "Choose live or historical.");
       const offset = Number(req.query.cursor || 0);
       if (!Number.isInteger(offset) || offset < 0 || offset > 100000) throw new PredictionMarketDataError("invalid_cursor", "Invalid catalog cursor.");
       const { payload } = await fetchJson(queryUrl(`${POLYMARKET_GATEWAY}/v1/events`, {
@@ -1597,7 +1597,7 @@ export function registerPredictionMarketDataRoutes(router: Router): void {
         const category = { id: text(league?.slug || "sports"), label: text(league?.name || "Sports"), sport: text(asRecord(event.eventState)?.type || "Sports"), providerId: "" };
         return normalizePolymarketEvents({ events: [event] }, category).filter(c =>
           isMoneyline(c) &&
-          (mode !== "live" || c.live === true));
+          (mode !== "live" || c.live === true) && (mode !== "premarket" || gameTiming(c) === "upcoming"));
       });
       res.setHeader("Cache-Control", "public, max-age=30");
       res.status(200).json({ ok: true, source: "polymarket_us", mode, items: contracts, events_scanned: events.length,

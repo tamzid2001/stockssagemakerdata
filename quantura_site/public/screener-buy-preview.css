@@ -1,9 +1,9 @@
 .home-buy-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .home-buy-heading h2{font-size:clamp(1.15rem,2vw,1.6rem);margin:0}
 .home-buy-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:12px 0}
-.home-buy-cards article{min-width:0;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card,var(--bg));color:var(--text)}
-.home-buy-symbol{font-size:1.1rem;font-weight:700;color:var(--primary,var(--accent))}
-.home-buy-cards p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.85rem;margin:6px 0;color:var(--muted)}
+.home-buy-cards article{min-width:0;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card,var(--bg));color:var(--foreground)}
+.home-buy-symbol{font-size:1.1rem;font-weight:700;color:var(--brand-highlight)}
+.home-buy-cards p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.85rem;margin:6px 0;color:var(--muted-foreground)}
 .home-buy-cards dl{display:grid;grid-template-columns:1fr auto;gap:6px;font-size:.85rem;margin-bottom:0}
 .home-buy-cards dd{margin:0;font-variant-numeric:tabular-nums}
-#home-buy-signals [data-buy-status],#home-buy-signals .home-buy-note{font-size:.85rem;color:var(--muted)}
+#home-buy-signals [data-buy-status],#home-buy-signals .home-buy-note{font-size:.85rem;color:var(--muted-foreground)}

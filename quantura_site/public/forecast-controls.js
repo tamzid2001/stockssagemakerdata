@@ -181,7 +181,16 @@
     }
     return closed.length?[{values:closed,dvalue:86400_000}]:[];
   }
-  const helpers = Object.freeze({ localValue, localInstant, cutoffInstant, normalizeWeightsTwoDecimals, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
+  function predictionMarketSource(selection, settings = {}) {
+    const provider = selection?.source || selection?.provider || selection?.contract?.source;
+    const symbol = selection?.symbol || selection?.contract?.providerSymbol;
+    const contractId = selection?.contract_id || selection?.contract?.contractId;
+    if (!["kalshi", "polymarket_us"].includes(provider) || !symbol || !contractId) {
+      throw new Error("Choose a Kalshi or Polymarket outcome in market search first.");
+    }
+    return {type: "prediction_market", ...settings, provider, symbol, contract_id: contractId};
+  }
+  const helpers = Object.freeze({ predictionMarketSource, localValue, localInstant, cutoffInstant, normalizeWeightsTwoDecimals, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);

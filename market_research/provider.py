@@ -130,6 +130,26 @@ class QuanturaProvider:
             row["selected_position"] = contract["side"]
         return rows
 
+    def hourly_history(self, contract, start, end):
+        """Completed, genuine hourly observations; no forward filling."""
+        from .engine import iso, stamp, Quote
+        result = self.request("/api/sports/prediction-markets/export", {
+            "source": self.source, "contracts": [contract], "start": iso(start),
+            "end": iso(end), "frequency": "1h", "mode": "normalized",
+            "target": "price", "missing": "leave", "history_phase": "pregame",
+            "pregameOnly": True, "format": "json",
+        })
+        quotes = {}
+        for row in result.get("rows", []):
+            if row.get("is_forward_filled") or row.get("observed") is False:
+                continue
+            # Kalshi candles are end-stamped; Polymarket buckets are start-stamped.
+            close = stamp(row["timestamp"]) + (3600 if self.source == "polymarket_us" else 0)
+            price = row.get("price")
+            if start < close <= end and type(price) in (int, float) and 0 <= price <= 1:
+                quotes[close] = Quote(close, price, price)
+        return sorted(quotes.values(), key=lambda q: q.timestamp)
+
     def resolution(self, contract):
         """Read-only official outcome evidence, never inferred from a last quote."""
         slug=contract["providerSymbol"]
@@ -216,13 +236,13 @@ class KalshiProvider(QuanturaProvider):
                 'selected_side_won': bool(payout), 'selected_side_payout': payout}
 
     def discover(self, mode, max_pages=1, start_cursor="0"):
-        if mode == "live":
+        if mode in {"live", "premarket"}:
             contracts, cursor, coverage = {}, start_cursor, {}
             for _ in range(max_pages):
                 items, coverage = self._page(mode, cursor)
                 for item in items:
-                    contracts[item["contractId"]] = {**item, "live": True,
-                        "live_classification": "started_open_market_not_live_score_confirmation"}
+                    contracts[item["contractId"]] = {**item, "live": mode == "live",
+                        "live_classification": "known_future_game_start" if mode == "premarket" else "started_open_market_not_live_score_confirmation"}
                 cursor = coverage["next_cursor"]
                 if cursor is None:
                     break

@@ -784,7 +784,7 @@ async function main() {
     const dateIso = fmtDate(date);
     const topic = TOPIC_SEQUENCE[i];
     const rawTitle = TITLE_LIBRARY[i];
-    const title = `Week ${i + 1}: ${rawTitle}`;
+    const title = rawTitle;
     const baseSlug = `${dateIso}-${slugify(rawTitle)}`;
     let slug = baseSlug;
     let n = 2;
