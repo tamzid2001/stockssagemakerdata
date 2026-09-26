@@ -1,3 +1,4 @@
+import { yahooJson } from "./yahooRequests";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import {
   GetObjectCommand,
@@ -957,22 +958,9 @@ async function fetchYahooHistorySegment(input: {
   endSeconds: number;
   fetchImpl: typeof fetch;
 }): Promise<CanonicalDatasetRow[]> {
-  const response = await input.fetchImpl(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.ticker)}?period1=${input.startSeconds}&period2=${input.endSeconds}&interval=${encodeURIComponent(
+  const payload = await yahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.ticker)}?period1=${input.startSeconds}&period2=${input.endSeconds}&interval=${encodeURIComponent(
       input.interval
-    )}&includePrePost=false&events=div%2Csplits&corsDomain=finance.yahoo.com`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "QuanturaForecastFoundry/1.0",
-      },
-    }
-  );
-  if (!response.ok) {
-    throw new Error(`Yahoo history request failed (${response.status}).`);
-  }
-  const payload = (await response.json().catch(() => ({}))) as Record<string, any>;
+    )}&includePrePost=false&events=div%2Csplits&corsDomain=finance.yahoo.com`, input.fetchImpl, {"User-Agent":"QuanturaForecastFoundry/1.0"}) as Record<string, any>;
   const result = Array.isArray(payload?.chart?.result) ? payload.chart.result[0] : null;
   const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
   const quote = Array.isArray(result?.indicators?.quote) ? result.indicators.quote[0] || {} : {};
@@ -1025,22 +1013,9 @@ async function fetchYahooMinuteHistorySegment(input: {
   endMs: number;
   fetchImpl: typeof fetch;
 }): Promise<MinutePricePoint[]> {
-  const response = await input.fetchImpl(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.ticker)}?period1=${Math.floor(
+  const payload = await yahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(input.ticker)}?period1=${Math.floor(
       input.startMs / 1000
-    )}&period2=${Math.floor(input.endMs / 1000)}&interval=1m&includePrePost=true&events=div%2Csplits&corsDomain=finance.yahoo.com`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "QuanturaForecastFoundry/1.0",
-      },
-    }
-  );
-  if (!response.ok) {
-    throw new Error(`Yahoo minute history request failed (${response.status}).`);
-  }
-  const payload = (await response.json().catch(() => ({}))) as Record<string, any>;
+    )}&period2=${Math.floor(input.endMs / 1000)}&interval=1m&includePrePost=true&events=div%2Csplits&corsDomain=finance.yahoo.com`, input.fetchImpl, {"User-Agent":"QuanturaForecastFoundry/1.0"}) as Record<string, any>;
   const result = Array.isArray(payload?.chart?.result) ? payload.chart.result[0] : null;
   const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
   const quote = Array.isArray(result?.indicators?.quote) ? result.indicators.quote[0] || {} : {};

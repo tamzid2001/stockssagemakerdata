@@ -98,12 +98,12 @@
     const support = document.createElement("button");
     support.type = "button"; support.className = "support-launcher";
     support.id = "quantura-support-launcher"; support.setAttribute("aria-haspopup", "dialog");
-    support.setAttribute("aria-label", "Open Q Support");
-    support.textContent = "Q Support";
+    support.setAttribute("aria-label", "Open Support");
+    support.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 3V11.5a9 9 0 0 1 18 0Z"/><path d="M7 10h8M7 14h5"/></svg><span>Support</span>';
     support.addEventListener("click", async () => {
       support.disabled = true;
       try {
-        await loadScript("/support-chat.js?v=20260920-jev");
+        await loadScript("/support-chat.js?v=20260926-history");
         window.QuanturaSupport.open(support);
       } catch { support.textContent = "Retry help"; }
       finally { support.disabled = false; }

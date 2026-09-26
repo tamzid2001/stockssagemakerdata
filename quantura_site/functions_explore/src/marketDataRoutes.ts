@@ -1,3 +1,4 @@
+import { yahooRetrySeconds } from "./yahooRequests";
 import { Router } from "express";
 import { AlpacaClient, AlpacaError, barsToCsv, publicAlpacaError, type AlpacaBar } from "./alpacaClient";
 import { YahooFinanceClient } from "./yahooMarketData";
@@ -19,7 +20,7 @@ function stockSource(value: unknown): "auto" | "alpaca" | "yahoo" {
 
 function inferredRange(timeframeValue: unknown, limit: number, endValue: unknown): { start: string; end: string } {
   const endParsed = Date.parse(String(endValue || ""));
-  const end = Number.isFinite(endParsed) ? new Date(endParsed) : new Date();
+  const end = Number.isFinite(endParsed) ? new Date(endParsed) : new Date(Math.floor(Date.now() / 60000) * 60000);
   if (limit === 0) return { start: "1970-01-01T00:00:00.000Z", end: end.toISOString() };
   const timeframe = String(timeframeValue || "1Day").toLowerCase();
   const minutesPerRow = timeframe.includes("day") || timeframe === "1d"
@@ -45,7 +46,7 @@ export type StockHistoryResult = {
 };
 
 /** Shared provider-aware history service used by downloads and forecast jobs. */
-export async function fetchStockHistoryData(body: Record<string, unknown>): Promise<StockHistoryResult> {
+export async function fetchStockHistoryData(body: Record<string, unknown>, clients: { alpaca?: AlpacaClient; yahoo?: YahooFinanceClient } = {}): Promise<StockHistoryResult> {
   const source = stockSource(body.source || body.provider);
   const limit = requestedLimit(body.limit);
   const range = inferredRange(body.timeframe || body.interval, limit, body.end);
@@ -59,13 +60,24 @@ export async function fetchStockHistoryData(body: Record<string, unknown>): Prom
     session: String(body.session || "regular"),
     limit,
   };
-  const alpaca = new AlpacaClient();
-  const yahoo = new YahooFinanceClient();
+  const alpaca = clients.alpaca || new AlpacaClient();
+  const yahoo = clients.yahoo || new YahooFinanceClient();
   let provider: "alpaca" | "yahoo" = source === "yahoo" ? "yahoo" : "alpaca";
   let fallbackUsed = false;
   let result;
   if (source === "yahoo") {
-    result = await yahoo.getStockBars(input);
+    try { result = await yahoo.getStockBars(input); }
+    catch (error) {
+      if (!(error instanceof AlpacaError) || error.code !== "rate_limit" || !alpaca.isConfigured() || !/^[A-Z][A-Z0-9.-]{0,14}$/.test(input.symbol.toUpperCase())) throw error;
+      // A real verified US asset can use the existing provider during Yahoo's cooldown.
+      // International stocks, FX, indices and unsupported assets never become US proxies.
+      try {
+        const asset = await alpaca.getAsset(input.symbol);
+        if (asset.status === "inactive" || !["us_equity", "equity"].includes(asset.assetClass)) throw error;
+        result = await alpaca.getStockBars({ ...input, feed: "" });
+        provider = "alpaca"; fallbackUsed = true;
+      } catch { throw error; }
+    }
   } else if (source === "alpaca") {
     result = await alpaca.getStockBars(input);
   } else if (/[=^]|\.(?:[C-Z]|[A-Z]{2,})$|-(?:USD|EUR|GBP|JPY|USDT)$/i.test(String(input.symbol || ""))) {
@@ -109,6 +121,7 @@ export function registerMarketDataRoutes(router: Router): void {
       res.status(200).json({ ok: true, provider: "alpaca", checks });
     } catch (error) {
       const safe = publicAlpacaError(error);
+      if (safe.status === 429 && yahooRetrySeconds()) res.setHeader("Retry-After", String(yahooRetrySeconds()));
       res.status(safe.status).json(safe.body);
     }
   });
@@ -134,6 +147,7 @@ export function registerMarketDataRoutes(router: Router): void {
       });
     } catch (error) {
       const safe = publicAlpacaError(error);
+      if (safe.status === 429 && yahooRetrySeconds()) res.setHeader("Retry-After", String(yahooRetrySeconds()));
       res.status(safe.status).json(safe.body);
     }
   };
@@ -173,6 +187,7 @@ export function registerMarketDataRoutes(router: Router): void {
       res.status(200).json({ ok: true, provider, sourceRequested: source, fallbackUsed, underlying: underlying.toUpperCase(), expirations });
     } catch (error) {
       const safe = publicAlpacaError(error);
+      if (safe.status === 429 && yahooRetrySeconds()) res.setHeader("Retry-After", String(yahooRetrySeconds()));
       res.status(safe.status).json(safe.body);
     }
   });
@@ -216,6 +231,7 @@ export function registerMarketDataRoutes(router: Router): void {
       res.status(200).json({ ok: true, provider, sourceRequested: source, fallbackUsed, underlying: underlying.toUpperCase(), count: contracts.length, contracts });
     } catch (error) {
       const safe = publicAlpacaError(error);
+      if (safe.status === 429 && yahooRetrySeconds()) res.setHeader("Retry-After", String(yahooRetrySeconds()));
       res.status(safe.status).json(safe.body);
     }
   });
@@ -259,6 +275,7 @@ export function registerMarketDataRoutes(router: Router): void {
       res.status(200).json({ ok: true, provider, sourceRequested: source, fallbackUsed, ...result, count: result.rows.length });
     } catch (error) {
       const safe = publicAlpacaError(error);
+      if (safe.status === 429 && yahooRetrySeconds()) res.setHeader("Retry-After", String(yahooRetrySeconds()));
       res.status(safe.status).json(safe.body);
     }
   });

@@ -149,7 +149,7 @@ function updateSource() {
     return;
   }
   if (!source) {
-    summary.textContent = "Enter a stock ticker above or select an individual Kalshi / Polymarket US contract in Q Search. Uploaded CSVs are not supported here.";
+    summary.textContent = "Enter a stock ticker above or select an individual Kalshi / Polymarket US contract in Search. Uploaded CSVs are not supported here.";
     button.disabled = true;
     return;
   }
@@ -323,7 +323,7 @@ function init() {
     try {
       await session.ensureSession();
       const source = selectedSource();
-      if (!source) throw new Error("Enter a stock ticker or select a supported market in Q Search first.");
+      if (!source) throw new Error("Enter a stock ticker or select a supported market in Search first.");
       const frequency = byId("backtest-frequency").value;
       source.frequency = source.type === "ticker" ? frequency : ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" })[frequency];
       if (source.type === "prediction_market") source.history_phase = byId("backtest-history-phase").value;

@@ -13788,7 +13788,7 @@
   });
   document.getElementById("backtest-open")?.addEventListener("click", async () => {
     try {
-      const builder = await import("/backtest-builder.js?v=20260925a");
+      const builder = await import("/backtest-builder.js?v=20260926-labels");
       builder.openBacktest();
     } catch (error) {
       showToast(error?.message || "Backtest builder is temporarily unavailable.", "warn");
@@ -14125,7 +14125,7 @@
           session: String(data.get("ticker_session") || "extended"),
         };
     if (sourceType === "workspace_dataset" && !source.dataset_id) throw new Error("Enter a workspace dataset ID.");
-    if (sourceType === "ticker" && !source.symbol) throw new Error("Choose a market in Q Search before running a forecast.");
+    if (sourceType === "ticker" && !source.symbol) throw new Error("Choose a market in Search before running a forecast.");
     const models = getEnsembleSelections();
     const enabled = Object.values(models).filter((model) => model.enabled);
     if (!enabled.length || !enabled.some((model) => Number.isFinite(model.weight) && model.weight > 0)) throw new Error("Enable at least one model with a positive weight.");

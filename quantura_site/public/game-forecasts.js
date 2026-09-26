@@ -1,8 +1,7 @@
 /* Public pregame snapshots; no account, order or trading capability. */
 (() => {
   'use strict';
-  const section=document.getElementById('today-games');if(!section)return;
-  const cards=section.querySelector('[data-game-cards]'),status=section.querySelector('[data-game-status]');
+  const cards=document.getElementById('qs-games');if(!cards)return;
   const dialog=document.getElementById('game-forecast-dialog');
   const time=value=>new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date(value));
   const element=(tag,value,className)=>{const node=document.createElement(tag);node.textContent=value;if(className)node.className=className;return node;};
@@ -10,7 +9,7 @@
   async function show(id) {
     dialog.showModal();const body=dialog.querySelector('[data-game-detail]');body.replaceChildren(element('p','Loading forecast…'));
     try {
-      const response=await fetch(`/api/screener/games/${id}`);if(!response.ok)throw new Error('unavailable');const {item}=await response.json();
+      const response=await fetch(`/api/screener/games/${id}`, {signal:AbortSignal.timeout(20000)});if(!response.ok)throw new Error('unavailable');const {item}=await response.json();
       if(!dialog.open)return;
       const title=dialog.querySelector('h2');title.textContent=`${item.outcome} · ${item.event_title}`;
       body.replaceChildren(element('p',`Game starts ${time(item.game_start)}. Forecast ends ${time(item.forecast_end)}.`),element('p',`Updated ${time(item.generated_at)} · ${item.history_count} genuine hourly observations · ${item.models.join(' + ')}`, 'small'));
@@ -30,18 +29,16 @@
       for(const warning of item.warnings||[])details.append(element('p',warning,'small'));body.append(details);
     } catch {body.replaceChildren(element('p','This forecast could not be loaded. Close and try again.'));}
   }
-  async function load(){
-    status.textContent='Loading today’s game forecasts…';
-    try {
-      const response=await fetch('/api/screener/games');if(!response.ok)throw new Error('unavailable');const data=await response.json();cards.replaceChildren();
-      status.textContent=data.items.length?`${data.items.length} outcome forecasts · Today in New York (${data.date})`:'No pregame forecasts are available for today yet.';
-      if(data.coverage?.some(p=>p.partial || p.failed) || data.bounded)status.textContent+=' Some markets are unavailable in this scan.';
-      for(const game of data.items){
-        const card=element('article','','game-card');card.append(element('div',game.provider==='kalshi'?'Kalshi':'Polymarket US','small'),element('h3',game.event_title),element('p',game.outcome),element('p',`Starts ${time(game.game_start)}`,'small'),element('p',`${game.status==='final_pregame'?'Final pregame forecast':'Updates hourly before start hour'} · Updated ${time(game.generated_at)}`,'small'));
-        const button=element('button','View forecast','cta secondary');button.type='button';button.addEventListener('click',()=>show(game.id));card.append(button);cards.append(card);
-      }
-    } catch{status.textContent='Game forecasts are temporarily unavailable. Try refreshing.';}
+  function render(items) {
+    cards.replaceChildren();
+    for(const game of items) {
+      const card=element('article','','game-card');
+      card.append(element('div',game.provider==='kalshi'?'Kalshi':'Polymarket US','small'),element('h3',game.event_title),element('p',game.outcome),element('p',`Starts ${time(game.game_start)}`,'small'));
+      if(Number.isFinite(game.endpoint?.['0.5']))card.append(element('p',`End-of-horizon P50: ${percent(game.endpoint['0.5'])}`));
+      card.append(element('p',`${game.status==='final_pregame'?'Final pregame forecast':'Updates hourly before start hour'} · Updated ${time(game.generated_at)}`,'small'));
+      const button=element('button','View forecast','cta secondary');button.type='button';button.addEventListener('click',()=>show(game.id));card.append(button);cards.append(card);
+    }
   }
   dialog.querySelector('[data-game-close]').addEventListener('click',()=>dialog.close());
-  section.querySelector('[data-game-refresh]').addEventListener('click',load);load();
+  window.QuanturaGames=Object.freeze({render,show});
 })();

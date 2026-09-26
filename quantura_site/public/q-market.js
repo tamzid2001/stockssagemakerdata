@@ -22,7 +22,7 @@
     root.__quanturaSetPanel?.("forecast");
     const source=root.document.getElementById("ensemble-source-type");if(source){source.value="series";source.dispatchEvent(new root.Event("change",{bubbles:true}));}
     const chip=root.document.getElementById("q-selected-market");
-    if(chip)chip.textContent="Your CSV · choose the file and columns below. Use Q Search to return to a market.";
+    if(chip)chip.textContent="Your CSV · choose the file and columns below. Use Search to return to a market.";
   });
   // Old ticker/download links still hydrate through verified provider discovery.
   const params=new URLSearchParams(root.location.search),symbol=params.get("ticker");
@@ -31,7 +31,7 @@
     root.fetch("/api/market-search?"+query,{signal:AbortSignal.timeout(15000)})
       .then(r=>r.ok?r.json():null).then(payload=>{
         if(root.QuanturaMarketSelection)return;
-        const row=Object.values(payload?.groups||{}).flat().find(r=>!r.contract_id && api.validResource(r) && r.symbol.toUpperCase()===symbol.toUpperCase());
+        const row=[...(payload?.groups?.alpaca||[]),...Object.entries(payload?.groups||{}).filter(([source])=>source!=="alpaca").flatMap(([,rows])=>rows)].find(r=>!r.contract_id && api.validResource(r) && r.symbol.toUpperCase()===symbol.toUpperCase());
         if(row)root.dispatchEvent(new root.CustomEvent("quantura:market-selected",{detail:{resource:row,intent:root.location.pathname==="/options"?"options":"restore"}}));
       }).catch(()=>{}); // No fabricated fallback selection when discovery fails.
   }
@@ -48,7 +48,7 @@
     return d.toISOString();
   }
   function requestFor(row,settings,contracts=[]){
-    if(!validResource(row))throw Error("Select a market with Q Search first.");
+    if(!validResource(row))throw Error("Select a market with Search first.");
     const end=isoLocal(settings.end)||new Date().toISOString();
     if(Date.parse(end)>Date.now()+60000)throw Error("The end time must not be in the future.");
     const prediction=row.resource_type==="prediction_market_contract";

@@ -26,7 +26,7 @@
   function show(){results.hidden=false;queryInput.setAttribute("aria-expanded","true");}
   function render(groups,errors={}){
     resources.clear();show();
-    results.innerHTML=Object.entries(groups).filter(([,rows])=>rows.length).map(([source,rows])=>`<section class="market-search-group"><h3>${escapeHtml(providerLabel(source))}</h3>${rows.map(card).join("")}</section>`).join("")+Object.keys(errors).map(s=>`<p class="notice small">${escapeHtml(providerLabel(s))}: temporarily unavailable.</p>`).join("");
+    results.innerHTML=Object.entries(groups).sort(([a],[b])=>Number(b==="alpaca")-Number(a==="alpaca")).filter(([,rows])=>rows.length).map(([source,rows])=>`<section class="market-search-group"><h3>${escapeHtml(providerLabel(source))}</h3>${rows.map(card).join("")}</section>`).join("")+Object.keys(errors).map(s=>`<p class="notice small">${escapeHtml(providerLabel(s))}: temporarily unavailable.</p>`).join("");
     if(!results.innerHTML)results.innerHTML='<div class="empty-state">No supported market matched this search. Try a ticker or an exact event link.</div>';
   }
   async function get(url,signal){

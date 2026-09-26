@@ -77,8 +77,9 @@ test('support dialog accepts verified guest sessions, safely renders text, filte
   w.AbortController=AbortController;
   w.fetch=async()=>{calls++;return {ok:true,json:async()=>({data:{answer:'<script>not executable</script>',references:[{url:'https://evil.example',title:'Bad'},{url:'https://quantura.studio/contact',title:'Contact'}]}})};};
   w.eval(read('public/support-chat.js')); w.QuanturaSupport.open(w.document.getElementById('help'));
-  assert.equal(w.document.getElementById('support-title').textContent,'Q Support');
-  assert.match(w.document.getElementById('support-privacy').textContent,/TypeSafe \(Jev\)/);
+  assert.equal(w.document.getElementById('support-title').textContent,'Support');
+  assert.match(w.document.getElementById('support-privacy').textContent,/this device/);
+  assert.doesNotMatch(w.document.getElementById('quantura-support').textContent,/Jev|Q Support/);
   assert.doesNotMatch(w.document.getElementById('quantura-support').textContent,/GPT|OpenAI/);
   const form=w.document.querySelector('form'),input=w.document.querySelector('textarea');
   input.value='Where are CSVs?'; form.dispatchEvent(new w.Event('submit',{cancelable:true})); await tick();
@@ -88,7 +89,28 @@ test('support dialog accepts verified guest sessions, safely renders text, filte
   assert.equal(calls,1); assert.equal(w.document.scripts.length,0);
   assert.equal(w.document.querySelectorAll('a[href="https://evil.example"]').length,0);
   assert.equal(w.localStorage.length,0);
-  [...w.document.querySelectorAll('button')].find(b=>b.textContent==='Clear chat').click();
+  [...w.document.querySelectorAll('button')].find(b=>b.textContent==='New conversation').click();
   assert.equal(w.document.querySelector('[role=log]').children.length,1);
   assert.equal(input.value,''); d.window.close();
+});
+
+test('support history survives reload, can be reopened/deleted, and is isolated on account changes', async () => {
+  const d=new JSDOM('',{url:'https://quantura.studio/',runScripts:'outside-only'}),w=d.window;
+  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+  let authChanged,currentUser={uid:'first-user',getIdToken:async()=> 'fixture'};
+  w.firebase={auth:()=>({currentUser,onAuthStateChanged:callback=>{authChanged=callback;}})};
+  w.AbortController=AbortController;
+  w.fetch=async()=>({ok:true,json:async()=>({data:{answer:'Use Download history.',references:[{url:'https://quantura.studio/forecasting',title:'Forecast'}]}})});
+  const boot=()=>{w.eval(read('public/support-chat.js'));w.QuanturaSupport.open();};boot();
+  const input=w.document.querySelector('textarea');input.value='Where is my download?';w.document.querySelector('form').dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();
+  const saved=JSON.parse(w.localStorage.getItem('quantura_support_v1:first-user'));assert.equal(saved.length,1);assert.equal(saved[0].messages.length,2);
+  w.document.getElementById('quantura-support').remove();boot();
+  w.document.querySelector('[aria-controls="support-history"]').click();w.document.querySelector('.support-history-open').click();
+  assert.match(w.document.querySelector('[role=log]').textContent,/Where is my download\?/);
+  currentUser={uid:'second-user',getIdToken:async()=> 'fixture'};authChanged(currentUser);
+  assert.doesNotMatch(w.document.querySelector('[role=log]').textContent,/Where is my download/);
+  w.document.querySelector('[aria-controls="support-history"]').click();assert.equal(w.document.querySelectorAll('.support-history-row').length,0);
+  currentUser={uid:'first-user',getIdToken:async()=> 'fixture'};authChanged(currentUser);
+  w.document.querySelector('[aria-controls="support-history"]').click();w.document.querySelector('.support-history-delete').click();
+  assert.equal(w.localStorage.getItem('quantura_support_v1:first-user'),null);assert.equal(w.document.querySelectorAll('.support-history-row').length,0);w.close();
 });

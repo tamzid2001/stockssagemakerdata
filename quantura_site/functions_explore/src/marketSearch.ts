@@ -1,3 +1,4 @@
+import { yahooJson } from "./yahooRequests";
 import type { Request, Router } from "express";
 import { isIP } from "node:net";
 import { searchPredictionMarkets, discoverForecastMarkets, resolveMarketLink, gameTiming, PredictionMarketDataError, type PredictionMarketSource } from "./predictionMarketData";
@@ -72,17 +73,13 @@ function yahooAssetClass(quoteType: unknown, symbol: string): string {
 const yahooSearchCache = new Map<string, { at: number; rows: JsonRecord[] }>();
 const yahooSearchInflight = new Map<string, Promise<JsonRecord[]>>();
 const alpacaAssetCache = new Map<string, { at: number; rows: JsonRecord[] }>();
-let yahooSearchCooldownUntil = 0;
+
 
 async function searchYahoo(query: string, limit: number): Promise<JsonRecord[]> {
   const key = `${query.trim().toLowerCase()}:${limit}`;
   const cached = yahooSearchCache.get(key);
   if (cached && Date.now() - cached.at < 15 * 60_000) return cached.rows;
   if (yahooSearchInflight.has(key)) return yahooSearchInflight.get(key)!;
-  if (Date.now() < yahooSearchCooldownUntil) {
-    if (cached && Date.now() - cached.at < 24 * 3600_000) return cached.rows;
-    throw new Error("yahoo_search_cooling_down");
-  }
   const request = fetchYahoo().then(rows => {
     yahooSearchCache.delete(key);
     yahooSearchCache.set(key, { at: Date.now(), rows });
@@ -102,16 +99,7 @@ async function searchYahoo(query: string, limit: number): Promise<JsonRecord[]> 
     url.searchParams.set("quotesCount", String(limit));
     url.searchParams.set("newsCount", "0");
     url.searchParams.set("enableFuzzyQuery", "true");
-    const response = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "quantura-market-search/1.0" },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (response.status === 429) {
-      const retry = Number(response.headers.get("retry-after"));
-      yahooSearchCooldownUntil = Date.now() + Math.min(3600_000, Math.max(60_000, Number.isFinite(retry) ? retry * 1000 : 60_000));
-    }
-    if (!response.ok) throw new Error("yahoo_search_unavailable");
-    const payload = await response.json() as JsonRecord;
+    const payload = await yahooJson(url.toString(), fetch, { "User-Agent": "quantura-market-search/1.0" }, 15 * 60_000) as JsonRecord;
     const quotes = Array.isArray(payload.quotes) ? payload.quotes : [];
     return quotes.slice(0, limit).flatMap((value) => {
       const item = value && typeof value === "object" ? value as JsonRecord : {};
@@ -253,7 +241,7 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
       tasks.push(searchYahoo(query, limit).then((rows) => { groups.yahoo = rows; }).catch(() => { errors.yahoo = "temporarily_unavailable"; }));
     }
     if (mode !== "live" && ["auto", "alpaca"].includes(requested)) {
-      tasks.push(searchAlpaca(query).then((rows) => { groups.alpaca = rows; }).catch(() => { errors.alpaca = "unavailable_or_not_found"; }));
+      tasks.push(verifiedAlpacaAsset(query.toUpperCase()).then((rows) => { groups.alpaca = rows; }).catch(() => { errors.alpaca = "unavailable_or_not_found"; }));
     }
     for (const source of ["polymarket_us", "kalshi"] as PredictionMarketSource[]) {
       if (requested !== "auto" && requested !== source) continue;

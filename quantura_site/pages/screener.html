@@ -4,11 +4,11 @@
     <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Q Screener | Stocks &amp; Kalshi Perpetuals</title>
+    <title>Screener | Quantura</title>
     <meta name="description" content="Screen stocks and Kalshi perpetuals by forecast quantiles, market cap, and historical prices." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura.studio/screener" />
-    <meta property="og:title" content="Q Screener" />
+    <meta property="og:title" content="Screener" />
     <meta property="og:description" content="A high-density market research table for prices and forecast quantiles." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quantura.studio/screener" />
@@ -24,8 +24,8 @@
     <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
     <script src="/pwa-launch.js?v=20260926a"></script>
     <script src="/theme-init.js?v=20260926a"></script>
-    <script defer src="/ui-runtime.js?v=20260926b"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260824s1" />
+    <script defer src="/ui-runtime.js?v=20260926-support"></script>
+    <link rel="stylesheet" href="/styles.css?v=20260926-support" />
     <link rel="stylesheet" href="/screener.css?v=20260923-archive" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
@@ -38,8 +38,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/app.js?v=20260926a"></script>
-    <script defer src="/game-forecasts.js?v=20260926a"></script>
-    <script defer src="/screener.js?v=20260926-offset"></script>
+
+    <script defer src="/screener.js?v=20260926-integrated"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -68,20 +68,12 @@
       </aside>
 
       <div class="qs-main">
-        <section id="today-games" class="game-screener" aria-labelledby="today-games-title">
-          <div class="game-section-heading"><div><h2 id="today-games-title">Today’s games</h2><p>Kalshi and Polymarket US · Hourly pregame forecasts through four hours after kickoff.</p></div><button type="button" class="cta secondary" data-game-refresh>Refresh games</button></div>
-          <p class="small">Updates stop on the hour a game starts. The final pregame forecast stays available today.</p>
-          <p data-game-status role="status">Loading today’s game forecasts…</p>
-          <div data-game-cards class="game-card-grid"></div>
-        </section>
-        <dialog id="game-forecast-dialog" class="game-dialog" aria-labelledby="game-forecast-title"><div class="game-section-heading"><h2 id="game-forecast-title">Game forecast</h2><button type="button" class="cta secondary" data-game-close autofocus>Close</button></div><div data-game-detail></div></dialog>
-
         <section class="qs-hero" aria-labelledby="screener-title">
           <div>
-            <div class="qs-eyebrow"><span class="qs-live-dot" aria-hidden="true"></span> Stocks &amp; perpetual contracts</div>
-            <h1 id="screener-title">Q Screener</h1>
+            <div class="qs-eyebrow"><span class="qs-live-dot" aria-hidden="true"></span> Market research</div>
+            <h1 id="screener-title">Screener</h1>
             <p>
-              Compare stocks with weekly forecast ranges, explore perpetual contracts, or view today’s game forecasts.
+              Stocks, perpetual contracts, and today’s game forecasts in one place.
             </p>
           </div>
           <div class="qs-hero-actions">
@@ -124,7 +116,7 @@
             <span id="qs-filter-count">0 active</span>
           </summary>
           <form id="qs-filters" novalidate>
-            <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · daily 7-session ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · spot scale</option></select></label>
+            <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · daily 7-session ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · spot scale</option><option value="today_games">Today’s games · Kalshi &amp; Polymarket US</option></select></label>
               <label class="qs-field qs-search-field">
                 <span>Search</span>
                 <div class="qs-input-icon"><i class="iconoir-search" aria-hidden="true"></i><input id="qs-search" name="search" type="search" placeholder="Ticker or company, e.g. PLTR" autocomplete="off" /></div>
@@ -224,11 +216,11 @@
 
           <div class="qs-state qs-loading" id="qs-loading">
             <span class="qs-spinner" aria-hidden="true"></span>
-            <div><strong>Scanning market data…</strong><span>Loading the latest validated full-universe snapshot.</span></div>
+            <div><strong>Scanning market data…</strong><span>Loading published prices and forecasts.</span></div>
           </div>
           <div class="qs-state qs-error" id="qs-error" hidden>
             <i class="iconoir-warning-triangle" aria-hidden="true"></i>
-            <div><strong>Validated scan unavailable</strong><span id="qs-error-message">The most recent complete dataset could not be loaded.</span><button class="cta secondary small" id="qs-retry" type="button">Retry</button></div>
+            <div><strong>Market data unavailable</strong><span id="qs-error-message">The most recent complete dataset could not be loaded.</span><button class="cta secondary small" id="qs-retry" type="button">Retry</button></div>
           </div>
           <div class="qs-state qs-empty" id="qs-empty" hidden>
             <i class="iconoir-search" aria-hidden="true"></i>
@@ -258,6 +250,9 @@
             </table>
           </div>
 
+          <div id="qs-games" class="game-card-grid" hidden data-game-cards></div>
+          <dialog id="game-forecast-dialog" class="game-dialog" aria-labelledby="game-forecast-title"><div class="game-section-heading"><h2 id="game-forecast-title">Game forecast</h2><button type="button" class="cta secondary" data-game-close autofocus>Close</button></div><div data-game-detail></div></dialog>
+
           <nav class="qs-pagination" id="qs-pagination" aria-label="Screener pages" hidden>
             <button class="cta secondary small" id="qs-previous" type="button"><i class="iconoir-nav-arrow-left" aria-hidden="true"></i>Previous</button>
             <span id="qs-page-label">Page 1 of 1</span>
@@ -265,7 +260,7 @@
           </nav>
         </section>
 
-        <section class="qs-methodology">
+        <section class="qs-methodology" id="qs-methodology">
           <article>
             <h2>How to read this screener</h2>
             <p>Compare the latest completed daily input close with the first forecast quantile values. Quantiles describe a forecast distribution, not a recommendation or guaranteed outcome.</p>
