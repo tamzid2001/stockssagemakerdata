@@ -16,9 +16,9 @@ on:
     inputs:
       mode:
         type: choice
-        options: [verify, readiness, observe, live]
+        options: [verify, readiness, observe, paper, live]
         default: verify
-        description: Verify is offline. Readiness is signed GET only. Observe never sends orders. Live requires independent approval gates.
+        description: Verify is offline. Readiness is signed GET only. Observe never sends orders. Paper simulates fills and P&L in an isolated journal. Live requires independent approval gates.
       history_minutes:
         type: choice
         options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
@@ -108,14 +108,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$MODE" == observe || "$MODE" == live ]]; then
+          if [[ "$MODE" == observe || "$MODE" == paper || "$MODE" == live ]]; then
             python -m pip install --require-hashes -r market_research/requirements.lock
           else
             python -m pip install --require-hashes -r market_research/requirements-analysis.lock
             python -m pip install pytest==8.4.2 pyyaml==6.0.2
           fi
       - name: Offline execution and restart tests
-        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_provisional_direction.py market_research/tests/test_kalshi_stop_exit.py market_research/tests/test_kalshi_shared_account.py -q
+        run: python -m pytest market_research/tests/test_kalshi_execution.py market_research/tests/test_kalshi_live_workflow.py market_research/tests/test_kalshi_provisional_direction.py market_research/tests/test_kalshi_stop_exit.py market_research/tests/test_kalshi_shared_account.py market_research/tests/test_kalshi_paper_trader.py -q
       - name: Display exact configuration for approval (no secrets)
         run: python -m market_research.kalshi_live_worker --mode config --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-recovery-increases "$MAX_RECOVERY_INCREASES"
       - name: Readiness or explicitly selected worker
@@ -131,7 +131,7 @@ jobs:
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: python -m market_research.kalshi_live_worker --mode "$MODE" --history-minutes "$HISTORY_MINUTES" --subaccount "$SUBACCOUNT" --direction-policy "$DIRECTION_POLICY" --starting-contracts "$STARTING_CONTRACTS" --recovery-multiplier "$RECOVERY_MULTIPLIER" --max-recovery-increases "$MAX_RECOVERY_INCREASES" --duration-minutes 300
       - name: Serialized handoff after successful durable worker exit
-        if: success() && inputs.continuous && (inputs.mode == 'observe' || inputs.mode == 'live') && vars.QUANTURA_KALSHI_CONTINUOUS == 'true'
+        if: success() && inputs.continuous && (inputs.mode == 'observe' || inputs.mode == 'paper' || inputs.mode == 'live') && vars.QUANTURA_KALSHI_CONTINUOUS == 'true'
         uses: actions/github-script@v8
         env:
           CONTINUOUS_MODE: ${{ inputs.mode }}

@@ -31,7 +31,7 @@ jobs:
             const mode=process.env.APPROVED_MODE, sha=process.env.APPROVED_SHA;
             const history=Number(process.env.HISTORY_MINUTES), account=Number(process.env.SUBACCOUNT), direction=process.env.DIRECTION_POLICY;
             const start=Number(process.env.STARTING_CONTRACTS), multiplier=Number(process.env.RECOVERY_MULTIPLIER), increases=Number(process.env.MAX_RECOVERY_INCREASES);
-            if(!['observe','live'].includes(mode) || !/^[a-f0-9]{40}$/.test(sha) ||
+            if(!['observe','paper','live'].includes(mode) || !/^[a-f0-9]{40}$/.test(sha) ||
                !Number.isInteger(history) || history<1 || history>12 ||
                !Number.isInteger(account) || account<0 || account>63 ||
                !Number.isSafeInteger(start) || start<1 ||
@@ -47,4 +47,4 @@ jobs:
             await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:context.payload.repository.default_branch,
               inputs:{mode,history_minutes:String(history),subaccount:String(account),direction_policy:direction,
                 starting_contracts:String(start),recovery_multiplier:String(multiplier),max_recovery_increases:String(increases),
-                continuous:'true',code_ref:sha}});
+                continuous:'true',code_ref:mode === 'paper' ? '' : sha}});

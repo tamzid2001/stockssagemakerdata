@@ -107,13 +107,18 @@ def run(config, mode, duration):
               'authenticated_reads': True, 'resting_order_count': len(orders),
               'position_count': len(positions), 'orders_sent': 0}))
         return
-    journal = LiveJournal(config, broker.key_id, os.environ.get('GITHUB_RUN_ID', 'local'),
+    journal_key = broker.key_id + ':paper-v1' if mode == 'paper' else broker.key_id
+    journal = LiveJournal(config, journal_key, os.environ.get('GITHUB_RUN_ID', 'local'),
         broker.enabled, shared_protocol=broker.enabled)
     journal.claim()
     session_baseline = journal.public_summary()
     from .kalshi_shared_account import SharedAccountCoordinator
     coordinator = SharedAccountCoordinator(journal, broker) if broker.enabled else None
-    trader = Trader(config, broker, journal, coordinator=coordinator)
+    if mode == 'paper':
+        from .kalshi_paper_trader import PaperTrader
+        trader = PaperTrader(config, broker, journal)
+    else:
+        trader = Trader(config, broker, journal, coordinator=coordinator)
     stopped = False
     def stop(*_):
         nonlocal stopped
@@ -152,7 +157,7 @@ def run(config, mode, duration):
                     # Check every active entry/stop at roughly one-second cadence.
                     # Retry only the reconciled remainder with a fresh quote and
                     # client ID; never blindly repeat an ambiguous delivery.
-                    active_position = bool(journal.state().get('active')) if broker.enabled else False
+                    active_position = bool(journal.state().get('active')) if broker.enabled or mode == 'paper' else False
                     interval = 1 if active_position else 20
                     if now - last_reconcile >= interval:
                         phase = 'position_reconciliation'
@@ -312,7 +317,7 @@ def run(config, mode, duration):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['config', 'readiness', 'observe', 'live'], default='config')
+    parser.add_argument('--mode', choices=['config', 'readiness', 'observe', 'paper', 'live'], default='config')
     parser.add_argument('--series', choices=['KXBTC15M', 'KXBNB15M', 'KXDOGE15M',
                         'KXETH15M', 'KXNEAR15M', 'KXZEC15M'], default='KXBTC15M')
     parser.add_argument('--history-minutes', type=int, default=1)

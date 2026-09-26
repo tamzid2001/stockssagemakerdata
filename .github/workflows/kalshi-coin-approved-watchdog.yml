@@ -97,7 +97,7 @@ jobs:
             const e=process.env;
             if (!['BNB','DOGE','ETH','NEAR','ZEC'].includes(e.COIN) ||
                 e.WORKFLOW_FILE !== `kalshi-${e.COIN.toLowerCase()}-approved-trader.yml` ||
-                !['observe','live'].includes(e.MODE) ||
+                !['observe','paper','live'].includes(e.MODE) ||
                 !/^[a-f0-9]{40}$/.test(e.APPROVED_SHA || '') ||
                 !Number.isInteger(Number(e.SUBACCOUNT)) || Number(e.SUBACCOUNT)<0 || Number(e.SUBACCOUNT)>63 ||
                 !/^(?:[1-9]|1[0-2])$/.test(e.HISTORY_MINUTES) ||
@@ -116,4 +116,4 @@ jobs:
               inputs:{mode:e.MODE,history_minutes:e.HISTORY_MINUTES,subaccount:e.SUBACCOUNT,
                 direction_policy:e.DIRECTION_POLICY,starting_contracts:e.STARTING_CONTRACTS,
                 recovery_multiplier:e.RECOVERY_MULTIPLIER,max_recovery_increases:e.MAX_RECOVERY_INCREASES,
-                continuous:'true',code_ref:e.APPROVED_SHA}});
+                continuous:'true',code_ref:e.MODE === 'paper' ? '' : e.APPROVED_SHA}});
