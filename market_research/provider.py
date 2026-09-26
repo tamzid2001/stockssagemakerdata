@@ -145,7 +145,7 @@ class QuanturaProvider:
                 continue
             # Kalshi candles are end-stamped; Polymarket buckets are start-stamped.
             close = stamp(row["timestamp"]) + (3600 if self.source == "polymarket_us" else 0)
-            price = row.get("price")
+            price = row.get("ask") if self.source == "kalshi" else row.get("price")
             if start < close <= end and type(price) in (int, float) and 0 <= price <= 1:
                 quotes[close] = Quote(close, price, price)
         return sorted(quotes.values(), key=lambda q: q.timestamp)

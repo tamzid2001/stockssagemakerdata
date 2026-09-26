@@ -39,9 +39,9 @@ def test_hourly_history_has_no_incomplete_or_filled_observations(provider,offset
     calls=[]
     def request(path,body):
         calls.append(body)
-        return {"rows":[{"timestamp":"2026-09-26T01:00:00Z","price":.4},
-                        {"timestamp":"2026-09-26T02:00:00Z","price":.5,"is_forward_filled":True},
-                        {"timestamp":"2026-09-26T04:30:00Z","price":.6}]}
+        return {"rows":[{"timestamp":"2026-09-26T01:00:00Z","price":.4,"ask":.4},
+                        {"timestamp":"2026-09-26T02:00:00Z","price":.5,"ask":.5,"is_forward_filled":True},
+                        {"timestamp":"2026-09-26T04:30:00Z","price":.6,"ask":.6}]}
     p.request=request
     quotes=p.hourly_history(contract(),start,end)
     assert quotes==[Quote(start+3600+offset,.4,.4)]
@@ -52,3 +52,19 @@ def test_hourly_history_has_no_incomplete_or_filled_observations(provider,offset
 def test_late_model_completion_never_materializes_a_published_document():
     with pytest.raises(ValueError,match='GAME_START_HOUR_REACHED'):
         document(contract(),{},stamp('2026-09-26T23:00:00Z'))
+
+
+def test_kalshi_retains_genuine_book_candles_without_trade_prices():
+    p=KalshiProvider();start=stamp('2026-09-26T00:00:00Z')
+    p.request=lambda *_: {"rows":[{"timestamp":"2026-09-26T01:00:00Z","price":None,"ask":.6,"bid":.5}]}
+    assert p.hourly_history(contract(),start,start+7200)==[Quote(start+3600,.6,.6)]
+
+
+def test_hourly_ensemble_advances_hours_and_does_not_call_regular_hour_steps_gaps(monkeypatch):
+    from market_research import forecast
+    from ensemble_forecasting.worker import execute_job
+    monkeypatch.setattr(forecast,'execute_job',lambda job,**kw:execute_job(job,mock=True,**kw))
+    result=forecast.forecast_window([Quote(3600,.4,.4),Quote(7200,.42,.42)],7,models=('prophet','chronos'),frequency='1h',failure_policy='fail')
+    assert result['rows'][0]['timestamp']==10800
+    assert result['rows'][-1]['timestamp']==32400
+    assert result['history_gap_count']==0 and result['imputed_context_steps']==0
