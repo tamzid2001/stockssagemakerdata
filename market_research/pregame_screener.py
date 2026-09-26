@@ -18,6 +18,7 @@ from .provider import KalshiProvider, QuanturaProvider
 
 NY = ZoneInfo("America/New_York")
 COLLECTION = "game_forecast_catalog"
+REPORT_FILENAME = "report-pregame-summary.json"
 
 
 def game_date(seconds):
@@ -149,7 +150,7 @@ def run(source, maximum):
         db.collection("game_forecast_status").document(source).set(report)
         output = Path(os.environ.get("QUANTURA_RESEARCH_DIR", "/tmp/quantura-pregame"))
         output.mkdir(parents=True, exist_ok=True)
-        (output / "pregame-summary.json").write_text(json.dumps(report))
+        (output / REPORT_FILENAME).write_text(json.dumps(report))
         print(json.dumps({"event": "pregame_summary", **report}), flush=True)
         if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(summary, "a") as stream:
