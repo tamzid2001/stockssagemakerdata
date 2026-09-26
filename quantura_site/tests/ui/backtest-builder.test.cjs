@@ -5,15 +5,13 @@ const path = require('node:path');
 const {JSDOM} = require('jsdom');
 const root = path.resolve(__dirname, '../..');
 
-test('one accessible full-screen backtest builder follows the primary forecast action in both templates', () => {
+test('forecast actions omit Backtest while retaining the existing builder dialog', () => {
   for (const folder of ['pages', 'functions_ssr/templates']) {
     const dom = new JSDOM(fs.readFileSync(path.join(root, folder, 'forecasting.html'), 'utf8'));
     const doc = dom.window.document;
-    const button = doc.getElementById('backtest-open');
     const modal = doc.getElementById('backtest-dialog');
-    assert.equal(button?.getAttribute('type'), 'button');
-    assert.equal(button?.getAttribute('aria-controls'), 'backtest-dialog');
-    assert.ok(button?.closest('.ensemble-primary-actions'));
+    assert.equal(doc.getElementById('backtest-open'), null);
+    assert.equal(doc.querySelectorAll('.ensemble-primary-actions button').length, 1);
     assert.equal(modal?.tagName, 'DIALOG');
     assert.equal(modal?.getAttribute('aria-labelledby'), 'backtest-title');
     assert.ok(modal?.querySelector('#backtest-form #backtest-run'));

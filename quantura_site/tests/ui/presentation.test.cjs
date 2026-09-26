@@ -389,7 +389,7 @@ test('Quantura Forecast is the expanded primary form with exactly one submission
   assert.equal(panel.querySelector('#ensemble-forecast-settings').tagName,'SECTION');
   assert.equal(panel.querySelectorAll('#ensemble-forecast-form button[type="submit"]').length,1);
   assert.equal(panel.querySelector('#ensemble-forecast-form button[type="submit"]').textContent.trim(),'Run forecast');
-  assert.equal(panel.querySelector('#backtest-open').type,'button');
+  assert.equal(panel.querySelector('#backtest-open'),null);
   assert.equal(panel.querySelector('#backtest-dialog #backtest-run').type,'submit');
   assert.equal(panel.querySelector('#forecast-form'),null);
   assert.equal(panel.querySelector('#legacy-forecast-detail').hidden,true);
