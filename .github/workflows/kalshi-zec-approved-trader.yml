@@ -5,9 +5,9 @@ on:
     inputs:
       mode:
         type: choice
-        options: [verify, readiness, observe, live]
+        options: [verify, readiness, observe, paper, live]
         default: verify
-        description: Verify is offline; observe is read-only. Live needs separate ZEC approval and shared-account coordination.
+        description: Verify is offline; observe is read-only; paper simulates fills in a separate journal. Live needs separate ZEC approval and shared-account coordination.
       history_minutes:
         type: choice
         options: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
