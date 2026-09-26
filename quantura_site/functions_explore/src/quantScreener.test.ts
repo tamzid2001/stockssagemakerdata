@@ -180,3 +180,31 @@ test("dated release reads the archived rows, not today's overwritten rolling ass
     await assert.rejects(loadPublishedScreenerDataset("owner","repo","2020-01-01"),/screener_snapshot_not_found/);
   } finally {globalThis.fetch=originalFetch;clearPublishedScreenerCache();}
 });
+
+test("GOOGL maximum P50 above price cannot match a ten-percent-below filter", () => {
+  const forecast = row({ticker: "GOOGL", actual_price: 343.845, quantile_stats: {p50: {min: 335.305308, max: 346.811235, avg: 341.432634}}});
+  for (const statistic of ["min", "max", "avg"] as const) {
+    for (const operator of ["lt", "lte"] as const) {
+      const rule = {quantile: "p50", statistic, operator, percent: 10};
+      assert.equal(rowMatchesQuery(forecast, query({quantileRules: [rule]})), false);
+      assert.equal(rowMatchesQuery(forecast, query({quantileRules: [{...rule, percent: -10}]})), false);
+    }
+  }
+});
+
+test("percentage rules compare full-horizon statistics with directional price offsets", () => {
+  const match = (value: number, operator: "lt" | "lte" | "gt" | "gte", statistic: "min" | "max" | "avg" = "max") => rowMatchesQuery(
+    row({actual_price: 100, quantile_stats: {p50: {[statistic]: value}}}),
+    query({quantileRules: [{quantile: "p50", statistic, operator, percent: 10}]}),
+  );
+  for (const statistic of ["min", "max", "avg"] as const) {
+    assert.equal(match(89, "lt", statistic), true);
+    assert.equal(match(90, "lt", statistic), false);
+    assert.equal(match(90, "lte", statistic), true);
+    assert.equal(match(99, "lt", statistic), false);
+    assert.equal(match(109, "gt", statistic), false);
+    assert.equal(match(110, "gt", statistic), false);
+    assert.equal(match(110, "gte", statistic), true);
+    assert.equal(match(111, "gt", statistic), true);
+  }
+});
