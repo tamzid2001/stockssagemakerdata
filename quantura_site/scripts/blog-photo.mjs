@@ -20,3 +20,9 @@ export function photoFigure(photo) {
       <figcaption>Photo by <a href="${escapeHtml(referralUrl(photo.photographer_url))}" target="_blank" rel="noopener noreferrer">${escapeHtml(photo.photographer)}</a> on <a href="${escapeHtml(referralUrl(photo.photo_url))}" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
     </figure>`;
 }
+
+export function photoThumbnail(photo) {
+  if (!photo?.download_tracked_at) throw new Error("Select and track the Unsplash photo before publication");
+  const srcset = [320, 640, 960].map(width => `${escapeHtml(imageUrl(photo, width))} ${width}w`).join(", ");
+  return `<img class="blog-card-photo" src="${escapeHtml(imageUrl(photo, 640))}" srcset="${srcset}" sizes="(max-width: 768px) calc(100vw - 48px), 360px" alt="${escapeHtml(photo.alt)}" width="640" height="360" loading="lazy" decoding="async" />`;
+}

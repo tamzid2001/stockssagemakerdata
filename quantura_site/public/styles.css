@@ -954,7 +954,7 @@ section.studio-section#terminal {
 .footer {
   border-top: 1px solid var(--line);
   padding: 40px 0 30px;
-  background: #f2ede4;
+  background: var(--background);
 }
 
 .footer-grid {
@@ -6622,10 +6622,6 @@ body.modal-open {
 }
 
 /* Dark mode polish (override hard-coded light surfaces). */
-[data-theme="dark"] .footer {
-  background: var(--paper-2);
-}
-
 [data-theme="dark"] .footer-terms {
   background: rgba(18, 24, 42, 0.68);
   border-color: rgba(233, 237, 247, 0.2);
@@ -10434,4 +10430,15 @@ html .toast[data-variant="warn"] {
   .feature-checkbox-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Editorial photos use the post's reviewed Unsplash selection. */
+.blog-card-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 16px;
 }
