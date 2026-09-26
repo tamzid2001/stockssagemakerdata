@@ -184,14 +184,16 @@ test('dismissal cancels debounce and prevents late success/error responses from 
   }
 });
 
-test('live moneylines browse without a search term and select the exact side for forecasts or downloads', async () => {
+test('search-bar live intent browses games and preserves exact forecast/download selection', async () => {
   const d=dom(page('forecasting.html')); const w=d.window; let request; const selections=[];
   w.__quanturaSetPanel=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};
   w.addEventListener('quantura:market-selected',event=>selections.push(event.detail));
   const contract={source:'polymarket_us',contractId:'side-b',side:'short',eventTitle:'A vs B'};
   w.fetch=async url=>{request=url;return {ok:true,json:async()=>({count:1,groups:{polymarket_us:[{resource_type:'prediction_market_contract',resource_id:'polymarket_us:side-b',source:'polymarket_us',symbol:'game',forecast_available:true,contract_id:'side-b',outcome:'B',name:'B · A vs B',status:'open',timing:'live',contract}]}})};};
-  w.eval(source('market-search.js'));w.document.querySelector('[data-market-mode="live"]').click();await tick();
-  assert.match(request,/mode=live/);assert.equal(w.document.getElementById('market-search-query').required,false);
+  w.eval(source('market-search.js'));w.document.getElementById('market-search-query').value='live games';
+  w.document.getElementById('market-search-form').dispatchEvent(new w.Event('submit'));await tick();
+  assert.match(request,/mode=live/);assert.equal(new URL(request,'https://quantura.studio').searchParams.get('q'),'');
+  assert.equal(w.document.querySelector('.market-mode-controls'),null);
   w.document.querySelector('[data-market-action="prediction-forecast"]').click();
   assert.equal(selections[0].intent,'forecast');assert.equal(selections[0].resource.contract.side,'short');
   w.document.getElementById('market-search-query').value='https://polymarket.us/event/game';
@@ -199,6 +201,12 @@ test('live moneylines browse without a search term and select the exact side for
   assert.match(request,/market-search\/resolve\?url=/);
   w.document.querySelector('[data-market-action="prediction-download"]').click();
   assert.equal(selections[1].intent,'download'); assert.equal(w.QuanturaMarketSelection.contract_id,'side-b');
+  w.document.getElementById('market-search-query').value='historical Yankees';
+  w.document.getElementById('market-search-form').dispatchEvent(new w.Event('submit'));await tick();
+  const historical=new URL(request,'https://quantura.studio');assert.equal(historical.searchParams.get('mode'),'any');assert.equal(historical.searchParams.get('q'),'Yankees');
+  w.document.getElementById('market-search-query').value='Yankees';
+  w.document.getElementById('market-search-form').dispatchEvent(new w.Event('submit'));await tick();
+  assert.equal(new URL(request,'https://quantura.studio').searchParams.get('mode'),'open','ordinary searches reset to active markets');
   d.window.close();
 });
 
