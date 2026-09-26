@@ -37,7 +37,7 @@
     <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
     <script src="/pwa-launch.js?v=20260926a"></script>
     <script src="/theme-init.js?v=20260926a"></script>
-    <script defer src="/ui-runtime.js?v=20260926b"></script>
+    <script defer src="/ui-runtime.js?v=20260926-support"></script>
     <link rel="stylesheet" href="/styles.css?v=20260817c" />
     <link rel="stylesheet" href="/q-terminal.css?v=20260921-q-search" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
@@ -53,10 +53,10 @@
     <script defer src="/forecast-controls.js?v=20260926b"></script>
     <script defer src="/forecast-metrics.js?v=20260920-forecast-only"></script>
     <script defer src="/app.js?v=20260925-extended-hours"></script>
-    <script defer src="/q-market.js?v=20260921-q-search"></script>
+    <script defer src="/q-market.js?v=20260926-labels"></script>
     <script defer src="/q-download.js?v=20260921-q-search"></script>
-    <script defer src="/market-search.js?v=20260921-q-search"></script>
-    <script defer src="/screener-panel-lazy.js?v=20260926-offset"></script>
+    <script defer src="/market-search.js?v=20260926-labels"></script>
+    <script defer src="/screener-panel-lazy.js?v=20260926-integrated"></script>
 
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -109,7 +109,7 @@
 	            <div class="container">
 	              <section class="market-search-workspace" aria-labelledby="market-search-title">
                     <div class="market-search-heading">
-                      <h2 id="market-search-title">Q Search</h2><span class="small muted">Source · Auto</span>
+                      <h2 id="market-search-title">Search</h2><span class="small muted">Source · Auto</span>
                       <div class="market-mode-controls" role="group" aria-label="Market discovery"><button type="button" class="task-chip" data-market-mode="open" aria-pressed="true">Markets</button><button type="button" class="task-chip" data-market-mode="live" aria-pressed="false">Live games</button><button type="button" class="task-chip" data-market-mode="any" aria-pressed="false">Include historical</button></div>
                     </div>
                     <form id="market-search-form" class="market-search-form">
@@ -253,7 +253,7 @@
                               <form id="backtest-form" class="backtest-form">
                                 <section class="backtest-panel" aria-labelledby="backtest-market-title">
                                   <h3 id="backtest-market-title">Market & history</h3>
-                                  <p id="backtest-source-summary" class="small muted">Enter a stock ticker below, or select one event contract in Q Search.</p>
+                                  <p id="backtest-source-summary" class="small muted">Enter a stock ticker below, or select one event contract in Search.</p>
                                   <div class="backtest-fields">
                                     <div class="field"><label class="label" for="backtest-ticker">Stock ticker</label><input id="backtest-ticker" name="backtest_ticker" type="text" placeholder="e.g., SPY" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20" /><span class="small muted">Enter a ticker to backtest a stock. Leave blank to use a selected Kalshi or Polymarket contract.</span></div>
                                     <div class="field"><label class="label" for="backtest-frequency">Observed interval</label><select id="backtest-frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">1 minute</option></select></div>
@@ -407,7 +407,7 @@
 
                   <section class="panel hidden q-download" data-panel="download" aria-labelledby="q-download-title">
                     <div class="panel-header"><h2 id="q-download-title">Q Download</h2><p class="small muted">Real provider observations. Preview and export the same snapshot.</p></div>
-                    <div id="qd-selection" class="q-selected-market">Choose a market with Q Search.</div>
+                    <div id="qd-selection" class="q-selected-market">Choose a market with Search.</div>
                     <div id="qd-basket" class="q-download-basket" aria-label="Selected outcomes"></div>
                     <form id="q-download-form">
                       <div class="q-toolbar">

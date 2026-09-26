@@ -1,3 +1,4 @@
+import { assertYahooReady, recordYahooRateLimit, yahooJson } from "./yahooRequests";
 import { AlpacaBar, AlpacaError, OptionContract, classifyEquitySession } from "./alpacaClient";
 
 type FetchLike = typeof fetch;
@@ -151,50 +152,33 @@ export function parseYahooChartResponse(
   return requested > 0 ? rows.slice(-Math.min(requested, 50000)) : rows;
 }
 
-const yahooCooldowns = new WeakMap<FetchLike, number>();
+const yahooOptionSessions = new WeakMap<FetchLike, { session: YahooOptionSession | null; pending: Promise<YahooOptionSession> | null }>();
 
 export class YahooFinanceClient {
   private readonly fetchImpl: FetchLike;
-  private optionSession: YahooOptionSession | null = null;
-  private optionSessionPromise: Promise<YahooOptionSession> | null = null;
+  private get sessionState() {
+    let state = yahooOptionSessions.get(this.fetchImpl);
+    if (!state) { state = { session: null, pending: null }; yahooOptionSessions.set(this.fetchImpl, state); }
+    return state;
+  }
+  private get optionSession() { return this.sessionState.session; }
+  private set optionSession(value: YahooOptionSession | null) { this.sessionState.session = value; }
+  private get optionSessionPromise() { return this.sessionState.pending; }
+  private set optionSessionPromise(value: Promise<YahooOptionSession> | null) { this.sessionState.pending = value; }
 
   constructor(options: { fetchImpl?: FetchLike } = {}) {
     this.fetchImpl = options.fetchImpl || fetch;
   }
 
   private async requestJson(url: string, extraHeaders: Record<string, string> = {}): Promise<Record<string, unknown>> {
-    if ((yahooCooldowns.get(this.fetchImpl) || 0) > Date.now()) {
-      throw new AlpacaError("rate_limit", "Yahoo Finance is cooling down after a rate limit. Wait a minute or select Auto/Alpaca for supported US equities.", 429);
-    }
-    let response: Response;
-    try {
-      response = await this.fetchImpl(url, {
-        headers: { Accept: "application/json", "User-Agent": YAHOO_USER_AGENT, ...extraHeaders },
-        signal: AbortSignal.timeout(25000),
-      });
-    } catch {
-      throw new AlpacaError("network", "Yahoo Finance market data could not be reached. Try again.", 502);
-    }
-    if (response.status === 404) throw new AlpacaError("unsupported_symbol", "Yahoo Finance could not find this symbol.", 404);
-    if (response.status === 429) {
-      const retry = response.headers.get("retry-after") || "60";
-      const milliseconds = /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now();
-      yahooCooldowns.set(this.fetchImpl, Date.now() + Math.min(3600_000, Math.max(60_000, Number.isFinite(milliseconds) ? milliseconds : 60_000)));
-      throw new AlpacaError("rate_limit", "Yahoo Finance rate-limited this request. Wait a minute or select Auto/Alpaca for supported US equities.", 429);
-    }
-    if (response.status === 401 || response.status === 403) {
-      throw new AlpacaError("authentication", "Yahoo Finance requires a refreshed provider session.", 502);
-    }
-    if (!response.ok) throw new AlpacaError("upstream", "Yahoo Finance could not complete the request.", 502);
-    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
-    if (!payload) throw new AlpacaError("upstream", "Yahoo Finance returned an unreadable response.", 502);
-    return payload;
+    return yahooJson(url, this.fetchImpl, { "User-Agent": YAHOO_USER_AGENT, ...extraHeaders });
   }
 
   private async createOptionSession(force = false): Promise<YahooOptionSession> {
     if (!force && this.optionSession && this.optionSession.expiresAt > Date.now()) return this.optionSession;
     if (!force && this.optionSessionPromise) return this.optionSessionPromise;
 
+    assertYahooReady(this.fetchImpl);
     const pending = (async () => {
       let bootstrap: Response;
       try {
@@ -206,6 +190,7 @@ export class YahooFinanceClient {
       } catch {
         throw new AlpacaError("network", "Yahoo Finance options data could not establish a provider session.", 502);
       }
+      recordYahooRateLimit(bootstrap, this.fetchImpl);
       const bootstrapCookies = responseCookies(bootstrap);
       const initialCookie = cookieHeader(bootstrapCookies);
       if (!initialCookie) throw new AlpacaError("upstream", "Yahoo Finance options data could not establish a provider session.", 502);
@@ -219,7 +204,7 @@ export class YahooFinanceClient {
       } catch {
         throw new AlpacaError("network", "Yahoo Finance options data could not refresh its provider session.", 502);
       }
-      if (crumbResponse.status === 429) throw new AlpacaError("rate_limit", "Yahoo Finance rate-limited this request. Wait briefly and retry.", 429);
+      recordYahooRateLimit(crumbResponse, this.fetchImpl);
       if (!crumbResponse.ok) throw new AlpacaError("upstream", "Yahoo Finance options data could not refresh its provider session.", 502);
       const crumb = (await crumbResponse.text()).trim();
       if (!crumb || crumb.length > 200 || /\s/.test(crumb) || /too many requests/i.test(crumb)) {

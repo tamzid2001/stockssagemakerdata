@@ -492,7 +492,24 @@ test('game detail is fetched on demand and market labels are rendered as text', 
   w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
   const item={id:'a'.repeat(32),provider:'kalshi',event_title:'<img src=x onerror=alert(1)>',outcome:'A',game_start:'2026-09-26T23:30Z',forecast_end:'2026-09-27T03:30Z',generated_at:'2026-09-26T21:10Z',history_count:180,models:['prophet','chronos'],status:'updating_pregame',predictions:[{timestamp:'2026-09-27T03:30Z',quantiles:{'0.1':.2,'0.5':.4,'0.9':.8}}]};
   w.fetch=async url=>{calls.push(url);return {ok:true,json:async()=>url.endsWith(item.id)?{item}:{date:'2026-09-26',items:[item],coverage:[]}};};
-  w.eval(source('game-forecasts.js'));await tick();assert.equal(calls.length,1);assert.equal(w.document.querySelector('[data-game-cards] img'),null);
-  w.document.querySelector('[data-game-cards] button').click();await tick();assert.equal(calls.length,2);assert.equal(w.document.querySelector('dialog').open,true);assert.match(w.document.querySelector('dialog').textContent,/40.0%/);
+  w.AbortSignal=AbortSignal;
+  w.eval(source('game-forecasts.js'));w.QuanturaGames.render([item]);assert.equal(calls.length,0);assert.equal(w.document.querySelector('[data-game-cards] img'),null);
+  w.document.querySelector('[data-game-cards] button').click();await tick();assert.equal(calls.length,1);assert.equal(w.document.querySelector('dialog').open,true);assert.match(w.document.querySelector('dialog').textContent,/40.0%/);
   w.document.querySelector('[data-game-close]').click();assert.equal(w.document.querySelector('dialog').open,false);w.close();
+});
+
+test('games are a lazy screener data source with searchable paginated results and a recoverable error', async () => {
+  const d=dom(page('screener.html')),w=d.window,calls=[];w.history.replaceState({},'', '/screener?source=today_games');
+  w.URL.createObjectURL=()=> 'blob:fixture';w.URL.revokeObjectURL=()=>{};w.AbortController=AbortController;
+  let fail=false;
+  const items=Array.from({length:55},(_,i)=>({id:String(i).padStart(32,'0'),provider:i%2?'kalshi':'polymarket_us',event_title:'Game '+i,outcome:'Home',game_start:'2026-09-26T23:00:00Z',generated_at:'2026-09-26T20:00:00Z',status:'updating_pregame',endpoint:{'0.1':.2,'0.5':.5,'0.9':.8}}));
+  w.fetch=async url=>{calls.push(url);return {ok:!fail,json:async()=>({date:'2026-09-26',items,coverage:[]})};};
+  const append=w.document.head.append.bind(w.document.head);w.document.head.append=node=>{append(node);if(node.src.includes('game-forecasts.js')){w.eval(source('game-forecasts.js'));node.dispatchEvent(new w.Event('load'));}};
+  w.eval(source('screener.js'));await tick();await tick();
+  assert.deepEqual(calls,['/api/screener/games']);assert.equal(w.document.getElementById('today-games'),null);
+  assert.equal(w.document.querySelectorAll('#qs-games .game-card').length,50);assert.equal(w.document.getElementById('qs-loading').hidden,true);
+  w.document.getElementById('qs-next').click();await tick();assert.equal(w.document.querySelectorAll('#qs-games .game-card').length,5);assert.equal(calls.length,1);
+  const search=w.document.getElementById('qs-search');search.value='Kalshi';search.dispatchEvent(new w.Event('change',{bubbles:true}));await tick();assert.equal(w.document.querySelectorAll('#qs-games .game-card').length,27);
+  fail=true;w.document.getElementById('qs-refresh').click();await tick();assert.equal(w.document.getElementById('qs-error').hidden,false);assert.equal(w.document.getElementById('qs-loading').hidden,true);
+  fail=false;w.document.getElementById('qs-retry').click();await tick();assert.equal(w.document.getElementById('qs-error').hidden,true,w.document.getElementById('qs-error-message').textContent);assert.equal(w.document.getElementById('qs-games').hidden,false);w.close();
 });

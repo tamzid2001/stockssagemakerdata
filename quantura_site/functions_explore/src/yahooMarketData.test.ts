@@ -83,6 +83,30 @@ test("Yahoo rate limits impose a shared cooldown without hammering upstream", as
   assert.equal(calls,1);
 });
 
+test("Yahoo duplicate history requests share one fetch across clients and cached payloads are isolated", async () => {
+  let calls=0,release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const fetchImpl:typeof fetch=async()=>{calls++;await gate;return new Response(JSON.stringify(payload()));};
+  const a=new YahooFinanceClient({fetchImpl}),b=new YahooFinanceClient({fetchImpl});
+  const first=a.getStockBars({symbol:'SPY',start:'2026-08-20',end:'2026-08-25'}),second=b.getStockBars({symbol:'SPY',start:'2026-08-20',end:'2026-08-25'});
+  release();const [one,two]=await Promise.all([first,second]);assert.equal(calls,1);one.rows[0].close=999;
+  assert.equal(two.rows[0].close,102);assert.equal((await b.getStockBars({symbol:'SPY',start:'2026-08-20',end:'2026-08-25'})).rows[0].close,102);assert.equal(calls,1);
+  await b.getStockBars({symbol:'QQQ',start:'2026-08-20',end:'2026-08-25'});assert.equal(calls,2);
+});
+
+test("Yahoo crumb rate limits block other Yahoo endpoints and honor HTTP-date Retry-After", async () => {
+  let calls=0;
+  const retryDate=new Date(Date.now()+180000).toUTCString();
+  const fetchImpl:typeof fetch=async url=>{calls++;
+    if(String(url).includes('/v7/finance/options/'))return new Response('',{status:401});
+    if(String(url)==='https://fc.yahoo.com')return new Response('',{status:404,headers:{'Set-Cookie':'A3=fixture; Path=/; Secure'}});
+    return new Response('',{status:429,headers:{'Retry-After':retryDate}});
+  };
+  await assert.rejects(new YahooFinanceClient({fetchImpl}).listOptionExpirations('SPY'),/rate-limited/);
+  await assert.rejects(new YahooFinanceClient({fetchImpl}).getStockBars({symbol:'SPY'}),/cooling down/);assert.equal(calls,3);
+  const {yahooRetrySeconds}=await import('./yahooRequests');assert.ok(yahooRetrySeconds(fetchImpl)>170);
+});
+
 test("Yahoo options expirations and chains normalize genuine provider fields without inventing Greeks", async () => {
   const optionPayload = {
     optionChain: {

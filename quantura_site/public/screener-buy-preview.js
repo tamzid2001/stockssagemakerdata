@@ -26,7 +26,7 @@
         }
         article.append(link,title,details);cards.append(article);
       }
-    } catch { status.textContent="The daily publication is temporarily unavailable. Open Q Screener to retry."; }
+    } catch { status.textContent="The daily publication is temporarily unavailable. Open Screener to retry."; }
   }
   if ("IntersectionObserver" in window) {
     const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();load();}},{rootMargin:"200px"});observer.observe(section);

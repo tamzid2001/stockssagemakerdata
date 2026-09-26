@@ -876,6 +876,33 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .support-status, .support-privacy { padding: 0 14px; margin: 8px 0 0; line-height: 1.4; color: var(--muted-foreground); }
 .support-footer { padding: 12px 14px; flex-wrap: wrap; }
 .support-launcher:focus-visible, .support-dialog :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.support-launcher { display: inline-flex; align-items: center; gap: 9px; padding: 12px 18px; border-radius: 16px; box-shadow: 0 8px 24px #07101f26; transition: transform .15s ease; }
+.support-launcher:hover { transform: translateY(-2px); }
+.support-dialog { width: min(460px, calc(100vw - 24px)); max-height: min(780px, calc(100dvh - 32px)); border-radius: 22px; }
+.support-header { padding: 20px; background: var(--card); }
+.support-header h2 { font-size: 21px; letter-spacing: -.4px; }
+.support-close { width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 50%; background: var(--secondary); color: var(--foreground); font-size: 26px; cursor: pointer; }
+.support-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; }
+.support-messages, .support-history { min-height: 170px; max-height: 35dvh; flex: 1 1 auto; overflow: auto; padding: 10px 20px 20px; }
+.support-messages[hidden], .support-history[hidden], #qs-games[hidden], .qs-field[hidden], .qs-quantile-filters[hidden], .qs-date-navigation[hidden], #saved-alerts[hidden], #qs-methodology[hidden], .qs-hero-actions [hidden] { display: none !important; }
+.support-history h3 { margin: 4px 0; font-size: 16px; }
+.support-history p, .support-history-open small { color: var(--muted-foreground); }
+.support-history-list { display: grid; gap: 8px; margin-top: 16px; }
+.support-history-row { display: flex; gap: 8px; align-items: center; border: 1px solid var(--border); border-radius: 12px; padding: 8px; background: var(--card); }
+.support-history-open { display: grid; gap: 6px; flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; color: var(--foreground); padding: 8px; cursor: pointer; font: inherit; }
+.support-history-open strong { overflow-wrap: anywhere; font-size: 14px; }
+.support-history-open[aria-current="true"] { border-left: 3px solid var(--primary); }
+.support-history-delete { min-height: 44px; border: 0; padding: 8px; border-radius: 8px; background: var(--secondary); color: var(--foreground); cursor: pointer; }
+.support-form { padding: 0 20px; }
+.support-form textarea { border-radius: 12px; min-height: 72px; }
+.support-send { justify-self: end; min-width: 88px; min-height: 44px; }
+.support-status:empty { display: none; }
+.support-status, .support-privacy, .support-accuracy { margin: 10px 0 0; padding: 0 20px; color: var(--muted-foreground); line-height: 1.5; font-size: 12px; }
+.support-footer { padding: 14px 20px 18px; }
+.support-message-user { background: var(--primary); color: var(--primary-foreground); }
+#qs-games { padding: 20px; }
+@media (prefers-reduced-motion: reduce) { .support-launcher { transition: none; } }
+@media (max-height: 680px) { .support-messages, .support-history { min-height: 70px; }.support-header { padding: 14px 20px; }.support-toolbar { padding-block: 8px; }.support-footer { padding-block: 8px; } }
 @media (max-width: 768px) {
   .support-launcher { bottom: calc(74px + env(safe-area-inset-bottom)); right: 12px; }
   .support-dialog { inset: auto 12px max(12px, env(safe-area-inset-bottom)) 12px; width: auto; }

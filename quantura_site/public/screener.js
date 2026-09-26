@@ -62,6 +62,63 @@
   let savedAlertsMeta = {};
   let alertPanelLoading = null;
   let availableDates = [];
+  let gameModulePromise, gameSnapshot, gameExport;
+  const stockSortOptions=refs.sort.innerHTML;
+  const gamesView=document.getElementById("qs-games");
+  function ensureGames() {
+    if(window.QuanturaGames)return Promise.resolve(window.QuanturaGames);
+    if(!gameModulePromise)gameModulePromise=new Promise((resolve,reject)=>{
+      const script=document.createElement("script");script.src="/game-forecasts.js?v=20260926-integrated";
+      const timeout=setTimeout(()=>{script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));},15000);
+      script.onload=()=>{clearTimeout(timeout);if(window.QuanturaGames)resolve(window.QuanturaGames);else {gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));}};
+      script.onerror=()=>{clearTimeout(timeout);script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));};document.head.append(script);
+    });
+    return gameModulePromise;
+  }
+  function sourceControls(state) {
+    const games=state.source==="today_games",nonStock=state.source!=="stocks";
+    if(refs.sort.dataset.mode!==(games?"games":"stocks")) {
+      refs.sort.innerHTML=games?'<option value="gameStart">Game start</option><option value="event">Event</option><option value="provider">Provider</option><option value="lastUpdate">Last update</option>':stockSortOptions;
+      refs.sort.dataset.mode=games?"games":"stocks";
+    }
+    for(const control of [refs.universe,refs.marketCap,refs.statistic,refs.addRule]){control.disabled=nonStock;control.closest(".qs-field, fieldset").hidden=games;}
+    root.querySelectorAll('input[name="position"]').forEach(control=>{control.disabled=nonStock;control.closest("fieldset").hidden=games;});
+    refs.search.placeholder=games?"Team, game, outcome, or provider":"Ticker or company, e.g. PLTR";
+    document.querySelector(".qs-date-navigation").hidden=games;
+    document.getElementById("saved-alerts").hidden=games;
+    document.querySelector('.qs-hero-actions a[href="#saved-alerts"]').hidden=games;
+    document.getElementById("qs-methodology").hidden=games;
+    document.getElementById("qs-empty").querySelector("strong").textContent=games?"No game forecasts match your search.":"No securities match your current filters.";
+  }
+  async function loadGames(request,force) {
+    const renderer=await ensureGames();
+    if(request.signal.aborted)return;
+    if(force||!gameSnapshot||gameSnapshot.until<Date.now()) {
+      const response=await fetch("/api/screener/games",{signal:request.signal,headers:{Accept:"application/json"},cache:force?"reload":"default"});
+      if(!response.ok)throw new Error("Game forecasts are temporarily unavailable. Please retry.");
+      const value=await response.json();if(!Array.isArray(value.items))throw new Error("The game forecast response was incomplete. Please retry.");
+      gameSnapshot={value,until:Date.now()+30000};
+    }
+    if(request.signal.aborted)return;
+    const data=gameSnapshot.value,query=current.search.toLowerCase();
+    const items=data.items.filter(item=>[item.event_title,item.outcome,item.provider==="kalshi"?"Kalshi":"Polymarket US"].join(" ").toLowerCase().includes(query));
+    const key={gameStart:"game_start",event:"event_title",provider:"provider",lastUpdate:"generated_at"}[current.sort]||"game_start";
+    items.sort((a,b)=>(String(a[key]).localeCompare(String(b[key]))||a.id.localeCompare(b.id))*(current.direction==="desc"?-1:1));
+    const pages=Math.max(1,Math.ceil(items.length/current.pageSize));current.page=Math.min(current.page,pages);
+    refs.metricMatches.textContent=items.length.toLocaleString();refs.metricTotal.textContent="of "+data.items.length.toLocaleString()+" published outcomes";
+    availableDates=[];refs.dateAvailability.textContent="Today in New York · "+data.date;
+    refs.status.textContent=items.length.toLocaleString()+" outcome forecasts match your search.";
+    refs.freshness.textContent="Hourly pregame forecasts through four hours after kickoff. Updates stop at the start hour."+(data.bounded||data.coverage?.some(p=>p.partial||p.failed)?" Some markets are unavailable in this scan.":"");
+    refs.pageLabel.textContent="Page "+current.page+" of "+pages;refs.previous.disabled=current.page<=1;refs.next.disabled=current.page>=pages;
+    renderer.render(items.slice((current.page-1)*current.pageSize,current.page*current.pageSize));
+    disableExport(true);
+    if(gameExport)URL.revokeObjectURL(gameExport);
+    const fields=["provider","event_title","outcome","game_start","forecast_end","generated_at","status"];
+    const cell=value=>{let text=String(value??"");if(typeof value==="string"&&/^[\s]*[=+@\-]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"';};
+    gameExport=URL.createObjectURL(new Blob([[[...fields,"p10","p50","p90"].map(cell).join(","),...items.map(item=>[...fields.map(key=>item[key]),...['0.1','0.5','0.9'].map(q=>item.endpoint?.[q])].map(cell).join(","))].join("\r\n")],{type:"text/csv;charset=utf-8"}));
+    refs.export.href=gameExport;refs.export.download="quantura-games-"+data.date+".csv";refs.export.removeAttribute("aria-disabled");refs.export.classList.remove("disabled");
+    setView(items.length?"games":"empty");
+  }
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -156,6 +213,7 @@
 
   function writeControls(state) {
     if(refs.source)refs.source.value=state.source || "stocks";
+    sourceControls(state);
     refs.search.value = state.search || "";
     refs.universe.value = state.universe || "all";
     refs.marketCap.value = state.marketCap || "all";
@@ -163,7 +221,7 @@
     renderRules(state.quantileRules || []);
     refs.sort.value = state.sort || "ticker";
     refs.direction.value = state.direction || "asc";
-    const perps=state.source==="kalshi_perps";
+    const perps=state.source!=="stocks";
     for(const control of [refs.universe,refs.marketCap,refs.statistic,refs.addRule])control.disabled=perps;
     root.querySelectorAll('input[name="position"]').forEach((input) => {
       input.checked = state.positions.includes(input.value);
@@ -174,7 +232,7 @@
   function parseUrl() {
     const params = new URLSearchParams(window.location.search);
     const allowed = {
-      source: ["stocks","kalshi_perps"],
+      source: ["stocks","kalshi_perps","today_games"],
       universe: ["all", "sp500", "nasdaq", "etf"],
       marketCap: ["all", "mega", "large", "mid", "small", "micro"],
       statistic: ["row", "min", "max", "avg"],
@@ -188,6 +246,9 @@
       const value = params.get(key);
       if (allowed[key].includes(value)) state[key] = value;
     });
+    if(!params.get("source")&&window.location.hash==="#today-games")state.source="today_games";
+    sourceControls(state);
+    if(state.source==="today_games")state.sort="gameStart";
     const sort = params.get("sort");
     if (Array.from(refs.sort.options).some((option) => option.value === sort)) state.sort = sort;
     try {
@@ -287,7 +348,8 @@
     refs.error.hidden = name !== "error";
     refs.empty.hidden = name !== "empty";
     refs.tableWrap.hidden = name !== "table";
-    refs.pagination.hidden = name !== "table";
+    gamesView.hidden=name!=="games";
+    refs.pagination.hidden = !["table","games"].includes(name);
   }
 
   function disableExport(disabled) {
@@ -296,6 +358,7 @@
       refs.export.setAttribute("aria-disabled", "true");
       refs.export.classList.add("disabled");
     } else {
+      refs.export.removeAttribute("download");
       refs.export.href = `/api/screener/export.csv?${buildParams(current)}`;
       refs.export.removeAttribute("aria-disabled");
       refs.export.classList.remove("disabled");
@@ -337,6 +400,8 @@
     const settings = options || {};
     if (activeRequest) activeRequest.abort();
     activeRequest = new AbortController();
+    const request=activeRequest;
+    const timeout=setTimeout(()=>request.abort(),25000);
     current = readControls();
     if (settings.resetPage) current.page = 1;
     writeControls(current);
@@ -346,28 +411,31 @@
     disableExport(true);
     refs.status.textContent = "Scanning market data…";
     try {
+      if(current.source==="today_games"){await loadGames(request,settings.force);return;}
       const response = await fetch(`/api/screener/data?${buildParams(current).toString()}`, {
         method: "GET",
         headers: { Accept: "application/json" },
         cache: settings.force ? "reload" : "default",
-        signal: activeRequest.signal,
+        signal: request.signal,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.detail || "The screener service returned an unavailable response.");
+      if(request.signal.aborted)return;
       render(payload);
     } catch (error) {
-      if (error && error.name === "AbortError") return;
+      if(request!==activeRequest)return;
+      if(error?.name==="AbortError"){refs.errorMessage.textContent="The request timed out. Please retry.";refs.status.textContent="Market data could not be loaded.";setView("error");return;}
       const message = String(error && error.message ? error.message : "").trim();
       refs.errorMessage.textContent = !message || message === "Failed to fetch"
         ? "Market data could not be reached. Check your connection and retry; the last validated scan has not been changed."
         : message;
       refs.status.textContent = "The validated screener dataset is currently unavailable.";
       setView("error");
-    }
+    } finally {clearTimeout(timeout);}
   }
 
   function clearFilters() {
-    current = { ...defaults, date: current.date, positions: [] };
+    current = { ...defaults, source: current.source, sort: current.source==="today_games"?"gameStart":"ticker", date: current.date, positions: [] };
     writeControls(current);
     load({ resetPage: true });
   }
@@ -377,8 +445,8 @@
     load({ resetPage: true });
   });
   root.addEventListener("change", event => {
-    if(event.target===refs.source){current={...defaults,source:refs.source.value,date:refs.source.value==="stocks"?current.date:"",positions:[],quantileRules:[]};writeControls(current);}
-    const perps=refs.source?.value==="kalshi_perps";
+    if(event.target===refs.source){current={...defaults,source:refs.source.value,sort:refs.source.value==="today_games"?"gameStart":"ticker",date:refs.source.value==="stocks"?current.date:"",positions:[],quantileRules:[]};writeControls(current);}
+    const perps=refs.source?.value!=="stocks";
     for(const control of [refs.universe,refs.marketCap,refs.statistic,refs.addRule])control.disabled=perps;
     root.querySelectorAll('input[name="position"]').forEach(control=>{control.disabled=perps;});
     load({resetPage:true});
@@ -486,7 +554,7 @@
   document.getElementById("qs-save-alert").addEventListener("click",async event=>{
     const button=event.currentTarget;button.disabled=true;alertStatus.textContent="Saving…";
     try{const state=readControls();
-      if(state.source==="kalshi_perps")throw new Error("Daily closing-price alerts apply to the stock scan. Perpetual forecasts are currently on demand.");
+      if(state.source!=="stocks")throw new Error("Daily closing-price alerts apply to the stock scan. Perpetual forecasts are currently on demand.");
       // Saved responses also carry legacy normalized query fields. Do not send
       // them back as new editable filters when applying and saving a preset.
       const filters=Object.fromEntries(["search","universe","marketCap","minMarketCap","maxMarketCap","quantileRules","positions","sort","direction","statistic"].filter(key=>state[key]!==undefined).map(key=>[key,state[key]]));
