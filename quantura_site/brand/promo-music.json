@@ -1,0 +1,12 @@
+{
+  "track": "Synth Wave",
+  "artist": "Alex McCulloch (Pro Sensory)",
+  "source": "https://opengameart.org/content/synth-wave",
+  "download_url": "https://opengameart.org/sites/default/files/Synth%20Wave_0.mp3",
+  "license": "CC0 1.0 Universal",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "verified_at": "2026-09-26",
+  "source_sha256": "d09b65f3cc1d5306c318bdf27622cc99feb3edb0b7483c463dc38b3432aa9827",
+  "excerpt_sha256": "eb543f66f081fba5ea220d19d4de68abd7a0f3ed45039e558690c64b61d3c928",
+  "edits": "First 24 seconds; normalized to -20 LUFS; mixed at 75% with 0.8-second fade-in and two-second fade-out."
+}

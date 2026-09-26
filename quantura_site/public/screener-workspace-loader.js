@@ -15,7 +15,7 @@
     if (document.querySelector('script[data-quantura-screener-workspace]')) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "/screener.js?v=20260920-perps-jev";
+      script.src = "/screener.js?v=20260926-offset";
       script.async = true;
       script.dataset.quanturaScreenerWorkspace = "true";
       script.addEventListener("load", resolve, { once: true });

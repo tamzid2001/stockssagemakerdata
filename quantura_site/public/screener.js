@@ -256,8 +256,8 @@
     refs.rules.innerHTML=rules.map((rule,i)=>`<div class="qs-rule">
       <select data-rule="statistic" aria-label="Rule ${i+1} statistic">${options([["avg","Average"],["min","Minimum"],["max","Maximum"]],rule.statistic)}</select>
       <select data-rule="quantile" aria-label="Rule ${i+1} quantile">${options(["p01","p10","p25","p50","p75","p90","p99"].map(q=>[q,q.toUpperCase()]),rule.quantile)}</select>
-      <select data-rule="operator" aria-label="Rule ${i+1} comparison">${options([["gt","> price by"],["gte","≥ price by"],["lt","< price by"],["lte","≤ price by"]],rule.operator)}</select>
-      <label><input data-rule="percent" aria-label="Rule ${i+1} percent difference" type="number" min="-100000" max="100000" step="any" value="${escapeHtml(rule.percent)}"> %</label>
+      <select data-rule="operator" aria-label="Rule ${i+1} comparison">${options([["gt","More than price +"],["gte","At least price +"],["lt","Less than price −"],["lte","At most price −"]],rule.operator)}</select>
+      <label><input data-rule="percent" aria-label="Rule ${i+1} percent difference" type="number" min="0" max="100000" step="any" value="${escapeHtml((rule.operator==="lt" || rule.operator==="lte")?Math.abs(rule.percent):rule.percent)}"> %</label>
       <button type="button" class="cta secondary small" data-remove-rule="${i}" aria-label="Remove filter ${i+1}"><i class="iconoir-cancel" aria-hidden="true"></i></button>
     </div>`).join("");
     refs.addRule.disabled=rules.length>=12;

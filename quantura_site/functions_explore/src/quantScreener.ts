@@ -205,10 +205,13 @@ export function rowMatchesQuery(row: QuantScreenerRow, query: QuantScreenerQuery
   for (const rule of query.quantileRules || []) {
     const value = (row.quantile_stats as Record<string, Record<string, unknown>> | undefined)?.[rule.quantile]?.[rule.statistic];
     const price = row.actual_price;
-    if (typeof value !== "number" || !Number.isFinite(value) || typeof price !== "number" || !(price > 0)) return false;
-    // Quantile value relative to price, NOT price relative to the quantile.
-    const percent = (value - price) / price * 100;
-    if (!(rule.operator === "gt" ? percent > rule.percent : rule.operator === "gte" ? percent >= rule.percent : rule.operator === "lt" ? percent < rule.percent : percent <= rule.percent)) return false;
+    if (typeof value !== "number" || !Number.isFinite(value) || typeof price !== "number" || !Number.isFinite(price) || !(price > 0)) return false;
+    // A below-price comparison uses a negative offset: "< price by 10%"
+    // means below 90% of price. Keep legacy negative below offsets equivalent.
+    const below = rule.operator === "lt" || rule.operator === "lte";
+    const offset = below ? -Math.abs(rule.percent) : rule.percent;
+    const threshold = price * (100 + offset) / 100;
+    if (!(rule.operator === "gt" ? value > threshold : rule.operator === "gte" ? value >= threshold : rule.operator === "lt" ? value < threshold : value <= threshold)) return false;
   }
   const ticker = String(row.ticker || "").toUpperCase();
   const company = String(row.company_name || "").toUpperCase();
