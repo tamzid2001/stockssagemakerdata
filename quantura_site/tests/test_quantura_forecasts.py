@@ -18,7 +18,8 @@ def test_public_forecast_surfaces_are_explicitly_prospective():
         assert marker in hub
     assert "THIS EVENT HAS NOT OCCURRED" in client
     assert "Forecasts are probabilistic scenarios" in detail
-    assert 'id="home-forecast-preview"' in home
+    assert 'id="forecast-preview-title"' in home
+    assert "Illustration" in home
     assert "BREAKING NEWS" not in hub.upper()
     assert "BREAKING NEWS" not in detail.upper()
 

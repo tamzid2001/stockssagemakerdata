@@ -192,7 +192,7 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
     client = (PUBLIC / "data-integrations.js").read_text()
 
     for text in [
-        "<title>Quantura Forecasting | Cross-Asset Forecast Intelligence</title>",
+        "<title>Forecast | Quantura</title>",
         "Q Download",
         "Provider fields",
         "Normalized",
@@ -225,7 +225,7 @@ def test_paid_pricing_is_archived_and_free_access_is_explicit():
     assert 'url=/forecasting' in pricing
     home = (PAGES / "index.html").read_text().lower()
     assert "free to explore" in home
-    assert "billed separately by aws" in home
+    assert "are billed by aws to the connected account" in (PAGES / "research.html").read_text().lower()
     assert "$39/mo" not in home
     for removed in ["gpt token", "llm token", "ai model access", "quantura go", "quantura plus", "quantura business", "quantura desk"]:
         assert removed not in pricing
