@@ -55,7 +55,7 @@
     <script defer src="/app.js?v=20260925-extended-hours"></script>
     <script defer src="/q-market.js?v=20260926-labels"></script>
     <script defer src="/q-download.js?v=20260921-q-search"></script>
-    <script defer src="/market-search.js?v=20260926-labels"></script>
+    <script defer src="/market-search.js?v=20260926-search-intent"></script>
     <script defer src="/screener-panel-lazy.js?v=20260926-integrated"></script>
 
     <script>
@@ -110,10 +110,9 @@
 	              <section class="market-search-workspace" aria-labelledby="market-search-title">
                     <div class="market-search-heading">
                       <h2 id="market-search-title">Search</h2><span class="small muted">Source · Auto</span>
-                      <div class="market-mode-controls" role="group" aria-label="Market discovery"><button type="button" class="task-chip" data-market-mode="open" aria-pressed="true">Markets</button><button type="button" class="task-chip" data-market-mode="live" aria-pressed="false">Live games</button><button type="button" class="task-chip" data-market-mode="any" aria-pressed="false">Include historical</button></div>
                     </div>
                     <form id="market-search-form" class="market-search-form">
-                      <div class="field"><label class="label" for="market-search-query">Ticker, company, team, prop, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, Yankees, or paste a Polymarket US / Kalshi link" required /></div>
+                      <div class="field"><label class="label" for="market-search-query">Ticker, company, team, prop, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, live games, historical Yankees, or a market link" required /></div>
                       <input id="market-search-source" type="hidden" value="auto" />
                       <button class="cta" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Search</span></button>
                     </form>

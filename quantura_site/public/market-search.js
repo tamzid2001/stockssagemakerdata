@@ -3,7 +3,7 @@
   const form=document.getElementById("market-search-form"),queryInput=document.getElementById("market-search-query"),status=document.getElementById("market-search-status"),results=document.getElementById("market-search-results");
   if(!form||!queryInput||!status||!results)return;
   const workspace=form.closest(".market-search-workspace")||form.parentElement;
-  const resources=new Map(),cache=new Map();let timer,controller,sequence=0,mode="open",eventView=null,lastGroups={},lastErrors={};
+  const resources=new Map(),cache=new Map();let timer,controller,sequence=0,eventView=null,lastGroups={},lastErrors={};
   const escapeHtml=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
   const providerLabel=s=>({alpaca:"Alpaca",yahoo:"Yahoo Finance",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
   queryInput.setAttribute("aria-controls","market-search-results");queryInput.setAttribute("aria-describedby","market-search-status");queryInput.setAttribute("aria-expanded","false");queryInput.maxLength=2048;
@@ -35,8 +35,15 @@
     if(!response.ok)throw Error(payload.message||"Search is temporarily unavailable.");
     cache.set(url,{at:Date.now(),payload});if(cache.size>20)cache.delete(cache.keys().next().value);return payload;
   }
+  function discoveryQuery(raw){
+    if(/^https?:\/\//i.test(raw))return {query:raw,mode:"open"};
+    const historical=/\binclude\s+historical\b|^historical(?:\s+(?:markets|games))?\b\s*:?/i;
+    const live=/\blive\s+games\b|^live\s*:/i;
+    const intent=historical.test(raw)?historical:live.test(raw)?live:null;
+    return {query:intent?raw.replace(intent,"").trim():raw,mode:intent===historical?"any":intent===live?"live":"open"};
+  }
   async function search(rank=false){
-    clearTimeout(timer);controller?.abort();const run=++sequence,query=queryInput.value.trim();eventView=null;
+    clearTimeout(timer);controller?.abort();const run=++sequence,{query,mode}=discoveryQuery(queryInput.value.trim());eventView=null;
     if(query.length<2&&mode!=="live"){closeResults();status.textContent="Enter at least two characters to search markets.";return;}
     controller=new AbortController();results.setAttribute("aria-busy","true");status.textContent="Searching configured providers…";
     try{
@@ -75,7 +82,6 @@
   }
   form.addEventListener("submit",event=>{event.preventDefault();void search(true);});
   queryInput.addEventListener("input",()=>{controller?.abort();++sequence;clearTimeout(timer);timer=setTimeout(()=>search(),300);});
-  document.querySelectorAll("[data-market-mode]").forEach(button=>button.addEventListener("click",()=>{mode=button.dataset.marketMode;document.querySelectorAll("[data-market-mode]").forEach(b=>b.setAttribute("aria-pressed",String(b===button)));queryInput.required=mode!=="live";void search();}));
   queryInput.addEventListener("keydown",event=>{if(event.key==="ArrowDown"&&!results.hidden){event.preventDefault();results.querySelector('[data-market-action]')?.focus();}});
   results.addEventListener("input",event=>{if(event.target.id==="q-event-filter")filterEvent(event.target.value);});
   results.addEventListener("keydown",event=>{
