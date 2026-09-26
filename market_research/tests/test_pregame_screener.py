@@ -68,3 +68,22 @@ def test_hourly_ensemble_advances_hours_and_does_not_call_regular_hour_steps_gap
     assert result['rows'][0]['timestamp']==10800
     assert result['rows'][-1]['timestamp']==32400
     assert result['history_gap_count']==0 and result['imputed_context_steps']==0
+
+
+def test_pregame_summary_is_accepted_by_encrypted_artifact_packager(tmp_path, monkeypatch):
+    import json
+    import zipfile
+    from market_research.pregame_screener import REPORT_FILENAME
+    from market_research.artifact import package, decrypt
+
+    source = tmp_path / "output"
+    source.mkdir()
+    report = {"successful": 12, "failed": 0}
+    (source / REPORT_FILENAME).write_text(json.dumps(report))
+    monkeypatch.setenv("QUANTURA_RESEARCH_ARTIFACT_KEY", bytes(range(32)).hex())
+    result = package(source, tmp_path / "summary.qra.enc")
+    assert result["format"] == "AES-256-GCM encrypted ZIP"
+    decrypt(tmp_path / "summary.qra.enc", tmp_path / "summary.zip")
+    with zipfile.ZipFile(tmp_path / "summary.zip") as archive:
+        assert json.loads(archive.read(REPORT_FILENAME)) == report
+        assert archive.namelist() == [REPORT_FILENAME, "manifest.json"]
