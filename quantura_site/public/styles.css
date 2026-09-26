@@ -10435,3 +10435,14 @@ html .toast[data-variant="warn"] {
     grid-template-columns: 1fr;
   }
 }
+
+/* Editorial photos use the post's reviewed Unsplash selection. */
+.blog-card-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}

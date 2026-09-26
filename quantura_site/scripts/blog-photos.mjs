@@ -2,7 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { imageUrl, photoFigure, escapeHtml, referralUrl } from "./blog-photo.mjs";
+import { imageUrl, photoFigure, photoThumbnail, escapeHtml, referralUrl } from "./blog-photo.mjs";
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registryPath = path.join(site, "brand/blog-photos.json");
@@ -89,6 +89,21 @@ if (process.argv.includes("--stage")) {
     }
     post.heroImage = imageUrl(photo);
     post.heroPhoto = { provider: "unsplash", id: photo.id, alt: photo.alt, photographer: photo.photographer, photographerUrl: photo.photographer_url, sourceUrl: photo.photo_url, selectedAt: photo.download_tracked_at };
+  }
+  // Use the same reviewed selection in every listing; never choose photos at runtime.
+  for (const root of ["pages", "public"]) {
+    const topicDir = path.join(site, root, "blog/topics");
+    const listings = [path.join(site, root, "blog/index.html"), ...(await fs.readdir(topicDir)).filter(name => name.endsWith(".html")).map(name => path.join(topicDir, name))];
+    for (const file of listings) {
+      const original = await fs.readFile(file, "utf8");
+      const html = original.replace("Quantitative research, documented clearly.", "Research notes").replace("Current notes on market-data sources, forecast quantiles, SageMaker Canvas, technical confirmation, and research operations.", "Notes on market data, forecasting, and research.").replace(/<a class="card(?: blog-post-card)?" href="\/blog\/posts\/([a-z0-9-]+)">([\s\S]*?)<\/a>/g, (full, slug, body) => {
+        const photo = registry.photos[registry.posts[slug]];
+        if (!photo) throw new Error(`Unreviewed listing photo for ${slug}`);
+        const content = body.replace(/\s*<img class="blog-card-photo"[^>]*>/, "").replace(/\s*<p class="small" style="margin-top: 12px;">[\s\S]*?<\/p>/, "");
+        return `<a class="card blog-post-card" href="/blog/posts/${slug}">\n              ${photoThumbnail(photo)}${content}</a>`;
+      });
+      pending.push([file, html]);
+    }
   }
   // All source documents validate before any page is overwritten. No directory deletion.
   for (const [file, html] of pending) await fs.writeFile(file, html);

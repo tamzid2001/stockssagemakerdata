@@ -2,7 +2,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { imageUrl, photoFigure, escapeHtml } from "./blog-photo.mjs";
+import { imageUrl, photoFigure, photoThumbnail, escapeHtml } from "./blog-photo.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -634,8 +634,8 @@ function blogIndexHtml(posts) {
         <div class="container content-grid">
           <div>
             <div class="eyebrow">Quantura Blog</div>
-            <h1>Quantitative research, documented clearly.</h1>
-            <p>Current notes on market-data sources, forecast quantiles, SageMaker Canvas, technical confirmation, and research operations.</p>
+            <h1>Research notes</h1>
+            <p>Notes on market data, forecasting, and research.</p>
           </div>
           <div class="card">
             <h3>Popular topics</h3>
@@ -654,10 +654,10 @@ function blogIndexHtml(posts) {
           </div>
           <div class="grid-3">
             ${latest.map((post) => `
-            <a class="card" href="/blog/posts/${post.slug}">
+            <a class="card blog-post-card" href="/blog/posts/${post.slug}">
+              ${photoThumbnail(editorialPhoto(post.slug))}
               <h3>${post.title}</h3>
               <div class="small">${humanDate(new Date(`${post.dateIso}T00:00:00.000Z`))}</div>
-              <p class="small" style="margin-top: 12px;">${post.excerpt}</p>
               <div class="tag" style="margin-top: 14px;">${TOPIC_BY_SLUG.get(post.topic)?.label || post.topic}</div>
             </a>`).join("\n")}
           </div>
@@ -718,10 +718,10 @@ function topicPageHtml(topicSlug, posts) {
         <div class="container">
           <div class="grid-3">
             ${filtered.map((post) => `
-            <a class="card" href="/blog/posts/${post.slug}">
+            <a class="card blog-post-card" href="/blog/posts/${post.slug}">
+              ${photoThumbnail(editorialPhoto(post.slug))}
               <h3>${post.title}</h3>
               <div class="small">${humanDate(new Date(`${post.dateIso}T00:00:00.000Z`))}</div>
-              <p class="small" style="margin-top: 12px;">${post.excerpt}</p>
             </a>`).join("\n")}
           </div>
         </div>
