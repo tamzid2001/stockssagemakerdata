@@ -837,7 +837,7 @@
       sidebar_learn_more: "Forecast guide",
       sidebar_screener: "Screener",
       panel_forecast_title: "Quantura Forecast",
-      panel_forecast_subtitle: "Multi-model probabilistic forecasting. Configure once, run asynchronously, and download your final ensemble.",
+      panel_forecast_subtitle: "Choose a market, set the horizon, and run your forecast.",
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.",
       panel_ticker_query_title: "Forecast Review",
@@ -14460,7 +14460,7 @@
     ensembleUiState.capabilities = response.data || {};
     ensembleUiState.capabilitiesLoaded = true;
     renderEnsembleModelCapabilities(ensembleUiState.capabilities);
-    setEnsembleStatus("Model availability loaded. Configure the ensemble and submit a durable job.");
+    setEnsembleStatus("Choose your models and run a forecast.");
   };
 
   const refreshPrimaryForecast = async () => {
