@@ -4,14 +4,15 @@
   if (!section) return;
   const status = section.querySelector("[data-buy-status]");
   const cards = section.querySelector("[data-buy-cards]");
+  const MEGA_CAP_MIN = 200_000_000_000;
   const money = value => new Intl.NumberFormat(undefined, {style:"currency",currency:"USD",maximumFractionDigits:2}).format(value);
   async function load() {
     try {
-      const response = await fetch("/api/screener/data?pageSize=24&sort=ticker", {signal:AbortSignal.timeout(12000)});
+      const response = await fetch("/api/screener/data?pageSize=24&marketCap=mega&sort=marketCap&direction=desc", {signal:AbortSignal.timeout(12000)});
       if (!response.ok) throw Error("unavailable");
       const data = await response.json();
-      const rows = (data.items || []).filter(row => row?.ticker && Number.isFinite(row.actual_price) && Number.isFinite(row.p50)).slice(0,6);
-      status.textContent = rows.length ? `${rows.length} of ${data.total ?? rows.length} published stocks · scan ${data.scanDate || "latest"}` : "No validated stock forecasts are available yet. A new scan may still be running.";
+      const rows = (data.items || []).filter(row => row?.ticker && Number.isFinite(row.actual_price) && Number.isFinite(row.p50) && Number.isFinite(row.market_cap) && row.market_cap >= MEGA_CAP_MIN).sort((a,b) => b.market_cap - a.market_cap || a.ticker.localeCompare(b.ticker)).slice(0,6);
+      status.textContent = rows.length ? `${rows.length} mega-cap forecasts · scan ${data.scanDate || "latest"}` : "No validated mega-cap forecasts are available yet. A new scan may still be running.";
       for (const row of rows) {
         const article=document.createElement("article");
         const link=document.createElement("a");
