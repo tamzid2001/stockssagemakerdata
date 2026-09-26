@@ -118,7 +118,7 @@
       }
       whenVisible(video, () => {
         video.src = video.dataset.lazyVideo;
-        video.play().catch(() => {});
+        if (video.autoplay) video.play().catch(() => {});
       });
     });
   });

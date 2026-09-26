@@ -1,24 +1,25 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Week 44: SageMaker Canvas to Quantura Export Pipeline | Quantura Blog</title>
+    <title>SageMaker Canvas to Quantura Export Pipeline | Quantura Blog</title>
     <meta name="description" content="Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls." />
     <meta name="keywords" content="quantura, blog, macro-signals, macro, regime, liquidity, rates, markets" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura.studio/blog/posts/2026-01-01-sagemaker-canvas-to-quantura-export-pipeline" />
-    <meta property="og:title" content="Week 44: SageMaker Canvas to Quantura Export Pipeline | Quantura Blog" />
+    <meta property="og:title" content="SageMaker Canvas to Quantura Export Pipeline | Quantura Blog" />
     <meta property="og:description" content="Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls." />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="https://quantura.studio/blog/posts/2026-01-01-sagemaker-canvas-to-quantura-export-pipeline" />
-    <meta property="og:image" content="https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Week 44: SageMaker Canvas to Quantura Export Pipeline | Quantura Blog" />
+    <meta name="twitter:title" content="SageMaker Canvas to Quantura Export Pipeline | Quantura Blog" />
     <meta name="twitter:description" content="Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls." />
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
     <meta name="twitter:url" content="https://quantura.studio/blog/posts/2026-01-01-sagemaker-canvas-to-quantura-export-pipeline" />
     <meta property="article:published_time" content="2026-01-01" />
     <meta property="article:section" content="Macro Signals" />
@@ -32,14 +33,19 @@
     <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
-    <script src="/theme-init.js?v=20260908a"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <script src="/pwa-launch.js?v=20260926a"></script>
+    <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260405a" />
+    <link rel="stylesheet" href="/styles.css?v=20260926a" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">{
   "@context": "https://schema.org",
   "@type": "BlogPosting",
-  "headline": "Week 44: SageMaker Canvas to Quantura Export Pipeline",
+  "headline": "SageMaker Canvas to Quantura Export Pipeline",
   "description": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
   "datePublished": "2026-01-01",
   "dateModified": "2026-01-01",
@@ -54,12 +60,12 @@
   "mainEntityOfPage": "https://quantura.studio/blog/posts/2026-01-01-sagemaker-canvas-to-quantura-export-pipeline",
   "image": {
     "@type": "ImageObject",
-    "url": "https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
-    "creditText": "Photo by Hoover Tung on Unsplash",
+    "url": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+    "creditText": "Photo by Ataberk Güler on Unsplash",
     "creator": {
       "@type": "Person",
-      "name": "Hoover Tung",
-      "url": "https://unsplash.com/@lozt?utm_source=quantura&utm_medium=referral"
+      "name": "Ataberk Güler",
+      "url": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral"
     }
   }
 }</script>
@@ -84,7 +90,7 @@
         <div class="container content-grid">
           <div>
             <div class="eyebrow">Quantura Blog</div>
-            <h1>Week 44: SageMaker Canvas to Quantura Export Pipeline</h1>
+            <h1>SageMaker Canvas to Quantura Export Pipeline</h1>
             <p>Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.</p>
             <div class="small muted">Published January 1, 2026 · Topic: <a href="/blog/topics/macro-signals">Macro Signals</a></div>
           </div>
@@ -102,12 +108,12 @@
         <div class="container">
           <article class="card" style="padding: 28px;">
 
-    <figure class="blog-photo" data-unsplash-photo="4QcH0MBnAIM">
-      <img src="https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" srcset="https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w, https://images.unsplash.com/photo-1526642591341-bcfc36ffae2f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format 1280w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="areal photography of cityscape" width="1280" height="720" decoding="async" fetchpriority="high" />
-      <figcaption>Photo by <a href="https://unsplash.com/@lozt?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Hoover Tung</a> on <a href="https://unsplash.com/photos/areal-photography-of-cityscape-4QcH0MBnAIM?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
+    <figure class="blog-photo" data-unsplash-photo="S4ivgQRxaPo">
+      <img src="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" srcset="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w, https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format 1280w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="black flat screen computer monitor on white desk" width="1280" height="720" decoding="async" fetchpriority="high" />
+      <figcaption>Photo by <a href="https://unsplash.com/@ataberkguler?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Ataberk Güler</a> on <a href="https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
     </figure>
     <p>
-      Week 44: SageMaker Canvas to Quantura Export Pipeline is written for operators who need a repeatable bridge between signal intake and action execution.
+      SageMaker Canvas to Quantura Export Pipeline is written for operators who need a repeatable bridge between signal intake and action execution.
       The core objective is to reduce latency without reducing rigor. A recurring problem in discretionary workflows is undocumented confidence. Quantura playbooks require confidence to be represented as concrete ranges, expected volatility bands, and downside triggers that can be measured after the fact.
     </p>
     <p>

@@ -14099,13 +14099,13 @@
     const historyLimit = Number(data.get("history_limit") ?? 500);
     if (!["workspace_dataset", "series"].includes(sourceType) && (!Number.isInteger(historyLimit) || historyLimit < 2 || historyLimit > 500)) throw new Error("Choose 2–500 historical observations. Model minimums still apply.");
     const selection = window.QuanturaMarketSelection;
-    if (sourceType === "prediction_market" && !selection?.contract_id) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
+    if (sourceType === "prediction_market" && !(selection?.contract_id || selection?.contract?.contractId)) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
     const source = sourceType === "series"
       ? { type: "series", name: ensembleUiState.csvName, rows: window.QuanturaForecastControls.csvSeries(ensembleUiState.csvTable || {headers:[],rows:[]}, document.getElementById("ensemble-csv-date").value, document.getElementById("ensemble-csv-target").value), timestamp_column: "timestamp", target_column: "target", frequency: document.getElementById("ensemble-csv-frequency").value, timezone: ensembleTimeZone() }
       : sourceType === "kalshi_perp"
       ? {type:"kalshi_perp",symbol:String(data.get("ticker")||"").trim().toUpperCase(),frequency:({"1Day":"1D","1Hour":"1h","1Min":"1min"})[data.get("ticker_frequency")],limit:historyLimit}
       : sourceType === "prediction_market"
-      ? { type: "prediction_market", provider: selection.source, symbol: selection.symbol, contract_id: selection.contract_id, frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")), limit: historyLimit }
+      ? window.QuanturaForecastControls.predictionMarketSource(selection, { frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")), limit: historyLimit })
       : sourceType === "workspace_dataset"
       ? {
           type: "workspace_dataset",
@@ -14689,6 +14689,7 @@
     window.addEventListener("quantura:market-selected", (event) => {
       if (!event.detail?.resource) return;
       const row = event.detail.resource;
+      window.QuanturaMarketSelection = row;
       if (!row?.contract_id) {
         if (row?.symbol) {
           ui.ensembleSourceType.value = row.source === "kalshi_perps" ? "kalshi_perp" : "ticker";

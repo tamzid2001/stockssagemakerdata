@@ -1,14 +1,15 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Forecasting | Cross-Asset Forecast Intelligence</title>
+    <title>Forecast | Quantura</title>
         <meta name="description" content="Use Quantura Forecast for multi-model probabilistic quantiles, deterministic scenarios, and optional balanced AI interpretation." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="stock forecasting terminal, quantile forecast, fan chart, ticker analysis, historical market data" />
         <link rel="canonical" href="https://quantura.studio/forecasting" />
-        <meta property="og:title" content="Quantura Forecasting Studio" />
+        <meta property="og:title" content="Forecast | Quantura" />
         <meta property="og:description" content="Probabilistic ensemble forecasting, cross-asset market data, and demand intelligence for serious investors." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/forecasting" />
@@ -16,7 +17,7 @@
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura Forecasting Studio" />
+    <meta name="twitter:title" content="Forecast | Quantura" />
     <meta name="twitter:description" content="Probabilistic ensemble forecasting, cross-asset market data, and demand intelligence for serious investors." />
     <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/forecasting" />
@@ -30,7 +31,12 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
     <meta name="apple-mobile-web-app-title" content="Quantura" />
     <link rel="manifest" href="/site.webmanifest?v=20260909a" />
-    <script src="/theme-init.js?v=20260908a"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <script src="/pwa-launch.js?v=20260926a"></script>
+    <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
     <link rel="stylesheet" href="/styles.css?v=20260817c" />
     <link rel="stylesheet" href="/q-terminal.css?v=20260921-q-search" />
@@ -119,8 +125,8 @@
 	                <div class="studio-panel">
                   <section class="panel" data-panel="forecast">
 	                    <div class="panel-header">
-	                      <h2>Quantura Forecast</h2>
-	                      <p class="small">Choose models and a horizon. Receive one probabilistic ensemble.</p>
+	                      <h1>Forecast</h1>
+	                      <p class="small">Choose a market, set the horizon, and run your forecast.</p>
 	                    </div>
                     <section class="ensemble-forecast-shell forecast-workspace-section" id="ensemble-forecast-settings" aria-label="Quantura Forecast configuration">
                       <div class="ensemble-forecast-body">
@@ -222,7 +228,7 @@
                             <div class="form-grid">
                               <div class="field"><label class="label" for="ensemble-context-length">Context length</label><input id="ensemble-context-length" name="context_length" type="number" min="40" max="16384" value="512" /></div>
                               <div class="field"><label class="label" for="ensemble-transform">Target transform</label><select id="ensemble-transform" name="transform"><option value="auto">Auto</option><option value="log">Log</option><option value="none">None</option></select></div>
-                              <div class="field"><label class="label" for="ensemble-failure-policy">Model failure policy</label><select id="ensemble-failure-policy" name="model_failure_policy"><option value="fail">Fail reproducibly</option><option value="renormalize">Renormalize remaining models</option></select></div>
+                              <div class="field"><label class="label" for="ensemble-failure-policy">Model failure policy</label><select id="ensemble-failure-policy" name="model_failure_policy"><option value="renormalize">Use available models · disclose exclusions</option><option value="fail">Require every selected model</option></select></div>
                               <div class="field" data-ensemble-source="workspace_dataset" hidden><label class="label" for="ensemble-frequency">Dataset interval</label><select id="ensemble-frequency" name="frequency"><option value="infer">Detect from timestamps</option><option value="1min">1 minute</option><option value="5min">5 minutes</option><option value="15min">15 minutes</option><option value="30min">30 minutes</option><option value="1h">1 hour</option><option value="1D" selected>Daily</option><option value="custom">Custom interval</option></select><input id="ensemble-frequency-custom" aria-label="Custom dataset interval" placeholder="For example: 2h" maxlength="30" hidden disabled /><span class="small muted">Market intervals come from the selected data source.</span></div>
                             </div>
                           <div class="ensemble-preset-row">

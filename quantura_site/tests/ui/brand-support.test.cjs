@@ -7,11 +7,13 @@ const root = path.resolve(__dirname, '../..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
-test('homepage uses supplied responsive brand assets, removes dock and labels mobile navigation', () => {
+test('homepage has a concise forecast preview and accessible on-demand video', () => {
   const html = read('pages/index.html'), app = read('public/app.js');
   assert.doesNotMatch(html, /class="home-bottom-nav|id="home-bottom-nav|data-unsplash-gallery/);
-  assert.match(html, /quantura-product-concept-640\.webp/);
-  assert.match(html, /example values, not live market data/);
+  assert.match(html, /forecast-preview-title/);
+  assert.match(html, /quantura-intro\.mp4/);
+  assert.match(html, /<track[^>]+kind="captions"/);
+  assert.match(html, /Illustration/);
   assert.match(app, /<span>Terminal<\/span>/);
   assert.match(app, /<span>Shop<\/span>/);
   assert.match(app, /headerAuth\.innerHTML = accountAuthed[\s\S]{0,160}<span>Profile<\/span>[\s\S]{0,100}<span>Sign in<\/span>/);

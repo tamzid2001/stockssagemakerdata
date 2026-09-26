@@ -1,346 +1,204 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Quantura | Intelligence for Serious Investors</title>
-    <link rel="stylesheet" href="styles.css" />
-    <script defer src="app.js"></script>
+    <meta name="color-scheme" content="light dark" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quantura | Explore the market. See the possibilities.</title>
+        <meta name="description" content="Forecast stocks and prediction markets, explore probability ranges, and keep your research in one place." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="quantura, market intelligence, stock forecasting, historical market data, screener, research workflow, institutional analytics" />
+    <link rel="canonical" href="https://quantura.studio/" />
+        <meta property="og:title" content="Quantura | Explore the market. See the possibilities." />
+        <meta property="og:description" content="Search markets, prepare data, generate probability forecasts, screen opportunities, and deliver research through one coherent platform." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/" />
+        <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quantura | Explore the market. See the possibilities." />
+    <meta name="twitter:description" content="Cross-asset forecasts, prediction-market datasets, screeners, backtests, APIs, and collaborative research." />
+    <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
+    <meta name="twitter:url" content="https://quantura.studio/" />
+    <meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260909a" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260909a" />
+<link rel="shortcut icon" href="/favicon.ico?v=20260909a" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
+<meta name="apple-mobile-web-app-title" content="Quantura" />
+<link rel="manifest" href="/site.webmanifest?v=20260909a" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <script src="/pwa-launch.js?v=20260926a"></script>
+    <script src="/theme-init.js?v=20260926a"></script>
+    <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
+    <link rel="stylesheet" href="/styles.css?v=20260926a" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
+	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore-compat.js"></script>
+	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-functions-compat.js"></script>
+	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-storage-compat.js"></script>
+	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
+	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
+	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+	    <script defer src="/app.js?v=20260926a"></script>
+    <script defer src="/forecasts.js?v=20260908a"></script>
+
+    <link rel="stylesheet" href="/screener-buy-preview.css" />
+    <script defer src="/screener-buy-preview.js?v=20260923-neutral"></script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Quantura",
+        "url": "https://quantura.studio/",
+        "logo": "https://quantura.studio/assets/quantura-logo.svg",
+        "sameAs": []
+      }
+    </script>
+
+
+
+    <script>
+      window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
+      window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
+    </script>
   </head>
-  <body>
-    <header class="site-header">
-      <nav class="nav">
-        <div class="logo">Quantura</div>
-        <div class="nav-links">
-          <a href="#product">Product</a>
-          <a href="#upsell">Upsells</a>
-          <a href="#use-cases">Use Cases</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#contact">Contact</a>
-        </div>
+  <body class="home-page">
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Forecast</a><a href="/screener">Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
-          <button class="ghost" data-modal-target="login-modal">Log in</button>
-          <button class="primary" data-modal-target="signup-modal">Sign up</button>
+          <span id="header-user-status" class="pill">Logged Out</span>
+          <button class="cta secondary" id="header-auth" type="button" data-analytics="nav_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+          <a class="cta" href="/forecasting" data-analytics="nav_cta"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open Forecast</span></a>
         </div>
-      </nav>
-      <section class="hero">
-        <div class="hero-content">
-          <p class="eyebrow">Weekly edge. Daily confidence.</p>
-          <h1>
-            Quantura turns noisy markets into a clear, weekly list of
-            mispriced growth and value stocks.
-          </h1>
-          <p class="subhead">
-            Join the free newsletter and unlock model-driven insights, options
-            context, and thesis-ready briefs built for decision makers.
-          </p>
-          <div class="cta-row">
-            <button class="primary" data-modal-target="signup-modal">
-              Get the free weekly newsletter
-            </button>
-            <button class="secondary" data-scroll-target="#pricing">
-              See premium access
-            </button>
-          </div>
-          <div class="trust-row">
-            <span>Trusted by growth investors</span>
-            <span>Actionable, not overwhelming</span>
-            <span>Signals + headlines in one place</span>
-          </div>
-        </div>
-        <div class="hero-card">
-          <h3>This week's snapshot</h3>
-          <ul>
-            <li>5–10 mispriced growth/value names</li>
-            <li>1–2 bullet thesis per stock</li>
-            <li>Options-implied probabilities + catalysts</li>
-            <li>Soft CTA to full model rankings</li>
-          </ul>
-          <div class="hero-card-footer">
-            <span>Next drop: Monday 9 AM ET</span>
-            <button class="primary" data-modal-target="signup-modal">
-              Reserve your seat
-            </button>
-          </div>
-        </div>
-      </section>
+      </div>
     </header>
 
-    <main>
-      <section id="product" class="section">
-        <div class="section-header">
-          <h2>🧱 Core Free Product (Top of Funnel)</h2>
-          <p>
-            We use the AIDA framework to move investors from curiosity to
-            conviction—without the hype.
-          </p>
+        <main id="main-content">
+      <section class="q-home-hero container" aria-labelledby="home-intelligence-title">
+        <div class="q-home-copy">
+          <p class="eyebrow">A clearer view of what comes next</p>
+          <h1 id="home-intelligence-title">Explore the market.<br /><span>See the possibilities.</span></h1>
+          <p>Forecast stocks and prediction markets with probability ranges, real historical data, and multiple models.</p>
+          <div class="hero-actions"><a class="cta" href="/forecasting">Start a forecast <i class="iconoir-arrow-right" aria-hidden="true"></i></a><a class="cta secondary" href="/screener">Explore the screener</a></div>
+          <p class="small muted">Free to explore. Sign in to save your work.</p>
         </div>
-        <div class="grid two">
-          <div class="card">
-            <h3>Attention</h3>
-            <p>
-              Free weekly newsletter: “Top 5–10 mispriced growth/value stocks
-              this week.”
-            </p>
-          </div>
-          <div class="card">
-            <h3>Interest</h3>
-            <p>
-              Light commentary and one chart or metric per stock for a quick
-              read.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Desire</h3>
-            <p>
-              Options context, implied probabilities, and catalyst calendars
-              show why each ticker matters right now.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Action</h3>
-            <p>Soft CTA: “Full model & rankings inside.”</p>
-          </div>
+        <div class="q-home-preview" aria-label="Illustrative probability forecast">
+          <div class="q-preview-heading"><span>Forecast</span><span class="task-chip">Illustration</span></div>
+          <svg viewBox="0 0 560 300" role="img" aria-labelledby="forecast-preview-title forecast-preview-desc">
+            <title id="forecast-preview-title">A range of possible outcomes</title><desc id="forecast-preview-desc">Historical observations connect to a median forecast with widening lower and upper probability bounds.</desc>
+            <g class="q-preview-grid"><path d="M20 65H540M20 135H540M20 205H540M20 275H540" /></g>
+            <path class="q-preview-band" d="M235 145L285 110L335 95L385 65L435 45L530 22L530 265L435 220L385 200L335 180L285 166Z" />
+            <path class="q-preview-observed" d="M20 215L50 194L80 204L110 170L140 185L170 144L200 153L235 145" />
+            <path class="q-preview-median" d="M235 145L285 138L335 130L385 121L435 113L530 103" />
+            <path class="q-preview-cutoff" d="M235 30V275" />
+            <g class="q-preview-label"><text x="20" y="296">Observed</text><text x="270" y="296">Forecast range</text><text x="475" y="94">P50</text></g>
+          </svg>
+          <div class="q-preview-footer"><span><i class="q-legend-dot"></i> Median + uncertainty</span><a href="/forecasting">Try your own market →</a></div>
         </div>
       </section>
-
-      <section id="upsell" class="section accent">
-        <div class="section-header">
-          <h2>Upsell Ideas You Won't See Elsewhere</h2>
-          <p>
-            Fresh, niche offers designed for serious investors who want targeted
-            clarity.
-          </p>
-        </div>
-        <div class="grid three">
-          <div class="card">
-            <h3>One-Time Price Forecast</h3>
-            <p>
-              A fixed-fee, single-ticker forecast that blends current price
-              action with options-implied probabilities and a 30-day scenario
-              map.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Earnings Shock Radar</h3>
-            <p>
-              A pre-earnings alert pack: implied move distribution, sentiment
-              divergence, and a post-earnings drift score.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Liquidation Watchlist</h3>
-            <p>
-              A brief on crowded trades at risk of unwind—pairing short interest,
-              options skew, and flow reversals.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Sector Rotation Signal</h3>
-            <p>
-              Quarterly heatmap with macro triggers and a “next two weeks”
-              rotation playbook.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Conviction Tracker</h3>
-            <p>
-              Monitor your top ideas with thesis checkpoints, price milestones,
-              and alerts when the story breaks.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Opportunity Reset</h3>
-            <p>
-              A one-time 60-minute strategy session: re-rank your watchlist
-              against the Quantura model and set next steps.
-            </p>
-          </div>
-        </div>
+      <section class="q-home-features container" aria-label="Your research workflow">
+        <article><i class="iconoir-search" aria-hidden="true"></i><h2>Find a market</h2><p>Search a ticker or paste a Kalshi or Polymarket US link.</p></article>
+        <article><i class="iconoir-graph-up" aria-hidden="true"></i><h2>Explore the range</h2><p>Compare the median with lower and upper probability forecasts.</p></article>
+        <article><i class="iconoir-download" aria-hidden="true"></i><h2>Keep your research</h2><p>Save forecasts to your profile or download data for your next step.</p></article>
       </section>
-
-      <section id="use-cases" class="section">
-        <div class="section-header">
-          <h2>Use Cases</h2>
-          <p>Quantura fits into how real investors work.</p>
-        </div>
-        <div class="grid three">
-          <div class="card">
-            <h3>Weekly Portfolio Review</h3>
-            <p>
-              Replace endless scanning with a short list of actionable ideas.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Pre-Earnings Prep</h3>
-            <p>
-              See implied odds, catalyst risk, and expected reaction zones.
-            </p>
-          </div>
-          <div class="card">
-            <h3>Idea Vetting</h3>
-            <p>
-              Cross-check your thesis with fundamentals, flows, and sentiment.
-            </p>
-          </div>
-        </div>
+      <section id="home-buy-signals" class="section section-compact container" aria-labelledby="home-buy-title">
+        <div class="home-buy-heading"><h2 id="home-buy-title">Latest stock forecasts</h2><a class="cta secondary small" href="/screener">Open screener</a></div>
+        <p class="small muted" data-buy-status role="status">Loading the latest forecasts…</p><div class="home-buy-cards" data-buy-cards></div>
+        <p class="small muted">Model estimates for research; results are uncertain.</p>
       </section>
-
-      <section id="pricing" class="section accent">
-        <div class="section-header">
-          <h2>Pricing</h2>
-          <p>Simple plans with one-time upgrades when you need them.</p>
-        </div>
-        <div class="grid two">
-          <div class="card pricing">
-            <h3>Free Newsletter</h3>
-            <p class="price">$0</p>
-            <ul>
-              <li>Weekly top 5–10 mispriced ideas</li>
-              <li>1–2 bullets and a key chart per stock</li>
-              <li>Soft CTA to full model access</li>
-            </ul>
-            <button class="primary" data-modal-target="signup-modal">
-              Join free
-            </button>
-          </div>
-          <div class="card pricing highlight">
-            <h3>Quantura Pro</h3>
-            <p class="price">$49/mo</p>
-            <ul>
-              <li>Full model rankings + sector filters</li>
-              <li>Options-implied probabilities</li>
-              <li>Headline summaries + catalyst tracking</li>
-              <li>Slack alerts + CSV exports</li>
-            </ul>
-            <button class="primary" data-checkout="pro">
-              Start Pro (Stripe)
-            </button>
-          </div>
-        </div>
-        <div class="card wide">
-          <h3>One-Time Forecast — $199</h3>
-          <p>
-            A deep dive into one ticker: current options pricing, implied move
-            probabilities, and a 30-day forecast map.
-          </p>
-          <button class="secondary" data-checkout="forecast">
-            Buy one-time forecast
-          </button>
-        </div>
+      <section class="q-home-video-section container" aria-labelledby="home-video-title">
+        <div><p class="eyebrow">Meet Quantura</p><h2 id="home-video-title">From a question to a forecast.</h2><p>A short tour of market search, probability ranges, and today's games.</p><a class="cta secondary" href="/forecasting">Open Forecast</a></div>
+        <figure><video class="hero-video" data-lazy-video="/assets/quantura-intro.mp4" poster="/assets/quantura-intro-poster.jpg" preload="none" controls playsinline aria-label="Quantura product tour"><track kind="captions" src="/assets/quantura-intro.vtt" srclang="en" label="English" default /></video><figcaption class="small muted">24-second product tour · no audio required.</figcaption></figure>
       </section>
-
-      <section class="section">
-        <div class="section-header">
-          <h2>Account Settings & Upsells</h2>
-          <p>Preview the personalized settings available after login.</p>
-        </div>
-        <div class="card settings">
-          <div class="setting">
-            <div>
-              <h4>Promotional Emails</h4>
-              <p>Receive offers and early access to premium research.</p>
-            </div>
-            <label class="toggle">
-              <input type="checkbox" id="promo-toggle" checked />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="setting">
-            <div>
-              <h4>Upsell Alerts</h4>
-              <p>Notify me about one-time forecasts and new signal packs.</p>
-            </div>
-            <label class="toggle">
-              <input type="checkbox" id="upsell-toggle" checked />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="setting">
-            <div>
-              <h4>Weekly Digest Reminder</h4>
-              <p>Get a reminder before the newsletter drops.</p>
-            </div>
-            <label class="toggle">
-              <input type="checkbox" id="digest-toggle" />
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <section id="contact" class="section">
-        <div class="section-header">
-          <h2>Contact Us</h2>
-          <p>Let’s talk about your investment workflow.</p>
-        </div>
-        <div class="grid two">
-          <div class="card">
-            <h3>Support</h3>
-            <p>Email us at <a href="mailto:support@quantura.ai">support@quantura.ai</a>.</p>
-            <p>Response time: within 24 hours on business days.</p>
-          </div>
-          <div class="card">
-            <h3>Talk to Sales</h3>
-            <p>
-              Tell us how you screen and what you need. We’ll tailor the model
-              view to your process.
-            </p>
-            <button class="secondary" data-modal-target="signup-modal">
-              Book a call
-            </button>
-          </div>
-        </div>
-      </section>
+      <section class="q-home-games container" aria-labelledby="home-games-title"><div><p class="eyebrow">Prediction markets</p><h2 id="home-games-title">Today's games, in one place.</h2><p>Browse Kalshi and Polymarket US games and open their latest pregame forecast when you need it.</p></div><a class="cta" href="/screener#today-games">View today's games</a></section>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-links">
-        <a href="terms.html">Terms & Conditions</a>
-        <a href="privacy.html">Privacy Policy</a>
-        <a href="mailto:support@quantura.ai">support@quantura.ai</a>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <div class="footer-social" aria-label="Quantura social links">
+            <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_linkedin" aria-label="LinkedIn (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0.5 8.5H4.5V23H0.5V8.5zM8.5 8.5H12.3V10.4h.1c.5-1 1.9-2.1 3.9-2.1 4.2 0 5 2.8 5 6.5V23h-4v-6.7c0-1.6 0-3.7-2.2-3.7-2.3 0-2.6 1.8-2.6 3.6V23h-4V8.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_reddit" aria-label="Reddit (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.9 10.7c.1-.4.1-.8 0-1.2-.3-1-1.4-1.6-2.5-1.3-.6.2-1 .6-1.2 1.1-1.5-1-3.4-1.7-5.5-1.8l1-4.6 3.2.7c.1.8.8 1.4 1.7 1.4.9 0 1.7-.8 1.7-1.7S19.5 2 18.6 2c-.6 0-1.2.4-1.5.9l-3.7-.8c-.3-.1-.6.1-.7.4l-1.2 5.2c-2.2.1-4.2.8-5.7 1.8-.2-.5-.6-.9-1.2-1.1-1-.3-2.1.3-2.5 1.3-.1.4-.1.8 0 1.2.1.6.4 1 .9 1.3-.1.4-.1.9-.1 1.3 0 3.6 4.1 6.5 9.1 6.5s9.1-2.9 9.1-6.5c0-.4 0-.9-.1-1.3.5-.3.8-.8.9-1.3zM7.9 12.8c0-.8.7-1.5 1.5-1.5s1.5.7 1.5 1.5-.7 1.5-1.5 1.5-1.5-.6-1.5-1.5zm8.5 4c-.9.9-2.6 1.3-4.4 1.3s-3.5-.4-4.4-1.3c-.2-.2-.2-.5 0-.7.2-.2.5-.2.7 0 .6.6 2 1 3.7 1 1.7 0 3.1-.4 3.7-1 .2-.2.5-.2.7 0 .2.2.2.5 0 .7zm-1.8-2.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5z"/></svg>
+            </a>
+            <a class="social-link" href="#" data-analytics="social_github" aria-label="GitHub (coming soon)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.75 5.63.75 12c0 5.1 3.29 9.41 7.86 10.94.58.11.79-.26.79-.57v-2.1c-3.2.71-3.88-1.57-3.88-1.57-.53-1.37-1.29-1.74-1.29-1.74-1.05-.74.08-.73.08-.73 1.16.08 1.77 1.23 1.77 1.23 1.03 1.8 2.7 1.28 3.36.98.1-.77.4-1.28.72-1.58-2.55-.3-5.23-1.31-5.23-5.84 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.53.11-3.2 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.67.23 2.9.11 3.2.74.83 1.19 1.89 1.19 3.18 0 4.54-2.69 5.54-5.25 5.83.41.37.77 1.1.77 2.22v3.29c0 .31.21.68.8.57A11.3 11.3 0 0 0 23.25 12C23.25 5.63 18.27.5 12 .5z"/></svg>
+            </a>
+          </div>
+          <a
+            class="aikido-audit-badge"
+            href="https://app.aikido.dev/audit-report/external/czmnRPYgy05fbnV1LMZxw5ew/request"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="View Quantura's public Aikido security audit report"
+            data-analytics="security_aikido_audit"
+          >
+            <img
+              src="https://app.aikido.dev/assets/badges/full-light-theme.svg"
+              alt="Aikido Security Audit Report"
+              height="40"
+              loading="lazy"
+              decoding="async"
+            />
+          </a>
+        </div>
+        <div class="small">
+          <strong>Workspace</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/forecasting?panel=profile">Profile</a></div>
+          <div></div>
+          <div><a href="/contact">Contact</a></div>
+        </div>
+        <div class="small">
+          <strong>Legal</strong>
+          <div><a href="/terms">Terms and Conditions</a></div>
+          <div><a href="/privacy">Privacy Policy</a></div>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+          <details class="footer-terms" style="margin-top:10px;">
+            <summary>Terms summary (important)</summary>
+            <ul class="footer-terms-list">
+              <li>By using Quantura, you confirm you are at least 18 years old and authorized to act for your account or business.</li>
+              <li>Paid plans renew automatically until canceled before the next billing date. Refund and cancellation rules are listed in the full Terms.</li>
+              <li>Quantura provides software and data tooling, not brokerage, investment advisory, legal, or tax services.</li>
+              <li>Market data, forecast outputs, and AI-generated content may be delayed, incomplete, or inaccurate and must be independently verified.</li>
+              <li>Services are provided "as is" to the maximum extent permitted by law, with liability limitations and dispute resolution terms in the full Terms.</li>
+              <li>Where enforceable, disputes may be resolved through individual arbitration and class action waiver terms.</li>
+            </ul>
+          </details>
+          <p class="small legal-copy">
+            Financial disclaimer: nothing on Quantura is investment, tax, accounting, or legal advice. Trading and options involve substantial risk, including possible loss of principal.
+          </p>
+        </div>
       </div>
-      <p>© 2026 Quantura. All rights reserved.</p>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
     </footer>
 
-    <div class="modal" id="login-modal">
-      <div class="modal-content">
-        <button class="close" data-close>&times;</button>
-        <h3>Log in</h3>
-        <form>
-          <label>
-            Email
-            <input type="email" placeholder="you@company.com" required />
-          </label>
-          <label>
-            Password
-            <input type="password" placeholder="••••••••" required />
-          </label>
-          <button class="primary" type="submit">Log in</button>
-        </form>
-      </div>
-    </div>
-
-    <div class="modal" id="signup-modal">
-      <div class="modal-content">
-        <button class="close" data-close>&times;</button>
-        <h3>Create your account</h3>
-        <form>
-          <label>
-            Name
-            <input type="text" placeholder="Alex Morgan" required />
-          </label>
-          <label>
-            Email
-            <input type="email" placeholder="you@company.com" required />
-          </label>
-          <label>
-            Role
-            <input type="text" placeholder="Investor, PM, Analyst" />
-          </label>
-          <button class="primary" type="submit">Get access</button>
-        </form>
-      </div>
-    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>
 </html>

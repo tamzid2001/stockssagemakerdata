@@ -97,7 +97,8 @@ def test_p1_paper_and_hourly_screeners_share_models_but_isolate_books_and_provid
     assert hourly["jobs"]["screener"]["strategy"]["fail-fast"] is False
     assert hourly["jobs"]["screener"]["strategy"]["matrix"]["provider"]==["polymarket_us","kalshi"]
     assert "runner.temp" not in str(hourly["jobs"]["screener"]["env"])
-    assert "FIREBASE_SERVICE_ACCOUNT_JSON" not in text
+    assert "FIREBASE_SERVICE_ACCOUNT_JSON" in text  # Publishes public forecast outputs only.
+    assert "market_research.pregame_screener" in text
     assert "uses: ./.github/actions/research-artifact" in text
     for name in ["p1_worker.py","p1_oco.py","hourly_screener.py"]:
         source=(ROOT / "market_research" / name).read_text()

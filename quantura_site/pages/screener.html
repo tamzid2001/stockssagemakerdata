@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Q Screener | Stocks &amp; Kalshi Perpetuals</title>
@@ -17,7 +18,12 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260909a" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
     <link rel="manifest" href="/site.webmanifest?v=20260909a" />
-    <script src="/theme-init.js?v=20260908a"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <script src="/pwa-launch.js?v=20260926a"></script>
+    <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
     <link rel="stylesheet" href="/styles.css?v=20260824s1" />
     <link rel="stylesheet" href="/screener.css?v=20260923-archive" />
@@ -31,7 +37,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260923-neutral"></script>
+    <script defer src="/app.js?v=20260926a"></script>
+    <script defer src="/game-forecasts.js?v=20260926a"></script>
     <script defer src="/screener.js?v=20260923-neutral"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -61,13 +68,20 @@
       </aside>
 
       <div class="qs-main">
+        <section id="today-games" class="game-screener" aria-labelledby="today-games-title">
+          <div class="game-section-heading"><div><h2 id="today-games-title">Today’s games</h2><p>Kalshi and Polymarket US · Hourly pregame forecasts through four hours after kickoff.</p></div><button type="button" class="cta secondary" data-game-refresh>Refresh games</button></div>
+          <p class="small">Updates stop on the hour a game starts. The final pregame forecast stays available today.</p>
+          <p data-game-status role="status">Loading today’s game forecasts…</p>
+          <div data-game-cards class="game-card-grid"></div>
+        </section>
+        <dialog id="game-forecast-dialog" class="game-dialog" aria-labelledby="game-forecast-title"><div class="game-section-heading"><h2 id="game-forecast-title">Game forecast</h2><button type="button" class="cta secondary" data-game-close autofocus>Close</button></div><div data-game-detail></div></dialog>
+
         <section class="qs-hero" aria-labelledby="screener-title">
           <div>
             <div class="qs-eyebrow"><span class="qs-live-dot" aria-hidden="true"></span> Stocks &amp; perpetual contracts</div>
             <h1 id="screener-title">Q Screener</h1>
             <p>
-              Compare stock closes with weekly forecast quantiles, or browse Kalshi perpetual prices and open an on-demand forecast.
-              Stock comparisons use the latest completed daily close; no intraday price tracking. Perpetual reference prices and trade history use the underlying spot scale.
+              Compare stocks with weekly forecast ranges, explore perpetual contracts, or view today’s game forecasts.
             </p>
           </div>
           <div class="qs-hero-actions">

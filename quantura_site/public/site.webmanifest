@@ -1,7 +1,7 @@
 {
   "name": "Quantura",
   "short_name": "Quantura",
-  "description": "Quantitative forecasts, market data, and research workspaces.",
+  "description": "Market forecasts, probability ranges, and your research workspace.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07101f",
@@ -25,5 +25,6 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "/"
 }

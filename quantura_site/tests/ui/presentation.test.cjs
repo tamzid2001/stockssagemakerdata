@@ -205,6 +205,7 @@ test('live moneylines browse without a search term and select the exact side for
 test('primary form builds prediction-market minute and single-model requests without treating contracts as tickers', () => {
   const d=dom(page('forecasting.html'));const w=d.window;
   w.document.getElementById('ensemble-model-list').innerHTML='<article data-ensemble-model="prophet"><input name="ensemble_model_enabled" type="checkbox" checked><input data-model-weight="prophet" value="1"></article>';
+  w.eval(source('forecast-controls.js'));
   w.QuanturaMarketSelection={source:'kalshi',symbol:'KXGAME-TEAM',contract_id:'KXGAME-TEAM:yes'};
   w.document.getElementById('ensemble-source-type').value='prediction_market';
   w.eval(`const ui={ensembleForecastForm:document.getElementById('ensemble-forecast-form'),ensembleModelList:document.getElementById('ensemble-model-list')};
@@ -382,10 +383,10 @@ test('request navigation and opposite-side forecast are explicit actions; Foundr
   d.window.close();
 });
 
-test('Quantura Forecast is the expanded primary form with exactly one submission action', () => {
+test('Forecast is the expanded primary form with exactly one submission action', () => {
   const d=dom(page('forecasting.html')); const document=d.window.document;
   const panel=document.querySelector('[data-panel="forecast"]');
-  assert.equal(panel.querySelector('h2').textContent,'Quantura Forecast');
+  assert.equal(panel.querySelector('h1').textContent,'Forecast');
   assert.equal(panel.querySelector('#ensemble-forecast-settings').tagName,'SECTION');
   assert.equal(panel.querySelectorAll('#ensemble-forecast-form button[type="submit"]').length,1);
   assert.equal(panel.querySelector('#ensemble-forecast-form button[type="submit"]').textContent.trim(),'Run forecast');
@@ -476,4 +477,22 @@ test('primary forecast loads free guest capabilities without automatically runni
   signedIn=true;await w.refreshTestForecast();assert.equal(capabilities,2);assert.equal(presets,1);assert.equal(w.ui.ensembleTicker.value,'TEST');
   document.querySelector('[data-panel="forecast"]').classList.add('hidden');await w.refreshTestForecast();assert.equal(capabilities,2);
   assert.doesNotMatch(implementation,/method: "POST"|pollEnsembleForecast/);d.window.close();
+});
+
+test('Kalshi selections with legacy provider or nested contract retain provider identity', () => {
+  const d=dom();d.window.eval(source('forecast-controls.js'));const f=d.window.QuanturaForecastControls.predictionMarketSource;
+  for(const selection of [{provider:'kalshi',symbol:'KXGAME-A',contract_id:'KXGAME-A:yes'}, {contract:{source:'kalshi',providerSymbol:'KXGAME-A',contractId:'KXGAME-A:yes'}}]) {
+    const request=f(selection);assert.equal(request.provider,'kalshi');assert.equal(request.symbol,'KXGAME-A');assert.equal(request.contract_id,'KXGAME-A:yes');
+  }
+  assert.throws(()=>f({symbol:'AAPL'}),/Choose a Kalshi or Polymarket outcome/);d.window.close();
+});
+
+test('game detail is fetched on demand and market labels are rendered as text', async () => {
+  const d=dom(page('screener.html')),w=d.window,calls=[];
+  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+  const item={id:'a'.repeat(32),provider:'kalshi',event_title:'<img src=x onerror=alert(1)>',outcome:'A',game_start:'2026-09-26T23:30Z',forecast_end:'2026-09-27T03:30Z',generated_at:'2026-09-26T21:10Z',history_count:180,models:['prophet','chronos'],status:'updating_pregame',predictions:[{timestamp:'2026-09-27T03:30Z',quantiles:{'0.1':.2,'0.5':.4,'0.9':.8}}]};
+  w.fetch=async url=>{calls.push(url);return {ok:true,json:async()=>url.endsWith(item.id)?{item}:{date:'2026-09-26',items:[item],coverage:[]}};};
+  w.eval(source('game-forecasts.js'));await tick();assert.equal(calls.length,1);assert.equal(w.document.querySelector('[data-game-cards] img'),null);
+  w.document.querySelector('[data-game-cards] button').click();await tick();assert.equal(calls.length,2);assert.equal(w.document.querySelector('dialog').open,true);assert.match(w.document.querySelector('dialog').textContent,/40.0%/);
+  w.document.querySelector('[data-game-close]').click();assert.equal(w.document.querySelector('dialog').open,false);w.close();
 });

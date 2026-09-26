@@ -21,8 +21,11 @@ def forecast_window(
     horizon: int,
     models: tuple[str, ...] | None = None,
     quantiles: tuple[float, ...] = QUANTILES,
-    *, single_point_research: bool = False, failure_policy: str | None = None,
+    *, single_point_research: bool = False, failure_policy: str | None = None, frequency: str = "1min",
 ) -> dict:
+    if frequency not in {"1min", "1h"} or (single_point_research and frequency != "1min"):
+        raise ValueError("INVALID_RESEARCH_FREQUENCY")
+    interval_seconds = 3600 if frequency == "1h" else 60
     models = default_research_models() if models is None else models
     if failure_policy not in (None, 'fail', 'renormalize'):
         raise ValueError('INVALID_RESEARCH_FAILURE_POLICY')
@@ -41,7 +44,7 @@ def forecast_window(
     if any(b.timestamp <= a.timestamp for a, b in zip(window, window[1:])):
         raise ValueError("NON_CHRONOLOGICAL_CONTEXT")
     quality = history_quality(window)
-    gaps = sum(b.timestamp - a.timestamp > 60 for a, b in zip(window, window[1:]))
+    gaps = sum(b.timestamp - a.timestamp > interval_seconds for a, b in zip(window, window[1:]))
     source = [
         {"timestamp": iso(q.timestamp), "target": q.ask, "observed": q.observed}
         for q in window
@@ -62,7 +65,7 @@ def forecast_window(
     configuration = {
         "prediction_length": horizon,
         "horizon_mode": "frequency_periods",
-        "frequency": "1min",
+        "frequency": frequency,
         "calendar": "NONE",
         "transform": "none",
         "context_length": 500,
@@ -76,7 +79,7 @@ def forecast_window(
     result = execute_job(
         {
             "request": configuration,
-            "input": {"rows": logits, "frequency": "1min"},
+            "input": {"rows": logits, "frequency": frequency},
             "runtime_mode": "production",
         },
         minimum_history_rows=1 if single_point_research else 2,
@@ -140,7 +143,7 @@ def forecast_window(
         "imputation": "none_observed_values_only",
         "history_gap_count": gaps,
         "history_elapsed_minutes": (window[-1].timestamp - window[0].timestamp) / 60,
-        "history_requested_minutes": 500,
+        "history_requested_minutes": 500 * interval_seconds / 60,
         "source_hash": digest(source),
         "seed": seed,
         "input_snapshot": source,
@@ -154,10 +157,10 @@ def forecast_window(
         "models": result.get("models"),
         "warnings": result.get("warnings", [])
         + (["LOW_INFORMATION_HISTORY: genuine quotes are unchanged across the window or a long recent stretch. Forecast allowed without adding variation; predictive reliability is unvalidated."] if quality['low_information'] else [])
-        + (["IRREGULAR_HISTORY: missing minutes retained; foundation-model observation steps are not equal elapsed time. Reliability requires validation."] if gaps else [])
+        + (["IRREGULAR_HISTORY: missing intervals retained; foundation-model observation steps are not equal elapsed time. Reliability requires validation."] if gaps else [])
         + (
             [
-                f"SHORT_HISTORY: only {len(window)} genuine minute observations; forecast reliability is unvalidated."
+                f"SHORT_HISTORY: only {len(window)} genuine observations; forecast reliability is unvalidated."
             ]
             if len(window) < 500
             else []

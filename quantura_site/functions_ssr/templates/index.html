@@ -1,22 +1,23 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura | Quantitative Forecasts, Data APIs &amp; Research</title>
-        <meta name="description" content="Quantura connects cross-asset data, probabilistic forecasts, screeners, backtests, APIs, and collaborative research workspaces." />
+    <title>Quantura | Explore the market. See the possibilities.</title>
+        <meta name="description" content="Forecast stocks and prediction markets, explore probability ranges, and keep your research in one place." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="quantura, market intelligence, stock forecasting, historical market data, screener, research workflow, institutional analytics" />
     <link rel="canonical" href="https://quantura.studio/" />
-        <meta property="og:title" content="Quantura | Quantitative Forecasts, Data APIs &amp; Research" />
-        <meta property="og:description" content="Search markets, prepare data, generate calibrated forecasts, screen opportunities, and deliver research through one coherent platform." />
+        <meta property="og:title" content="Quantura | Explore the market. See the possibilities." />
+        <meta property="og:description" content="Search markets, prepare data, generate probability forecasts, screen opportunities, and deliver research through one coherent platform." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/" />
         <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura | Quantitative Forecasts, Data APIs &amp; Research" />
+    <meta name="twitter:title" content="Quantura | Explore the market. See the possibilities." />
     <meta name="twitter:description" content="Cross-asset forecasts, prediction-market datasets, screeners, backtests, APIs, and collaborative research." />
     <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/" />
@@ -30,9 +31,14 @@
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
 <meta name="apple-mobile-web-app-title" content="Quantura" />
 <link rel="manifest" href="/site.webmanifest?v=20260909a" />
-    <script src="/theme-init.js?v=20260908a"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <script src="/pwa-launch.js?v=20260926a"></script>
+    <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260405a" />
+    <link rel="stylesheet" href="/styles.css?v=20260926a" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -43,9 +49,9 @@
 	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
 	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-	    <script defer src="/app.js?v=20260923-neutral"></script>
+	    <script defer src="/app.js?v=20260926a"></script>
     <script defer src="/forecasts.js?v=20260908a"></script>
-    <script defer src="/marketing-carousel.js"></script>
+
     <link rel="stylesheet" href="/screener-buy-preview.css" />
     <script defer src="/screener-buy-preview.js?v=20260923-neutral"></script>
 
@@ -60,78 +66,7 @@
       }
     </script>
 
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        "mainEntity": [
-          {
-            "@type": "Question",
-            "name": "What is Quantura?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Quantura is a market intelligence platform that combines forecasting, technical context, news, options data, and workflow tools so teams can make faster, better-documented decisions."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Who is Quantura built for?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Quantura is built for active investors, research teams, founders, and operators who need structured, repeatable decision workflows rather than one-off chart snapshots."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Is Quantura free?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Quantura is free with fair-use limits. Guests can forecast and download results. Create an account to save requests and organize private workspaces. Provider availability and licensing still apply; AWS infrastructure is billed separately by AWS."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Which forecasting methods are included?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Quantura supports Q Forecast probabilistic workflows, SageMaker Canvas options, and an AWS SageMaker Canvas baseline so users can compare approaches and store runs."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Can I save and reload forecasts and screener runs?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Yes. Saved forecasts and screener runs are stored privately in your workspace and can be reloaded, shared with collaborators, and managed later."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Can I download historical market data?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Yes. The Historical Data workflow loads Alpaca equity bars, previews returned fields, distinguishes trading sessions, and generates chronologically ordered CSV files."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Does Quantura place trades for me?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "No. Quantura provides analytics and decision support only and is not a broker or investment adviser."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "How is account data protected?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Quantura uses authenticated access, role-based controls, encrypted transport, and workspace-level permissions to protect user data."
-            }
-          }
-        ]
-      }
-    </script>
+
 
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
@@ -142,524 +77,55 @@
     <header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/screener">Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Forecast</a><a href="/screener">Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
         <div class="nav-actions">
           <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary" id="header-auth" type="button" data-analytics="nav_signin"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
-          <a class="cta" href="/forecasting" data-analytics="nav_cta"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
+          <a class="cta" href="/forecasting" data-analytics="nav_cta"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open Forecast</span></a>
         </div>
       </div>
     </header>
 
-    <main>
-	      <section class="hero home-intelligence-hero" aria-labelledby="home-intelligence-title">
-	        <div class="container hero-grid">
-	          <div class="hero-copy">
-	            <span class="eyebrow">Markets. Forecasts. Opportunities.</span>
-	            <h1 id="home-intelligence-title">See the market.<br /><span>Understand what’s next.</span></h1>
-	            <p>
-	              Probabilistic forecasts, cross-asset research, and connected data.
-                  Explore the range of possibilities—not just a single price target.
-	            </p>
-	            <div class="hero-actions">
-	              <a class="cta" href="/forecasting" data-analytics="hero_cta_primary"><span>Start researching</span><i class="iconoir-arrow-right" aria-hidden="true"></i></a>
-
-	            </div>
-                <ul class="hero-proof" aria-label="Research capabilities">
-                  <li><strong>Quantiles</strong><span>Make uncertainty visible</span></li>
-                  <li><strong>Connected data</strong><span>Sources with provenance</span></li>
-                  <li><strong>Workspace API</strong><span>Research you can reuse</span></li>
-                </ul>
-	          </div>
-              <figure class="hero-product-visual">
-                <a href="/forecasting" aria-label="Explore Quantura Forecast">
-                  <img src="/assets/quantura-product-concept.webp?v=20260909a" srcset="/assets/quantura-product-concept-640.webp?v=20260909a 640w, /assets/quantura-product-concept.webp?v=20260909a 1200w" sizes="(max-width: 760px) calc(100vw - 32px), 52vw" width="1200" height="675" alt="Quantura brand illustration: a probabilistic research interface on a laptop. Example values, not live forecasts." fetchpriority="high" decoding="async" />
-                </a>
-                <figcaption>Product concept illustration · example values, not live market data.</figcaption>
-              </figure>
+        <main id="main-content">
+      <section class="q-home-hero container" aria-labelledby="home-intelligence-title">
+        <div class="q-home-copy">
+          <p class="eyebrow">A clearer view of what comes next</p>
+          <h1 id="home-intelligence-title">Explore the market.<br /><span>See the possibilities.</span></h1>
+          <p>Forecast stocks and prediction markets with probability ranges, real historical data, and multiple models.</p>
+          <div class="hero-actions"><a class="cta" href="/forecasting">Start a forecast <i class="iconoir-arrow-right" aria-hidden="true"></i></a><a class="cta secondary" href="/screener">Explore the screener</a></div>
+          <p class="small muted">Free to explore. Sign in to save your work.</p>
         </div>
-		      </section>
-
+        <div class="q-home-preview" aria-label="Illustrative probability forecast">
+          <div class="q-preview-heading"><span>Forecast</span><span class="task-chip">Illustration</span></div>
+          <svg viewBox="0 0 560 300" role="img" aria-labelledby="forecast-preview-title forecast-preview-desc">
+            <title id="forecast-preview-title">A range of possible outcomes</title><desc id="forecast-preview-desc">Historical observations connect to a median forecast with widening lower and upper probability bounds.</desc>
+            <g class="q-preview-grid"><path d="M20 65H540M20 135H540M20 205H540M20 275H540" /></g>
+            <path class="q-preview-band" d="M235 145L285 110L335 95L385 65L435 45L530 22L530 265L435 220L385 200L335 180L285 166Z" />
+            <path class="q-preview-observed" d="M20 215L50 194L80 204L110 170L140 185L170 144L200 153L235 145" />
+            <path class="q-preview-median" d="M235 145L285 138L335 130L385 121L435 113L530 103" />
+            <path class="q-preview-cutoff" d="M235 30V275" />
+            <g class="q-preview-label"><text x="20" y="296">Observed</text><text x="270" y="296">Forecast range</text><text x="475" y="94">P50</text></g>
+          </svg>
+          <div class="q-preview-footer"><span><i class="q-legend-dot"></i> Median + uncertainty</span><a href="/forecasting">Try your own market →</a></div>
+        </div>
+      </section>
+      <section class="q-home-features container" aria-label="Your research workflow">
+        <article><i class="iconoir-search" aria-hidden="true"></i><h2>Find a market</h2><p>Search a ticker or paste a Kalshi or Polymarket US link.</p></article>
+        <article><i class="iconoir-graph-up" aria-hidden="true"></i><h2>Explore the range</h2><p>Compare the median with lower and upper probability forecasts.</p></article>
+        <article><i class="iconoir-download" aria-hidden="true"></i><h2>Keep your research</h2><p>Save forecasts to your profile or download data for your next step.</p></article>
+      </section>
       <section id="home-buy-signals" class="section section-compact container" aria-labelledby="home-buy-title">
-        <div class="home-buy-heading"><h2 id="home-buy-title">Latest stock forecasts</h2><a class="cta secondary small" href="/screener">View Q Screener <i class="iconoir-arrow-right" aria-hidden="true"></i></a></div>
-        <p data-buy-status role="status">Loading the latest daily publication…</p>
-        <div class="home-buy-cards" data-buy-cards></div>
-        <p class="home-buy-note">Compare the latest completed daily close with the first forecast P50 and P99. Seven trading sessions; model estimates are not investment recommendations.</p>
+        <div class="home-buy-heading"><h2 id="home-buy-title">Latest stock forecasts</h2><a class="cta secondary small" href="/screener">Open screener</a></div>
+        <p class="small muted" data-buy-status role="status">Loading the latest forecasts…</p><div class="home-buy-cards" data-buy-cards></div>
+        <p class="small muted">Model estimates for research; results are uncertain.</p>
       </section>
-
-      <section class="home-workflow-strip" aria-label="Explore Quantura">
-        <div class="container">
-          <a href="/forecasting"><i class="iconoir-stats-up-square" aria-hidden="true"></i><span>Forecast</span></a>
-          <a href="/screener"><i class="iconoir-search" aria-hidden="true"></i><span>Screener</span></a>
-          <a href="/historical-data"><i class="iconoir-database" aria-hidden="true"></i><span>Historical data</span></a>
-          <a href="/sports-forecasting"><i class="iconoir-trophy" aria-hidden="true"></i><span>Prediction markets</span></a>
-          <a href="/developers/api"><i class="iconoir-code" aria-hidden="true"></i><span>Developer API</span></a>
-        </div>
+      <section class="q-home-video-section container" aria-labelledby="home-video-title">
+        <div><p class="eyebrow">Meet Quantura</p><h2 id="home-video-title">From a question to a forecast.</h2><p>A short tour of market search, probability ranges, and today's games.</p><a class="cta secondary" href="/forecasting">Open Forecast</a></div>
+        <figure><video class="hero-video" data-lazy-video="/assets/quantura-intro.mp4" poster="/assets/quantura-intro-poster.jpg" preload="none" controls playsinline aria-label="Quantura product tour"><track kind="captions" src="/assets/quantura-intro.vtt" srclang="en" label="English" default /></video><figcaption class="small muted">24-second product tour · no audio required.</figcaption></figure>
       </section>
-
-      <section class="section home-global-section" aria-labelledby="home-global-title">
-        <div class="container">
-          <div class="home-global-banner">
-            <h2 id="home-global-title">From connected data<br />to considered decisions.</h2>
-            <p>Explore markets, preserve your research, and deliver it through one workspace-aware API.</p>
-            <a class="cta" href="/developers/api">Explore the API <i class="iconoir-arrow-right" aria-hidden="true"></i></a>
-          </div>
-        </div>
-      </section>
-
-      <section class="section forecast-home-preview-section" aria-labelledby="home-forecast-title">
-        <div class="container">
-          <div class="forecast-section-heading">
-            <div>
-              <div class="eyebrow">Prospective intelligence · timestamped before outcomes</div>
-              <h2 id="home-forecast-title">Tomorrow's Headlines, Today</h2>
-              <p class="small">Quantura forecasts unresolved events that may shape markets, business, policy, technology, and sports. Every prediction has a formal resolution rule and is scored after reality arrives.</p>
-            </div>
-            <a class="cta secondary" href="/forecasts">Explore Forecasts</a>
-          </div>
-          <div class="forecast-label-row" style="margin-bottom:18px;"><span class="forecast-label">FORECAST</span><span class="forecast-not-occurred">UNRESOLVED EVENTS ARE CLEARLY LABELED</span></div>
-          <div id="home-forecast-preview" class="forecast-card-grid"><div class="forecast-state">Loading the reviewed forecast record…</div></div>
-        </div>
-      </section>
-
-      <section class="section section-compact quantura-rn-injection-shell">
-        <div class="container">
-          <div
-            id="quantura-rn-home"
-            class="quantura-rn-root"
-            data-quantura-rn-root
-            data-rn-slot-id="home-native-slot-1"
-            data-rn-placement="home_surface"
-            data-rn-context="home"
-            data-rn-title="Unified RN surface in the web shell"
-            data-rn-body="This component is rendered with React Native for Web. Native ad inventory appears only in installed iOS/Android builds."
-            data-rn-placeholder="true"
-          ></div>
-        </div>
-      </section>
-
-      <section class="section section-compact">
-        <div class="container">
-          <div class="section-title">
-            <h2>One platform from source data to licensed output</h2>
-            <p class="small">Shared services keep discovery, provenance, forecasting, API delivery, and workspace permissions consistent.</p>
-          </div>
-          <div class="insight-grid">
-            <article class="card">
-              <h3><i class="iconoir-search" aria-hidden="true"></i> Search &amp; screen</h3>
-              <p>Find supported assets and prediction markets, then narrow them with a reusable quantitative screener.</p>
-            </article>
-            <article class="card">
-              <h3><i class="iconoir-stats-up-square" aria-hidden="true"></i> Forecast &amp; validate</h3>
-              <p>Compare P1/P25/P50/P75/P99 distributions, technical structure, options context, and historical reliability.</p>
-            </article>
-            <article class="card">
-              <h3><i class="iconoir-database" aria-hidden="true"></i> Deliver data</h3>
-              <p>Save versioned artifacts, share workspace access, export SageMaker-ready datasets, or consume approved resources through the API.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>Use Cases in Public Markets</h2>
-            <p class="small">Reference implementations and platform examples from established institutions and vendors.</p>
-          </div>
-          <div class="use-case-grid">
-            <a class="use-case-card" href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer" data-analytics="use_case_marquee">
-              <div class="use-case-media use-case-media-goldman">
-                <img src="https://cdn.simpleicons.org/goldmansachs/ffffff" alt="Goldman Sachs logo" loading="lazy" />
-              </div>
-              <div class="use-case-body">
-                <h3>Goldman Marquee MarketView</h3>
-                <p class="small">Visual market intelligence and institutional workflow tooling for global desks.</p>
-                <span class="use-case-link">Open use case</span>
-              </div>
-            </a>
-            <a class="use-case-card" href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer" data-analytics="use_case_morgan_stanley">
-              <div class="use-case-media use-case-media-openai">
-                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTg4b2xFrY7mhOS9pGOnckG88R0ZzHpzYZ7hA&s" alt="OpenAI x Morgan Stanley" loading="lazy" />
-              </div>
-              <div class="use-case-body">
-                <h3>OpenAI x Morgan Stanley</h3>
-                <p class="small">Advisor enablement story showing knowledge access at enterprise scale.</p>
-                <span class="use-case-link">Open use case</span>
-              </div>
-            </a>
-            <a class="use-case-card" href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer" data-analytics="use_case_aws_capital_markets">
-              <div class="use-case-media use-case-media-aws">
-                <img src="https://d2908q01vomqb2.cloudfront.net/da4b9237bacccdf19c0760cab7aec4a8359010b0/2017/07/27/AWS_Logo_PoweredBy_127px.png" alt="AWS logo" loading="lazy" />
-              </div>
-              <div class="use-case-body">
-                <h3>AWS Capital Markets</h3>
-                <p class="small">Cloud patterns for front-office modernization, data platforms, and resilient market infrastructure.</p>
-                <span class="use-case-link">Open use case</span>
-              </div>
-            </a>
-            <a class="use-case-card" href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer" data-analytics="use_case_perplexity_sonar">
-              <div class="use-case-media use-case-media-perplexity">
-                <img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="Perplexity logo" loading="lazy" />
-              </div>
-              <div class="use-case-body">
-                <h3>Perplexity Sonar API</h3>
-                <p class="small">Web-grounded LLM integration quickstart for research-grade retrieval and synthesis.</p>
-                <span class="use-case-link">Open use case</span>
-              </div>
-            </a>
-          </div>
-        </div>
-      </section>
-
-	      <section class="section section-compact">
-	        <div class="container">
-	          <div class="section-title">
-	            <h2>Trusted workflows</h2>
-	            <p class="small">Brands and tools commonly used in adjacent research and execution stacks.</p>
-	          </div>
-          <div class="brand-rail" aria-label="Horizontal brand logo strip">
-            <div class="brand-track">
-              <span class="brand-pill"><img src="/assets/logo-openai.svg" alt="OpenAI logo" loading="lazy" /><span>OpenAI</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/google/4285F4" alt="Google logo" loading="lazy" /><span>Google</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/anthropic/191919" alt="Anthropic logo" loading="lazy" /><span>Anthropic</span></span>
-              <span class="brand-pill"><img src="/assets/logo-microsoft.svg" alt="Microsoft logo" loading="lazy" /><span>Microsoft</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/nvidia/76B900" alt="NVIDIA logo" loading="lazy" /><span>NVIDIA</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/apple/111111" alt="Apple logo" loading="lazy" /><span>Apple</span></span>
-              <span class="brand-pill"><img src="/assets/logo-amazon.svg" alt="Amazon Nova logo" loading="lazy" /><span>Amazon Nova</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/meta/0467DF" alt="Meta logo" loading="lazy" /><span>Meta</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/stripe/635BFF" alt="Stripe logo" loading="lazy" /><span>Stripe</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/firebase/FFCA28" alt="Firebase logo" loading="lazy" /><span>Firebase</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/github/181717" alt="GitHub logo" loading="lazy" /><span>GitHub</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/x/111111" alt="X logo" loading="lazy" /><span>X</span></span>
-
-              <span class="brand-pill"><img src="/assets/logo-openai.svg" alt="OpenAI logo" loading="lazy" /><span>OpenAI</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/google/4285F4" alt="Google logo" loading="lazy" /><span>Google</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/anthropic/191919" alt="Anthropic logo" loading="lazy" /><span>Anthropic</span></span>
-              <span class="brand-pill"><img src="/assets/logo-microsoft.svg" alt="Microsoft logo" loading="lazy" /><span>Microsoft</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/nvidia/76B900" alt="NVIDIA logo" loading="lazy" /><span>NVIDIA</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/apple/111111" alt="Apple logo" loading="lazy" /><span>Apple</span></span>
-              <span class="brand-pill"><img src="/assets/logo-amazon.svg" alt="Amazon Nova logo" loading="lazy" /><span>Amazon Nova</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/meta/0467DF" alt="Meta logo" loading="lazy" /><span>Meta</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/stripe/635BFF" alt="Stripe logo" loading="lazy" /><span>Stripe</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/firebase/FFCA28" alt="Firebase logo" loading="lazy" /><span>Firebase</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/github/181717" alt="GitHub logo" loading="lazy" /><span>GitHub</span></span>
-              <span class="brand-pill"><img src="https://cdn.simpleicons.org/x/111111" alt="X logo" loading="lazy" /><span>X</span></span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container content-grid">
-          <div class="card">
-            <div class="eyebrow">Terminal preview</div>
-            <h2>Quantura is built to feel like a desk terminal, not a spreadsheet.</h2>
-            <p>
-              Load a ticker once, keep the chart on screen, and drive forecasting, indicators, news, options, and screener discovery from the same context.
-              Your work is stored in your secure workspace so you can return to any run later.
-            </p>
-            <div class="feature-list" style="margin-top: 18px;">
-              <div class="feature"><span></span>Ticker context + reusable interactive chart</div>
-              <div class="feature"><span></span>Saved forecasts with quantile overlays</div>
-              <div class="feature"><span></span>Collaboration workspaces + audit trail</div>
-            </div>
-            <div class="hero-actions" style="margin-top: 22px;">
-              <a class="cta" href="/forecasting" data-analytics="home_terminal_open"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open forecasting studio</span></a>
-
-            </div>
-          </div>
-
-          <div class="card media-card">
-            <video
-              class="hero-video"
-              data-lazy-video="/assets/hero-market.mp4"
-              muted
-              loop
-              playsinline
-              preload="none"
-              controls
-            ></video>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>Quantura at a glance</h2>
-            <p class="small">Execution-grade intelligence for operators, allocators, and active decision-makers.</p>
-            <p class="small" style="max-width: 900px; margin-top: 10px;">
-              Quantura compresses the research loop from discovery to decision. We blend macro regime context, market structure,
-              technical momentum, and catalyst risk into one weekly workflow so you can act on signal quality, not noise volume.
-            </p>
-          </div>
-          <div class="metrics">
-            <div class="stat-card">
-              <strong>5–10</strong>
-              <span class="small">high-conviction mispricings surfaced weekly, ranked by catalyst timing and risk/reward</span>
-            </div>
-            <div class="stat-card">
-              <strong>15+ yrs</strong>
-              <span class="small">operator, buy-side, and research process distilled into repeatable decision playbooks</span>
-            </div>
-            <div class="stat-card">
-              <strong>72 hrs</strong>
-              <span class="small">average onboarding window for scenario map, trigger levels, and execution notes</span>
-            </div>
-          </div>
-          <p class="small" style="margin-top: 18px;">
-            Start with the Weekly Brief for consistent opportunity flow, then move to a paid plan when sizing, timing,
-            and downside control demand institutional-grade rigor.
-          </p>
-          <div class="hero-actions" style="margin-top: 16px;">
-            <a class="cta" href="/forecasting" data-analytics="glance_cta_terminal"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
-
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>Collaborative research workspaces</h2>
-            <p class="small">Move from a market signal to a documented team decision without losing context.</p>
-          </div>
-          <div class="insight-grid">
-            <div class="card">
-              <h3>Keep analysis together</h3>
-              <p>
-                Save prediction analyses, forecast runs, screener results, and generated artifacts in the active private workspace.
-              </p>
-            </div>
-            <div class="card">
-              <h3>Organize your workspace</h3>
-              <p>
-                Keep datasets, forecast requests, and collaborators together in one private workspace.
-              </p>
-            </div>
-            <div class="card">
-              <h3>Review with shared context</h3>
-              <p>
-                Invite viewers or editors so the team can inspect the same quantiles, scenarios, files, and saved research state.
-              </p>
-            </div>
-          </div>
-          <div class="hero-actions" style="margin-top: 22px;">
-            <a class="cta" href="/forecasting?panel=profile#terminal-profile-collaboration" data-analytics="home_collaboration_open">
-              <i class="iconoir-group" aria-hidden="true"></i><span>Open workspace settings</span>
-            </a>
-          </div>
-        </div>
-      </section>
-
-	      <section class="section">
-	        <div class="container content-grid">
-	          <div>
-            <h2>Why serious investors choose Quantura</h2>
-            <p>
-              The Quantura process fuses data, market structure, and operator instincts. We maintain a
-              prioritized research queue, re-rank it weekly, and reserve intensive modeling for the highest-conviction opportunities.
-            </p>
-	            <div class="testimonial">
-	              “Quantura is the first research partner to give us demand-level clarity without the fluff.”
-	              <div class="small">— Growth equity partner</div>
-	            </div>
-	          </div>
-          <div class="card">
-            <h3>What you get</h3>
-            <div class="feature-list">
-              <div class="feature"><span></span>Weekly mispricing report + sector map</div>
-              <div class="feature"><span></span>Pro model outputs + interpretation call</div>
-              <div class="feature"><span></span>Scenario ranges + implied probability bands</div>
-              <div class="feature"><span></span>Optional technical indicator stack</div>
-            </div>
-          </div>
-	        </div>
-	      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>Quoted from public sources</h2>
-            <p class="small">Short excerpts, attributed and linked.</p>
-          </div>
-          <div class="quote-carousel card" data-quote-carousel data-quote-interval="7000">
-            <div class="quote-carousel-controls">
-              <div class="quote-nav-buttons">
-                <button class="cta secondary small" type="button" data-quote-prev aria-label="Previous quote">Prev</button>
-                <button class="cta secondary small" type="button" data-quote-next aria-label="Next quote">Next</button>
-              </div>
-            </div>
-            <div class="quote-carousel-track">
-              <!-- source: https://marquee.gs.com/welcome/campaigns/marketview -->
-              <figure class="quote-slide" data-quote-slide>
-                <blockquote>"An award-winning ecosystem of visual insights answering important questions in global markets."</blockquote>
-                <figcaption>
-                  Goldman Sachs Marquee MarketView
-                  <a href="https://marquee.gs.com/welcome/campaigns/marketview" target="_blank" rel="noopener noreferrer">Source</a>
-                </figcaption>
-              </figure>
-              <!-- source: https://openai.com/customer-stories/morgan-stanley/ -->
-              <figure class="quote-slide" data-quote-slide>
-                <blockquote>"This technology makes you as smart as the smartest person in the organization."</blockquote>
-                <figcaption>
-                  Jeff McMillan, Morgan Stanley
-                  <a href="https://openai.com/customer-stories/morgan-stanley/" target="_blank" rel="noopener noreferrer">Source</a>
-                </figcaption>
-              </figure>
-              <!-- source: https://aws.amazon.com/financial-services/capital-markets/ -->
-              <figure class="quote-slide" data-quote-slide>
-                <blockquote>"Reimagine capital markets for today and tomorrow."</blockquote>
-                <figcaption>
-                  AWS Capital Markets
-                  <a href="https://aws.amazon.com/financial-services/capital-markets/" target="_blank" rel="noopener noreferrer">Source</a>
-                </figcaption>
-              </figure>
-              <!-- source: https://docs.perplexity.ai/docs/sonar/quickstart -->
-              <figure class="quote-slide" data-quote-slide>
-                <blockquote>"Get started with Perplexity's Sonar API for web-grounded AI responses."</blockquote>
-                <figcaption>
-                  Perplexity Sonar Quickstart
-                  <a href="https://docs.perplexity.ai/docs/sonar/quickstart" target="_blank" rel="noopener noreferrer">Source</a>
-                </figcaption>
-              </figure>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container">
-          <div class="section-title">
-            <h2>How Quantura works</h2>
-            <p class="small">Three layers of conviction for every asset.</p>
-          </div>
-          <div class="insight-grid">
-            <div class="card">
-              <h3>Discovery</h3>
-              <p>We scan for mispricings, demand shifts, and catalysts across equities and macro factors.</p>
-            </div>
-            <div class="card">
-              <h3>Model layering</h3>
-              <p>Quantura Forecast combines probabilistic models, foundation-model forecasting, and technical context in one reproducible workflow.</p>
-            </div>
-            <div class="card">
-              <h3>Decision-ready delivery</h3>
-              <p>We package forecasts into a clean briefing, with next steps and risk triggers.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="section faq-section">
-        <div class="container">
-          <div class="section-title">
-            <h2>Frequently asked questions</h2>
-            <p class="small">Clear answers for diligence, implementation, and day-to-day workflow decisions.</p>
-          </div>
-          <div class="faq-grid">
-            <details class="faq-item" open>
-              <summary><i class="iconoir-info-circle" aria-hidden="true"></i><span>What is Quantura?</span></summary>
-              <p class="small faq-answer">
-                Quantura is a decision-intelligence platform that unifies forecasting, technical context, macro-aware news,
-                options structure, and shared research workflows so teams can move from signal to action faster.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm9 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM7.5 13c-2.8 0-5 1.9-5 4.2V19h10v-1.8C12.5 14.9 10.3 13 7.5 13Zm9 0c-1.2 0-2.4.4-3.2 1.1 1 .9 1.7 2.1 1.7 3.5V19h6v-1.8c0-2.3-2.2-4.2-4.5-4.2Z" fill="currentColor"/></svg><span>Who should use Quantura?</span></summary>
-              <p class="small faq-answer">
-                Quantura is built for active investors, research desks, founders, and operators who require repeatable
-                decision systems, auditability, and rigorous scenario framing.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-wallet" aria-hidden="true"></i><span>Is Quantura free?</span></summary>
-              <p class="small faq-answer">
-                Yes. Forecast and download without a paid plan. Create an account to save your requests and organize private workspaces. Fair-use limits, provider availability and data licensing still apply. Connected AWS infrastructure is billed separately by AWS.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-graph-up" aria-hidden="true"></i><span>Which forecasting methods are supported?</span></summary>
-              <p class="small faq-answer">
-                Quantura supports Q Forecast workflows, SageMaker Canvas alternatives, and AWS SageMaker Canvas baselines.
-                Runs are persisted so assumptions, quantiles, and model behavior can be reviewed longitudinally.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h7v2H5v14h14V12h2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Zm12-2h2v4h4v2h-4v4h-2V9h-4V7h4V3Zm-9 9.5 2.8 3.4L11 13l3.5 4.2H6Z" fill="currentColor"/></svg><span>Can I download historical market data?</span></summary>
-              <p class="small faq-answer">
-                Yes. Choose Alpaca, Yahoo Finance, or automatic fallback, then select a ticker, timeframe, end date, row count,
-                trading-session policy, and adjustment. Preview the returned bars before generating a chronological CSV.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-bookmark-book" aria-hidden="true"></i><span>Can I save, reload, and share past runs?</span></summary>
-              <p class="small faq-answer">
-                Yes. Forecast and screener runs are versionable workspace assets you can reload, compare, and share with collaborators.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-graph-up" aria-hidden="true"></i><span>Can I refresh the forecast with newer data?</span></summary>
-              <p class="small faq-answer">
-                Yes. Refresh quotes updates the observed-price overlay. Refresh latest data &amp; forecast creates a new forecast from a fresh input snapshot. Notification settings are archived from the current product.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-shield-check" aria-hidden="true"></i><span>How does Quantura handle security and privacy?</span></summary>
-              <p class="small faq-answer">
-                Quantura applies authenticated access, encrypted transport, role-based permissions, and workspace-level controls.
-                See the Privacy Policy for retention, transfer, and data-rights details.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><svg class="faq-icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm4.95 13.54-1.41 1.41L12 13.41l-3.54 3.54-1.41-1.41L10.59 12 7.05 8.46l1.41-1.41L12 10.59l3.54-3.54 1.41 1.41L13.41 12Z" fill="currentColor"/></svg><span>Can I cancel a paid plan?</span></summary>
-              <p class="small faq-answer">
-                Yes. Plans can be canceled under the billing terms listed in Pricing and Terms.
-                Cancellation affects future billing and does not reverse already-rendered services.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-cursor-pointer" aria-hidden="true"></i><span>Does Quantura execute trades automatically?</span></summary>
-              <p class="small faq-answer">
-                No. Quantura is analytics and decision-support software. It is not a broker-dealer or investment adviser;
-                all execution decisions remain with the user.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-download-circle" aria-hidden="true"></i><span>Can I export my research artifacts?</span></summary>
-              <p class="small faq-answer">
-                Yes. Forecasts, screener outputs, and upload artifacts can be exported for external BI, validation,
-                compliance review, and reporting workflows.
-              </p>
-            </details>
-            <details class="faq-item">
-              <summary><i class="iconoir-headset-help" aria-hidden="true"></i><span>Where do I request support or enterprise help?</span></summary>
-              <p class="small faq-answer">
-                Use the Contact page for onboarding, integration help, and enterprise forecasting engagements.
-                Support generally responds within one business day.
-              </p>
-            </details>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="container callout">
-          <span class="badge">Quantura Forecast</span>
-          <h2>Need a forecast workflow you can run right now?</h2>
-          <p>
-            Select a market or upload your own time series, choose your forecast horizon,
-            and explore the final ensemble. Sign in only when you want to save your request to a profile.
-          </p>
-          <div class="hero-actions">
-            <a class="cta" href="/forecasting">Run a forecast</a>
-          </div>
-        </div>
-      </section>
-
-      <section class="section free-access-note"><div class="container"><h2>Free to explore. Yours to save.</h2><p>Forecast markets, explore the Screener and download supported data without a paid plan. Create an account to save your requests and organize private workspaces. Fair-use limits and provider availability apply.</p><a class="cta" href="/forecasting">Run a forecast</a><p class="small muted">Bring-your-own AWS infrastructure is billed separately by AWS. Third-party data licensing restrictions still apply.</p></div></section>
+      <section class="q-home-games container" aria-labelledby="home-games-title"><div><p class="eyebrow">Prediction markets</p><h2 id="home-games-title">Today's games, in one place.</h2><p>Browse Kalshi and Polymarket US games and open their latest pregame forecast when you need it.</p></div><a class="cta" href="/screener#today-games">View today's games</a></section>
     </main>
+
 
     <footer class="footer">
       <div class="container footer-grid">

@@ -293,6 +293,8 @@ service cloud.firestore {
 
     // Private paper-research worker checkpoints and licensed input snapshots.
     // Access only by the existing server/worker identity, never public clients.
+    match /game_forecast_catalog/{document=**} { allow read, write: if false; }
+    match /game_forecast_status/{document=**} { allow read, write: if false; }
     match /market_research_sessions/{document=**} { allow read, write: if false; }
     match /kalshi_execution_sessions/{document=**} { allow read, write: if false; }
     match /market_research_forecasts/{document=**} { allow read, write: if false; }

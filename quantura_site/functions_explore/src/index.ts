@@ -44,6 +44,7 @@ import {
   publicScreenerRow,
 } from "./quantScreener";
 import { ScreenerMarketService, ScreenerSignalStore } from "./screenerMarketService";
+import { registerGameForecastRoutes } from "./gameForecasts";
 import { registerScreenerAlertRoutes, runScreenerDigests } from "./screenerAlerts";
 import { BrevoNotificationMailer, FirestoreEmailDeliveryLedger } from "./brevoEmail";
 import {
@@ -689,6 +690,7 @@ registerPlatformApiRoutes(ROUTES, {
 });
 registerBacktestRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
 registerScreenerAlertRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
+registerGameForecastRoutes(ROUTES, db);
 registerSupportChatRoutes(ROUTES, {
   db, auth, publicOrigin: PUBLIC_ORIGIN,
 });

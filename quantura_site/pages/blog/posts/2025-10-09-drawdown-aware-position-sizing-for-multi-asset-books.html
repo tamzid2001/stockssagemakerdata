@@ -1,14 +1,15 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Week 32: Drawdown-Aware Position Sizing for Multi-Asset Books | Quantura Blog</title>
+    <title>Drawdown-Aware Position Sizing for Multi-Asset Books | Quantura Blog</title>
     <meta name="description" content="Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls." />
     <meta name="keywords" content="quantura, blog, portfolio-playbooks, portfolio, sizing, risk-budget, playbook, markets" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://quantura.studio/blog/posts/2025-10-09-drawdown-aware-position-sizing-for-multi-asset-books" />
-    <meta property="og:title" content="Week 32: Drawdown-Aware Position Sizing for Multi-Asset Books | Quantura Blog" />
+    <meta property="og:title" content="Drawdown-Aware Position Sizing for Multi-Asset Books | Quantura Blog" />
     <meta property="og:description" content="Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls." />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="https://quantura.studio/blog/posts/2025-10-09-drawdown-aware-position-sizing-for-multi-asset-books" />
@@ -16,7 +17,7 @@
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Week 32: Drawdown-Aware Position Sizing for Multi-Asset Books | Quantura Blog" />
+    <meta name="twitter:title" content="Drawdown-Aware Position Sizing for Multi-Asset Books | Quantura Blog" />
     <meta name="twitter:description" content="Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls." />
     <meta name="twitter:image" content="https://images.unsplash.com/photo-1709880945165-d2208c6ad2ec?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxmaW5hbmNlJTIwcmVzZWFyY2glMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTd8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
     <meta name="twitter:url" content="https://quantura.studio/blog/posts/2025-10-09-drawdown-aware-position-sizing-for-multi-asset-books" />
@@ -32,14 +33,19 @@
     <link rel="alternate" type="application/rss+xml" title="Quantura Blog RSS" href="/blog/rss.xml" />
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.json" />
-    <script src="/theme-init.js?v=20260908a"></script>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <script src="/pwa-launch.js?v=20260926a"></script>
+    <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260920-perps-jev"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260405a" />
+    <link rel="stylesheet" href="/styles.css?v=20260926a" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">{
   "@context": "https://schema.org",
   "@type": "BlogPosting",
-  "headline": "Week 32: Drawdown-Aware Position Sizing for Multi-Asset Books",
+  "headline": "Drawdown-Aware Position Sizing for Multi-Asset Books",
   "description": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
   "datePublished": "2025-10-09",
   "dateModified": "2025-10-09",
@@ -84,7 +90,7 @@
         <div class="container content-grid">
           <div>
             <div class="eyebrow">Quantura Blog</div>
-            <h1>Week 32: Drawdown-Aware Position Sizing for Multi-Asset Books</h1>
+            <h1>Drawdown-Aware Position Sizing for Multi-Asset Books</h1>
             <p>Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.</p>
             <div class="small muted">Published October 9, 2025 · Topic: <a href="/blog/topics/portfolio-playbooks">Portfolio Playbooks</a></div>
           </div>
@@ -107,7 +113,7 @@
       <figcaption>Photo by <a href="https://unsplash.com/@jakubzerdzicki?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Jakub Żerdzicki</a> on <a href="https://unsplash.com/photos/a-calculator-sitting-on-top-of-a-table-next-to-a-laptop-8wLZi9OhsWU?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
     </figure>
     <p>
-      Week 32: Drawdown-Aware Position Sizing for Multi-Asset Books is written for operators who need a repeatable bridge between signal intake and action execution.
+      Drawdown-Aware Position Sizing for Multi-Asset Books is written for operators who need a repeatable bridge between signal intake and action execution.
       The core objective is to reduce latency without reducing rigor. Institutional workflows fail when process drift is tolerated. Quantura teams reduce drift by turning every signal into a tracked assumption, every assumption into a scenario, and every scenario into an action threshold that can be audited later.
     </p>
     <p>
