@@ -1,7 +1,7 @@
 /* Public saved snapshots; viewing never queues inference or trading. */
 (() => {
   'use strict';
-  const cards=document.getElementById('qs-games'),page=document.getElementById('game-forecast-page');if(!cards&&!page)return;
+  const page=document.getElementById('game-forecast-page');
   const bands=['0.01','0.25','0.5','0.75','0.9','0.99'];let sequence=0,viewed=null,saveBusy=false;
   const savedFor=new Set();
   async function saveViewed(){
@@ -22,6 +22,113 @@
   const percent=v=>Number.isFinite(v)?`${(100*v).toFixed(1)}%`:'—',label=q=>'P'+String(Math.round(Number(q)*100)).padStart(2,'0');
   const href=id=>`/forecasting?panel=forecast&gameForecastId=${encodeURIComponent(id)}`;
   function provider(game){const n=el('div',game.provider==='kalshi'?'Kalshi':'Polymarket US','game-provider small');if(window.QuanturaLogos)n.insertAdjacentHTML('afterbegin',window.QuanturaLogos.markup(game));return n;}
+  const normalize=value=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const teamCodes={
+    mlb:'ARI ATL BAL BOS CHC CHW CIN CLE COL DET HOU KCR LAA LAD MIA MIL MIN NYM NYY ATH PHI PIT SDP SEA SFG STL TBR TEX TOR WSN'.split(' '),
+    nfl:'ARI ATL BAL BUF CAR CHI CIN CLE DAL DEN DET GB HOU IND JAX KC LAC LAR LV MIA MIN NE NO NYG NYJ PHI PIT SEA SF TB TEN WAS'.split(' '),
+    nba:'ATL BOS BKN CHA CHI CLE DAL DEN DET GSW HOU IND LAC LAL MEM MIA MIL MIN NOP NYK OKC ORL PHI PHX POR SAC SAS TOR UTA WAS'.split(' '),
+    nhl:'ANA BOS BUF CAR CBJ CGY CHI COL DAL DET EDM FLA LAK MIN MTL NJD NSH NYI NYR OTT PHI PIT SEA SJS STL TBL TOR UTA VAN VGK WPG WSH'.split(' '),
+  };
+  const aliases={mlb:{CWS:'CHW',CHW:'CHW',CHC:'CHC',KC:'KCR',KCR:'KCR',OAK:'ATH',ATH:'ATH',SD:'SDP',SDP:'SDP',SF:'SFG',SFG:'SFG',TB:'TBR',TBR:'TBR',WSH:'WSN',WSN:'WSN'},nfl:{JAC:'JAX',LA:'LAR',LVR:'LV',GNB:'GB',KAN:'KC',NWE:'NE',NOR:'NO',SFO:'SF',TAM:'TB',WAS:'WAS',WSH:'WAS'},nba:{GS:'GSW',NO:'NOP',NY:'NYK',SA:'SAS',WSH:'WAS',UTAH:'UTA'},nhl:{LA:'LAK',NJ:'NJD',SJ:'SJS',TB:'TBL',WAS:'WSH',UTAH:'UTA'}};
+  const mlbNames=['Arizona Diamondbacks','Atlanta Braves','Baltimore Orioles','Boston Red Sox','Chicago Cubs','Chicago White Sox','Cincinnati Reds','Cleveland Guardians','Colorado Rockies','Detroit Tigers','Houston Astros','Kansas City Royals','Los Angeles Angels','Los Angeles Dodgers','Miami Marlins','Milwaukee Brewers','Minnesota Twins','New York Mets','New York Yankees','Athletics','Philadelphia Phillies','Pittsburgh Pirates','San Diego Padres','Seattle Mariners','San Francisco Giants','St. Louis Cardinals','Tampa Bay Rays','Texas Rangers','Toronto Blue Jays','Washington Nationals'];
+  const nameAliases=new Map();mlbNames.forEach((name,index)=>{const code=teamCodes.mlb[index];for(const variant of[name,name.split(' ').slice(name.includes('Red Sox')||name.includes('White Sox')? -2:-1).join(' '),code])nameAliases.set('mlb:'+normalize(variant),code);});
+  const canonicalCode=(league,value)=>aliases[league]?.[String(value).toUpperCase()]||String(value).toUpperCase();
+  // Team name facts from ESPN's public /sports/{league}/teams endpoints, captured 2026-09-27.
+  const officialNames={"nfl":{"ARI":["Arizona Cardinals","Cardinals","Cardinals"],"ATL":["Atlanta Falcons","Falcons","Falcons"],"BAL":["Baltimore Ravens","Ravens","Ravens"],"BUF":["Buffalo Bills","Bills","Bills"],"CAR":["Carolina Panthers","Panthers","Panthers"],"CHI":["Chicago Bears","Bears","Bears"],"CIN":["Cincinnati Bengals","Bengals","Bengals"],"CLE":["Cleveland Browns","Browns","Browns"],"DAL":["Dallas Cowboys","Cowboys","Cowboys"],"DEN":["Denver Broncos","Broncos","Broncos"],"DET":["Detroit Lions","Lions","Lions"],"GB":["Green Bay Packers","Packers","Packers"],"HOU":["Houston Texans","Texans","Texans"],"IND":["Indianapolis Colts","Colts","Colts"],"JAX":["Jacksonville Jaguars","Jaguars","Jaguars"],"KC":["Kansas City Chiefs","Chiefs","Chiefs"],"LV":["Las Vegas Raiders","Raiders","Raiders"],"LAC":["Los Angeles Chargers","Chargers","Chargers"],"LAR":["Los Angeles Rams","Rams","Rams"],"MIA":["Miami Dolphins","Dolphins","Dolphins"],"MIN":["Minnesota Vikings","Vikings","Vikings"],"NE":["New England Patriots","Patriots","Patriots"],"NO":["New Orleans Saints","Saints","Saints"],"NYG":["New York Giants","Giants","Giants"],"NYJ":["New York Jets","Jets","Jets"],"PHI":["Philadelphia Eagles","Eagles","Eagles"],"PIT":["Pittsburgh Steelers","Steelers","Steelers"],"SF":["San Francisco 49ers","49ers","49ers"],"SEA":["Seattle Seahawks","Seahawks","Seahawks"],"TB":["Tampa Bay Buccaneers","Buccaneers","Buccaneers"],"TEN":["Tennessee Titans","Titans","Titans"],"WSH":["Washington Commanders","Commanders","Commanders"]},"nba":{"ATL":["Atlanta Hawks","Hawks","Hawks"],"BOS":["Boston Celtics","Celtics","Celtics"],"BKN":["Brooklyn Nets","Nets","Nets"],"CHA":["Charlotte Hornets","Hornets","Hornets"],"CHI":["Chicago Bulls","Bulls","Bulls"],"CLE":["Cleveland Cavaliers","Cavaliers","Cavaliers"],"DAL":["Dallas Mavericks","Mavericks","Mavericks"],"DEN":["Denver Nuggets","Nuggets","Nuggets"],"DET":["Detroit Pistons","Pistons","Pistons"],"GS":["Golden State Warriors","Warriors","Warriors"],"HOU":["Houston Rockets","Rockets","Rockets"],"IND":["Indiana Pacers","Pacers","Pacers"],"LAC":["LA Clippers","Clippers","Clippers"],"LAL":["Los Angeles Lakers","Lakers","Lakers"],"MEM":["Memphis Grizzlies","Grizzlies","Grizzlies"],"MIA":["Miami Heat","Heat","Heat"],"MIL":["Milwaukee Bucks","Bucks","Bucks"],"MIN":["Minnesota Timberwolves","Timberwolves","Timberwolves"],"NO":["New Orleans Pelicans","Pelicans","Pelicans"],"NY":["New York Knicks","Knicks","Knicks"],"OKC":["Oklahoma City Thunder","Thunder","Thunder"],"ORL":["Orlando Magic","Magic","Magic"],"PHI":["Philadelphia 76ers","76ers","76ers"],"PHX":["Phoenix Suns","Suns","Suns"],"POR":["Portland Trail Blazers","Trail Blazers","Trail Blazers"],"SAC":["Sacramento Kings","Kings","Kings"],"SA":["San Antonio Spurs","Spurs","Spurs"],"TOR":["Toronto Raptors","Raptors","Raptors"],"UTAH":["Utah Jazz","Jazz","Jazz"],"WSH":["Washington Wizards","Wizards","Wizards"]},"nhl":{"ANA":["Anaheim Ducks","Ducks","Ducks"],"BOS":["Boston Bruins","Bruins","Bruins"],"BUF":["Buffalo Sabres","Sabres","Sabres"],"CGY":["Calgary Flames","Flames","Flames"],"CAR":["Carolina Hurricanes","Hurricanes","Hurricanes"],"CHI":["Chicago Blackhawks","Blackhawks","Blackhawks"],"COL":["Colorado Avalanche","Avalanche","Avalanche"],"CBJ":["Columbus Blue Jackets","Blue Jackets","Blue Jackets"],"DAL":["Dallas Stars","Stars","Stars"],"DET":["Detroit Red Wings","Red Wings","Red Wings"],"EDM":["Edmonton Oilers","Oilers","Oilers"],"FLA":["Florida Panthers","Panthers","Panthers"],"LA":["Los Angeles Kings","Kings","Kings"],"MIN":["Minnesota Wild","Wild","Wild"],"MTL":["Montreal Canadiens","Canadiens","Canadiens"],"NSH":["Nashville Predators","Predators","Predators"],"NJ":["New Jersey Devils","Devils","Devils"],"NYI":["New York Islanders","Islanders","Islanders"],"NYR":["New York Rangers","Rangers","Rangers"],"OTT":["Ottawa Senators","Senators","Senators"],"PHI":["Philadelphia Flyers","Flyers","Flyers"],"PIT":["Pittsburgh Penguins","Penguins","Penguins"],"SJ":["San Jose Sharks","Sharks","Sharks"],"SEA":["Seattle Kraken","Kraken","Kraken"],"STL":["St. Louis Blues","Blues","Blues"],"TB":["Tampa Bay Lightning","Lightning","Lightning"],"TOR":["Toronto Maple Leafs","Maple Leafs","Maple Leafs"],"UTAH":["Utah Mammoth","Mammoth","Mammoth"],"VAN":["Vancouver Canucks","Canucks","Canucks"],"VGK":["Vegas Golden Knights","Golden Knights","Golden Knights"],"WSH":["Washington Capitals","Capitals","Capitals"],"WPG":["Winnipeg Jets","Jets","Jets"]}};
+  for(const [league,teams]of Object.entries(officialNames))for(const [abbreviation,names]of Object.entries(teams))for(const name of names.filter(Boolean))nameAliases.set(league+':'+normalize(name),canonicalCode(league,abbreviation));
+  function identity(item){
+    const symbol=item.symbol||'',event=item.event_id||symbol;
+    let league,teams;
+    if(item.provider==='polymarket_us'){
+      const match=symbol.match(/^(?:aec-)?(mlb|nfl|nba|nhl)-([a-z0-9]+)-([a-z0-9]+)-\d{4}-\d{2}-\d{2}(?:-|$)/i);
+      if(match){league=match[1].toLowerCase();teams=match.slice(2,4).map(value=>canonicalCode(league,value));}
+    }else{
+      const match=event.match(/^KX(MLB|NFL|NBA|NHL)[A-Z0-9]*-\d{2}[A-Z]{3}\d{2}(?:\d{4})?([A-Z]+)(?:-|$)/);
+      if(match){league=match[1].toLowerCase();const codes=[...teamCodes[league],...Object.keys(aliases[league]||{})],pairs=new Map();
+        for(const a of codes)for(const b of codes)if(a!==b&&a+b===match[2]){const pair=[canonicalCode(league,a),canonicalCode(league,b)];pairs.set(pair.join(':'),pair);}
+        if(pairs.size===1)teams=[...pairs.values()][0];
+      }
+    }
+    if(teams?.some(code=>!teamCodes[league]?.includes(code)))teams=null;
+    if(!teams){league='names';teams=(item.home_team&&item.away_team?[item.home_team,item.away_team]:String(item.event_title||'').split(':')[0].split(/\s+(?:vs\.?|v\.?|@)\s+/i)).map(normalize);}
+    const key=teams.length===2&&teams.every(Boolean)?[league,...teams.slice().sort(),item.game_start].join('|'):[item.provider,item.event_id||item.event_title,item.game_start].join('|');
+    return {key,league,teams};
+  }
+  function outcomeTeam(value,info){
+    const normalized=normalize(value),code=canonicalCode(info.league,value);
+    if(info.teams.includes(code))return code;
+    if(info.teams.includes(nameAliases.get(info.league+':'+normalized)))return nameAliases.get(info.league+':'+normalized);
+    return info.teams.find(team=>normalize(team)===normalized)||null;
+  }
+  function group(items){
+    const games=new Map();
+    for(const item of items){
+      const info=identity(item);let game=games.get(info.key);
+      if(!game){game={id:info.key,event_title:item.event_title,game_start:item.game_start,generated_at:item.generated_at,info,providers:[],markets:[],native:new Map(),search:[]};games.set(info.key,game);}
+      if(item.provider==='polymarket_us')game.event_title=item.event_title;
+      if(item.generated_at>game.generated_at)game.generated_at=item.generated_at;
+      if(!game.providers.includes(item.provider))game.providers.push(item.provider);
+      game.search.push(item.event_title,item.market_title,item.outcome,item.provider==='kalshi'?'Kalshi':'Polymarket');
+      const nativeKey=item.provider+':'+(item.symbol||item.market_id||item.id);
+      let market=game.native.get(nativeKey);if(!market){market={provider:item.provider,symbol:item.symbol,title:item.market_title,rows:[]};game.native.set(nativeKey,market);}market.rows.push(item);
+    }
+    for(const game of games.values()){
+      const propositions=new Map();
+      const add=(key,title,provider,yes,no)=>{let market=propositions.get(key);if(!market){market={id:key,title,variants:{}};propositions.set(key,market);}market.variants[provider]={yes,no};};
+      for(const [nativeKey,native]of game.native){
+        const yes=native.rows.find(row=>['yes','long'].includes(row.side)),no=native.rows.find(row=>['no','short'].includes(row.side));
+        const kalshiWinner=native.provider==='kalshi'&&/^KX(?:MLB|NFL|NBA|NHL)GAME-/.test(native.symbol||'');
+        const polyWinner=native.provider==='polymarket_us'&&(/full_game_winner/i.test(native.rows[0].market_type||'')||/^(?:aec-)?(?:mlb|nfl|nba|nhl)-[^-]+-[^-]+-\d{4}-\d{2}-\d{2}$/.test(native.symbol||''));
+        const affirmative=outcomeTeam(yes?.outcome,game.info)||(kalshiWinner?outcomeTeam(native.symbol.split('-').at(-1),game.info):null);
+        const teamLabel=team=>game.info.league==='mlb'?mlbNames[teamCodes.mlb.indexOf(team)]||team:yes?.outcome||team;
+        if(affirmative&&(kalshiWinner||polyWinner)){
+          add('win:'+affirmative,`${teamLabel(affirmative)} to win`,native.provider,yes,no);
+          // A published opposite team contract is the No side only for a two-team winner market.
+          const opposite=polyWinner&&outcomeTeam(no?.outcome,game.info);
+          if(opposite&&opposite!==affirmative)add('win:'+opposite,`${game.info.league==='mlb'?mlbNames[teamCodes.mlb.indexOf(opposite)]:no.outcome} to win`,native.provider,no,yes);
+        }else{
+          add(nativeKey,native.title||yes?.outcome||native.rows[0].outcome||game.event_title,native.provider,yes||(!no?native.rows[0]:null),no);
+        }
+      }
+      game.markets=[...propositions.values()].sort((a,b)=>Object.keys(b.variants).length-Object.keys(a.variants).length||a.title.localeCompare(b.title));
+      game.providers.sort();game.provider=game.providers.join(',');game.search=game.search.join(' ').toLowerCase();delete game.native;
+    }
+    return [...games.values()];
+  }
+  const selections=new Map();let cardSequence=0;
+  function choices(legend,name,options,onChange){
+    const field=el('fieldset','','game-switch');field.append(el('legend',legend));
+    for(const option of options){const wrap=el('label','','game-switch-option'),input=el('input'),span=el('span',option.label);input.type='radio';input.name=name;input.value=option.value;input.checked=option.checked;input.disabled=option.disabled||false;input.addEventListener('change',()=>{if(input.checked)onChange(input.value);});wrap.append(input,span);field.append(wrap);}return field;
+  }
+  function render(entries){
+    // Terminal mounts its screener asynchronously, after this shared script has loaded.
+    const cards=document.getElementById('qs-games');if(!cards)return;
+    const games=entries[0]?.markets?entries:group(entries);cards.replaceChildren();
+    for(const game of games){
+      const card=el('article','','game-card'),number=++cardSequence;
+      const preferred=game.markets[0],stored=selections.get(game.id);
+      let selected=stored||{provider:preferred.variants.kalshi?'kalshi':game.providers[0],market:preferred.id,side:'yes'};
+      const draw=focusName=>{
+        let market=game.markets.find(m=>m.id===selected.market&&m.variants[selected.provider])||game.markets.find(m=>m.variants[selected.provider]);
+        selected.market=market.id;const pair=market.variants[selected.provider];
+        if(!pair[selected.side])selected.side=pair.yes?'yes':'no';selections.set(game.id,{...selected});
+        const row=pair[selected.side];card.replaceChildren();
+        const title=el('h3',game.event_title);title.id='game-title-'+number;card.setAttribute('aria-labelledby',title.id);card.append(title,el('p',`Starts ${time(game.game_start)}`,'small'));
+        card.append(choices('Platform','game-provider-'+number,[{value:'kalshi',label:'Kalshi',checked:selected.provider==='kalshi',disabled:!game.providers.includes('kalshi')},{value:'polymarket_us',label:'Polymarket',checked:selected.provider==='polymarket_us',disabled:!game.providers.includes('polymarket_us')}],value=>{selected.provider=value;draw('game-provider-'+number);}));
+        const marketLabel=el('label','Market','game-market-label'),select=el('select');select.id='game-market-'+number;select.name='game-market-'+number;marketLabel.htmlFor=select.id;
+        for(const candidate of game.markets.filter(m=>m.variants[selected.provider])){const option=el('option',candidate.title);option.value=candidate.id;option.selected=candidate.id===market.id;select.append(option);}
+        select.addEventListener('change',()=>{selected.market=select.value;draw(select.name);});card.append(marketLabel,select);
+        card.append(choices('Position','game-side-'+number,[{value:'yes',label:'Yes',checked:selected.side==='yes',disabled:!pair.yes},{value:'no',label:'No',checked:selected.side==='no',disabled:!pair.no}],value=>{selected.side=value;draw('game-side-'+number);}));
+        card.append(provider(row),el('p',`${selected.side==='yes'?'Yes':'No'} · ${row.outcome==='No'?market.title:row.outcome}`,'game-selected-outcome'));
+        const summary=el('p',`End-of-horizon P50: ${percent(row.endpoint?.['0.5'])}`,'game-probability');summary.setAttribute('aria-live','polite');card.append(summary);
+        const quantiles=el('dl','','game-quantile-summary');for(const q of bands){const value=el('div');value.append(el('dt',label(q)),el('dd',percent(row.endpoint?.[q])));quantiles.append(value);}card.append(quantiles);
+        card.append(el('p',`${row.models?.length||0} models · ${row.status==='final_pregame'?'Final pregame forecast':'Updates hourly before start'} · ${row.recomputed_at?'Recomputed':'Updated'} ${time(row.recomputed_at||row.generated_at)}`,'small'));
+        if(!pair.yes||!pair.no)card.append(el('p',`${pair.yes?'No':'Yes'} forecast is not available for this market.`,'small'));
+        const link=el('a','View forecast','cta secondary');link.href=href(row.id);link.setAttribute('aria-label',`View ${selected.side} forecast for ${market.title} on ${selected.provider==='kalshi'?'Kalshi':'Polymarket'}`);card.append(link);
+        if(focusName)card.querySelector(`input[name="${focusName}"]:checked,select[name="${focusName}"]`)?.focus();
+      };draw();cards.append(card);
+    }
+  }
   async function show(id,saved=false){
     if(!page){window.location.href=href(id);return;}
     const run=++sequence;viewed=null;page.hidden=false;page.setAttribute('aria-busy','true');page.replaceChildren(el('p','Loading saved game forecast…'));
@@ -46,8 +153,7 @@
       viewed={item,saved};if(!saved)saveViewed();
     }catch{if(run===sequence){page.replaceChildren(el('p',saved?'Sign in to open your saved forecast.':'This forecast could not be loaded.'));const retry=el('button','Try again','cta secondary');retry.type='button';retry.addEventListener('click',()=>show(id,saved));page.append(retry);}}finally{if(run===sequence)page.removeAttribute('aria-busy');}
   }
-  function render(items){if(!cards)return;cards.replaceChildren();for(const game of items){const card=el('article','','game-card');card.append(provider(game),el('h3',game.event_title),el('p',game.outcome),el('p',`Starts ${time(game.game_start)}`,'small'));if(Number.isFinite(game.endpoint?.['0.5']))card.append(el('p',`End-of-horizon P50: ${percent(game.endpoint['0.5'])}`));card.append(el('p',`${game.status==='final_pregame'?'Final pregame forecast':'Updates hourly before start hour'} · ${game.recomputed_at?'Recomputed':'Updated'} ${time(game.recomputed_at||game.generated_at)}`,'small'));const link=el('a','View forecast','cta secondary');link.href=href(game.id);card.append(link);cards.append(card);}}
-  window.QuanturaGames=Object.freeze({render,show});
+  window.QuanturaGames=Object.freeze({group,render,show});
   const params=new URLSearchParams(window.location.search),id=params.get('gameForecastId'),savedId=params.get('userGameForecastId');
   if(page&&(/^[a-f0-9]{32}$/.test(id||'')||/^[a-f0-9]{40}$/.test(savedId||''))){
     document.body.classList.add('game-forecast-view');

@@ -1,5 +1,5 @@
 import type { Router } from "express";
-import type admin from "firebase-admin";
+import admin from "firebase-admin";
 import crypto from "node:crypto";
 import {authenticatePlatformRequest} from "./apiAccess";
 
@@ -45,6 +45,10 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
   }
   if(rows.at(-1)?.timestamp!==raw.forecast_end)return null;
   const base:Record<string,unknown>={id:raw.id,provider:raw.provider,event_title:text(raw.event_title),outcome:text(raw.outcome),
+    symbol:text(raw.symbol,220),contract_id:text(raw.contract_id,220),market_id:text(raw.market_id,220),event_id:text(raw.event_id,220),
+    side:["yes","no","long","short"].includes(text(raw.side))?raw.side:raw.provider==="kalshi"?text(raw.contract_id).split(":").at(-1):null,
+    market_title:text(raw.market_title,320),market_type:text(raw.market_type,120),sport:text(raw.sport,80),league:text(raw.league,100),
+    home_team:text(raw.home_team,160),away_team:text(raw.away_team,160),
     game_date:raw.game_date,game_start:raw.game_start,forecast_end:raw.forecast_end,generated_at:raw.generated_at,
     recomputed_at:validTime(raw.recomputed_at)?raw.recomputed_at:null,
     schedule_verified_at:validTime(raw.schedule_verified_at)?raw.schedule_verified_at:null,schedule_source:text(raw.schedule_source,120),
@@ -100,14 +104,19 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
       res.setHeader("Cache-Control","private, no-store");res.json({saved:true,id:savedId,request_id:requestId,url:`/forecasting?panel=forecast&userGameForecastId=${savedId}`});
     }catch{res.status(503).json({error:"saved_forecast_unavailable"});}
   });
-  router.get("/screener/games",async(_req,res)=>{
+  router.get("/screener/games",async(req,res)=>{
+    const cursor=String(req.query.cursor||"");
+    if(cursor&&!/^[a-f0-9]{32}$/.test(cursor)){res.status(400).json({error:"invalid_cursor"});return;}
     try {
       const date=gameDate();
+      let query=db.collection("game_forecast_catalog").where("game_date","==",date).orderBy(admin.firestore.FieldPath.documentId());
+      if(cursor)query=query.startAfter(cursor);
       const [games,status]=await Promise.all([
-        db.collection("game_forecast_catalog").where("game_date","==",date).limit(1000).get(),
+        query.limit(501).get(),
         db.collection("game_forecast_status").get(),
       ]);
-      const items=games.docs.flatMap(doc=>{const publicRow=publicGameForecast(doc.data());return publicRow?[publicRow]:[];})
+      const page=games.docs.slice(0,500),nextCursor=games.size>500?page.at(-1)!.id:null;
+      const items=page.flatMap(doc=>{const publicRow=publicGameForecast(doc.data());return publicRow?[publicRow]:[];})
         .sort((a,b)=>String(a.game_start).localeCompare(String(b.game_start))||String(a.event_title).localeCompare(String(b.event_title)));
       const current=status.docs.map(doc=>({...doc.data(),id:doc.id})).filter((data:any)=>data.game_date===date && ["kalshi","polymarket_us"].includes(data.provider));
       const coverage=["kalshi","polymarket_us"].flatMap(provider=>{
@@ -117,7 +126,7 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
         return [{provider,updated_at:selected.map((d:any)=>text(d.updated_at,50)).sort().at(-1),eligible:selected.reduce((n,d:any)=>n+(Number(d.eligible)||0),0),successful:selected.reduce((n,d:any)=>n+(Number(d.successful)||0),0),failed:selected.reduce((n,d:any)=>n+(Number(d.failed)||0),0),partial:selected.some((d:any)=>d.partial===true)||sharded.length>0&&sharded.length<Number((sharded[0] as any).shards)}];
       });
       res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");
-      res.json({date,time_zone:"America/New_York",items,coverage,bounded:games.size===1000});
+      res.json({date,time_zone:"America/New_York",items,coverage,next_cursor:nextCursor,bounded:nextCursor!==null});
     }catch{res.status(503).json({error:"games_unavailable",message:"Game forecasts are temporarily unavailable."});}
   });
   router.get("/screener/games/:id",async(req,res)=>{
