@@ -382,7 +382,7 @@ test('request navigation and opposite-side forecast are explicit actions; Foundr
   assert.equal(document.querySelector('#ensemble-request-next').type,'button');
   assert.equal(document.querySelector('#ensemble-other-side').hidden,true);
   const app=source('app.js');
-  assert.match(app,/marketSelector.hidden = \["autopilot", "foundry", "profile"\].includes\(next\)/);
+  assert.match(app,/marketSelector.hidden = \["autopilot", "foundry", "profile", "screener"\].includes\(next\)/);
   assert.match(app,/candidates.length!==1/);
   assert.match(app,/row.contract\?\.marketId===s.market_id&&row.contract_id!==s.contract_id/);
   assert.match(app,/if\(!ids.length\|\|ids.length>50\)return/);
@@ -500,7 +500,7 @@ test('game cards open the saved Forecast page, whose six quantiles render safely
   const cards=dom(page('screener.html'));let calls=0;cards.window.fetch=async()=>{calls++;};cards.window.eval(source('game-forecasts.js'));cards.window.QuanturaGames.render([item]);assert.equal(calls,0);
   assert.match(cards.window.document.querySelector('#qs-games a').href,/forecasting\?panel=forecast&gameForecastId=/);assert.equal(cards.window.document.querySelector('#qs-games img'),null);cards.window.close();
   const d=dom(page('forecasting.html')),w=d.window;w.history.replaceState({},'', '/forecasting?panel=forecast&gameForecastId='+id);w.AbortSignal=AbortSignal;const urls=[];w.fetch=async(url,options)=>{urls.push(url);assert.equal(options.method,undefined);return {ok:true,json:async()=>({item})};};w.eval(source('game-forecasts.js'));await tick();
-  const host=w.document.getElementById('game-forecast-page');assert.equal(host.hidden,false);assert.equal(host.querySelector('img'),null);assert.match(host.textContent,/82 genuine hourly observations/);assert.equal(host.querySelectorAll('thead th').length,7);assert.match(host.textContent,/95.0%/);assert.equal(urls.length,1);assert.match(urls[0],/screener\/games\//);w.close();
+  const host=w.document.getElementById('game-forecast-page');assert.equal(host.hidden,false);assert.equal(host.querySelector('img'),null);assert.match(host.textContent,/82 genuine hourly observations/);assert.equal(host.querySelectorAll('.game-probabilities thead th').length,7);assert.match(host.textContent,/95.0%/);assert.equal(urls.length,2);assert.match(urls[0],/screener\/games\//);assert.match(urls[1],/\/history$/);w.close();
 });
 
 test('games are a lazy screener data source with searchable paginated results and a recoverable error', async () => {
@@ -511,9 +511,9 @@ test('games are a lazy screener data source with searchable paginated results an
   w.fetch=async url=>{calls.push(url);return {ok:!fail,json:async()=>({date:'2026-09-26',items,coverage:[]})};};
   const append=w.document.head.append.bind(w.document.head);w.document.head.append=node=>{append(node);if(node.src.includes('game-forecasts.js')){w.eval(source('game-forecasts.js'));node.dispatchEvent(new w.Event('load'));}};
   w.eval(source('screener.js'));await tick();await tick();
-  assert.deepEqual(calls,['/api/screener/games']);assert.equal(w.document.getElementById('today-games'),null);
+  assert.deepEqual(calls,['/api/screener/games','/api/screener/games/prices']);assert.equal(w.document.getElementById('today-games'),null);
   assert.equal(w.document.querySelectorAll('#qs-games .game-card').length,50);assert.equal(w.document.getElementById('qs-loading').hidden,true);
-  w.document.getElementById('qs-next').click();await tick();assert.equal(w.document.querySelectorAll('#qs-games .game-card').length,5);assert.equal(calls.length,1);
+  w.document.getElementById('qs-next').click();await tick();assert.equal(w.document.querySelectorAll('#qs-games .game-card').length,5);assert.equal(calls.length,2);
   const search=w.document.getElementById('qs-search');search.value='Kalshi';search.dispatchEvent(new w.Event('change',{bubbles:true}));await tick();assert.equal(w.document.querySelectorAll('#qs-games .game-card').length,27);
   fail=true;w.document.getElementById('qs-refresh').click();await tick();assert.equal(w.document.getElementById('qs-error').hidden,false);assert.equal(w.document.getElementById('qs-loading').hidden,true);
   fail=false;w.document.getElementById('qs-retry').click();await tick();assert.equal(w.document.getElementById('qs-error').hidden,true,w.document.getElementById('qs-error-message').textContent);assert.equal(w.document.getElementById('qs-games').hidden,false);w.close();

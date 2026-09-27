@@ -2,6 +2,8 @@ import type { Router } from "express";
 import admin from "firebase-admin";
 import crypto from "node:crypto";
 import {authenticatePlatformRequest} from "./apiAccess";
+import {gameMarketUrl, gameMarketPrices} from "./gameMarketQuotes";
+import {observedGameHistory, gameHistory} from "./gameHistory";
 
 export function gameDate(now = Date.now()): string {
   return new Intl.DateTimeFormat("en-CA", {timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(now));
@@ -45,7 +47,8 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
   }
   if(rows.at(-1)?.timestamp!==raw.forecast_end)return null;
   const base:Record<string,unknown>={id:raw.id,provider:raw.provider,event_title:text(raw.event_title),outcome:text(raw.outcome),
-    symbol:text(raw.symbol,220),contract_id:text(raw.contract_id,220),market_id:text(raw.market_id,220),event_id:text(raw.event_id,220),
+    symbol:text(raw.symbol,220),contract_id:text(raw.contract_id,220),market_id:text(raw.market_id,220),event_id:text(raw.event_id,220),event_slug:text(raw.event_slug,220),
+    market_url:gameMarketUrl(raw),
     side:["yes","no","long","short"].includes(text(raw.side))?raw.side:raw.provider==="kalshi"?text(raw.contract_id).split(":").at(-1):null,
     market_title:text(raw.market_title,320),market_type:text(raw.market_type,120),sport:text(raw.sport,80),league:text(raw.league,100),
     home_team:text(raw.home_team,160),away_team:text(raw.away_team,160),
@@ -58,11 +61,12 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
     endpoint:rows.at(-1)?.quantiles};
   if(detail)Object.assign(base,{symbol:text(raw.symbol,220),contract_id:text(raw.contract_id,220),
     history_start:validTime(raw.history_start)?raw.history_start:null,history_gap_count:Number(raw.history_gap_count)||0,
-    method:text(raw.method,600),warnings:Array.isArray(raw.warnings)?raw.warnings.map(w=>text(w,600)).slice(0,20):[],predictions:rows});
+    method:text(raw.method,600),warnings:Array.isArray(raw.warnings)?raw.warnings.map(w=>text(w,600)).slice(0,20):[],predictions:rows,observations:observedGameHistory(raw)});
   return base;
 }
 
 export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Firestore,auth?:admin.auth.Auth):void {
+  let prices: {date:string; until:number; promise:Promise<Record<string,unknown>>} | undefined;
   const signedIn=async(req:any,res:any)=>{
     try {
     if(!auth)throw Error("authentication_unavailable");
@@ -128,6 +132,40 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
       res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");
       res.json({date,time_zone:"America/New_York",items,coverage,next_cursor:nextCursor,bounded:nextCursor!==null});
     }catch{res.status(503).json({error:"games_unavailable",message:"Game forecasts are temporarily unavailable."});}
+  });
+  router.get("/screener/games/prices",async(_req,res)=>{
+    try {
+      const date=gameDate();
+      if(!prices || prices.date!==date || prices.until<Date.now()) {
+        const promise=(async()=>{
+          const data=await db.collection("game_forecast_catalog").where("game_date","==",date).limit(10001).get();
+          const rows=data.docs.slice(0,10000).flatMap(doc=>{const row=publicGameForecast(doc.data());return row?[row]:[];});
+          const items=await gameMarketPrices(rows);
+          return {date,items,bounded:data.size>10000,missing:items.filter(item=>item.latest_price===null).length};
+        })();
+        const entry={date,until:Date.now()+60000,promise};prices=entry;
+        promise.catch(()=>{if(prices===entry)prices=undefined;});
+      }
+      res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");res.json(await prices.promise);
+    }catch{res.status(503).json({error:"game_prices_unavailable"});}
+  });
+  router.get("/screener/games/saved/:id/history",async(req,res)=>{
+    try {
+      const uid=await signedIn(req,res);if(!uid)return;const id=String(req.params.id);
+      if(!/^[a-f0-9]{40}$/.test(id)){res.status(404).json({error:"not_found"});return;}
+      const doc=await db.collection("user_game_forecasts").doc(id).get();
+      if(!doc.exists||doc.data()?.ownerUid!==uid){res.status(404).json({error:"not_found"});return;}
+      res.setHeader("Cache-Control","private, no-store");res.json(await gameHistory(doc.data()!.forecast));
+    }catch{res.status(503).json({error:"game_history_unavailable"});}
+  });
+  router.get("/screener/games/:id/history",async(req,res)=>{
+    const id=String(req.params.id);if(!/^[a-f0-9]{32}$/.test(id)){res.status(404).json({error:"not_found"});return;}
+    try {
+      const doc=await db.collection("game_forecast_catalog").doc(id).get();
+      const item=doc.exists?publicGameForecast(doc.data()||{},Date.now(),true,true):null;
+      if(!item){res.status(404).json({error:"not_found"});return;}
+      res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");res.json(await gameHistory(item));
+    }catch{res.status(503).json({error:"game_history_unavailable"});}
   });
   router.get("/screener/games/:id",async(req,res)=>{
     const id=String(req.params.id);

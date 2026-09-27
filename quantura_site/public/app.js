@@ -2298,7 +2298,7 @@
           panelsRoot.dataset.activePanel = next;
           window.dispatchEvent(new CustomEvent("quantura:panel-changed", {detail:{panel:next}}));
           const marketSelector = document.querySelector(".market-search-workspace");
-          if (marketSelector) marketSelector.hidden = ["autopilot", "foundry", "profile"].includes(next);
+          if (marketSelector) marketSelector.hidden = ["autopilot", "foundry", "profile", "screener"].includes(next);
 		      if (next === "profile" && /^#terminal-profile-(auth|profile|orders|collaboration|developer)$/.test(window.location.hash)) {
 		        const requestedGroup = document.getElementById(window.location.hash.slice(1));
 		        if (requestedGroup instanceof HTMLDetailsElement && !requestedGroup.hidden) requestedGroup.open = true;

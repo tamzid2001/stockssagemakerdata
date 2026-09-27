@@ -90,6 +90,7 @@ def document(contract, forecast, now, original=None):
         "models": [m["id"] for m in forecast["models"] if m["status"] == "completed"],
         "effective_weights_by_quantile": forecast["weights"], "model_versions": forecast["model_versions"],
         "warnings": forecast["warnings"], "predictions": [{**r, "timestamp": iso(r["timestamp"])} for r in rows],
+        "observations": [{"timestamp": r["timestamp"], "price": r["target"]} for r in forecast["input_snapshot"]],
         "expires_at": datetime.fromtimestamp(end + 2 * 86400, timezone.utc),
         "method": "Ten days of genuine completed hourly pregame observations. Four models for 2–31 observations with approved TimesFM; five from 32 observations (or four without TimesFM). Equal weights renormalized separately for each supported quantile; Toto/TimesFM tails are never extrapolated. Logit probability ensemble; missing hours stay missing. Final partial-hour model point is interpolated.",
     }

@@ -42,7 +42,7 @@
     <script defer src="/ga4-context.js?v=20260927a"></script>
     <script defer src="/app.js?v=20260927-research"></script>
 
-    <script defer src="/screener.js?v=20260927-game-controls"></script>
+    <script defer src="/screener.js?v=20260927-game-filters"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -122,8 +122,11 @@
             <div class="qs-filter-grid"><label class="qs-field"><span>Data source</span><select id="qs-source" name="source"><option value="stocks">Stocks · daily 7-session ensemble</option><option value="kalshi_perps">Kalshi Perpetuals · spot scale</option><option value="today_games">Today’s games · Kalshi &amp; Polymarket US</option></select></label>
               <label class="qs-field qs-search-field">
                 <span>Search</span>
-                <div class="qs-input-icon"><i class="iconoir-search" aria-hidden="true"></i><input id="qs-search" name="search" type="search" placeholder="Ticker or company, e.g. PLTR" autocomplete="off" /></div>
+                <div class="qs-input-icon"><i class="iconoir-search" aria-hidden="true"></i><input id="qs-search" name="search" type="search" maxlength="512" enterkeyhint="search" placeholder="Ticker or company, e.g. PLTR" autocomplete="off" /></div>
               </label>
+              <label class="qs-field qs-game-filter" hidden><span>Game platform</span><select id="qs-game-provider" name="gameProvider"><option value="all">All platforms</option><option value="kalshi">Kalshi only</option><option value="polymarket_us">Polymarket only</option></select></label>
+              <label class="qs-field qs-game-filter" hidden><span>Latest price</span><select id="qs-game-comparison" name="gameComparison"><option value="any">Any price</option><option value="below">Below quantile</option><option value="above">Above quantile</option></select></label>
+              <label class="qs-field qs-game-filter" hidden><span>Forecast quantile · horizon end</span><select id="qs-game-quantile" name="gameQuantile"><option value="0.01">P01</option><option value="0.25">P25</option><option value="0.5" selected>P50</option><option value="0.75">P75</option><option value="0.9">P90</option><option value="0.99">P99</option></select></label>
               <label class="qs-field">
                 <span>Universe</span>
                 <select id="qs-universe" name="universe">
