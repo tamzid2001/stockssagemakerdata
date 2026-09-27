@@ -16,3 +16,12 @@ test("late, future, wrong-day, malformed and crossed-band forecasts are hidden",
  for(const patch of [{generated_at:"2026-09-26T23:00:00Z"},{game_date:"2026-09-27"},{input_cutoff:"2026-09-26T22:30:00Z"},
  {forecast_end:"2026-09-27T03:31:00Z"},{predictions:[{timestamp:"2026-09-27T03:30:00Z",quantiles:{"0.1":.8,"0.5":.4,"0.9":.7}}]}])assert.equal(publicGameForecast({...fixture(),...patch},now),null);
 });
+test("six-quantile refresh retains tails, four/five models, and honest retrospective timing",()=>{
+ const modern={...fixture(),schema_version:2,history_count:82,schedule_verified_at:"2026-09-26T21:00:00Z",models:["prophet","granite","chronos","timesfm","toto"],
+ predictions:[{timestamp:"2026-09-27T03:30:00Z",quantiles:{"0.01":.01,"0.25":.2,"0.5":.4,"0.75":.6,"0.9":.8,"0.99":.99}}]};
+ assert.deepEqual(Object.keys((publicGameForecast(modern,now,true)!.predictions as any[])[0].quantiles),["0.01","0.25","0.5","0.75","0.9","0.99"]);
+ assert.equal(publicGameForecast({...modern,models:["prophet","chronos"]},now),null);
+ const replay={...modern,generated_at:"2026-09-27T02:00:00Z",recomputed_at:"2026-09-27T02:00:00Z",original_generated_at:modern.generated_at};
+ assert.ok(publicGameForecast(replay,Date.parse(replay.generated_at),true));
+ assert.equal(publicGameForecast({...replay,input_cutoff:"2026-09-26T23:00:00Z"},Date.parse(replay.generated_at)),null);
+});

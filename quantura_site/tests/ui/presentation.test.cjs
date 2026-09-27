@@ -495,15 +495,12 @@ test('Kalshi selections with legacy provider or nested contract retain provider 
   assert.throws(()=>f({symbol:'AAPL'}),/Choose a Kalshi or Polymarket outcome/);d.window.close();
 });
 
-test('game detail is fetched on demand and market labels are rendered as text', async () => {
-  const d=dom(page('screener.html')),w=d.window,calls=[];
-  w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};
-  const item={id:'a'.repeat(32),provider:'kalshi',event_title:'<img src=x onerror=alert(1)>',outcome:'A',game_start:'2026-09-26T23:30Z',forecast_end:'2026-09-27T03:30Z',generated_at:'2026-09-26T21:10Z',history_count:180,models:['prophet','chronos'],status:'updating_pregame',predictions:[{timestamp:'2026-09-27T03:30Z',quantiles:{'0.1':.2,'0.5':.4,'0.9':.8}}]};
-  w.fetch=async url=>{calls.push(url);return {ok:true,json:async()=>url.endsWith(item.id)?{item}:{date:'2026-09-26',items:[item],coverage:[]}};};
-  w.AbortSignal=AbortSignal;
-  w.eval(source('game-forecasts.js'));w.QuanturaGames.render([item]);assert.equal(calls.length,0);assert.equal(w.document.querySelector('[data-game-cards] img'),null);
-  w.document.querySelector('[data-game-cards] button').click();await tick();assert.equal(calls.length,1);assert.equal(w.document.querySelector('dialog').open,true);assert.match(w.document.querySelector('dialog').textContent,/40.0%/);
-  w.document.querySelector('[data-game-close]').click();assert.equal(w.document.querySelector('dialog').open,false);w.close();
+test('game cards open the saved Forecast page, whose six quantiles render safely without submitting inference', async () => {
+  const id='a'.repeat(32),item={id,provider:'kalshi',event_title:'<img src=x onerror=alert(1)>',outcome:'A',game_start:'2026-09-26T23:30Z',forecast_end:'2026-09-27T03:30Z',generated_at:'2026-09-26T21:10Z',input_cutoff:'2026-09-26T21:00Z',history_count:82,models:['prophet','granite','chronos','timesfm','toto'],status:'updating_pregame',predictions:[{timestamp:'2026-09-27T03:30Z',quantiles:{'0.01':.05,'0.25':.2,'0.5':.4,'0.75':.6,'0.9':.8,'0.99':.95}}]};
+  const cards=dom(page('screener.html'));let calls=0;cards.window.fetch=async()=>{calls++;};cards.window.eval(source('game-forecasts.js'));cards.window.QuanturaGames.render([item]);assert.equal(calls,0);
+  assert.match(cards.window.document.querySelector('#qs-games a').href,/forecasting\?panel=forecast&gameForecastId=/);assert.equal(cards.window.document.querySelector('#qs-games img'),null);cards.window.close();
+  const d=dom(page('forecasting.html')),w=d.window;w.history.replaceState({},'', '/forecasting?panel=forecast&gameForecastId='+id);w.AbortSignal=AbortSignal;const urls=[];w.fetch=async(url,options)=>{urls.push(url);assert.equal(options.method,undefined);return {ok:true,json:async()=>({item})};};w.eval(source('game-forecasts.js'));await tick();
+  const host=w.document.getElementById('game-forecast-page');assert.equal(host.hidden,false);assert.equal(host.querySelector('img'),null);assert.match(host.textContent,/82 genuine hourly observations/);assert.equal(host.querySelectorAll('thead th').length,7);assert.match(host.textContent,/95.0%/);assert.equal(urls.length,1);assert.match(urls[0],/screener\/games\//);w.close();
 });
 
 test('games are a lazy screener data source with searchable paginated results and a recoverable error', async () => {

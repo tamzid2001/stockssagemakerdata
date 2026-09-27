@@ -5,7 +5,7 @@
   const workspace=form.closest(".market-search-workspace")||form.parentElement;
   const resources=new Map(),cache=new Map();let timer,controller,sequence=0,eventView=null,lastGroups={},lastErrors={};
   const escapeHtml=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
-  const providerLabel=s=>({alpaca:"Alpaca",yahoo:"Yahoo Finance",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
+  const providerLabel=s=>({alpaca:"Alpaca",yahoo:"Yahoo Finance",dukascopy:"Dukascopy",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
   queryInput.setAttribute("aria-controls","market-search-results");queryInput.setAttribute("aria-describedby","market-search-status");queryInput.setAttribute("aria-expanded","false");queryInput.maxLength=2048;
   function closeResults(){clearTimeout(timer);controller?.abort();controller=null;++sequence;results.hidden=true;results.removeAttribute("aria-busy");queryInput.setAttribute("aria-expanded","false");}
   const outside=e=>{if(!workspace.contains(e.target))closeResults();};
@@ -17,16 +17,16 @@
   function card(row){
     resources.set(row.resource_id,row);const prediction=row.resource_type==="prediction_market_contract";
     const forecast=row.forecast_available&&!['closed','settled'].includes(row.status);
-    return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}"><div class="market-search-result-main"><div class="market-search-result-symbol">${escapeHtml(prediction?row.outcome||row.side:row.symbol)}</div><div><strong>${escapeHtml(row.market_title||row.name||row.symbol)}</strong><div class="small muted">${escapeHtml([prediction?row.contract?.eventTitle:null,row.symbol,providerLabel(row.source),row.exchange,row.market_group,row.side,row.timing||row.status,row.unit].filter(Boolean).join(" · "))}</div></div></div><div class="market-search-result-actions">
+    return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}"><div class="market-search-result-main">${window.QuanturaLogos?.markup(row)||""}<div class="market-search-result-symbol">${escapeHtml(prediction?row.outcome||row.side:row.symbol)}</div><div><strong>${escapeHtml(row.market_title||row.name||row.symbol)}</strong><div class="small muted">${escapeHtml([prediction?row.contract?.eventTitle:null,row.symbol,providerLabel(row.source),row.exchange,row.market_group,row.side,row.timing||row.status,row.unit].filter(Boolean).join(" · "))}</div></div></div><div class="market-search-result-actions">
       ${forecast?`<button class="cta small" type="button" data-market-action="${prediction?'prediction-forecast':'forecast'}">Forecast</button>`:""}
       <button class="cta secondary small" type="button" data-market-action="${prediction?'prediction-download':'history'}">Download history</button>
-      ${prediction?`<button class="cta secondary small" type="button" data-market-action="add-download">+ Export outcome</button>${eventId(row)?'<button class="cta secondary small" type="button" data-market-action="event">All event markets</button>':''}`:["equity","etf"].includes(row.asset_class)?'<button class="cta secondary small" type="button" data-market-action="options">Options</button>':''}
+      ${prediction?`<button class="cta secondary small" type="button" data-market-action="add-download">+ Export outcome</button>${eventId(row)?'<button class="cta secondary small" type="button" data-market-action="event">All event markets</button>':''}`:row.source!=="dukascopy"&&["equity","etf"].includes(row.asset_class)?'<button class="cta secondary small" type="button" data-market-action="options">Options</button>':''}
       </div></article>`;
   }
   function show(){results.hidden=false;queryInput.setAttribute("aria-expanded","true");}
   function render(groups,errors={}){
     resources.clear();show();
-    results.innerHTML=Object.entries(groups).sort(([a],[b])=>Number(b==="alpaca")-Number(a==="alpaca")).filter(([,rows])=>rows.length).map(([source,rows])=>`<section class="market-search-group"><h3>${escapeHtml(providerLabel(source))}</h3>${rows.map(card).join("")}</section>`).join("")+Object.keys(errors).map(s=>`<p class="notice small">${escapeHtml(providerLabel(s))}: temporarily unavailable.</p>`).join("");
+    results.innerHTML=Object.entries(groups).sort(([a],[b])=>Number(b==="alpaca")-Number(a==="alpaca")).filter(([,rows])=>rows.length).map(([source,rows])=>`<section class="market-search-group"><h3>${escapeHtml(providerLabel(source))}</h3>${rows.map(card).join("")}</section>`).join("")+Object.keys(errors).map(s=>`<p class="notice small">${escapeHtml(providerLabel(s))}: ${errors[s]==="catalog_snapshot"?"live catalog unavailable; showing the last verified catalog":"temporarily unavailable"}.</p>`).join("");
     if(!results.innerHTML)results.innerHTML='<div class="empty-state">No supported market matched this search. Try a ticker or an exact event link.</div>';
   }
   async function get(url,signal){
@@ -36,22 +36,23 @@
     cache.set(url,{at:Date.now(),payload});if(cache.size>20)cache.delete(cache.keys().next().value);return payload;
   }
   function discoveryQuery(raw){
-    if(/^https?:\/\//i.test(raw))return {query:raw,mode:"open"};
+    if(/^https?:\/\//i.test(raw))return {query:raw,mode:"open",source:"auto"};
+    if(/^dukascopy\b/i.test(raw))return {query:raw.replace(/^dukascopy\s*:?\s*/i,"").trim(),mode:"open",source:"dukascopy"};
     const historical=/\binclude\s+historical\b|^historical(?:\s+(?:markets|games))?\b\s*:?/i;
     const live=/\blive\s+games\b|^live\s*:/i;
     const intent=historical.test(raw)?historical:live.test(raw)?live:null;
     return {query:intent?raw.replace(intent,"").trim():raw,mode:intent===historical?"any":intent===live?"live":"open"};
   }
   async function search(rank=false){
-    clearTimeout(timer);controller?.abort();const run=++sequence,{query,mode}=discoveryQuery(queryInput.value.trim());eventView=null;
-    if(query.length<2&&mode!=="live"){closeResults();status.textContent="Enter at least two characters to search markets.";return;}
+    clearTimeout(timer);controller?.abort();const run=++sequence,{query,mode,source="auto"}=discoveryQuery(queryInput.value.trim());eventView=null;
+    if(query.length<2&&mode!=="live"&&source!=="dukascopy"){closeResults();status.textContent="Enter at least two characters to search markets.";return;}
     controller=new AbortController();results.setAttribute("aria-busy","true");status.textContent="Searching configured providers…";
     try{
       const link=/^https?:\/\//i.test(query);
-      const params=new URLSearchParams(link?{url:query}:{q:query,source:"auto",limit:"20",mode,...(rank&&/\s/.test(query)?{rank:"true"}:{})});
+      const params=new URLSearchParams(link?{url:query}:{q:query,source,limit:"20",mode,...(rank&&/\s/.test(query)?{rank:"true"}:{})});
       const payload=await get(`${link?'/api/market-search/resolve':'/api/market-search'}?${params}`,controller.signal);if(run!==sequence)return;
       lastGroups=payload.groups||{};lastErrors=payload.errors||{};render(lastGroups,lastErrors);
-      status.textContent=`${Number(payload.count||0).toLocaleString()} results · Choose the exact outcome. ${payload.coverage||"Arrow keys to explore; Escape to close."}`;
+      status.textContent=`${Number(payload.count||0).toLocaleString()} results · Select an instrument or outcome. ${payload.coverage||"Arrow keys to explore; Escape to close."}`;
       if(link){const first=Object.values(lastGroups).flat().find(r=>eventId(r));if(first)void openEvent(first.source,eventId(first));}
     }catch(error){if(error.name!=="AbortError"&&run===sequence){show();results.innerHTML='<div class="empty-state">Unable to search. Retry or paste an exact provider event link.</div>';status.textContent=error.message;}}
     finally{if(run===sequence)results.removeAttribute("aria-busy");}
@@ -102,7 +103,7 @@
     window.QuanturaMarketSelection=row;
     if(intent==="forecast"){
       const source=document.getElementById("ensemble-source-type"),ticker=document.getElementById("ensemble-ticker"),provider=document.getElementById("ensemble-provider");
-      if(ticker)ticker.value=row.symbol;if(provider)provider.value="auto";
+      if(ticker)ticker.value=row.symbol;if(provider)provider.value=row.source==="dukascopy"?"dukascopy":"auto";
       if(source){source.value=row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new Event("change",{bubbles:true}));}
     }
     if(intent!=="add-download")setPanel(intent==="forecast"?"forecast":"download");

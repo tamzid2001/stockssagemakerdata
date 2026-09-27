@@ -59,7 +59,7 @@ test('multi-outcome basket preserves six soccer sides and never mixes providers'
 });
 test('old routes map to Q Download; no pricing/model/forecast API behavior is replaced',()=>{
   assert.match(source('app.js'),/\["sports-autopilot", "news", "options", "download"\].*return "download"/);
-  assert.match(source('app.js'),/provider.value = "auto"/);
+  assert.equal(api.requestFor(stock,settings).body.source,"auto");
   assert.match(source('q-terminal.css'),/z-index:120/);
 });
 test('screener navigation uses one Q Forecast and one unified Q Download',()=>{
@@ -69,4 +69,27 @@ test('screener navigation uses one Q Forecast and one unified Q Download',()=>{
   assert.equal(links.filter(a=>a.getAttribute('href')==='/forecasting?panel=download').length,1);
   assert.equal(links.some(a=>['/options','/historical-data','/sports-forecasting'].includes(a.getAttribute('href'))),false);
   d.window.close();
+});
+
+test('Dukascopy search selection retains its exact provider for forecasting and close-only downloads',async()=>{
+  const d=dom(),w=d.window,calls=[];const gold={resource_type:'instrument',resource_id:'dukascopy:XAU-USD',symbol:'XAU-USD',source:'dukascopy',asset_class:'metal',name:'Gold vs US Dollar',forecast_available:true};
+  w.__quanturaSetPanel=()=>{};
+  w.fetch=async(url,options)=>{calls.push({url,body:options?.body?JSON.parse(options.body):null});return {ok:true,json:async()=>url.includes('market-search')?{count:1,groups:{dukascopy:[gold]}}:{provider:'dukascopy',rows:[{timestamp:'2025-01-02T00:00:00Z',close:2625.185,open:2623.655}],warnings:[]}};};
+  w.eval(source('q-market.js'));w.eval(source('q-download.js'));w.eval(source('market-search.js'));
+  const query=w.document.getElementById('market-search-query');query.value='dukascopy XAUUSD';w.document.getElementById('market-search-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();
+  assert.match(calls[0].url,/source=dukascopy/);assert.match(calls[0].url,/q=XAUUSD/);
+  w.document.querySelector('[data-market-action="forecast"]').click();assert.equal(w.document.getElementById('ensemble-provider').value,'dukascopy');assert.equal(w.document.getElementById('ensemble-ticker').value,'XAU-USD');
+  const request=api.requestFor(gold,{...settings,frequency:'4h',price_side:'ask',columns:'close'});
+  assert.equal(request.body.source,'dukascopy');assert.equal(request.body.price_side,'ask');assert.equal(request.body.adjustment,'raw');assert.equal(request.body.timeframe,'4h');assert.equal(request.body.page_mode,true);
+  const snap=api.snapshot({provider:'dukascopy',rows:[{timestamp:'2025-01-02',open:1,close:2}]},gold,{...settings,columns:'close'},request);
+  assert.deepEqual(snap.columns,['timestamp','close']);assert.deepEqual(Object.keys(snap.rows[0]),['timestamp','close']);d.window.close();
+});
+test('Dukascopy download follows every page before enabling export and cancels settings changes',async()=>{
+  const d=dom(),w=d.window,calls=[];
+  const row={resource_type:'instrument',resource_id:'dukascopy:EUR-USD',symbol:'EUR-USD',source:'dukascopy',name:'Euro vs US Dollar',asset_class:'fx'};
+  w.fetch=async(url,options)=>{const body=JSON.parse(options.body);calls.push(body);return {ok:true,json:async()=>({provider:'dukascopy',rows:[{timestamp:body.cursor?'2025-02-01':'2025-01-01',close:1.03}],metadata:{completed_files:body.cursor?13:12,total_files:13},next_cursor:body.cursor?null:'page-2'})};};
+  w.eval(source('q-market.js'));w.eval(source('q-download.js'));w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:row,intent:'download'}}));
+  w.document.getElementById('q-download-form').dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();await tick();
+  assert.equal(calls.length,2);assert.equal(calls[1].cursor,'page-2');assert.equal(calls[1].end,calls[0].end);assert.equal(w.document.getElementById('qd-csv').disabled,false);assert.match(w.document.getElementById('qd-status').textContent,/2 rows/);
+  w.document.getElementById('qd-price-side').value='ask';w.document.getElementById('qd-price-side').dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(w.document.getElementById('qd-csv').disabled,true);d.window.close();
 });

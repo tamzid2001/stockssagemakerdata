@@ -6,8 +6,12 @@ on:
     inputs:
       max_contracts:
         type: number
-        default: 4
+        default: 500
         description: 'Maximum outcome forecasts per provider (scheduled: 500)'
+      refresh_published:
+        type: boolean
+        default: true
+        description: 'Recompute saved forecasts from their original pregame cutoff; label them retrospective'
 permissions:
   contents: read
 concurrency:
@@ -20,6 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         provider: [polymarket_us, kalshi]
+        shard: [0, 1]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -31,6 +36,8 @@ jobs:
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       PROVIDER: ${{ matrix.provider }}
       MAX_CONTRACTS: ${{ inputs.max_contracts || 500 }}
+      SHARD: ${{ matrix.shard }}
+      REFRESH_PUBLISHED: ${{ inputs.refresh_published || false }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -48,10 +55,13 @@ jobs:
       - name: Verify artifact encryption before acquiring datasets
         run: python -m market_research.artifact check-key
       - name: Forecast today’s games from ten days of hourly pregame data
-        run: python -m market_research.pregame_screener --provider "$PROVIDER" --max-contracts "$MAX_CONTRACTS"
+        run: |
+          extra=()
+          if [ "$REFRESH_PUBLISHED" = "true" ]; then extra+=(--refresh-published); fi
+          python -m market_research.pregame_screener --provider "$PROVIDER" --max-contracts "$MAX_CONTRACTS" --shard "$SHARD" --shards 2 "${extra[@]}"
       - name: Preserve partial or complete encrypted results
         if: always()
         uses: ./.github/actions/research-artifact
         with:
           encryption_key: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
-          name: hourly-${{ matrix.provider }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: hourly-${{ matrix.provider }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}

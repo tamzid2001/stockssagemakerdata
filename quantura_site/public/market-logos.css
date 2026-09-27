@@ -1,0 +1,12 @@
+.market-logo{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:0 0 32px;background:var(--surface-2,#f1f5f9);color:var(--text,#172033);border:1px solid var(--border,#dde3ec);border-radius:9px;font-size:11px;font-weight:700;overflow:hidden;vertical-align:middle;margin-right:8px}
+.market-logo img{width:28px;height:28px;object-fit:contain;background:#fff;border-radius:6px}
+.game-provider{display:flex;align-items:center;gap:2px}
+.game-forecast-page{padding:clamp(16px,3vw,32px);border:1px solid var(--border);border-radius:16px;background:var(--card);margin:16px 0}
+.game-forecast-page svg{display:block;width:100%;max-height:380px;margin:20px 0;background:var(--muted);border-radius:12px}
+.game-forecast-page .game-table-scroll{overflow-x:auto}
+.game-forecast-page table{width:100%;border-collapse:collapse;white-space:nowrap}
+.game-forecast-page th,.game-forecast-page td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--border)}
+.game-forecast-page th:first-child,.game-forecast-page td:first-child{text-align:left}
+.game-forecast-page .game-forecast-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+body.game-forecast-view #ensemble-forecast-settings,body.game-forecast-view .panel[data-panel=forecast]>.panel-header p{display:none}
+.logo-attribution{display:block;margin-top:12px;font-size:12px;color:var(--muted-foreground)}

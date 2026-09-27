@@ -11,8 +11,15 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
   if (!/^[a-f0-9]{32}$/.test(text(raw.id)) || !["kalshi","polymarket_us"].includes(text(raw.provider)) ||
       raw.game_date !== gameDate(now) || !validTime(raw.game_start) || gameDate(Date.parse(raw.game_start)) !== gameDate(now) ||
       !validTime(raw.forecast_end) || Date.parse(raw.forecast_end) !== Date.parse(raw.game_start)+4*3600000 ||
-      !validTime(raw.generated_at) || Date.parse(raw.generated_at) >= Math.floor(Date.parse(raw.game_start)/3600000)*3600000 ||
+      !validTime(raw.generated_at) || (!validTime(raw.recomputed_at) && Date.parse(raw.generated_at) >= Math.floor(Date.parse(raw.game_start)/3600000)*3600000) ||
       Date.parse(raw.generated_at)>now || !validTime(raw.input_cutoff) || Date.parse(raw.input_cutoff)>Date.parse(raw.generated_at)) return null;
+  if(raw.recomputed_at && (!validTime(raw.recomputed_at) || raw.recomputed_at!==raw.generated_at || !validTime(raw.original_generated_at) ||
+      Date.parse(raw.original_generated_at)>=Math.floor(Date.parse(raw.game_start)/3600000)*3600000 || Date.parse(raw.input_cutoff)>Date.parse(raw.original_generated_at)))return null;
+  const requested=["0.01","0.25","0.5","0.75","0.9","0.99"];
+  const keys=raw.schema_version===2?requested:["0.1","0.5","0.9"];
+  if(raw.schema_version===2 && (!Array.isArray(raw.models) || raw.models.length<4 || raw.models.length>5 ||
+      new Set(raw.models).size!==raw.models.length || raw.models.some(m=>!["prophet","granite","chronos","toto","timesfm"].includes(String(m))) ||
+      Number(raw.history_count)<2 || !validTime(raw.schedule_verified_at) || Date.parse(raw.schedule_verified_at)>now))return null;
   const predictions = Array.isArray(raw.predictions) ? raw.predictions : [];
   if (!predictions.length || predictions.length>512) return null;
   const rows:{timestamp:string;quantiles:Record<string,number>;interpolated_model_point:boolean}[]=[];
@@ -24,7 +31,7 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
     const q=row.quantiles as Record<string,unknown>;
     const quantiles:Record<string,number>={};
     let lower=-1;
-    for(const key of ["0.1","0.5","0.9"]) {
+    for(const key of keys) {
       const value=q[key];
       if(typeof value!=="number" || !Number.isFinite(value) || value<lower || value<0 || value>1)return null;
       quantiles[key]=value;lower=value;
@@ -35,6 +42,8 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
   if(rows.at(-1)?.timestamp!==raw.forecast_end)return null;
   const base:Record<string,unknown>={id:raw.id,provider:raw.provider,event_title:text(raw.event_title),outcome:text(raw.outcome),
     game_date:raw.game_date,game_start:raw.game_start,forecast_end:raw.forecast_end,generated_at:raw.generated_at,
+    recomputed_at:validTime(raw.recomputed_at)?raw.recomputed_at:null,
+    schedule_verified_at:validTime(raw.schedule_verified_at)?raw.schedule_verified_at:null,schedule_source:text(raw.schedule_source,120),
     input_cutoff:raw.input_cutoff,history_count:Number(raw.history_count)||0,
     models:Array.isArray(raw.models)?raw.models.map(m=>text(m,40)).slice(0,5):[],
     status:now>=Math.floor(Date.parse(raw.game_start)/3600000)*3600000?"final_pregame":"updating_pregame",
@@ -50,14 +59,20 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
     try {
       const date=gameDate();
       const [games,status]=await Promise.all([
-        db.collection("game_forecast_catalog").where("game_date","==",date).limit(500).get(),
+        db.collection("game_forecast_catalog").where("game_date","==",date).limit(1000).get(),
         db.collection("game_forecast_status").get(),
       ]);
       const items=games.docs.flatMap(doc=>{const publicRow=publicGameForecast(doc.data());return publicRow?[publicRow]:[];})
         .sort((a,b)=>String(a.game_start).localeCompare(String(b.game_start))||String(a.event_title).localeCompare(String(b.event_title)));
-      const coverage=status.docs.flatMap(doc=>{const data=doc.data();return data.game_date===date && ["kalshi","polymarket_us"].includes(doc.id)?[{provider:doc.id,updated_at:text(data.updated_at,50),eligible:Number(data.eligible)||0,successful:Number(data.successful)||0,failed:Number(data.failed)||0,partial:data.partial===true}]:[];});
+      const current=status.docs.map(doc=>({...doc.data(),id:doc.id})).filter((data:any)=>data.game_date===date && ["kalshi","polymarket_us"].includes(data.provider));
+      const coverage=["kalshi","polymarket_us"].flatMap(provider=>{
+        const all=current.filter((d:any)=>d.provider===provider),sharded=all.filter((d:any)=>d.shards>1);
+        const selected=sharded.length?sharded:all;
+        if(!selected.length)return [];
+        return [{provider,updated_at:selected.map((d:any)=>text(d.updated_at,50)).sort().at(-1),eligible:selected.reduce((n,d:any)=>n+(Number(d.eligible)||0),0),successful:selected.reduce((n,d:any)=>n+(Number(d.successful)||0),0),failed:selected.reduce((n,d:any)=>n+(Number(d.failed)||0),0),partial:selected.some((d:any)=>d.partial===true)||sharded.length>0&&sharded.length<Number((sharded[0] as any).shards)}];
+      });
       res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");
-      res.json({date,time_zone:"America/New_York",items,coverage,bounded:games.size===500});
+      res.json({date,time_zone:"America/New_York",items,coverage,bounded:games.size===1000});
     }catch{res.status(503).json({error:"games_unavailable",message:"Game forecasts are temporarily unavailable."});}
   });
   router.get("/screener/games/:id",async(req,res)=>{

@@ -104,9 +104,9 @@ function sendData(res: Response, data: unknown, requestId: string, meta: JsonRec
 }
 
 export async function tickerOverlayRows(source: JsonRecord, frequency: string, cutoff: number, now = Date.now(), fetchHistory = fetchStockHistoryData) {
-  const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || (frequency === "1D" ? "regular" : "extended"), adjustment: source.adjustment || "raw", feed: source.feed || undefined, limit: 500 };
+  const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || (frequency === "1D" ? "regular" : "extended"), adjustment: source.adjustment || "raw", feed: source.feed || undefined, price_side:source.price_side || "bid", limit: 500 };
   const requests = [fetchHistory({ ...common, start: new Date(Math.max(cutoff - 60000, now - 7 * 86400_000)).toISOString(), timeframe: "1Min" })];
-  if (frequency !== "1min") requests.push(fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe: frequency === "1D" ? "1Day" : "1Hour", limit: 2000 }));
+  if (frequency !== "1min") requests.push(fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe: source.provider==="dukascopy"?frequency:frequency === "1D" ? "1Day" : "1Hour", limit: 2000 }));
   // A rate-limited minute endpoint must not hide available daily/hourly closes,
   // and an unavailable coarse endpoint must not hide genuine recent quotes.
   const results = await Promise.allSettled(requests);
@@ -126,10 +126,10 @@ export async function tickerOverlayRows(source: JsonRecord, frequency: string, c
     return history.rows.flatMap(row => {
       const start = Date.parse(row.timestamp), target = finite(row.close);
       if (!Number.isFinite(start) || target === null) return [];
-      const end = interval === "1D" ? start : start + (interval === "1min" ? 60000 : 3600000);
+      const end = history.provider==="dukascopy" ? start+(history.barIntervalMinutes || (interval==="1D"?1440:interval==="1min"?1:60))*60000 : interval === "1D" ? start : start + (interval === "1min" ? 60000 : 3600000);
       // A daily bar's label is not its close time. Until its session has ended
       // conservatively show today's minute closes as provisional, not final.
-      if (end <= cutoff || end > now || (interval === "1D" && sessionDate(start) >= sessionDate(now))) return [];
+      if (end <= cutoff || end > now || (history.provider!=="dukascopy" && interval === "1D" && sessionDate(start) >= sessionDate(now))) return [];
       return [{timestamp: new Date(end).toISOString(), target, interval, session_date: sessionDate(start), provider: history.provider || source.provider, adjustment: history.adjustment || common.adjustment, feed: history.feed || source.feed || null}];
     });
   });
@@ -529,10 +529,10 @@ async function materializeSource(
     return { rows: history.rows, source: { type, provider, limit, ...selection, history_phase:source.history_phase === "auto" ? "auto" : selection.history_phase, effective_history_phase:history.selection.history_phase, history_quality: history.quality, event_start: history.contract.eventStart, symbol: history.contract.providerSymbol, contract_id: history.contract.contractId, side: history.contract.side, outcome: history.contract.outcome, event_id: history.contract.eventId, event_title: history.contract.eventTitle, market_id: history.contract.marketId, title: history.contract.marketTitle, units: "decimal_probability", history_rows: history.rows.length, observed_rows: history.observed_rows, warnings: history.warnings, redistribution_status: "review_required" }, frequency: history.frequency, timezone: "UTC" };
   }
   if (type === "ticker") {
-    assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "feed", "limit"], "source");
+    assertOnlyKeys(source, ["type", "symbol", "provider", "source", "start", "end", "field", "frequency", "adjustment", "session", "feed", "limit", "price_side"], "source");
     const limit = forecastObservationLimit(source.limit, MAX_HISTORY_ROWS);
-    const symbol = text(source.symbol, 30).toUpperCase();
-    if (!/^(?:\^[A-Z0-9.\-]{1,23}|[A-Z0-9][A-Z0-9.^=\-]{0,23})$/.test(symbol)) throw new Error("source_symbol_invalid");
+    const symbol = text(source.symbol, source.provider==="dukascopy"?80:30).toUpperCase();
+    if (!(source.provider==="dukascopy" ? /^[A-Z0-9][A-Z0-9._\/-]{0,70}$/ : /^(?:\^[A-Z0-9.\-]{1,23}|[A-Z0-9][A-Z0-9.^=\-]{0,23})$/).test(symbol)) throw new Error("source_symbol_invalid");
     const history = await fetchStockHistoryData({
       source: source.provider || source.source || "auto",
       symbol,
@@ -542,16 +542,18 @@ async function materializeSource(
       adjustment: source.adjustment || "raw",
       session: source.session || (source.frequency === "1Day" ? "regular" : "extended"),
       feed: source.feed || undefined,
+      price_side:source.price_side || "bid",
+      field:source.field || "close",
       // Provider download buckets are coarser than the requested forecast size.
       // Fetch a sufficient bucket, then take exactly the latest eligible N rows.
       limit: [500, 1000, 1500, 2000, 50000].find(size => size >= limit),
     });
-    const interval = history.timeframe === "1Min" ? 60000 : history.timeframe === "1Hour" ? 3600000 : 0;
+    const interval = history.barIntervalMinutes ? history.barIntervalMinutes*60000 : history.timeframe === "1Min" ? 60000 : history.timeframe === "1Hour" ? 3600000 : 0;
     const completedRows = history.rows.map(row => ({...row,timestamp:interval ? new Date(Date.parse(row.timestamp)+interval).toISOString() : row.timestamp})).filter(row => Date.parse(row.timestamp) <= (cutoff ?? Date.now()));
     return {
       rows: normalizeSeriesRows(completedRows, "timestamp", text(source.field || "close", 50) || "close", 2, 50000).slice(-limit),
-      source: { type: "ticker", symbol, limit, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, adjustment: history.adjustment, session: history.session, feed: history.feed, exchange_timezone: history.exchangeTimezone || "UTC", start: source.start || null, end: source.end || null },
-      frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
+      source: { type: "ticker", symbol:history.symbol || symbol, limit, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, adjustment: history.adjustment, session: history.session, feed: history.feed, exchange_timezone: history.exchangeTimezone || "UTC", start: source.start || null, end: source.end || null, ...(history.provider==="dukascopy"?{price_side:history.priceSide,provenance:history.metadata,warnings:history.warnings,timestamp_convention:"bucket_end",units:(history.metadata?.instrument as any)?.unit}: {}) },
+      frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min", "5Min":"5min", "15Min":"15min", "30Min":"30min", "4Hour":"4h" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
       timezone: "UTC",
     };
   }
@@ -986,7 +988,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     normalizeEnsembleConfiguration(body, access.plan);
     const cutoff = absoluteHistoryCutoff(body);
     const materialized = await materializeSource(options, principal, workspaceId, body.source, cutoff);
-    const calendarBody = materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
+    const calendarBody = materialized.source.provider==="dukascopy" ? {...body,calendar:"NONE",horizon_mode:"frequency_periods"} : materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
     const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(calendarBody, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
     if (configuration.analysis_mode === "recent_signal_search") {
       const requiredQuantiles = configuration.search_signal_rule === "cutoff_above_p99" ? [.99] : [.1,.5,.9];
@@ -1010,7 +1012,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       context_length: configuration.context_length,
       failure_policy: configuration.failure_policy,
       frequency: materialized.frequency,
-      calendar: ["prediction_market","kalshi_perp"].includes(text(materialized.source.type)) ? "NONE" : configuration.calendar,
+      calendar: materialized.source.provider==="dukascopy" || ["prediction_market","kalshi_perp"].includes(text(materialized.source.type)) ? "NONE" : configuration.calendar,
       models: configuration.models,
       toto_variant: configuration.toto_variant,
       ...(configuration.analysis_mode === "recent_signal_search" ? {analysis_mode:configuration.analysis_mode,search_max_cutoffs:configuration.search_max_cutoffs,search_signal_rule:configuration.search_signal_rule} : {}),

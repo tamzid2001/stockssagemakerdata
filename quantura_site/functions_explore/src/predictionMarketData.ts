@@ -314,7 +314,7 @@ function polymarketStatus(event: JsonRecord, market: JsonRecord): PredictionMark
   const raw = text(market.status || event.eventState, 80).toLowerCase();
   if (raw.includes("resolved") || raw.includes("settled")) return "settled";
   if (market.closed === true || event.closed === true || raw.includes("closed")) return "closed";
-  const start = Date.parse(text(market.gameStartTime || event.startTime || event.startDate, 100));
+  const start = Date.parse(text(market.gameStartTime || event.startTime, 100));
   if (Number.isFinite(start) && start > Date.now()) return "upcoming";
   return "open";
 }
@@ -365,7 +365,7 @@ export function normalizePolymarketEvents(
           marketTitle,
           outcome,
           side: position,
-          eventStart: iso(market.gameStartTime || event.startTime || event.startDate),
+          eventStart: iso(market.gameStartTime || event.startTime),
           expirationTime: iso(market.endDate || event.endDate),
           status,
           live: (event.live === true || asRecord(event.eventState)?.live === true) && event.ended !== true && asRecord(event.eventState)?.ended !== true && status === "open",
