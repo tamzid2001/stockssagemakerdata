@@ -179,7 +179,7 @@
     const rows=item.predictions,cutoff=Date.parse(item.input_cutoff),last=Date.parse(rows.at(-1).timestamp);
     const observations=showHistory?history.filter(r=>!hours||Date.parse(r.timestamp)>=cutoff-hours*3600000):[];
     const first=observations.length?Date.parse(observations[0].timestamp):cutoff;
-    const chart=document.createElementNS('http://www.w3.org/2000/svg','svg');chart.setAttribute('viewBox','0 0 720 282');chart.setAttribute('role','img');chart.setAttribute('aria-label','Genuine observed hourly prices and forecast: P01–P99 outer band, P25–P75 inner band and P50 median. The vertical line marks the original data cutoff. Missing historical hours are not connected. Values follow in the tables.');
+    const chart=document.createElementNS('http://www.w3.org/2000/svg','svg');chart.setAttribute('viewBox','0 0 720 310');chart.setAttribute('role','img');chart.setAttribute('aria-label','Genuine observed hourly prices and forecast: P01–P99 outer band, P25–P75 inner band and P50 median. The vertical line marks the original data cutoff. Missing historical hours are not connected. Values follow in the tables.');
     const fontSize=12*720/Math.max(280,Math.min(720,(page?.clientWidth||752)-32));
     const left=Math.max(52,fontSize*3.8+10);
     const x=t=>left+(692-left)*(Date.parse(t)-first)/Math.max(1,last-first),y=p=>242-208*p;
@@ -193,7 +193,8 @@
     }
     svg('line',{x1:x(item.input_cutoff),x2:x(item.input_cutoff),y1:26,y2:242,stroke:'var(--muted-foreground)','stroke-dasharray':'4 4','data-forecast-cutoff':''});
     svg('text',{x:x(item.input_cutoff),y:18,'text-anchor':x(item.input_cutoff)>560?'end':'start',fill:'var(--muted-foreground)','font-size':fontSize},'Forecast cutoff');
-    svg('text',{x:left,y:264,fill:'var(--muted-foreground)','font-size':fontSize},time(new Date(first).toISOString()));svg('text',{x:692,y:264,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':fontSize},time(rows.at(-1).timestamp));
+    const axisDate=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',timeZone:'America/New_York'}),axisClock=new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'});
+    for(const [position,timestamp,anchor]of [[left,first,'start'],[692,last,'end']]){for(const [height,formatter]of [[264,axisDate],[294,axisClock]])svg('text',{x:position,y:height,'text-anchor':anchor,fill:'var(--muted-foreground)','font-size':fontSize},formatter.format(new Date(timestamp)));}
     return chart;
   }
   async function show(id,saved=false){
