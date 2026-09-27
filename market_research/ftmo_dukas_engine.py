@@ -262,7 +262,7 @@ def replay(symbol: str, side: str, rows: list[dict], forecasts: list[dict], spec
             entry_open=ask['o']if side=='long'else bid['o'];exit_open=bid['o']if side=='long'else ask['o'];active=target()
             if active is not None and direction*(exit_open-active)>=-1e-10:
                 close(exit_open,at,at);sold=True
-            elif allowed and level is not None and direction*(entry_open-level)<0:
+            elif allowed and level is not None and direction*(entry_open-level)<=1e-10:
                 bought=buy(entry_open,at,at,bid['o'],ask['o'])
             low_equity=min(low_equity,equity(bid['o'],ask['o'],at))
             for left,right in zip(keys,keys[1:]):
@@ -270,7 +270,7 @@ def replay(symbol: str, side: str, rows: list[dict], forecasts: list[dict], spec
                 previous_entry=ask[left]if side=='long'else bid[left];entry_price=ask[right]if side=='long'else bid[right];active=target()
                 if not sold and active is not None and direction*(previous_exit-active)<0<=direction*(exit_price-active):
                     close(active,end,at);sold=True
-                elif not sold and not bought and allowed and level is not None and direction*(previous_entry-level)>=0>direction*(entry_price-level):
+                elif not sold and not bought and allowed and level is not None and direction*(previous_entry-level)>0>=direction*(entry_price-level):
                     # At most one addition per observed hourly bar. Crossing times are unknown.
                     spread=ask['o']-bid['o']
                     bought=buy(level,end,at,level-spread if side=='long'else level,level if side=='long'else level+spread)

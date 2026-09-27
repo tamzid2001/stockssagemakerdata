@@ -163,3 +163,12 @@ def test_nontradable_hour_still_marks_carried_loss_and_cannot_fill_target():
     r=replay('US500.sim','long',rows,forecasts(origin),s,Conversion('USD',[]),origin,origin+timedelta(hours=3),origin+timedelta(hours=24))
     assert r['open_entries']==1 and r['full']['closed_entries']==0
     assert r['full']['max_equity_drawdown']>=.305-1e-8
+
+
+def test_touching_executable_limit_fills_but_touching_raw_p01_does_not():
+    origin=datetime(2026,9,24,18,tzinfo=UTC)
+    rows=[quote(origin-timedelta(hours=1),100,101,99,100),
+          quote(origin+timedelta(hours=1),109.5,111,109.5,110),
+          quote(origin+timedelta(hours=2),109.5,111,109.49,110)]
+    r=replay('US500.sim','long',rows,forecasts(origin,p01=110),spec(),Conversion('USD',[]),origin,origin+timedelta(hours=3),origin+timedelta(hours=24))
+    assert r['open_entries']==1 and r['open_basket'][0]['entry']==pytest.approx(109.99)
