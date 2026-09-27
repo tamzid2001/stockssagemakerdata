@@ -179,10 +179,11 @@
     const rows=item.predictions,cutoff=Date.parse(item.input_cutoff),last=Date.parse(rows.at(-1).timestamp);
     const observations=showHistory?history.filter(r=>!hours||Date.parse(r.timestamp)>=cutoff-hours*3600000):[];
     const first=observations.length?Date.parse(observations[0].timestamp):cutoff;
-    const chart=document.createElementNS('http://www.w3.org/2000/svg','svg');chart.setAttribute('viewBox','0 0 720 310');chart.setAttribute('role','img');chart.setAttribute('aria-label','Genuine observed hourly prices and forecast: P01–P99 outer band, P25–P75 inner band and P50 median. The vertical line marks the original data cutoff. Missing historical hours are not connected. Values follow in the tables.');
+    const chart=document.createElementNS('http://www.w3.org/2000/svg','svg');chart.setAttribute('viewBox','0 0 720 282');chart.setAttribute('role','img');chart.setAttribute('aria-label','Genuine observed hourly prices and forecast: P01–P99 outer band, P25–P75 inner band and P50 median. The vertical line marks the original data cutoff. Missing historical hours are not connected. Values follow in the tables.');
+    const fontSize=12*720/Math.max(280,Math.min(720,(page?.clientWidth||752)-32));
     const x=t=>52+640*(Date.parse(t)-first)/Math.max(1,last-first),y=p=>242-208*p;
     const svg=(tag,attrs,text)=>{const n=document.createElementNS(chart.namespaceURI,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text)n.textContent=text;chart.append(n);return n;};
-    for(const p of[0,.25,.5,.75,1]){svg('line',{x1:52,x2:692,y1:y(p),y2:y(p),stroke:'var(--border)'});svg('text',{x:43,y:y(p)+4,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':12},`${p*100}%`);}
+    for(const p of[0,.25,.5,.75,1]){svg('line',{x1:52,x2:692,y1:y(p),y2:y(p),stroke:'var(--border)'});svg('text',{x:43,y:y(p)+4,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':fontSize},`${p*100}%`);}
     for(const[lo,hi,opacity]of[['0.01','0.99',.12],['0.25','0.75',.23]])if(rows.every(r=>Number.isFinite(r.quantiles[lo])&&Number.isFinite(r.quantiles[hi])))svg('polygon',{points:[...rows.map(r=>`${x(r.timestamp)},${y(r.quantiles[hi])}`),...rows.slice().reverse().map(r=>`${x(r.timestamp)},${y(r.quantiles[lo])}`)].join(' '),fill:'var(--primary)',opacity});
     svg('polyline',{points:rows.map(r=>`${x(r.timestamp)},${y(r.quantiles['0.5'])}`).join(' '),fill:'none',stroke:'var(--primary)','stroke-width':3,'stroke-dasharray':'7 3'});
     if(observations.length){
@@ -190,9 +191,9 @@
       svg('path',{d:path,fill:'none',stroke:'var(--foreground)','stroke-width':2,'data-observed-history':''});
     }
     svg('line',{x1:x(item.input_cutoff),x2:x(item.input_cutoff),y1:26,y2:242,stroke:'var(--muted-foreground)','stroke-dasharray':'4 4','data-forecast-cutoff':''});
-    svg('text',{x:x(item.input_cutoff),y:18,'text-anchor':x(item.input_cutoff)>560?'end':'start',fill:'var(--muted-foreground)','font-size':12},'Forecast cutoff');
-    svg('text',{x:52,y:264,fill:'var(--muted-foreground)','font-size':12},time(new Date(first).toISOString()));svg('text',{x:692,y:264,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':12},time(rows.at(-1).timestamp));
-    svg('text',{x:52,y:291,fill:'var(--foreground)','font-size':12},observations.length?'Solid line: observed hourly prices':'Historical prices hidden or unavailable');svg('text',{x:692,y:291,'text-anchor':'end',fill:'var(--primary)','font-size':12},'Dashed line: forecast P50');return chart;
+    svg('text',{x:x(item.input_cutoff),y:18,'text-anchor':x(item.input_cutoff)>560?'end':'start',fill:'var(--muted-foreground)','font-size':fontSize},'Forecast cutoff');
+    svg('text',{x:52,y:264,fill:'var(--muted-foreground)','font-size':fontSize},time(new Date(first).toISOString()));svg('text',{x:692,y:264,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':fontSize},time(rows.at(-1).timestamp));
+    return chart;
   }
   async function show(id,saved=false){
     if(!page){window.location.href=href(id);return;}
@@ -209,7 +210,8 @@
       const chartHost=el('div','','game-chart'),historyStatus=el('p',history.length?`${history.length} saved hourly observations.`:'Loading observed hourly prices…','small');historyStatus.setAttribute('role','status');
       const historyDetails=el('details'),historySummary=el('summary','Observed hourly prices'),historyScroll=el('div','','game-table-scroll');historyDetails.append(historySummary,historyScroll);
       const drawChart=()=>{
-        chartHost.replaceChildren(gameChart(item,history,toggle.checked,Number(range.value)));
+        const legend=el('div','','game-chart-legend');legend.append(el('span',toggle.checked&&history.length?'Solid line: observed hourly prices':'Historical prices hidden or unavailable'),el('span','Dashed line: forecast P50'));
+        chartHost.replaceChildren(gameChart(item,history,toggle.checked,Number(range.value)),legend);
         historyDetails.hidden=!history.length;historySummary.textContent=`Observed hourly prices · ${history.length} observations`;
         const table=el('table'),head=el('thead'),tr=el('tr');for(const title of['Time','Observed price']){const th=el('th',title);th.scope='col';tr.append(th);}head.append(tr);table.append(head);
         const body=el('tbody');for(const row of history){const tr=el('tr');tr.append(el('td',time(row.timestamp)),el('td',percent(row.price)));body.append(tr);}table.append(body);historyScroll.replaceChildren(table);
