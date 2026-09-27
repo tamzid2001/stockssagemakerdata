@@ -418,7 +418,7 @@ def test_historical_data_supports_alpaca_yahoo_and_no_start_date():
     assert 'id="qd-range"' in forecasting
     assert 'id="qd-kind"' in forecasting
     assert 'id="market-history-source"' not in forecasting
-    assert 'source:"auto"' in client
+    assert 'source:dukascopy?"dukascopy":"auto"' in client
     assert '"/api/market-data/perps/history"' in client
     assert '"/api/market-data/stocks/history"' in client
     assert '"/api/market-data/options/history"' in client
