@@ -101,9 +101,17 @@ def context_at(bars, origin, splits):
     return result
 
 
-def forecast(history,symbol):
+def forecast(history,symbol,opening=None):
+    origin=history[-1].end
+    opening=opening or origin
+    gap=(opening-origin).total_seconds()/60
+    if not gap.is_integer() or not 0 <= gap <= 5:
+        raise ValueError('OBSERVED_HISTORY_TOO_STALE')
+    # The model starts from the real last observation. Forecast the gap too,
+    # then retain only the fixed 09:31–15:30 exchange window.
+    prediction_length=HORIZON+int(gap)
     from ensemble_forecasting.worker import execute_job
-    result=execute_job({'request':{'prediction_length':HORIZON,'horizon_mode':'frequency_periods',
+    result=execute_job({'request':{'prediction_length':prediction_length,'horizon_mode':'frequency_periods',
         'frequency':'1min','calendar':'NONE','transform':'log','context_length':500,
         'failure_policy':'fail','quantiles':QUANTILES,
         'models':{m:{'enabled':True,'weight':1}for m in MODELS}},
@@ -113,6 +121,9 @@ def forecast(history,symbol):
         'source':{'type':'ticker','symbol':symbol,'provider':'alpaca'}})
     if result.get('failures') or {r['model']for r in result['model_runs']if r['status']=='completed'} != set(MODELS):
         raise RuntimeError('FIVE_MODEL_FORECAST_INCOMPLETE')
+    result['predictions']=[r for r in result['predictions'] if opening < timestamp(r['timestamp']) <= opening+timedelta(minutes=HORIZON)]
+    if len(result['predictions']) != HORIZON:
+        raise ValueError('FORECAST_TIMESTAMPS_INVALID')
     return result
 
 
@@ -167,24 +178,40 @@ def summarize(records,spread_index=0):
         'entry_streaks':streak([t['pnl']for t in trades]),'basket_streaks':streak(days)}
 
 
-def run(symbol,start,end,output,feed='sip'):
+def run(symbol,start,end,output,feed='sip',resume=False):
     output.mkdir(parents=True,exist_ok=True);calendar=schedule(start,end)
     calendar=calendar[(calendar.market_close-calendar.market_open).dt.total_seconds()>=HORIZON*60]
     api=AlpacaAPI('paper');records=[];failures=[]
     try:
-        bars,splits=bars_and_splits(api,symbol,start,end,feed)
+        if resume:
+            with gzip.open(output/'observed-bars.jsonl.gz','rt') as f:
+                bars=[MinuteBar(timestamp(r['end']),float(r['c']),float(r['h']),float(r['l']),float(r['o'])) for line in f if (r:=json.loads(line))]
+            splits=json.loads((output/'splits.json').read_text())
+            if not bars or bars!=sorted(bars,key=lambda b:b.end):raise ValueError('RESUME_OBSERVATIONS_INVALID')
+        else:
+            bars,splits=bars_and_splits(api,symbol,start,end,feed)
         with gzip.open(output/'observed-bars.jsonl.gz','wt')as f:
             for b in bars:f.write(json.dumps({'end':b.end.isoformat(),'o':b.open,'h':b.high,'l':b.low,'c':b.close})+'\n')
         (output/'splits.json').write_text(json.dumps(splits,indent=2)+'\n')
         for day,row in calendar.iterrows():
             opening=row.market_open.to_pydatetime();closing=row.market_close.to_pydatetime()
+            saved=output/(day.date().isoformat()+'.json')
+            if resume and saved.exists():
+                previous=json.loads(saved.read_text())
+                if previous.get('symbol')!=symbol or previous.get('day')!=day.date().isoformat() or previous.get('feed')!=feed or previous.get('origin')!=opening.isoformat():
+                    raise ValueError('RESUME_DAY_IDENTITY_MISMATCH')
+                if previous.get('status')=='completed':
+                    records.append(previous);continue
             record={'symbol':symbol,'day':day.date().isoformat(),'origin':opening.isoformat(),
                 'horizon_minutes':HORIZON,'feed':feed,'price_adjustment':'raw, origin-relative split context only','orders_sent':0}
             try:
                 history=context_at(bars,opening,splits)
-                if len(history)!=500 or history[-1].end!=opening:raise ValueError('500_ORIGIN_HISTORY_ROWS_REQUIRED')
+                if len(history)!=500:raise ValueError('500_ORIGIN_HISTORY_ROWS_REQUIRED')
+                record['history_origin']=history[-1].end.isoformat()
+                record['history_gap_minutes']=(opening-history[-1].end).total_seconds()/60
+                record['execution_code_sha']=__import__('os').environ.get('QUANTURA_CODE_SHA')
                 record['history_sha256']=hashlib.sha256(json.dumps([(b.end.isoformat(),b.close)for b in history]).encode()).hexdigest()
-                begin=time.monotonic();result=forecast(history,symbol);elapsed=time.monotonic()-begin
+                begin=time.monotonic();result=forecast(history,symbol,opening);elapsed=time.monotonic()-begin
                 available=opening+timedelta(seconds=elapsed)
                 record.update(status='completed',inference_seconds=elapsed,earliest_actionable_at=available.isoformat(),
                     predictions=result['predictions'],model_runs=result['model_runs'],
@@ -229,13 +256,13 @@ def aggregate(folder,study,output):
 def main():
     parser=argparse.ArgumentParser();sub=parser.add_subparsers(dest='command',required=True)
     p=sub.add_parser('plan');p.add_argument('--start',type=date.fromisoformat,required=True);p.add_argument('--end',type=date.fromisoformat,required=True);p.add_argument('--output',type=Path,required=True)
-    p=sub.add_parser('run');p.add_argument('--symbol',choices=SYMBOLS,required=True);p.add_argument('--start',type=date.fromisoformat,required=True);p.add_argument('--end',type=date.fromisoformat,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--feed',choices=('sip','iex'),default='sip')
+    p=sub.add_parser('run');p.add_argument('--symbol',choices=SYMBOLS,required=True);p.add_argument('--start',type=date.fromisoformat,required=True);p.add_argument('--end',type=date.fromisoformat,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--feed',choices=('sip','iex'),default='sip');p.add_argument('--resume',action='store_true')
     p=sub.add_parser('aggregate');p.add_argument('--artifacts',type=Path,required=True);p.add_argument('--plan',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     if args.command=='plan':
         result=plan(args.start,args.end);args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({'include':result['include']}))
     elif args.command=='run':
-        result=run(args.symbol,args.start,args.end,args.output,args.feed)
+        result=run(args.symbol,args.start,args.end,args.output,args.feed,args.resume)
         if not result['complete']:raise SystemExit(1)
     else:
         result=aggregate(args.artifacts,json.loads(args.plan.read_text()),args.output)

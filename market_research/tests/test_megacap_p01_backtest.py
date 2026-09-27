@@ -93,3 +93,22 @@ def test_aggregate_marks_missing_days_incomplete(tmp_path):
         'start':'2026-09-25','end':'2026-09-25'},tmp_path/'report')
     assert not result['complete']
     assert result['stocks'][0]['missing_or_failed_days']==['2026-09-25']
+
+
+def test_missing_open_bar_forecasts_from_actual_origin_then_crops_six_hours(monkeypatch):
+    from market_research.megacap_p01_backtest import forecast, MODELS
+    from ensemble_forecasting import worker
+    origin=OPEN-timedelta(minutes=2)
+    history=[MinuteBar(origin-timedelta(minutes=499-i),100,101,99,100)for i in range(500)]
+    def execute(job):
+        assert job['request']['prediction_length']==362
+        assert job['input']['rows'][-1]['timestamp']==origin.isoformat()
+        return {'failures':[],'model_runs':[{'model':m,'status':'completed'}for m in MODELS],
+                'predictions':[{'timestamp':(origin+timedelta(minutes=i)).isoformat(),'p01':99,'p50':100}for i in range(1,363)]}
+    monkeypatch.setattr(worker,'execute_job',execute)
+    result=forecast(history,'MSFT',OPEN)
+    assert len(result['predictions'])==360
+    assert result['predictions'][0]['timestamp']==(OPEN+timedelta(minutes=1)).isoformat()
+    assert result['predictions'][-1]['timestamp']==(OPEN+timedelta(minutes=360)).isoformat()
+    with pytest.raises(ValueError,match='OBSERVED_HISTORY_TOO_STALE'):
+        forecast(history,'MSFT',OPEN+timedelta(minutes=4))
