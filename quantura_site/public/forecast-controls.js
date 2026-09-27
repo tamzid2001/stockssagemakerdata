@@ -40,6 +40,7 @@
   const stockSessionFormatters = new Map();
   function stockChartTimestamp(row, job) {
     if (!row.timestamp || !Number.isFinite(Date.parse(row.timestamp))) return row.timestamp;
+    if (job.source?.provider === "dukascopy") return row.timestamp;
     if (job.source?.type !== "ticker" || job.frequency !== "1D") return row.timestamp;
     // Daily predictions use session-date labels, not the provider's midnight
     // or opening-time bar label. Preserve real timestamps outside the plot.

@@ -50,12 +50,15 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/forecast-controls.js?v=20260926b"></script>
+    <script defer src="/forecast-controls.js?v=20260926-markets"></script>
     <script defer src="/forecast-metrics.js?v=20260920-forecast-only"></script>
-    <script defer src="/app.js?v=20260925-extended-hours"></script>
-    <script defer src="/q-market.js?v=20260926-labels"></script>
-    <script defer src="/q-download.js?v=20260921-q-search"></script>
-    <script defer src="/market-search.js?v=20260926-search-intent"></script>
+    <link rel="stylesheet" href="/market-logos.css?v=20260926-logos" />
+    <script defer src="/market-logos.js?v=20260926-logos"></script>
+    <script defer src="/app.js?v=20260926-markets"></script>
+    <script defer src="/q-market.js?v=20260926-dukascopy"></script>
+    <script defer src="/q-download.js?v=20260926-dukascopy"></script>
+    <script defer src="/market-search.js?v=20260926-dukascopy"></script>
+    <script defer src="/game-forecasts.js?v=20260926-markets"></script>
     <script defer src="/screener-panel-lazy.js?v=20260926-integrated"></script>
 
     <script>
@@ -112,7 +115,7 @@
                       <h2 id="market-search-title">Search</h2><span class="small muted">Source · Auto</span>
                     </div>
                     <form id="market-search-form" class="market-search-form">
-                      <div class="field"><label class="label" for="market-search-query">Ticker, company, team, prop, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, live games, historical Yankees, or a market link" required /></div>
+                      <div class="field"><label class="label" for="market-search-query">Ticker, company, team, prop, or market link</label><input id="market-search-query" type="search" minlength="2" placeholder="AAPL, XAUUSD, dukascopy EURUSD, live games, or a market link" required /></div>
                       <input id="market-search-source" type="hidden" value="auto" />
                       <button class="cta" type="submit"><i class="iconoir-search" aria-hidden="true"></i><span>Search</span></button>
                     </form>
@@ -127,6 +130,7 @@
 	                      <h1>Forecast</h1>
 	                      <p class="small">Choose a market, set the horizon, and run your forecast.</p>
 	                    </div>
+                    <section id="game-forecast-page" class="game-forecast-page" aria-label="Saved game forecast" hidden></section>
                     <section class="ensemble-forecast-shell forecast-workspace-section" id="ensemble-forecast-settings" aria-label="Quantura Forecast configuration">
                       <div class="ensemble-forecast-body">
                         <form id="ensemble-forecast-form">
@@ -150,10 +154,11 @@
                             <div class="field" data-ensemble-history-count><label class="label" for="ensemble-history-limit">Last N observations</label><input id="ensemble-history-limit" name="history_limit" type="number" min="2" max="500" step="1" value="500" required /><small class="muted">Up to N real bars before the cutoff, after any history filters. Missing intervals are not filled. Model minimums still apply.</small></div>
                             <div class="field q-identity-compat" data-ensemble-source="ticker">
                               <label class="label" for="ensemble-provider">Market-data provider</label>
-                              <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option></select>
+                              <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="dukascopy">Dukascopy</option></select>
                             </div>
                             <div class="field" data-ensemble-source="ticker kalshi_perp"><label class="label" for="ensemble-ticker-frequency">Observed bars</label><select id="ensemble-ticker-frequency" name="ticker_frequency"><option value="1Day">Daily</option><option value="1Hour">Hourly</option><option value="1Min">Minute</option></select></div>
-                            <div class="field" data-ensemble-source="ticker"><label class="label" for="ensemble-ticker-session">Stock trading hours</label><select id="ensemble-ticker-session" name="ticker_session"><option value="extended" selected>Premarket + regular + after-hours</option><option value="regular">Regular hours only</option></select><small class="muted">Intraday forecasts use observed extended-hours bars when the provider has them. Hourly bars are used only after their hour has completed.</small></div>
+                            <div class="field" data-ensemble-source="ticker" data-ensemble-stock-session><label class="label" for="ensemble-ticker-session">Stock trading hours</label><select id="ensemble-ticker-session" name="ticker_session"><option value="extended" selected>Premarket + regular + after-hours</option><option value="regular">Regular hours only</option></select><small class="muted">Intraday forecasts use observed extended-hours bars when the provider has them. Hourly bars are used only after their hour has completed.</small></div>
+                            <div class="field" data-ensemble-dukascopy hidden><label class="label" for="ensemble-price-side">Quote side</label><select id="ensemble-price-side" name="price_side"><option value="bid">Bid close</option><option value="ask">Ask close</option></select><small class="muted">Completed UTC candles. Forecast periods include market closures.</small></div>
                             <div class="field" data-ensemble-source="workspace_dataset" hidden>
                               <label class="label" for="ensemble-dataset-id">Workspace dataset ID</label>
                               <input id="ensemble-dataset-id" name="dataset_id" placeholder="Saved Forecast Foundry dataset ID" autocomplete="off" />
@@ -422,6 +427,8 @@
                         <p id="qd-option-status" class="small muted" role="status"></p><div id="qd-option-chain" class="responsive-table-wrap" aria-label="Option contracts"></div>
                       </div>
                       <details class="q-download-advanced"><summary>Export settings</summary><div class="q-toolbar">
+                        <div class="field" data-qd-dukascopy hidden><label for="qd-price-side">Dukascopy quote side</label><select id="qd-price-side"><option value="bid">Bid close</option><option value="ask">Ask close</option></select></div>
+                        <div class="field" data-qd-dukascopy hidden><label for="qd-columns">Download columns</label><select id="qd-columns"><option value="close">Time + close</option><option value="ohlcv">OHLC + quote volume</option></select></div>
                         <div class="field" data-qd-stock><label for="qd-session">Trading session</label><select id="qd-session"><option value="regular">Regular</option><option value="extended">Extended</option></select></div>
                         <div class="field" data-qd-stock><label for="qd-adjustment">Corporate actions</label><select id="qd-adjustment"><option value="split">Split adjusted</option><option value="all">Splits + dividends</option><option value="raw">Raw</option></select></div>
                         <div class="field" data-qd-prediction hidden><label for="qd-phase">Game history</label><select id="qd-phase"><option value="auto">Auto · in-game after 32 min</option><option value="both">Pregame + in-game</option><option value="pregame">Pregame only</option><option value="in_game">In-game only</option></select></div>
@@ -503,6 +510,7 @@
       <div class="container small" style="margin-top: 24px;">
         © 2026 Quantura. All rights reserved.
       </div>
+      <div class="container logo-attribution"><a href="https://www.allinvestview.com/tools/ticker-logos/">Logos by AllInvestView</a></div>
     </footer>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

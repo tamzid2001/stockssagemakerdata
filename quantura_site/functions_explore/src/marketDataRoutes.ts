@@ -2,6 +2,8 @@ import { yahooRetrySeconds } from "./yahooRequests";
 import { Router } from "express";
 import { AlpacaClient, AlpacaError, barsToCsv, publicAlpacaError, type AlpacaBar } from "./alpacaClient";
 import { YahooFinanceClient } from "./yahooMarketData";
+import { dukascopy } from "./dukascopyClient";
+import { registerCompanyLogoRoutes } from "./companyLogos";
 
 function filePart(value: unknown): string {
   return String(value || "data").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "data";
@@ -33,8 +35,8 @@ function inferredRange(timeframeValue: unknown, limit: number, endValue: unknown
 }
 
 export type StockHistoryResult = {
-  provider: "alpaca" | "yahoo";
-  sourceRequested: "auto" | "alpaca" | "yahoo";
+  provider: "alpaca" | "yahoo" | "dukascopy";
+  sourceRequested: "auto" | "alpaca" | "yahoo" | "dukascopy";
   fallbackUsed: boolean;
   symbol: string;
   timeframe: string;
@@ -42,11 +44,16 @@ export type StockHistoryResult = {
   adjustment: string;
   session: string;
   exchangeTimezone?: string;
+  barIntervalMinutes?: number;
+  priceSide?: string;
+  metadata?: Record<string,unknown>;
+  warnings?: string[];
   rows: AlpacaBar[];
 };
 
 /** Shared provider-aware history service used by downloads and forecast jobs. */
 export async function fetchStockHistoryData(body: Record<string, unknown>, clients: { alpaca?: AlpacaClient; yahoo?: YahooFinanceClient } = {}): Promise<StockHistoryResult> {
+  if (String(body.source || body.provider).toLowerCase() === "dukascopy") return dukascopy.history(body);
   const source = stockSource(body.source || body.provider);
   const limit = requestedLimit(body.limit);
   const range = inferredRange(body.timeframe || body.interval, limit, body.end);
@@ -98,6 +105,7 @@ export async function fetchStockHistoryData(body: Record<string, unknown>, clien
 }
 
 export function registerMarketDataRoutes(router: Router): void {
+  registerCompanyLogoRoutes(router);
   router.get("/market-data/history/status", (_req, res) => {
     const alpaca = new AlpacaClient();
     res.status(200).json({
@@ -106,6 +114,7 @@ export function registerMarketDataRoutes(router: Router): void {
       sources: {
         alpaca: { available: alpaca.isConfigured(), label: "Alpaca" },
         yahoo: { available: true, label: "Yahoo Finance" },
+        dukascopy: { available: true, label: "Dukascopy", priceSides: ["bid","ask"] },
       },
     });
   });
@@ -129,12 +138,14 @@ export function registerMarketDataRoutes(router: Router): void {
   const stockHistory = async (req: any, res: any) => {
     try {
       const body = req.method === "GET" ? req.query : req.body || {};
-      const { provider, sourceRequested, fallbackUsed, ...result } = await fetchStockHistoryData(body);
+      const { provider, sourceRequested, fallbackUsed, ...result } = String(body.source || body.provider).toLowerCase()==="dukascopy" && body.page_mode===true
+        ? await dukascopy.history(body,true) : await fetchStockHistoryData(body);
       if (String(body.format || req.query?.format || "").toLowerCase() === "csv") {
+        if((result as any).next_cursor)throw new AlpacaError("invalid_request","Finish all paged JSON requests before exporting CSV, or request an unpaged range.",422);
         const filename = `${filePart(result.symbol)}-${provider}-${filePart(result.timeframe)}-${filePart(body.end || "latest")}.csv`;
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-        res.status(200).send(barsToCsv(result.symbol, result.rows));
+        res.status(200).send(provider==="dukascopy" ? "timestamp,close\r\n"+result.rows.map((r:AlpacaBar)=>`${r.timestamp},${r.close}`).join("\r\n") : barsToCsv(result.symbol, result.rows));
         return;
       }
       res.status(200).json({
@@ -153,6 +164,14 @@ export function registerMarketDataRoutes(router: Router): void {
   };
   router.get("/ticker/history", stockHistory);
   router.post("/market-data/stocks/history", stockHistory);
+
+  router.get("/market-data/dukascopy/instruments", async (req,res) => {
+    const catalog=await dukascopy.catalog(),query=String(req.query.search || "").trim();
+    const matches=(await dukascopy.search(query,catalog.instruments.length)).rows;
+    const offset=Number(req.query.offset || 0), limit=Math.min(200,Math.max(1,Number(req.query.limit)||100));
+    if(!Number.isInteger(offset)||offset<0||offset>matches.length){res.status(422).json({ok:false,message:"Choose a valid catalog offset."});return;}
+    res.json({ok:true,provider:"dukascopy",instruments:matches.slice(offset,offset+limit),total:matches.length,catalog_count:catalog.instruments.length,stale:catalog.stale,next_offset:offset+limit<matches.length?offset+limit:null});
+  });
 
   router.get("/market-data/options/expirations", async (req, res) => {
     try {

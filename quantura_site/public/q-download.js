@@ -17,7 +17,7 @@
     byId("qd-preview").disabled=false;byId("qd-preview").removeAttribute("aria-busy");byId("qd-cancel").hidden=true;
     byId("qd-preview-table").replaceChildren();status(message);
   }
-  function settings(){return Object.fromEntries(["kind","range","frequency","limit","start","end","session","adjustment","phase","layout","target","missing"].map(k=>[k,value(k)]).concat([["optionSymbol",optionSymbol]]));}
+  function settings(){return Object.fromEntries(["kind","range","frequency","limit","start","end","session","adjustment","phase","layout","target","missing","price-side","columns"].map(k=>[k==="price-side"?"price_side":k,value(k)]).concat([["optionSymbol",optionSymbol]]));}
   async function json(url,options={}){
     const response=await fetch(url,{...options,headers:{Accept:"application/json",...(options.body?{"Content-Type":"application/json"}:{})}});
     const data=await response.json();if(!response.ok||data.ok===false)throw Error(data.message||data.error?.message||"The provider could not return these observations.");return data;
@@ -26,7 +26,7 @@
     byId("qd-basket").innerHTML=[...basket.values()].map(row=>`<button type="button" class="task-chip" data-remove="${html(row.resource_id)}" aria-label="Remove ${html(row.outcome)}">${html(row.outcome)} · ${html(row.market_title||row.symbol)} ×</button>`).join("");
   }
   function configure(){
-    const prediction=selected?.resource_type==="prediction_market_contract",stock=selected&&["equity","etf"].includes(selected.asset_class);
+    const dukascopy=selected?.source==="dukascopy",prediction=selected?.resource_type==="prediction_market_contract",stock=!dukascopy&&selected&&["equity","etf"].includes(selected.asset_class);
     const largeLimit=[...byId("qd-limit").options].find(o=>o.value==="50000");
     if(largeLimit)largeLimit.disabled=selected?.source==="kalshi_perps";
     if(largeLimit?.disabled && value("limit")==="50000")byId("qd-limit").value="2000";
@@ -35,11 +35,12 @@
     byId("qd-options").hidden=value("kind")!=="options";
     document.querySelectorAll("[data-qd-stock]").forEach(el=>el.hidden=!stock||value("kind")==="options");
     document.querySelectorAll("[data-qd-prediction]").forEach(el=>el.hidden=!prediction);
+    document.querySelectorAll("[data-qd-dukascopy]").forEach(el=>el.hidden=!dukascopy);
     document.querySelectorAll("[data-qd-dates]").forEach(el=>el.hidden=value("range")!=="dates");
     document.querySelectorAll("[data-qd-latest]").forEach(el=>el.hidden=value("range")!=="latest");
     // These aggregations already exist in the prediction-market export service.
     const interval=byId("qd-frequency"),old=interval.value;
-    interval.innerHTML=[...[['1Min','Minute'],['1Hour','Hourly'],['1Day','Daily']],...(prediction?[['raw','Raw observations / trades'],['5m','5 minutes'],['15m','15 minutes'],['30m','30 minutes'],['final','Final observation']]:[])].map(([v,label])=>`<option value="${v}">${label}</option>`).join("");
+    interval.innerHTML=[...[['1Min','Minute'],['1Hour','Hourly'],['1Day','Daily']],...(prediction?[['raw','Raw observations / trades'],['5m','5 minutes'],['15m','15 minutes'],['30m','30 minutes'],['final','Final observation']]:dukascopy?[['5m','5 minutes'],['15m','15 minutes'],['30m','30 minutes'],['4h','4 hours']]:[])].map(([v,label])=>`<option value="${v}">${label}</option>`).join("");
     interval.value=[...interval.options].some(o=>o.value===old)?old:"1Day";
   }
   async function loadChain(){
@@ -101,7 +102,19 @@
     try{
       const config=settings(),request=api.requestFor(selected,config,[...basket.values()].map(r=>r.contract));
       controller=new AbortController();byId("qd-preview").disabled=true;byId("qd-preview").setAttribute("aria-busy","true");byId("qd-cancel").hidden=false;status("Downloading real provider observations…");
-      const payload=await json(request.url,{method:"POST",body:JSON.stringify(request.body),signal:controller.signal});
+      let payload=await json(request.url,{method:"POST",body:JSON.stringify(request.body),signal:controller.signal});
+      if(selected.source==="dukascopy"){
+        const rows=[...(payload.rows||[])],seen=new Set();
+        while(payload.next_cursor){
+          if(run!==sequence)return;
+          const cursor=payload.next_cursor;if(seen.has(cursor))throw Error("The provider repeated a page. Retry this download.");seen.add(cursor);
+          status(`Downloading Dukascopy · ${Number(payload.metadata?.completed_files||0)} / ${Number(payload.metadata?.total_files||0)} candle files · ${rows.length.toLocaleString()} rows. Cancel to stop.`);
+          payload=await json(request.url,{method:"POST",body:JSON.stringify({...request.body,cursor}),signal:controller.signal});
+          rows.push(...(payload.rows||[]));
+          if(rows.length>100000)throw Error("This export exceeds 100,000 rows. Download a smaller window.");
+        }
+        payload={...payload,rows};
+      }
       if(run!==sequence)return;
       saved=api.snapshot(payload,selected,config,request);
       const {columns,rows,metadata}=saved;

@@ -37,9 +37,11 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <link rel="stylesheet" href="/market-logos.css?v=20260926-logos" />
+    <script defer src="/market-logos.js?v=20260926-logos"></script>
     <script defer src="/app.js?v=20260926a"></script>
 
-    <script defer src="/screener.js?v=20260926-integrated"></script>
+    <script defer src="/screener.js?v=20260926-markets"></script>
     <script>
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-screener-v2","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
@@ -251,7 +253,7 @@
           </div>
 
           <div id="qs-games" class="game-card-grid" hidden data-game-cards></div>
-          <dialog id="game-forecast-dialog" class="game-dialog" aria-labelledby="game-forecast-title"><div class="game-section-heading"><h2 id="game-forecast-title">Game forecast</h2><button type="button" class="cta secondary" data-game-close autofocus>Close</button></div><div data-game-detail></div></dialog>
+
 
           <nav class="qs-pagination" id="qs-pagination" aria-label="Screener pages" hidden>
             <button class="cta secondary small" id="qs-previous" type="button"><i class="iconoir-nav-arrow-left" aria-hidden="true"></i>Previous</button>
@@ -284,6 +286,7 @@
         <div class="small"><strong>Legal</strong><div><a href="/terms">Terms</a></div><div><a href="/privacy">Privacy</a></div><div><a href="/disclaimer">Disclaimer</a></div><p class="legal-copy">Quantura provides research software, not brokerage or investment-advisory services.</p></div>
       </div>
       <div class="container small footer-bottom">© 2026 Quantura. All rights reserved.</div>
+      <div class="container logo-attribution"><a href="https://www.allinvestview.com/tools/ticker-logos/">Logos by AllInvestView</a></div>
     </footer>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </body>

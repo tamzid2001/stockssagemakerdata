@@ -1,4 +1,4 @@
-from market_research.pregame_screener import eligible, game_date, through_deadline, document
+from market_research.pregame_screener import eligible, game_date, through_deadline, document, game_models, GAME_QUANTILES
 from market_research.engine import stamp, Quote
 from market_research.provider import QuanturaProvider, KalshiProvider
 import pytest
@@ -87,3 +87,56 @@ def test_pregame_summary_is_accepted_by_encrypted_artifact_packager(tmp_path, mo
     with zipfile.ZipFile(tmp_path / "summary.zip") as archive:
         assert json.loads(archive.read(REPORT_FILENAME)) == report
         assert archive.namelist() == [REPORT_FILENAME, "manifest.json"]
+
+
+def test_four_or_five_models_depend_on_real_history_and_approved_timesfm():
+    assert game_models(31, True) == ('prophet','granite','chronos','timesfm')
+    assert len(game_models(32, True)) == 5
+    assert len(game_models(32, False)) == 4
+    with pytest.raises(ValueError,match='INSUFFICIENT_HISTORY'):
+        game_models(31, False)
+    assert GAME_QUANTILES == (.01,.25,.5,.75,.9,.99)
+
+
+def test_polymarket_schedule_uses_game_start_not_market_listing_date():
+    p=QuanturaProvider()
+    c={**contract(),"source":"polymarket_us","providerSymbol":"aec-game","contractId":"side-1"}
+    p._schedule_request=lambda _: {"market":{"slug":"aec-game","startDate":"2026-09-25T01:00:00Z","gameStartTime":"2026-09-27T01:30:00Z","marketSides":[{"id":"side-1","long":True}]}}
+    verified=p.verify_schedule(c)
+    assert stamp(verified['eventStart'])==stamp('2026-09-27T01:30:00Z')
+    assert game_date(stamp(verified['eventStart']))=='2026-09-26'
+    p._schedule_request=lambda _: {"market":{"slug":"aec-game","startDate":"2026-09-25T01:00:00Z","marketSides":[{"id":"side-1","long":True}]}}
+    with pytest.raises(ValueError,match='SCHEDULE_MISSING'):
+        p.verify_schedule(c)
+
+
+def test_kalshi_start_requires_a_linked_unambiguous_milestone():
+    p=KalshiProvider()
+    def request(url):
+        if '/events/' in url:return {'event':{'event_ticker':'GAME','event_metadata':{'occurrence_datetime':'2026-09-28T01:00Z'}},'markets':[{'ticker':'GAME'}]}
+        return {'milestones':[{'primary_event_tickers':['OTHER'],'start_date':'2026-09-28T01:00Z'},{'related_event_tickers':['GAME'],'start_date':'2026-09-27T01:30Z'}]}
+    p._schedule_request=request
+    assert stamp(p.verify_schedule(contract())['eventStart'])==stamp('2026-09-27T01:30Z')
+    p._schedule_request=lambda url:request(url) if '/events/' in url else {'milestones':[{'related_event_tickers':['GAME'],'start_date':'2026-09-27T01:30Z'},{'primary_event_tickers':['GAME'],'start_date':'2026-09-28T01:30Z'}]}
+    with pytest.raises(ValueError,match='SCHEDULE_MISSING_OR_CONFLICTING'):
+        p.verify_schedule(contract())
+
+
+def test_retrospective_refresh_keeps_original_pregame_cutoff_and_is_labeled():
+    from market_research import forecast
+    from ensemble_forecasting.worker import execute_job
+    # Exercise the real ensemble projection/quantile weighting with mock adapters.
+    original=forecast.execute_job
+    forecast.execute_job=lambda job,**kw:execute_job(job,mock=True,**kw)
+    try:
+        rows=[Quote(stamp('2026-09-25T14:00Z')+i*3600,.4,.4) for i in range(32)]
+        result=forecast.forecast_window(rows,7,models=('prophet','granite','chronos','toto'),quantiles=GAME_QUANTILES,frequency='1h',failure_policy='fail')
+        saved={'generated_at':'2026-09-26T21:10Z'}
+        doc=document(contract(),result,stamp('2026-09-27T02:00Z'),saved)
+        assert doc['recomputed_at']==doc['generated_at']
+        assert stamp(doc['input_cutoff'])<=stamp(doc['original_generated_at'])
+        assert set(doc['predictions'][-1]['quantiles'])=={'0.01','0.25','0.5','0.75','0.9','0.99'}
+        with pytest.raises(ValueError,match='ORIGINAL_CUTOFF_NOT_PREGAME'):
+            document(contract('2026-09-26T20:30Z'),result,stamp('2026-09-27T02:00Z'),saved)
+    finally:
+        forecast.execute_job=original

@@ -7,6 +7,7 @@ import { kalshiPerps } from "./kalshiPerps";
 import { contractGroup, eventMarketPage } from "./qSearchEvents";
 import { rankVerifiedCandidates } from "./qSearchRanking";
 import rateLimit from "express-rate-limit";
+import { dukascopy } from "./dukascopyClient";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -20,6 +21,7 @@ export function searchClientAddress(req: Pick<Request,"headers"|"ip"|"socket">, 
 }
 
 export const PROVIDER_CAPABILITIES = {
+  dukascopy: { label:"Dukascopy",assetClasses:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],search:true,history:true,forecasting:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],granularities:["1min","5min","15min","30min","1h","4h","1D"],redistributionStatus:"review_required" },
   kalshi_perps: { label: "Kalshi Perpetuals", assetClasses: ["perpetual"], search: true, history: true, forecasting: ["perpetual"], granularities: ["1min","1h","1D"], redistributionStatus: "review_required" },
   alpaca: {
     label: "Alpaca",
@@ -224,16 +226,17 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
     const requested = text(req.query.source || "auto", 40).toLowerCase();
     const mode = text(req.query.mode || "open", 20);
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
-    if (!["auto", "yahoo", "alpaca", "polymarket_us", "kalshi", "kalshi_perps"].includes(requested) || !["open", "live", "any"].includes(mode)) {
+    if (!["auto", "yahoo", "alpaca", "dukascopy", "polymarket_us", "kalshi", "kalshi_perps"].includes(requested) || !["open", "live", "any"].includes(mode)) {
       res.status(422).json({ ok: false, error: "search_filter_invalid", message: "Choose a supported source and market status." }); return;
     }
-    if (query.length < 2 && mode !== "live") {
+    if (query.length < 2 && mode !== "live" && requested!=="dukascopy") {
       res.status(400).json({ ok: false, error: "search_query_too_short", message: "Enter at least two characters." });
       return;
     }
     const groups: Record<string, JsonRecord[]> = {};
     const errors: Record<string, string> = {};
     const tasks: Array<Promise<void>> = [];
+    if(mode!=="live" && ["auto","dukascopy"].includes(requested)) tasks.push(dukascopy.search(query,limit).then(result=>{groups.dukascopy=result.rows;if(result.stale)errors.dukascopy="catalog_snapshot";}).catch(()=>{errors.dukascopy="temporarily_unavailable";}));
     if (["auto","kalshi_perps"].includes(requested)) tasks.push(kalshiPerps.search(query,limit)
       .then(rows=>{groups.kalshi_perps=mode==="any"?rows:rows.filter(r=>r.status==="active");})
       .catch(()=>{errors.kalshi_perps="temporarily_unavailable";}));

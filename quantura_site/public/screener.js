@@ -68,7 +68,7 @@
   function ensureGames() {
     if(window.QuanturaGames)return Promise.resolve(window.QuanturaGames);
     if(!gameModulePromise)gameModulePromise=new Promise((resolve,reject)=>{
-      const script=document.createElement("script");script.src="/game-forecasts.js?v=20260926-integrated";
+      const script=document.createElement("script");script.src="/game-forecasts.js?v=20260926-markets";
       const timeout=setTimeout(()=>{script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));},15000);
       script.onload=()=>{clearTimeout(timeout);if(window.QuanturaGames)resolve(window.QuanturaGames);else {gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));}};
       script.onerror=()=>{clearTimeout(timeout);script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));};document.head.append(script);
@@ -115,7 +115,7 @@
     if(gameExport)URL.revokeObjectURL(gameExport);
     const fields=["provider","event_title","outcome","game_start","forecast_end","generated_at","status"];
     const cell=value=>{let text=String(value??"");if(typeof value==="string"&&/^[\s]*[=+@\-]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"';};
-    gameExport=URL.createObjectURL(new Blob([[[...fields,"p10","p50","p90"].map(cell).join(","),...items.map(item=>[...fields.map(key=>item[key]),...['0.1','0.5','0.9'].map(q=>item.endpoint?.[q])].map(cell).join(","))].join("\r\n")],{type:"text/csv;charset=utf-8"}));
+    gameExport=URL.createObjectURL(new Blob([[[...fields,"p01","p25","p50","p75","p90","p99"].map(cell).join(","),...items.map(item=>[...fields.map(key=>item[key]),...['0.01','0.25','0.5','0.75','0.9','0.99'].map(q=>item.endpoint?.[q])].map(cell).join(","))].join("\r\n")],{type:"text/csv;charset=utf-8"}));
     refs.export.href=gameExport;refs.export.download="quantura-games-"+data.date+".csv";refs.export.removeAttribute("aria-disabled");refs.export.classList.remove("disabled");
     setView(items.length?"games":"empty");
   }
@@ -333,7 +333,7 @@
       : `/forecasting?ticker=${encodeURIComponent(String(row.ticker || ""))}`;
     const actualStamp = row.actual_price_timestamp ? ` title="Observed price ${escapeHtml(formatDate(row.actual_price_timestamp, true))}"` : "";
     return `<tr>
-      <td data-label="Security"><div class="qs-security"><a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>${row.forecast_action === "create" ? "Forecast" : "View forecast"}</a>`:'<small>Weekly forecast not published</small>'}<button class="qs-row-toggle" type="button" data-row-toggle aria-expanded="false" aria-label="Show more metrics for ${escapeHtml(row.ticker)}"><span>More metrics</span><i class="iconoir-nav-arrow-down" aria-hidden="true"></i></button></div></td>
+      <td data-label="Security"><div class="qs-security">${window.QuanturaLogos?.markup(row)||""}<a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>${row.forecast_action === "create" ? "Forecast" : "View forecast"}</a>`:'<small>Weekly forecast not published</small>'}<button class="qs-row-toggle" type="button" data-row-toggle aria-expanded="false" aria-label="Show more metrics for ${escapeHtml(row.ticker)}"><span>More metrics</span><i class="iconoir-nav-arrow-down" aria-hidden="true"></i></button></div></td>
       <td data-label="Actual" class="qs-mono qs-mobile-core"${actualStamp}>${escapeHtml(formatPrice(row.actual_price))}<small>${escapeHtml(formatDate(row.actual_price_timestamp,true))}</small><small>${escapeHtml(String(row.quote_session || "historical").replace(/_/g," "))} · ${escapeHtml(String(row.quote_source || row.data_source || "historical").replace(/_/g," "))}</small></td>
       ${["p01","p10","p25","p50","p75","p90","p99"].map(q=>`<td data-label="${q.toUpperCase()}" class="qs-mono ${["p10","p50","p90","p99"].includes(q)?"qs-mobile-core":"qs-mobile-detail"}" title="${escapeHtml(current.statistic === "row" ? "Comparison session" : `Horizon ${current.statistic}`)}">${escapeHtml(formatPrice(current.statistic === "row" ? row[q] : row.quantile_stats?.[q]?.[current.statistic]))}</td>`).join("")}
       <td data-label="Position" class="qs-mobile-detail"><span class="${position[1]}">${escapeHtml(position[0])}</span></td>

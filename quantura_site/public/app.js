@@ -13779,7 +13779,7 @@
     let selected;
     if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency, history_phase: source.history_phase || "both", history_lookback_minutes: source.history_lookback_minutes || 0, limit: source.limit ?? 500 };
     else if (source.type === "kalshi_perp") selected = {type:source.type,symbol:source.symbol,frequency:job.frequency,limit:source.limit??500};
-    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500, ...(source.adjustment ? {adjustment:source.adjustment} : {}), ...(source.session ? {session:source.session} : {}), ...(source.feed ? {feed:source.feed} : {}) };
+    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500, ...(source.price_side ? {price_side:source.price_side} : {}), ...(source.adjustment ? {adjustment:source.adjustment} : {}), ...(source.session ? {session:source.session} : {}), ...(source.feed ? {feed:source.feed} : {}) };
     else if (source.type === "workspace_dataset") selected = { type: source.type, dataset_id: source.dataset_id, timestamp_column: source.timestamp_column || "timestamp", target_column: source.target_column || "target", frequency: job.frequency, timezone: source.timezone || "UTC" };
     else throw new Error("This immutable inline series cannot refresh automatically. Submit an updated dataset.");
     return { workspace_id: job.workspace_id, ...(job.toto_variant ? {toto_variant: job.toto_variant} : {}), source: selected, prediction_length: job.prediction_length, horizon_mode: job.horizon_mode, quantiles: job.quantiles,
@@ -13850,7 +13850,7 @@
     const higher = summary.probabilityHigher;
     const direction = Number.isFinite(Number(median)) ? `Forecast-end P50: ${format(median)} — ${Number(median)>Number(latest.target)?"above":Number(median)<Number(latest.target)?"below":"equal to"} the current quote.` : "P50 was not requested.";
     const probability = ended ? "This forecast horizon has ended; no remaining-horizon probability is implied." : higher === null || higher === undefined ? "Current quote is outside the interpolable quantile range; no tail probability is invented." : `Saved forecast implies approximately ${Math.round(higher*100)}% above / ${Math.round((1-higher)*100)}% below this quote at ${ensembleLocalTime(end.timestamp)}. This is not an updated conditional forecast or a validated win rate.`;
-    host.innerHTML = `<strong>${escapeHtml(ensembleMarketIdentity(job).side)} · latest observed quote ${escapeHtml(format(latest.target))}</strong><p>${escapeHtml(ensembleLocalTime(latest.timestamp))} · ${age > 2 ? "Stale: " : ""}${age} min old · checked every minute, not a tick stream.</p><p>Nearest end-of-horizon quantile: ${escapeHtml(ensembleQuantileLabel(summary.nearest))}. ${escapeHtml(direction)}</p><p>${escapeHtml(probability)} A median denotes approximately 50% of modeled outcomes on each side, not a trading win rate.</p>`;
+    host.innerHTML = `${window.QuanturaLogos?.markup({symbol:job.source?.symbol,provider:job.source?.provider})||""}<strong>${escapeHtml(ensembleMarketIdentity(job).side)} · latest observed quote ${escapeHtml(format(latest.target))}</strong><p>${escapeHtml(ensembleLocalTime(latest.timestamp))} · ${age > 2 ? "Stale: " : ""}${age} min old · checked every minute, not a tick stream.</p><p>Nearest end-of-horizon quantile: ${escapeHtml(ensembleQuantileLabel(summary.nearest))}. ${escapeHtml(direction)}</p><p>${escapeHtml(probability)} A median denotes approximately 50% of modeled outcomes on each side, not a trading win rate.</p>`;
   };
 
   const setEnsembleStatus = (message, tone = "") => {
@@ -13973,19 +13973,31 @@
     document.querySelectorAll("[data-ensemble-source]").forEach((field) => {
       field.hidden = !field.dataset.ensembleSource.split(" ").includes(type);
     });
+    const dukascopy=type==="ticker" && document.getElementById("ensemble-provider")?.value==="dukascopy";
+    document.querySelectorAll("[data-ensemble-dukascopy]").forEach(field=>field.hidden=!dukascopy);
+    document.querySelectorAll("[data-ensemble-stock-session]").forEach(field=>field.hidden=type!=="ticker"||dukascopy);
+    const intervals=document.getElementById("ensemble-ticker-frequency");
+    if(intervals){
+      const value=intervals.value;
+      for(const option of intervals.querySelectorAll('[data-dukascopy-interval]'))option.remove();
+      if(dukascopy)for(const [value,label] of [["5min","5 minutes"],["15min","15 minutes"],["30min","30 minutes"],["4h","4 hours"]]){
+        const option=document.createElement("option");option.value=value;option.textContent=label;option.dataset.dukascopyInterval="true";intervals.append(option);
+      }
+      intervals.value=[...intervals.options].some(o=>o.value===value)?value:"1Hour";
+    }
     document.querySelectorAll("[data-ensemble-history-count]").forEach(field => {
       field.hidden = type === "workspace_dataset" || type === "series";
       field.querySelector("input").disabled = field.hidden;
     });
     const horizon = document.getElementById("ensemble-horizon-mode");
     const frequency = ["ticker","kalshi_perp"].includes(type) ? document.getElementById("ensemble-ticker-frequency")?.value : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
-    const intraday = type !== "ticker" || frequency !== "1Day";
+    const intraday = dukascopy || type !== "ticker" || frequency !== "1Day";
     if (horizon) {
       horizon.closest(".field").hidden = intraday;
       if (intraday) horizon.value = "frequency_periods";
       else if (horizon.value === "frequency_periods") horizon.value = "trading_sessions";
     }
-    const unit = frequency === "1Day" || frequency === "1D" ? "days" : frequency === "1Hour" || frequency === "1h" ? "hours" : "minutes";
+    const unit = frequency === "1Day" || frequency === "1D" ? "days" : ["1Hour","1h","4h"].includes(frequency) ? "hours" : "minutes";
     const lagUnit = document.getElementById("ensemble-history-lag-unit");
     if (lagUnit && lagUnit.dataset.sourceContext !== `${type}:${frequency}`) {
       lagUnit.value = unit;
@@ -14024,8 +14036,9 @@
         }
       : {
           type: "ticker",
-          symbol: normalizeTicker(data.get("ticker") || ""),
+          symbol: data.get("provider")==="dukascopy" ? String(data.get("ticker")||"").trim().toUpperCase() : normalizeTicker(data.get("ticker") || ""),
           provider: String(data.get("provider") || "auto"),
+          ...(data.get("provider")==="dukascopy"?{price_side:String(data.get("price_side")||"bid"),adjustment:"raw"}:{}),
           field: "close",
           limit: historyLimit,
           frequency: String(data.get("ticker_frequency") || "1Day"),
@@ -14042,7 +14055,7 @@
     const lag = cutoffMode === "relative" ? ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes"), Infinity) : 0;
     const cutoffAt = cutoffMode === "date" ? window.QuanturaForecastControls.cutoffInstant(document.getElementById("ensemble-history-cutoff").value) : undefined;
     const endAt = document.getElementById("ensemble-prediction-mode")?.value === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-prediction-end").value) : undefined;
-    const frequencyMinutes = ({"1Day":1440,"1D":1440,"1Hour":60,"1h":60,"1Min":1,"1min":1})[source.frequency] || 1440;
+    const frequencyMinutes = ({"1Day":1440,"1D":1440,"1Hour":60,"1h":60,"4h":240,"1Min":1,"1min":1,"5min":5,"15min":15,"30min":30})[source.frequency] || 1440;
     const durationUnit = document.getElementById("ensemble-prediction-unit")?.value || (frequencyMinutes === 1440 ? "days" : frequencyMinutes === 60 ? "hours" : "minutes");
     const steps = endAt ? 30 : Number(data.get("prediction_length") || 30) * ({days:1440,hours:60,minutes:1})[durationUnit] / frequencyMinutes;
     if (!Number.isInteger(steps) || steps < 1 || steps > 512) throw new Error("Choose a duration aligned with the observation interval, from 1 to 512 bars.");
@@ -14058,8 +14071,8 @@
       quantiles: getEnsembleQuantiles(),
       transform: sourceType === "prediction_market" ? "logit" : String(data.get("transform") || "auto"),
       context_length: contextRaw ? Number(contextRaw) : null,
-      frequency: sourceType === "ticker" ? ({"1Day":"1D","1Hour":"1h","1Min":"1min"})[source.frequency] : source.frequency,
-      calendar: sourceType === "ticker" && source.frequency === "1Day" ? "NYSE" : "NONE",
+      frequency: sourceType === "ticker" ? ({"1Day":"1D","1Hour":"1h","1Min":"1min"})[source.frequency] || source.frequency : source.frequency,
+      calendar: sourceType === "ticker" && source.provider!=="dukascopy" && source.frequency === "1Day" ? "NYSE" : "NONE",
       model_failure_policy: String(data.get("model_failure_policy") || "fail"),
       models,
     };
@@ -14578,7 +14591,7 @@
         if (custom) { custom.hidden = event.target.value !== "custom"; custom.disabled = custom.hidden; custom.required = !custom.hidden; }
       });
     }
-    for (const id of ["ensemble-ticker-frequency", "ensemble-market-frequency"]) document.getElementById(id)?.addEventListener("change", () => syncEnsembleSourceFields());
+    for (const id of ["ensemble-ticker-frequency", "ensemble-market-frequency", "ensemble-provider"]) document.getElementById(id)?.addEventListener("change", () => syncEnsembleSourceFields());
     document.getElementById("ensemble-chart-focus")?.addEventListener("click", async () => {
       const job = ensembleUiState.lastJob;
       if (!job) return;
@@ -14602,7 +14615,7 @@
           ui.ensembleSourceType.value = row.source === "kalshi_perps" ? "kalshi_perp" : "ticker";
           ui.ensembleTicker.value = row.symbol;
           const provider = document.getElementById("ensemble-provider");
-          if (provider) provider.value = "auto";
+          if (provider) provider.value = row.source === "dukascopy" ? "dukascopy" : "auto";
           syncEnsembleSourceFields();
         }
         return;

@@ -8,10 +8,11 @@
     root.QuanturaMarketSelection=row;
     const source=root.document.getElementById("ensemble-source-type"),ticker=root.document.getElementById("ensemble-ticker"),provider=root.document.getElementById("ensemble-provider");
     if(ticker)ticker.value=row.symbol;
-    if(provider)provider.value="auto";
+    if(provider)provider.value=row.source==="dukascopy"?"dukascopy":"auto";
     if(source){source.value=row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new root.Event("change",{bubbles:true}));}
     const chip=root.document.getElementById("q-selected-market");
     if(chip) { chip.replaceChildren(); const label=root.document.createElement("strong"); label.textContent=api.label(row); chip.append(label);
+      if(root.QuanturaLogos)chip.insertAdjacentHTML("afterbegin",root.QuanturaLogos.markup(row));
       const change=root.document.createElement("button");change.type="button";change.className="cta secondary small";change.textContent="Change";
       change.onclick=()=>root.document.getElementById("market-search-query")?.focus();chip.append(change);
       const upload=root.document.createElement("button");upload.type="button";upload.className="cta secondary small";upload.textContent="Upload CSV";upload.dataset.qUpload="true";chip.append(upload);
@@ -37,7 +38,7 @@
   }
 })(typeof window!=="undefined"?window:null,function(){
   "use strict";
-  const sources=["alpaca","yahoo","kalshi","polymarket_us","kalshi_perps"];
+  const sources=["alpaca","yahoo","dukascopy","kalshi","polymarket_us","kalshi_perps"];
   const validResource=row=>!!row && sources.includes(row.source) && typeof row.resource_id==="string" && row.resource_id.length<=500 && typeof row.symbol==="string" && row.symbol.length<=220;
   const label=row=>[row.outcome || row.symbol,row.market_title || row.name,row.source,row.exchange].filter(Boolean).join(" · ");
   function isoLocal(value){
@@ -51,9 +52,10 @@
     if(!validResource(row))throw Error("Select a market with Search first.");
     const end=isoLocal(settings.end)||new Date().toISOString();
     if(Date.parse(end)>Date.now()+60000)throw Error("The end time must not be in the future.");
+    const dukascopy=row.source==="dukascopy";
     const prediction=row.resource_type==="prediction_market_contract";
     const frequency=settings.frequency;
-    if(!["1Min","1Hour","1Day","raw","5m","15m","30m","final"].includes(frequency) || (!prediction && !["1Min","1Hour","1Day"].includes(frequency)))throw Error("Choose a supported interval.");
+    if(!["1Min","1Hour","1Day","raw","5m","15m","30m","4h","final"].includes(frequency) || (!prediction && !["1Min","1Hour","1Day",...(dukascopy?["5m","15m","30m","4h"]:[])].includes(frequency)))throw Error("Choose a supported interval.");
     const limit=Number(settings.limit);if(![500,1000,2000,50000].includes(limit))throw Error("Choose a supported row limit.");
     const interval=frequency==="1Min"?60000:frequency==="1Hour"?3600000:86400000;
     let start=settings.range==="dates"?isoLocal(settings.start):null;
@@ -70,11 +72,12 @@
     const option=settings.kind==="options";
     if(option&&!settings.optionSymbol)throw Error("Choose a specific call or put from the chain.");
     if(option || row.source==="kalshi_perps") start ||= new Date(Date.parse(end)-Math.max(7*86400000,limit*interval*3)).toISOString();
-    return {url:row.source==="kalshi_perps"?"/api/market-data/perps/history":option?"/api/market-data/options/history":"/api/market-data/stocks/history",body:{source:"auto",symbol:row.symbol,contractSymbol:option?settings.optionSymbol:undefined,start:start||undefined,end,timeframe:frequency,frequency:({"1Min":"1min","1Hour":"1h","1Day":"1D"})[frequency],limit,session:settings.session,adjustment:settings.adjustment,format:"json"}};
+    return {url:row.source==="kalshi_perps"?"/api/market-data/perps/history":option?"/api/market-data/options/history":"/api/market-data/stocks/history",body:{source:dukascopy?"dukascopy":"auto",price_side:dukascopy?(settings.price_side||"bid"):undefined,page_mode:dukascopy||undefined,symbol:row.symbol,contractSymbol:option?settings.optionSymbol:undefined,start:start||undefined,end,timeframe:frequency,frequency:({"1Min":"1min","1Hour":"1h","1Day":"1D"})[frequency],limit,session:settings.session,adjustment:dukascopy?"raw":settings.adjustment,format:"json"}};
   }
   function snapshot(payload,row,settings,request){
     if(!Array.isArray(payload.rows))throw Error("The provider did not return an exportable dataset.");
     let rows=payload.rows;
+    if(row.source==="dukascopy"&&settings.columns!=="ohlcv")rows=rows.map(r=>({timestamp:r.timestamp,close:r.close}));
     if(rows.length>100000)throw Error("This export exceeds the preview limit. Use a smaller window.");
     if(settings.range==="latest"){
       const grouped=new Map();for(const r of rows){const key=r.contract_id||r.item_id||row.resource_id;if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(r);}

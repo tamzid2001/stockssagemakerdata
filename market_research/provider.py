@@ -92,6 +92,66 @@ class QuanturaProvider:
             "next_cursor": cursor,
         }
 
+    def _schedule_request(self, url):
+        """Only fixed first-party public schedule endpoints; no order API."""
+        request = urllib.request.Request(url, headers={"User-Agent": "Quantura/1.0", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return json.load(response)
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            raise RuntimeError("SCHEDULE_UNAVAILABLE") from None
+
+    def verify_schedule(self, contract):
+        from .engine import stamp, iso
+        symbol, event_id = contract["providerSymbol"], contract["eventId"]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,220}", symbol):
+            raise ValueError("INVALID_SCHEDULE_IDENTIFIER")
+        updated = {**contract}
+        if self.source == "kalshi":
+            if not re.fullmatch(r"[A-Z0-9_-]{1,220}", event_id):
+                raise ValueError("INVALID_SCHEDULE_IDENTIFIER")
+            root = "https://api.elections.kalshi.com/trade-api/v2/"
+            payload = self._schedule_request(root + "events/" + event_id + "?with_nested_markets=true")
+            if payload.get("event", {}).get("event_ticker") != event_id:
+                raise ValueError("SCHEDULE_IDENTITY_MISMATCH")
+            markets = payload.get("markets", payload.get("event", {}).get("markets", []))
+            market = next((m for m in markets if m.get("ticker") == symbol), None)
+            if not market:
+                raise ValueError("SCHEDULE_IDENTITY_MISMATCH")
+            milestones = self._schedule_request(root + "milestones?" + urllib.parse.urlencode({"related_event_ticker": event_id, "limit": 500}))
+            if milestones.get("cursor"):
+                raise ValueError("SCHEDULE_DISCOVERY_INCOMPLETE")
+            starts = {stamp(m["start_date"]) for m in milestones.get("milestones", [])
+                      if event_id in [*m.get("primary_event_tickers", []), *m.get("related_event_tickers", [])] and m.get("start_date")}
+            if len(starts) != 1:
+                raise ValueError("SCHEDULE_MISSING_OR_CONFLICTING")
+            start = starts.pop()
+            updated.update(status="closed" if market.get("status") in {"closed", "finalized", "settled", "determined"} else "open")
+            source = "Kalshi linked sports milestone"
+        else:
+            root = "https://gateway.polymarket.us/v1/"
+            market = self._schedule_request(root + "market/slug/" + symbol).get("market", {})
+            side = next((s for s in market.get("marketSides", []) if str(s.get("id")) == str(contract["contractId"])), None)
+            if market.get("slug") != symbol or not side:
+                raise ValueError("SCHEDULE_IDENTITY_MISMATCH")
+            kickoff = market.get("gameStartTime")
+            source = "Polymarket US market gameStartTime"
+            if not kickoff and contract.get("eventSlug"):
+                slug = contract["eventSlug"]
+                if not re.fullmatch(r"[A-Za-z0-9_-]{1,220}", slug):
+                    raise ValueError("INVALID_SCHEDULE_IDENTIFIER")
+                event = self._schedule_request(root + "events/slug/" + slug).get("event", {})
+                if str(event.get("id")) != str(event_id) or event.get("slug") != slug:
+                    raise ValueError("SCHEDULE_IDENTITY_MISMATCH")
+                kickoff, source = event.get("startTime"), "Polymarket US event startTime"
+            if not kickoff:
+                raise ValueError("SCHEDULE_MISSING")
+            start = stamp(kickoff)
+            updated.update(side="long" if side.get("long") is not False else "short",
+                           status="closed" if market.get("closed") or market.get("status") == "MARKET_STATUS_RESOLVED" else "open")
+        updated.update(eventStart=iso(start), scheduleSource=source, scheduleVerifiedAt=iso(int(time.time())), live=time.time() >= start)
+        return updated
+
     def history(self, contract, start, end, history_phase="both", history_lookback_minutes=0):
         from .engine import iso
         if history_phase not in {"both", "pregame", "in_game"} or type(history_lookback_minutes) is not int or not 0 <= history_lookback_minutes <= 129600:
