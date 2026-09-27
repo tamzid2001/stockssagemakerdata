@@ -78,8 +78,9 @@ test('selecting a new forecasting market leaves a saved game, restores settings 
 test('genuine history is drawn with a cutoff boundary and can be hidden without hiding forecast',async()=>{
   const d=new JSDOM('<div id="game-forecast-page" hidden></div>',{url:'https://quantura.studio/forecasting?panel=forecast&gameForecastId='+id(1),runScripts:'outside-only'}),w=d.window;
   const item={...fixtures()[0],input_cutoff:'2026-09-27T18:00:00Z',history_count:2,observations:[{timestamp:'2026-09-27T15:00:00Z',price:.3},{timestamp:'2026-09-27T18:00:00Z',price:.4}],predictions:[{timestamp:'2026-09-27T23:05:00Z',quantiles:fixtures()[0].endpoint}]};
-  w.fetch=async url=>({ok:true,json:async()=>String(url).endsWith('/history')?{observations:item.observations,history_source:'saved_model_input'}:{item}});w.eval(script);for(let i=0;i<4;i++)await tick();
-  assert.equal(w.document.querySelectorAll('circle[data-observed-history]').length,2);assert.ok(w.document.querySelector('[data-forecast-cutoff]'));
+  w.Date.now=()=>Date.parse('2026-09-27T20:30:00Z');
+  w.fetch=async url=>({ok:true,json:async()=>String(url).endsWith('/history')?{observations:[...item.observations,{timestamp:'2026-09-27T19:00:00Z',price:.45},{timestamp:'2026-09-28T01:00:00Z',price:.9}],history_source:'saved_model_input_and_provider_outcomes'}:{item}});w.eval(script);for(let i=0;i<4;i++)await tick();
+  assert.equal(w.document.querySelectorAll('circle[data-observed-history]').length,3);assert.ok(w.document.querySelector('[data-forecast-cutoff]'));
   assert.equal((w.document.querySelector('path[data-observed-history]').getAttribute('d').match(/M/g)||[]).length,2);
   const toggle=w.document.querySelector('input[name="showGameHistory"]');toggle.click();assert.equal(w.document.querySelector('[data-observed-history]'),null);assert.ok(w.document.querySelector('svg polyline'));
   w.document.querySelectorAll('.game-forecast-actions button')[0].click();assert.equal(w.document.body.classList.contains('game-forecast-view'),false);d.window.close();
