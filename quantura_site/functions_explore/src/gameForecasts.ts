@@ -1,4 +1,7 @@
 import type { Router } from "express";
+import type admin from "firebase-admin";
+import crypto from "node:crypto";
+import {authenticatePlatformRequest} from "./apiAccess";
 
 export function gameDate(now = Date.now()): string {
   return new Intl.DateTimeFormat("en-CA", {timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(now));
@@ -7,9 +10,10 @@ const validTime = (value:unknown): value is string => typeof value === "string" 
 const text = (value:unknown, max=300) => typeof value === "string" ? value.slice(0,max) : "";
 
 /** Only a small explicit public projection; private worker fields never escape. */
-export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), detail=false):Record<string,unknown>|null {
+export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), detail=false, archive=false):Record<string,unknown>|null {
   if (!/^[a-f0-9]{32}$/.test(text(raw.id)) || !["kalshi","polymarket_us"].includes(text(raw.provider)) ||
-      raw.game_date !== gameDate(now) || !validTime(raw.game_start) || gameDate(Date.parse(raw.game_start)) !== gameDate(now) ||
+      !validTime(raw.game_start) || raw.game_date !== gameDate(Date.parse(raw.game_start)) ||
+      (archive ? Date.parse(raw.game_start)<now-3*86400000 || Date.parse(raw.game_start)>now+86400000 : raw.game_date !== gameDate(now)) ||
       !validTime(raw.forecast_end) || Date.parse(raw.forecast_end) !== Date.parse(raw.game_start)+4*3600000 ||
       !validTime(raw.generated_at) || (!validTime(raw.recomputed_at) && Date.parse(raw.generated_at) >= Math.floor(Date.parse(raw.game_start)/3600000)*3600000) ||
       Date.parse(raw.generated_at)>now || !validTime(raw.input_cutoff) || Date.parse(raw.input_cutoff)>Date.parse(raw.generated_at)) return null;
@@ -54,7 +58,48 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
   return base;
 }
 
-export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Firestore):void {
+export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Firestore,auth?:admin.auth.Auth):void {
+  const signedIn=async(req:any,res:any)=>{
+    try {
+    if(!auth)throw Error("authentication_unavailable");
+    const principal=await authenticatePlatformRequest(req,{db,auth});
+    if(principal.guest || principal.authMethod!=="firebase_session")throw Error("sign_in_required");
+    return principal.userId;
+    } catch {res.status(401).json({error:"sign_in_required"});return null;}
+  };
+  router.get("/screener/games/saved/:id",async(req,res)=>{
+    try {
+      const uid=await signedIn(req,res);if(!uid)return;const id=String(req.params.id);
+      if(!/^[a-f0-9]{40}$/.test(id)){res.status(404).json({error:"not_found"});return;}
+      const doc=await db.collection("user_game_forecasts").doc(id).get();
+      if(!doc.exists||doc.data()?.ownerUid!==uid){res.status(404).json({error:"not_found"});return;}
+      res.setHeader("Cache-Control","private, no-store");res.json({item:doc.data()!.forecast});
+    }catch{res.status(503).json({error:"saved_forecast_unavailable"});}
+  });
+  router.post("/screener/games/:id/save",async(req,res)=>{
+    try {
+      const uid=await signedIn(req,res);if(!uid)return;const id=String(req.params.id);
+      if(!/^[a-f0-9]{32}$/.test(id)){res.status(404).json({error:"not_found"});return;}
+      const raw=await db.collection("game_forecast_catalog").doc(id).get();
+      const forecast=raw.exists?publicGameForecast(raw.data()||{},Date.now(),true,true):null;
+      if(!forecast){res.status(404).json({error:"not_found"});return;}
+      const savedId=crypto.createHash("sha256").update(JSON.stringify([uid,id,forecast.generated_at,forecast.input_cutoff])).digest("hex").slice(0,40);
+      const saved=db.collection("user_game_forecasts").doc(savedId),requestId=`game__${savedId}`;
+      const request=db.collection("users").doc(uid).collection("requests").doc(requestId);
+      const now=new Date(),title=[forecast.event_title,forecast.outcome].filter(Boolean).join(" · ").slice(0,180);
+      await db.runTransaction(async tx=>{
+        const [existing,existingRequest]=await Promise.all([tx.get(saved),tx.get(request)]);
+        if(!existing.exists)tx.create(saved,{ownerUid:uid,forecast,saved_at:now.toISOString()});
+        // Reopening preserves rename, archive and deletion choices; it never overwrites a saved snapshot.
+        if(!existingRequest.exists)tx.create(request,{type:"forecast",ownerUid:uid,workspaceId:uid,title,
+          input:{provider:forecast.provider,market_symbol:forecast.symbol,outcome:forecast.outcome,panel:"forecast"},
+          outputsMeta:{status:"completed",summary:`${(forecast.models as string[]).length} models · Saved pregame probability forecast`},
+          sourceRef:{collection:"user_game_forecasts",id:savedId},published:false,deleted:false,visibility:"private",share:{visibility:"private",slug:""},
+          searchText:title.toLowerCase(),createdAt:now,updatedAt:now});
+      });
+      res.setHeader("Cache-Control","private, no-store");res.json({saved:true,id:savedId,request_id:requestId,url:`/forecasting?panel=forecast&userGameForecastId=${savedId}`});
+    }catch{res.status(503).json({error:"saved_forecast_unavailable"});}
+  });
   router.get("/screener/games",async(_req,res)=>{
     try {
       const date=gameDate();
@@ -80,7 +125,7 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
     if(!/^[a-f0-9]{32}$/.test(id)){res.status(404).json({error:"not_found"});return;}
     try {
       const doc=await db.collection("game_forecast_catalog").doc(id).get();
-      const item=doc.exists?publicGameForecast(doc.data()||{},Date.now(),true):null;
+      const item=doc.exists?publicGameForecast(doc.data()||{},Date.now(),true,true):null;
       if(!item){res.status(404).json({error:"not_found",message:"This forecast is no longer in today’s screener."});return;}
       res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");res.json({item});
     }catch{res.status(503).json({error:"games_unavailable"});}

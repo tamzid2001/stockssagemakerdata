@@ -1,4 +1,16 @@
 export const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+export function validateBlogPhotos(posts, registry, { allowUntracked = false } = {}) {
+  const ids = new Set(), sources = new Set();
+  for (const post of posts) {
+    const photo = registry.photos[registry.posts[post.slug]];
+    if (!photo) throw new Error(`Missing reviewed photo for ${post.slug}`);
+    const source = new URL(imageUrl(photo)).pathname;
+    if (ids.has(photo.id) || sources.has(source)) throw new Error(`Duplicate blog photo for ${post.slug}`);
+    ids.add(photo.id); sources.add(source);
+    if (!allowUntracked && !photo.download_tracked_at && !(photo.selection_method === "official_photo_page" && photo.source_reviewed_at && photo.license === "Unsplash License")) throw new Error(`Unreviewed photo for ${post.slug}`);
+  }
+}
+const reviewed = photo => photo?.download_tracked_at || photo?.selection_method === "official_photo_page" && photo?.source_reviewed_at && photo?.license === "Unsplash License";
 export function imageUrl(photo, width = 1280) {
   const url = new URL(photo.image_url);
   if (url.protocol !== "https:" || url.hostname !== "images.unsplash.com" || !url.searchParams.has("ixid")) throw new Error("Expected an attributed Unsplash API image URL");
@@ -13,7 +25,7 @@ export function referralUrl(value) {
   return url.href;
 }
 export function photoFigure(photo) {
-  if (!photo?.download_tracked_at) throw new Error("Select and track the Unsplash photo before publication");
+  if (!reviewed(photo)) throw new Error("Review the licensed photo; track API selections before publication");
   const srcset = [320, 640, 960, 1280].map(width => `${escapeHtml(imageUrl(photo, width))} ${width}w`).join(", ");
   return `<figure class="blog-photo" data-unsplash-photo="${escapeHtml(photo.id)}">
       <img src="${escapeHtml(imageUrl(photo))}" srcset="${srcset}" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="${escapeHtml(photo.alt)}" width="1280" height="720" decoding="async" fetchpriority="high" />
@@ -22,7 +34,7 @@ export function photoFigure(photo) {
 }
 
 export function photoThumbnail(photo) {
-  if (!photo?.download_tracked_at) throw new Error("Select and track the Unsplash photo before publication");
+  if (!reviewed(photo)) throw new Error("Review the licensed photo; track API selections before publication");
   const srcset = [320, 640, 960].map(width => `${escapeHtml(imageUrl(photo, width))} ${width}w`).join(", ");
   return `<img class="blog-card-photo" src="${escapeHtml(imageUrl(photo, 640))}" srcset="${srcset}" sizes="(max-width: 768px) calc(100vw - 48px), 360px" alt="${escapeHtml(photo.alt)}" width="640" height="360" loading="lazy" decoding="async" />`;
 }

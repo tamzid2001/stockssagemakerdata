@@ -55,7 +55,13 @@ class QuanturaProvider:
                 if error.code in {429, 502, 503, 504} and attempt < 3:
                     time.sleep(2**attempt)
                     continue
-                raise RuntimeError(f"DATA_HTTP_{error.code}") from None
+                # Retain only the adapter's bounded error code, never a URL or response body.
+                try:
+                    code = json.load(error).get("error", "")
+                except (ValueError, OSError):
+                    code = ""
+                suffix = "_" + code.upper() if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,60}", code) else ""
+                raise RuntimeError(f"DATA_HTTP_{error.code}{suffix}") from None
             except (urllib.error.URLError, TimeoutError):
                 if attempt < 3:
                     time.sleep(2**attempt)
@@ -114,7 +120,7 @@ class QuanturaProvider:
             payload = self._schedule_request(root + "events/" + event_id + "?with_nested_markets=true")
             if payload.get("event", {}).get("event_ticker") != event_id:
                 raise ValueError("SCHEDULE_IDENTITY_MISMATCH")
-            markets = payload.get("markets", payload.get("event", {}).get("markets", []))
+            markets = payload.get("markets") or payload.get("event", {}).get("markets", [])
             market = next((m for m in markets if m.get("ticker") == symbol), None)
             if not market:
                 raise ValueError("SCHEDULE_IDENTITY_MISMATCH")

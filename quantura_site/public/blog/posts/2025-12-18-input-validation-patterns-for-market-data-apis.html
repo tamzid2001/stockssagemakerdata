@@ -13,13 +13,13 @@
     <meta property="og:description" content="Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls." />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="https://quantura.studio/blog/posts/2025-12-18-input-validation-patterns-for-market-data-apis" />
-    <meta property="og:image" content="https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Input Validation Patterns for Market Data APIs | Quantura Blog" />
     <meta name="twitter:description" content="Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls." />
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
     <meta name="twitter:url" content="https://quantura.studio/blog/posts/2025-12-18-input-validation-patterns-for-market-data-apis" />
     <meta property="article:published_time" content="2025-12-18" />
     <meta property="article:section" content="Data Validation" />
@@ -40,7 +40,7 @@
     <script src="/pwa-launch.js?v=20260926a"></script>
     <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260926-support"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260926a" />
+    <link rel="stylesheet" href="/styles.css?v=20260927-research" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">{
   "@context": "https://schema.org",
@@ -60,16 +60,17 @@
   "mainEntityOfPage": "https://quantura.studio/blog/posts/2025-12-18-input-validation-patterns-for-market-data-apis",
   "image": {
     "@type": "ImageObject",
-    "url": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
-    "creditText": "Photo by Domaintechnik on Unsplash",
+    "url": "https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+    "creditText": "Photo by Elimende Inagella on Unsplash",
     "creator": {
       "@type": "Person",
-      "name": "Domaintechnik",
-      "url": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral"
+      "name": "Elimende Inagella",
+      "url": "https://unsplash.com/@elimendeinagella?utm_source=quantura&utm_medium=referral"
     }
   }
 }</script>
-    <script defer src="/app.js?v=20260405a"></script>
+    <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/app.js?v=20260927-research"></script>
   </head>
   <body>
 
@@ -95,12 +96,7 @@
             <div class="small muted">Published December 18, 2025 · Topic: <a href="/blog/topics/data-validation">Data Validation</a></div>
           </div>
           <div class="card">
-            <h3>Post metadata</h3>
-            <div class="small"><strong>Slug:</strong> 2025-12-18-input-validation-patterns-for-market-data-apis</div>
-            <div class="small"><strong>Date:</strong> 2025-12-18</div>
-            <div class="small"><strong>Tags:</strong> data-validation, data, validation, qa, governance, quantura, markets</div>
-            <div class="small" style="margin-top:8px;"><a href="/blog">Back to blog index</a></div>
-          </div>
+            <h3>Keep exploring</h3><p>Put this research into practice.</p><a href="/forecasting">Open Forecast →</a><p class="small"><a href="/blog">Browse research guides</a></p></div>
         </div>
       </section>
 
@@ -108,18 +104,12 @@
         <div class="container">
           <article class="card" style="padding: 28px;">
 
-    <figure class="blog-photo" data-unsplash-photo="VHmBX7FnXw0">
-      <img src="https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" srcset="https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w, https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format 1280w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="Server rack with blinking green lights" width="1280" height="720" decoding="async" fetchpriority="high" />
-      <figcaption>Photo by <a href="https://unsplash.com/@fslfsl?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Domaintechnik</a> on <a href="https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
+    <figure class="blog-photo" data-unsplash-photo="nA1MoDfGY14">
+      <img src="https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" srcset="https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w, https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format 1280w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="black and white electronic device" width="1280" height="720" decoding="async" fetchpriority="high" />
+      <figcaption>Photo by <a href="https://unsplash.com/@elimendeinagella?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Elimende Inagella</a> on <a href="https://unsplash.com/photos/black-and-white-electronic-device-nA1MoDfGY14?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
     </figure>
-    <p>
-      Input Validation Patterns for Market Data APIs is written for operators who need a repeatable bridge between signal intake and action execution.
-      The core objective is to reduce latency without reducing rigor. High-quality execution requires a separation between idea generation and risk approval. The fastest teams are not the teams that trade first; they are the teams that can explain why they acted, what invalidates the thesis, and what to do next.
-    </p>
-    <p>
-      In this playbook, the emphasis is not prediction theater; it is process reliability.
-      A recurring problem in discretionary workflows is undocumented confidence. Quantura playbooks require confidence to be represented as concrete ranges, expected volatility bands, and downside triggers that can be measured after the fact.
-    </p>
+    <p>Use this guide to make your research assumptions explicit and decide what evidence to review next.</p>
+
     <p>Execution speed should not be measured by how quickly an order is sent. It should be measured by how quickly the team can move from a new signal to a verified action plan with known downside boundaries. This includes data validation, scenario refresh, and communication quality. The most expensive delays often come from ambiguous ownership, not slow models.</p>
     <p>Institutional consistency also depends on presentation quality. A dense, reproducible template helps decision committees compare opportunities without being distracted by formatting differences. Quantura outputs should include a short thesis, a quantified risk envelope, a catalyst map, and a status line that states whether conditions are improving, deteriorating, or unchanged.</p>
 
@@ -223,7 +213,7 @@ return runChecks(dataset, checks);</code></pre>
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <p class="small">Inspectable forecasts. Research you can revisit.</p>
         </div>
         <div class="small">
           <strong>Research</strong>

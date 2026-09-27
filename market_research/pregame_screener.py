@@ -68,7 +68,7 @@ def document(contract, forecast, now, original=None):
         raise ValueError("GAME_START_HOUR_REACHED")
     start = stamp(contract["eventStart"])
     original_generated = stamp(original.get("original_generated_at") or original["generated_at"]) if original else None
-    if original and (game_date(start) != game_date(now) or original_generated >= start // 3600 * 3600 or forecast["origin"] > original_generated):
+    if original and (game_date(start) != original.get("game_date", game_date(now)) or original_generated >= start // 3600 * 3600 or forecast["origin"] > original_generated):
         raise ValueError("ORIGINAL_CUTOFF_NOT_PREGAME")
     end = start + 4 * 3600
     rows = through_deadline(forecast["rows"], forecast["origin"], forecast["input_snapshot"][-1]["target"], end)
@@ -92,7 +92,7 @@ def document(contract, forecast, now, original=None):
     }
 
 
-def run(source, maximum, refresh_published=False, shard=0, shards=1):
+def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_date=None):
     from .forecast import forecast_window
     from .store import Store
     provider = KalshiProvider() if source == "kalshi" else QuanturaProvider()
@@ -107,9 +107,10 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1):
     if removed:
         batch.commit()
     deadline = time.time() + 48 * 60
+    target_date = refresh_date or game_date(time.time())
     originals = {}
     if refresh_published:
-        for saved in db.collection(COLLECTION).where("game_date", "==", game_date(time.time())).limit(1000).stream():
+        for saved in db.collection(COLLECTION).where("game_date", "==", target_date).limit(1000).stream():
             row = saved.to_dict()
             if row.get("provider") == source:
                 originals[row["contract_id"]] = row
@@ -133,7 +134,7 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1):
     # Refresh every existing published snapshot before acquiring new outcomes.
     selected.sort(key=lambda c:(c["contractId"] not in originals,c["eventStart"],c["contractId"]))
     selected = [c for c in selected[:maximum] if int(digest(c["contractId"])[:8],16) % shards == shard]
-    report = {"provider": source, "game_date": game_date(time.time()), "eligible": len(selected), "successful": 0,
+    report = {"provider": source, "game_date": target_date, "eligible": len(selected), "successful": 0,
               "skipped": 0, "failed": 0, "partial": bool(cursor) or total_eligible > maximum,
               "shard": shard, "shards": shards, "refresh_published":refresh_published,
               "discovery": coverage, "removed_expired": removed, "failures": []}
@@ -148,7 +149,7 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1):
                 continue
             try:
                 contract = provider.verify_schedule(contract)
-                if game_date(stamp(contract["eventStart"])) != game_date(time.time()):
+                if game_date(stamp(contract["eventStart"])) != (target_date if original else game_date(time.time())):
                     if original:
                         db.collection(COLLECTION).document(original["id"]).delete()
                     report["skipped"] += 1
@@ -219,6 +220,7 @@ if __name__ == "__main__":
     parser.add_argument("--provider", required=True, choices=["kalshi", "polymarket_us"])
     parser.add_argument("--max-contracts", type=int, default=500)
     parser.add_argument("--refresh-published", action="store_true")
+    parser.add_argument("--refresh-date", help="Recalculate saved snapshots for a recent date, with their original pregame cutoff")
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shards", type=int, default=1)
     args = parser.parse_args()
@@ -226,4 +228,12 @@ if __name__ == "__main__":
         parser.error("Maximum must be between 1 and 500")
     if not 1 <= args.shards <= 4 or not 0 <= args.shard < args.shards:
         parser.error("Choose a valid shard")
-    run(args.provider, args.max_contracts, args.refresh_published, args.shard, args.shards)
+    if args.refresh_date:
+        try:
+            selected_date = datetime.strptime(args.refresh_date, "%Y-%m-%d").date()
+            today = datetime.now(NY).date()
+            if not args.refresh_published or not 0 <= (today - selected_date).days <= 3:
+                raise ValueError()
+        except ValueError:
+            parser.error("Refresh date must be today or one of the last three days, with --refresh-published")
+    run(args.provider, args.max_contracts, args.refresh_published, args.shard, args.shards, args.refresh_date)

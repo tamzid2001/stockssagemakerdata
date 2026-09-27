@@ -101,17 +101,17 @@
         "markets"
       ],
       "excerpt": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1619410283995-43d9134e7656?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1542831371-29b0f74f9713?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-08-20-mobile-navigation-for-dense-quantitative-workspaces",
       "description": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "mZnx9429i94",
-        "alt": "code editor displaying react source code",
-        "photographer": "Juanjo Jaramillo",
-        "photographerUrl": "https://unsplash.com/@juanjodev02?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/code-editor-displaying-react-source-code-mZnx9429i94?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.764Z"
+        "id": "4hbJ-eymZ1o",
+        "alt": "lines of HTML codes",
+        "photographer": "Florian Olivo",
+        "photographerUrl": "https://unsplash.com/@florianolv?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/lines-of-html-codes-4hbJ-eymZ1o?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.527Z"
       }
     },
     {
@@ -146,8 +146,8 @@
     },
     {
       "weekIndex": 75,
-      "title": "Chronological CSV Exports That Open Cleanly in Spreadsheets",
-      "rawTitle": "Chronological CSV Exports That Open Cleanly in Spreadsheets",
+      "title": "From a Clean Time Series to Portable Research",
+      "rawTitle": "From a Clean Time Series to Portable Research",
       "slug": "2026-08-06-chronological-csv-exports-that-open-cleanly-in-spreadsheets",
       "dateIso": "2026-08-06",
       "topic": "data-validation",
@@ -160,10 +160,10 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "excerpt": "Prepare a CSV, inspect a forecast, and preserve the timestamps and context needed to review it later.",
       "heroImage": "https://images.unsplash.com/photo-1529078155058-5d716f45d604?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-08-06-chronological-csv-exports-that-open-cleanly-in-spreadsheets",
-      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "description": "Prepare a CSV, inspect a forecast, and preserve the timestamps and context needed to review it later.",
       "heroPhoto": {
         "provider": "unsplash",
         "id": "Wpnoqo2plFA",
@@ -191,23 +191,23 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1506399309177-3b43e99fead2?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-07-30-yahoo-finance-options-history-as-an-availability-fallback",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "pgdaAwf6IJg",
+        "alt": "black ImgIX server system",
+        "photographer": "imgix",
+        "photographerUrl": "https://unsplash.com/@imgix?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/black-imgix-server-system-pgdaAwf6IJg?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.934Z"
       }
     },
     {
       "weekIndex": 73,
-      "title": "Forecast Uncertainty Expansion and Contraction Over Time",
-      "rawTitle": "Forecast Uncertainty Expansion and Contraction Over Time",
+      "title": "How to Read a Forecast Range",
+      "rawTitle": "How to Read a Forecast Range",
       "slug": "2026-07-23-forecast-uncertainty-expansion-and-contraction-over-time",
       "dateIso": "2026-07-23",
       "topic": "forecasting-workflows",
@@ -220,18 +220,18 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "excerpt": "Use forecast quantiles to compare possible outcomes and understand what a median leaves out.",
+      "heroImage": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-07-23-forecast-uncertainty-expansion-and-contraction-over-time",
-      "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "description": "Use forecast quantiles to compare possible outcomes and understand what a median leaves out.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "JKUTrJ4vK00",
+        "alt": "graphs of performance analytics on a laptop screen",
+        "photographer": "Luke Chesser",
+        "photographerUrl": "https://unsplash.com/@lukechesser?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.400Z"
       }
     },
     {
@@ -251,17 +251,17 @@
         "markets"
       ],
       "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-07-16-balanced-bull-bear-and-base-forecast-interpretation",
       "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "JKUTrJ4vK00",
-        "alt": "graphs of performance analytics on a laptop screen",
-        "photographer": "Luke Chesser",
-        "photographerUrl": "https://unsplash.com/@lukechesser?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.400Z"
+        "id": "EUsVwEOsblE",
+        "alt": "teal LED panel",
+        "photographer": "Adi Goldstein",
+        "photographerUrl": "https://unsplash.com/@adigold1?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/teal-led-panel-EUsVwEOsblE?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.065Z"
       }
     },
     {
@@ -281,17 +281,17 @@
         "markets"
       ],
       "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1640158615573-cd28feb1bf4e?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-07-09-optional-gpt-analysis-with-full-p10-p50-p90-context",
       "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "fyeOxvYvIyY",
+        "alt": "The word DATA and a star symbol stenciled in dark dots on glass",
+        "photographer": "Claudio Schwarz",
+        "photographerUrl": "https://unsplash.com/@purzlbaum?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/data-word-and-star-on-glass-fyeOxvYvIyY?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.191Z"
       }
     },
     {
@@ -341,17 +341,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1460925895917-afdab827c52f?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-06-25-meta-prophet-scenarios-with-mathematically-honest-signs",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "hpjSkU2UYSU",
+        "alt": "laptop computer on glass-top table",
+        "photographer": "Carlos Muza",
+        "photographerUrl": "https://unsplash.com/@kmuza?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/laptop-computer-on-glass-top-table-hpjSkU2UYSU?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.460Z"
       }
     },
     {
@@ -371,17 +371,17 @@
         "execution"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1593486544625-13ef2368e43a?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-06-18-least-privilege-aws-trust-policies-for-forecast-workflows",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "RfUy0XMCkhQ",
+        "alt": "black computer keyboard on brown wooden desk",
+        "photographer": "Dan LeFebvre",
+        "photographerUrl": "https://unsplash.com/@danlefeb?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/black-computer-keyboard-on-brown-wooden-desk-RfUy0XMCkhQ?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.597Z"
       }
     },
     {
@@ -400,17 +400,17 @@
         "markets"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1774494168068-0f716c3aafcf?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-06-11-private-iam-roles-for-user-billed-sagemaker-execution",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "IHUzuqnK87g",
+        "alt": "Modern office interior with cubicles and workstations",
+        "photographer": "blue sky",
+        "photographerUrl": "https://unsplash.com/@bluext?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/modern-office-interior-with-cubicles-and-workstations-IHUzuqnK87g?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.709Z"
       }
     },
     {
@@ -430,17 +430,17 @@
         "execution"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1534375754046-291eefbbeff7?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
+      "heroImage": "https://images.unsplash.com/photo-1578307898411-f6930dadea39?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-06-04-preparing-mlb-probability-series-for-sagemaker-canvas",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "rHERhrnGSsQ",
-        "alt": "Spectators and the baseball field at Progressive Field in Cleveland",
-        "photographer": "Chris Chow",
-        "photographerUrl": "https://unsplash.com/@chris_chow?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/baseball-stadium-rHERhrnGSsQ?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-26T19:40:06.030669+00:00"
+        "id": "I-SoYkFjVI0",
+        "alt": "grayscale photography of unknown person using computer",
+        "photographer": "CDC",
+        "photographerUrl": "https://unsplash.com/@cdc?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/grayscale-photography-of-unknown-person-using-computer-I-SoYkFjVI0?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.771Z"
       }
     },
     {
@@ -490,17 +490,17 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1783683783819-e6cb806bba69?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-05-21-earnings-date-caching-without-fabricated-calendar-events",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "y4GHs9GEFdM",
+        "alt": "Ethernet cables connected to the back of a network device",
+        "photographer": "Manuel Luikenga",
+        "photographerUrl": "https://unsplash.com/@manuel_luikenga?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/ethernet-cables-connected-to-the-back-of-a-network-device-y4GHs9GEFdM?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.991Z"
       }
     },
     {
@@ -520,17 +520,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1707157281599-d155d1da5b4c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-05-14-quantile-distance-filters-for-cross-sectional-research",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "ykgLX_CwtDw",
+        "alt": "person using stylus on tablet with charts",
+        "photographer": "Jakub Żerdzicki",
+        "photographerUrl": "https://unsplash.com/@jakubzerdzicki?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-using-stylus-on-tablet-with-charts-ykgLX_CwtDw?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.576Z"
       }
     },
     {
@@ -550,17 +550,17 @@
         "markets"
       ],
       "excerpt": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1619410283995-43d9134e7656?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-05-07-chunked-nasdaq-screening-with-checkpoints-and-retries",
       "description": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "mZnx9429i94",
-        "alt": "code editor displaying react source code",
-        "photographer": "Juanjo Jaramillo",
-        "photographerUrl": "https://unsplash.com/@juanjodev02?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/code-editor-displaying-react-source-code-mZnx9429i94?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.764Z"
+        "id": "ieic5Tq8YMk",
+        "alt": "a computer screen with a bunch of code on it",
+        "photographer": "Chris Ried",
+        "photographerUrl": "https://unsplash.com/@cdr6934?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/a-computer-screen-with-a-bunch-of-code-on-it-ieic5Tq8YMk?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.590Z"
       }
     },
     {
@@ -580,17 +580,17 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1506399441630-774ef431470f?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-04-30-full-universe-screener-coverage-and-degraded-scan-detection",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "HQfuZERbbzE",
+        "alt": "grayscale photography of rectangular gray case on wire rack",
+        "photographer": "imgix",
+        "photographerUrl": "https://unsplash.com/@imgix?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/grayscale-photography-of-rectangular-gray-case-on-wire-rack-HQfuZERbbzE?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.054Z"
       }
     },
     {
@@ -610,17 +610,17 @@
         "markets"
       ],
       "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1508873699372-7aeab60b44ab?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1560617544-b4f287789e24?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-04-23-regular-and-extended-hours-price-monitoring-by-design",
       "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "bU6JyhSI6zo",
-        "alt": "pen, notebook, and smartphone on table",
-        "photographer": "Dose Media",
-        "photographerUrl": "https://unsplash.com/@dose?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/pen-notebook-and-smartphone-on-table-bU6JyhSI6zo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.567Z"
+        "id": "o6elTKWZ5bI",
+        "alt": "space gray iPhone 6",
+        "photographer": "Jonas Lee",
+        "photographerUrl": "https://unsplash.com/@1eemingwell?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/space-gray-iphone-6-o6elTKWZ5bI?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.621Z"
       }
     },
     {
@@ -640,17 +640,17 @@
         "markets"
       ],
       "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1508873699372-7aeab60b44ab?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1536846670933-ce6eef8dfe89?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-04-16-true-forecast-boundary-crossings-without-email-spam",
       "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "bU6JyhSI6zo",
-        "alt": "pen, notebook, and smartphone on table",
-        "photographer": "Dose Media",
-        "photographerUrl": "https://unsplash.com/@dose?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/pen-notebook-and-smartphone-on-table-bU6JyhSI6zo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.567Z"
+        "id": "wJQPr0iQpK4",
+        "alt": "space gray iPhone 6",
+        "photographer": "Nicolas Hirajeta",
+        "photographerUrl": "https://unsplash.com/@nicolashirajeta?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/space-gray-iphone-6-wJQPr0iQpK4?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.683Z"
       }
     },
     {
@@ -670,17 +670,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1599658880436-c61792e70672?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-04-09-last-two-p10-signals-and-business-day-horizon-logic",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "eveI7MOcSmw",
+        "alt": "person using macbook pro on black table",
+        "photographer": "Myriam Jessier",
+        "photographerUrl": "https://unsplash.com/@mjessier?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-using-macbook-pro-on-black-table-eveI7MOcSmw?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.626Z"
       }
     },
     {
@@ -700,17 +700,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1542744173-05336fcc7ad4?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-04-02-p50-statistical-anomaly-bands-without-false-confidence-claims",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "pypeCEaJeZY",
+        "alt": "person using MacBook Pro",
+        "photographer": "Campaign Creators",
+        "photographerUrl": "https://unsplash.com/@campaign_creators?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-using-macbook-pro-pypeCEaJeZY?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.699Z"
       }
     },
     {
@@ -730,17 +730,17 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1529078155058-5d716f45d604?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1782094673136-5198a372980c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-03-26-prediction-csv-validation-before-quantile-analysis",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "Wpnoqo2plFA",
-        "alt": "white printing paper with numbers",
-        "photographer": "Mika Baumeister",
-        "photographerUrl": "https://unsplash.com/@kommumikation?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/white-printing-paper-with-numbers-Wpnoqo2plFA?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.435Z"
+        "id": "iZe21DzHnUg",
+        "alt": "Close-up of server cooling fans in a vibrant data center",
+        "photographer": "Winston Chen",
+        "photographerUrl": "https://unsplash.com/@winstonchen?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/close-up-of-server-cooling-fans-in-a-vibrant-data-center-iZe21DzHnUg?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.111Z"
       }
     },
     {
@@ -760,17 +760,17 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1785682117394-4c8d27afc12a?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-03-19-options-chain-reconciliation-across-market-data-providers",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "A-b2nPSSK6E",
+        "alt": "Technician inspecting server racks with a handheld diagnostic tool",
+        "photographer": "Valentin Lacoste",
+        "photographerUrl": "https://unsplash.com/@valentinlacoste?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/technician-inspecting-server-racks-with-a-handheld-diagnostic-tool-A-b2nPSSK6E?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.164Z"
       }
     },
     {
@@ -790,17 +790,17 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1781330169795-9d98a072ca1f?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-03-12-alpaca-and-yahoo-finance-fallback-without-silent-source-changes",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "UTTS_8YceDk",
+        "alt": "Rows of electronic circuit boards with chips and a cable",
+        "photographer": "Daniel Miksha",
+        "photographerUrl": "https://unsplash.com/@danielmiksha?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/rows-of-electronic-circuit-boards-with-chips-and-a-cable-UTTS_8YceDk?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.225Z"
       }
     },
     {
@@ -819,17 +819,17 @@
         "markets"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
       "canonical": "https://quantura.studio/blog/posts/2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "S4ivgQRxaPo",
-        "alt": "black flat screen computer monitor on white desk",
-        "photographer": "Ataberk Güler",
-        "photographerUrl": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.546Z"
+        "id": "GQOylIn892U",
+        "alt": "Laptop screen displaying code and data charts",
+        "photographer": "Daniil Komov",
+        "photographerUrl": "https://unsplash.com/@dkomow",
+        "sourceUrl": "https://unsplash.com/photos/GQOylIn892U",
+        "selectedAt": "2026-09-27T03:42:02.011919+00:00"
       }
     },
     {
@@ -849,17 +849,17 @@
         "execution"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1756576630180-653cbd594433?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-02-26-sagemaker-canvas-governance-leakage-drift-and-audit",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "S4ivgQRxaPo",
-        "alt": "black flat screen computer monitor on white desk",
-        "photographer": "Ataberk Güler",
-        "photographerUrl": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.546Z"
+        "id": "QLQSgxQzzqg",
+        "alt": "Custom gaming computer with rgb lighting",
+        "photographer": "Andrey Matveev",
+        "photographerUrl": "https://unsplash.com/@zelebb?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/custom-gaming-computer-with-rgb-lighting-QLQSgxQzzqg?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.903Z"
       }
     },
     {
@@ -879,17 +879,17 @@
         "risk-management"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1756575802474-b2348cef95c3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-02-19-ai-analysis-escalation-paths-for-high-uncertainty",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "wdbXQaD6m_Y",
+        "alt": "Inside a computer case with graphics card and fans",
+        "photographer": "Andrey Matveev",
+        "photographerUrl": "https://unsplash.com/@zelebb?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/inside-a-computer-case-with-graphics-card-and-fans-wdbXQaD6m_Y?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.954Z"
       }
     },
     {
@@ -909,17 +909,17 @@
         "markets"
       ],
       "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1548092372-0d1bd40894a3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-02-12-forecast-audit-trails-for-institutional-compliance",
       "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "JKUTrJ4vK00",
-        "alt": "graphs of performance analytics on a laptop screen",
-        "photographer": "Luke Chesser",
-        "photographerUrl": "https://unsplash.com/@lukechesser?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.400Z"
+        "id": "iIJrUoeRoCQ",
+        "alt": "closeup photo of turned-on blue and white laptop computer",
+        "photographer": "Philipp Katzenberger",
+        "photographerUrl": "https://unsplash.com/@fantasyflip?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/closeup-photo-of-turned-on-blue-and-white-laptop-computer-iIJrUoeRoCQ?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.256Z"
       }
     },
     {
@@ -939,17 +939,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-02-05-forecast-review-ownership-models-for-team-execution",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "mcSDtbWXUZU",
+        "alt": "turned on black and grey laptop computer",
+        "photographer": "Lukas Blazek",
+        "photographerUrl": "https://unsplash.com/@goumbik?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/turned-on-black-and-grey-laptop-computer-mcSDtbWXUZU?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.762Z"
       }
     },
     {
@@ -969,17 +969,17 @@
         "markets"
       ],
       "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1508873699372-7aeab60b44ab?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1596742578443-7682ef5251cd?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-01-29-narrative-contradictions-and-tactical-repositioning",
       "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "bU6JyhSI6zo",
-        "alt": "pen, notebook, and smartphone on table",
-        "photographer": "Dose Media",
-        "photographerUrl": "https://unsplash.com/@dose?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/pen-notebook-and-smartphone-on-table-bU6JyhSI6zo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.567Z"
+        "id": "DsmDqiYduaU",
+        "alt": "black android smartphone displaying home screen",
+        "photographer": "The Average Tech Guy",
+        "photographerUrl": "https://unsplash.com/@the_average_tech_guy?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/black-android-smartphone-displaying-home-screen-DsmDqiYduaU?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.740Z"
       }
     },
     {
@@ -999,17 +999,17 @@
         "markets"
       ],
       "excerpt": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1444653614773-995cb1ef9efa?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMG5ld3NwYXBlcnxlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-01-22-forecast-confidence-intervals-in-position-reviews",
       "description": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "E7RLgUjjazc",
+        "alt": "person wearing suit reading business newspaper",
+        "photographer": "Adeolu Eletu",
+        "photographerUrl": "https://unsplash.com/@adeolueletu?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-wearing-suit-reading-business-newspaper-E7RLgUjjazc?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.274Z"
       }
     },
     {
@@ -1029,17 +1029,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1711097383282-28097ae16b1d?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-01-15-momentum-exhaustion-signals-and-risk-tapering",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "9PwLeZA-RGc",
+        "alt": "a person holding a piece of paper over a laptop",
+        "photographer": "Jakub Żerdzicki",
+        "photographerUrl": "https://unsplash.com/@jakubzerdzicki?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/a-person-holding-a-piece-of-paper-over-a-laptop-9PwLeZA-RGc?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.817Z"
       }
     },
     {
@@ -1059,17 +1059,17 @@
         "markets"
       ],
       "excerpt": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1651341050677-24dba59ce0fd?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-01-08-macro-breadth-dashboards-for-cross-asset-context",
       "description": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "fiXLQXAhCfk",
-        "alt": "stock market candlestick chart on dark screen",
-        "photographer": "Maxim Hopman",
-        "photographerUrl": "https://unsplash.com/@nampoh?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/stock-market-candlestick-chart-on-dark-screen-fiXLQXAhCfk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.081Z"
+        "id": "x07ELaNFt34",
+        "alt": "graphical user interface, application",
+        "photographer": "Anne Nygård",
+        "photographerUrl": "https://unsplash.com/@polarmermaid?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/graphical-user-interface-application-x07ELaNFt34?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.137Z"
       }
     },
     {
@@ -1089,17 +1089,17 @@
         "markets"
       ],
       "excerpt": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1548784669-67e15fbb74b4?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2026-01-01-sagemaker-canvas-to-quantura-export-pipeline",
       "description": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "S4ivgQRxaPo",
-        "alt": "black flat screen computer monitor on white desk",
-        "photographer": "Ataberk Güler",
-        "photographerUrl": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.546Z"
+        "id": "40YHLEhFWq8",
+        "alt": "a computer keyboard and mouse on a desk",
+        "photographer": "Theme Direct :: Website Builder",
+        "photographerUrl": "https://unsplash.com/@theme_direct_website_builder?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/a-computer-keyboard-and-mouse-on-a-desk-40YHLEhFWq8?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.827Z"
       }
     },
     {
@@ -1119,17 +1119,17 @@
         "markets"
       ],
       "excerpt": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1709880945165-d2208c6ad2ec?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxmaW5hbmNlJTIwcmVzZWFyY2glMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTd8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxmaW5hbmNlJTIwcmVzZWFyY2glMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTd8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-12-25-scenario-trees-for-concentrated-portfolio-risk",
       "description": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "8wLZi9OhsWU",
-        "alt": "a calculator sitting on top of a table next to a laptop",
-        "photographer": "Jakub Żerdzicki",
-        "photographerUrl": "https://unsplash.com/@jakubzerdzicki?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/a-calculator-sitting-on-top-of-a-table-next-to-a-laptop-8wLZi9OhsWU?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.382Z"
+        "id": "nApaSgkzaxg",
+        "alt": "person in black suit jacket holding white tablet computer",
+        "photographer": "Towfiqu barbhuiya",
+        "photographerUrl": "https://unsplash.com/@towfiqu999999?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-in-black-suit-jacket-holding-white-tablet-computer-nApaSgkzaxg?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.331Z"
       }
     },
     {
@@ -1149,17 +1149,17 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1614508569207-3295ac89d75f?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-12-18-input-validation-patterns-for-market-data-apis",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "nA1MoDfGY14",
+        "alt": "black and white electronic device",
+        "photographer": "Elimende Inagella",
+        "photographerUrl": "https://unsplash.com/@elimendeinagella?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/black-and-white-electronic-device-nA1MoDfGY14?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.278Z"
       }
     },
     {
@@ -1179,17 +1179,17 @@
         "markets"
       ],
       "excerpt": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1619410283995-43d9134e7656?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-12-11-release-checklists-for-native-web-shells",
       "description": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "mZnx9429i94",
-        "alt": "code editor displaying react source code",
-        "photographer": "Juanjo Jaramillo",
-        "photographerUrl": "https://unsplash.com/@juanjodev02?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/code-editor-displaying-react-source-code-mZnx9429i94?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.764Z"
+        "id": "OqtafYT5kTw",
+        "alt": "monitor showing Java programming",
+        "photographer": "Ilya Pavlov",
+        "photographerUrl": "https://unsplash.com/@ilyapavlov?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/monitor-showing-java-programming-OqtafYT5kTw?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.659Z"
       }
     },
     {
@@ -1209,17 +1209,17 @@
         "markets"
       ],
       "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1504639725590-34d0984388bd?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-12-04-guardrails-for-multi-provider-model-routing",
       "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "JKUTrJ4vK00",
-        "alt": "graphs of performance analytics on a laptop screen",
-        "photographer": "Luke Chesser",
-        "photographerUrl": "https://unsplash.com/@lukechesser?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.400Z"
+        "id": "w7ZyuGYNpRQ",
+        "alt": "closeup photo of eyeglasses",
+        "photographer": "Kevin Ku",
+        "photographerUrl": "https://unsplash.com/@ikukevk?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/closeup-photo-of-eyeglasses-w7ZyuGYNpRQ?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.311Z"
       }
     },
     {
@@ -1239,17 +1239,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1558174685-430919a96c8d?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw5fHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-11-27-private-templates-for-reproducible-research",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "Nh4Sxasye24",
+        "alt": "A laptop displaying a website on a wooden desk with potted plants",
+        "photographer": "Michał Parzuchowski",
+        "photographerUrl": "https://unsplash.com/@mparzuchowski?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/laptop-on-wooden-desk-workspace-Nh4Sxasye24?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.886Z"
       }
     },
     {
@@ -1269,17 +1269,17 @@
         "markets"
       ],
       "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1508873699372-7aeab60b44ab?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1534945644675-24836fd2906c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-11-20-alert-fatigue-reduction-in-forecast-monitoring",
       "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "bU6JyhSI6zo",
-        "alt": "pen, notebook, and smartphone on table",
-        "photographer": "Dose Media",
-        "photographerUrl": "https://unsplash.com/@dose?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/pen-notebook-and-smartphone-on-table-bU6JyhSI6zo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.567Z"
+        "id": "MKwBr8JFCgs",
+        "alt": "gold iPhone 6 on brown wooden surface",
+        "photographer": "Elena G",
+        "photographerUrl": "https://unsplash.com/@lelena_g?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/gold-iphone-6-on-brown-wooden-surface-MKwBr8JFCgs?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.788Z"
       }
     },
     {
@@ -1329,17 +1329,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1556155092-490a1ba16284?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxMHx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-11-06-forecast-error-decomposition-for-better-retraining",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "744oGeqpxPQ",
+        "alt": "person using MacBook pro",
+        "photographer": "Austin Distel",
+        "photographerUrl": "https://unsplash.com/@austindistel?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-using-macbook-pro-744oGeqpxPQ?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.939Z"
       }
     },
     {
@@ -1359,17 +1359,17 @@
         "markets"
       ],
       "excerpt": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-10-30-trend-volatility-filters-for-cleaner-signal-intake",
       "description": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "fiXLQXAhCfk",
-        "alt": "stock market candlestick chart on dark screen",
-        "photographer": "Maxim Hopman",
-        "photographerUrl": "https://unsplash.com/@nampoh?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/stock-market-candlestick-chart-on-dark-screen-fiXLQXAhCfk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.081Z"
+        "id": "N__BnvQ_w18",
+        "alt": "screen showing bitcoin trading chart",
+        "photographer": "Nick Chong",
+        "photographerUrl": "https://unsplash.com/@nick604?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/screen-showing-bitcoin-trading-chart-N__BnvQ_w18?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.192Z"
       }
     },
     {
@@ -1389,17 +1389,17 @@
         "markets"
       ],
       "excerpt": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1786361295954-fd3e17cfd82a?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1728341651771-49116b839d18?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-10-23-macro-shock-drills-for-weekly-research-meetings",
       "description": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "COq9yoofdzw",
-        "alt": "The Manhattan skyline viewed across the water from a row of wooden pilings",
-        "photographer": "Peter Beke",
-        "photographerUrl": "https://unsplash.com/@peter_beke?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/manhattan-skyline-from-wooden-pilings-COq9yoofdzw?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.023Z"
+        "id": "Oh_7Y1YNtv0",
+        "alt": "A view of a city through a hole in a brick wall",
+        "photographer": "Rose Galloway Green",
+        "photographerUrl": "https://unsplash.com/@rgreen?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/a-view-of-a-city-through-a-hole-in-a-brick-wall-Oh_7Y1YNtv0?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:17.846Z"
       }
     },
     {
@@ -1419,17 +1419,17 @@
         "risk-management"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1604090898152-3003bd1ae6df?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw5fHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-10-16-sagemaker-canvas-feature-design-for-regime-shifts",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "S4ivgQRxaPo",
-        "alt": "black flat screen computer monitor on white desk",
-        "photographer": "Ataberk Güler",
-        "photographerUrl": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.546Z"
+        "id": "VH9DjmiQ_VY",
+        "alt": "macbook pro beside black remote control",
+        "photographer": "Shamsudeen Adedokun",
+        "photographerUrl": "https://unsplash.com/@shams_ad?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/macbook-pro-beside-black-remote-control-VH9DjmiQ_VY?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:22.007Z"
       }
     },
     {
@@ -1464,8 +1464,8 @@
     },
     {
       "weekIndex": 31,
-      "title": "Data Freshness SLAs for Forecast Credibility",
-      "rawTitle": "Data Freshness SLAs for Forecast Credibility",
+      "title": "Check the Data Behind Your Forecast",
+      "rawTitle": "Check the Data Behind Your Forecast",
       "slug": "2025-10-02-data-freshness-slas-for-forecast-credibility",
       "dateIso": "2025-10-02",
       "topic": "data-validation",
@@ -1478,18 +1478,18 @@
         "quantura",
         "markets"
       ],
-      "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "excerpt": "A practical checklist for source identity, observation cutoffs, missing data, and model coverage.",
+      "heroImage": "https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
       "canonical": "https://quantura.studio/blog/posts/2025-10-02-data-freshness-slas-for-forecast-credibility",
-      "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
+      "description": "A practical checklist for source identity, observation cutoffs, missing data, and model coverage.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "klWUhr-wPJ8",
+        "alt": "Rows of black server racks in a data center",
+        "photographer": "imgix",
+        "photographerUrl": "https://unsplash.com/@imgix",
+        "sourceUrl": "https://unsplash.com/photos/klWUhr-wPJ8",
+        "selectedAt": "2026-09-27T03:42:02.011919+00:00"
       }
     },
     {
@@ -1509,17 +1509,17 @@
         "markets"
       ],
       "excerpt": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1619410283995-43d9134e7656?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-09-25-ssr-hosting-route-checks-for-production-reliability",
       "description": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "mZnx9429i94",
-        "alt": "code editor displaying react source code",
-        "photographer": "Juanjo Jaramillo",
-        "photographerUrl": "https://unsplash.com/@juanjodev02?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/code-editor-displaying-react-source-code-mZnx9429i94?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.764Z"
+        "id": "8qEB0fTe9Vw",
+        "alt": "laptop screen displaying colorful code",
+        "photographer": "Mohammad Rahmani",
+        "photographerUrl": "https://unsplash.com/@afgprogrammer?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/laptop-screen-displaying-colorful-code-8qEB0fTe9Vw?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.712Z"
       }
     },
     {
@@ -1539,17 +1539,17 @@
         "markets"
       ],
       "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1487058792275-0ad4aaf24ca7?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-09-18-citation-first-llm-output-standards",
       "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "JKUTrJ4vK00",
-        "alt": "graphs of performance analytics on a laptop screen",
-        "photographer": "Luke Chesser",
-        "photographerUrl": "https://unsplash.com/@lukechesser?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.400Z"
+        "id": "Skf7HxARcoc",
+        "alt": "Colorful software or web code on a computer monitor",
+        "photographer": "Markus Spiske",
+        "photographerUrl": "https://unsplash.com/@markusspiske?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/colorful-software-or-web-code-on-a-computer-monitor-Skf7HxARcoc?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.365Z"
       }
     },
     {
@@ -1569,17 +1569,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1707157284454-553ef0a4ed0d?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxMXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-09-11-forecast-review-metrics-that-matter",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "heiYgqp0Tsk",
+        "alt": "office desk with smartphone and financial charts",
+        "photographer": "Jakub Żerdzicki",
+        "photographerUrl": "https://unsplash.com/@jakubzerdzicki?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/office-desk-with-smartphone-and-financial-charts-heiYgqp0Tsk?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.001Z"
       }
     },
     {
@@ -1599,17 +1599,17 @@
         "markets"
       ],
       "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1508873699372-7aeab60b44ab?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1526038335545-4b96864eaee7?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-09-04-turning-screener-results-into-research-queues",
       "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "bU6JyhSI6zo",
-        "alt": "pen, notebook, and smartphone on table",
-        "photographer": "Dose Media",
-        "photographerUrl": "https://unsplash.com/@dose?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/pen-notebook-and-smartphone-on-table-bU6JyhSI6zo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.567Z"
+        "id": "Q0ksjWR55Jc",
+        "alt": "black smartphone beside black smart case",
+        "photographer": "Sven",
+        "photographerUrl": "https://unsplash.com/@shauste?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/black-smartphone-beside-black-smart-case-Q0ksjWR55Jc?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.845Z"
       }
     },
     {
@@ -1629,17 +1629,17 @@
         "markets"
       ],
       "excerpt": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxidXNpbmVzcyUyMG5ld3NwYXBlcnxlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1579532536935-619928decd08?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxidXNpbmVzcyUyMG5ld3NwYXBlcnxlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-08-28-narrative-compression-signals-ahead-of-event-windows",
       "description": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "WYd_PkCa1BY",
-        "alt": "Business newspaper article",
-        "photographer": "AbsolutVision",
-        "photographerUrl": "https://unsplash.com/@codzilla_swiss?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/business-newspaper-article-WYd_PkCa1BY?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.330Z"
+        "id": "hWJsOnaWTqs",
+        "alt": "a stack of newspapers sitting on top of a wooden table",
+        "photographer": "Annie Spratt",
+        "photographerUrl": "https://unsplash.com/@anniespratt?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/a-stack-of-newspapers-sitting-on-top-of-a-wooden-table-hWJsOnaWTqs?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.391Z"
       }
     },
     {
@@ -1659,17 +1659,17 @@
         "workflow"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1576768324656-b8f41d7457f1?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxMHx8Y29tcHV0ZXIlMjB3b3Jrc3RhdGlvbnxlbnwxfDB8fHwxNzg4OTgxNjk2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-08-21-from-quantiles-to-orders-closing-the-workflow-gap",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "h9fCKilBTkI",
+        "alt": "gray Lenovo flat screen TV",
+        "photographer": "Denislav Popov",
+        "photographerUrl": "https://unsplash.com/@denislavppv?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/gray-lenovo-flat-screen-tv-h9fCKilBTkI?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:22.080Z"
       }
     },
     {
@@ -1689,17 +1689,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1745847768367-893e989d3a98?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxMnx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-08-14-structure-breaks-versus-false-breakouts-in-practice",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "rqMWNKRLVuw",
+        "alt": "Person working on a laptop with a cup of coffee",
+        "photographer": "dlxmedia.hu",
+        "photographerUrl": "https://unsplash.com/@dlxmedia?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-working-on-a-laptop-with-a-cup-of-coffee-rqMWNKRLVuw?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.050Z"
       }
     },
     {
@@ -1719,17 +1719,17 @@
         "markets"
       ],
       "excerpt": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1707761918029-1295034aa31e?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-08-07-rates-volatility-and-sector-rotation-playbooks",
       "description": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "fiXLQXAhCfk",
-        "alt": "stock market candlestick chart on dark screen",
-        "photographer": "Maxim Hopman",
-        "photographerUrl": "https://unsplash.com/@nampoh?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/stock-market-candlestick-chart-on-dark-screen-fiXLQXAhCfk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.081Z"
+        "id": "ip7GFn5JqX8",
+        "alt": "smartphone calculator on desk with financial charts behind",
+        "photographer": "Jakub Żerdzicki",
+        "photographerUrl": "https://unsplash.com/@jakubzerdzicki?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/smartphone-calculator-on-desk-with-financial-charts-behind-ip7GFn5JqX8?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.247Z"
       }
     },
     {
@@ -1749,17 +1749,17 @@
         "markets"
       ],
       "excerpt": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1641186539288-9c3f26725b12?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-07-31-sagemaker-canvas-what-if-testing-for-earnings-weeks",
       "description": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "S4ivgQRxaPo",
-        "alt": "black flat screen computer monitor on white desk",
-        "photographer": "Ataberk Güler",
-        "photographerUrl": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.546Z"
+        "id": "JwwxsDlYoMc",
+        "alt": "a city skyline with a bridge in the foreground",
+        "photographer": "Saqib Ameen",
+        "photographerUrl": "https://unsplash.com/@saqibameen?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/a-city-skyline-with-a-bridge-in-the-foreground-JwwxsDlYoMc?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:17.914Z"
       }
     },
     {
@@ -1779,17 +1779,17 @@
         "markets"
       ],
       "excerpt": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1709880945165-d2208c6ad2ec?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxmaW5hbmNlJTIwcmVzZWFyY2glMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTd8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1563986768711-b3bde3dc821e?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxmaW5hbmNlJTIwcmVzZWFyY2glMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTd8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-07-24-risk-budget-allocation-across-correlated-themes",
       "description": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "8wLZi9OhsWU",
-        "alt": "a calculator sitting on top of a table next to a laptop",
-        "photographer": "Jakub Żerdzicki",
-        "photographerUrl": "https://unsplash.com/@jakubzerdzicki?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/a-calculator-sitting-on-top-of-a-table-next-to-a-laptop-8wLZi9OhsWU?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.382Z"
+        "id": "DfjJMVhwH_8",
+        "alt": "turned-on MacBook Pro",
+        "photographer": "Austin Distel",
+        "photographerUrl": "https://unsplash.com/@austindistel?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/turned-on-macbook-pro-DfjJMVhwH_8?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.433Z"
       }
     },
     {
@@ -1809,17 +1809,17 @@
         "markets"
       ],
       "excerpt": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1762163516269-3c143e04175c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwc2VydmVyJTIwbmV0d29ya3xlbnwxfDB8fHwxNzg4OTgxNjE3fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
       "canonical": "https://quantura.studio/blog/posts/2025-07-17-cross-source-data-reconciliation-for-live-pipelines",
       "description": "Data Validation: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "VHmBX7FnXw0",
-        "alt": "Server rack with blinking green lights",
-        "photographer": "Domaintechnik",
-        "photographerUrl": "https://unsplash.com/@fslfsl?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/server-rack-with-blinking-green-lights-VHmBX7FnXw0?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.877Z"
+        "id": "M5tzZtFCOfs",
+        "alt": "Network cables and server equipment in a data center",
+        "photographer": "Taylor Vick",
+        "photographerUrl": "https://unsplash.com/@tvick",
+        "sourceUrl": "https://unsplash.com/photos/M5tzZtFCOfs",
+        "selectedAt": "2026-09-27T03:42:02.011919+00:00"
       }
     },
     {
@@ -1869,17 +1869,17 @@
         "markets"
       ],
       "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1504164996022-09080787b6b3?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
       "canonical": "https://quantura.studio/blog/posts/2025-07-03-structured-prompts-that-improve-forecast-analysis-precision",
       "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "JKUTrJ4vK00",
-        "alt": "graphs of performance analytics on a laptop screen",
-        "photographer": "Luke Chesser",
-        "photographerUrl": "https://unsplash.com/@lukechesser?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.400Z"
+        "id": "AaEQmoufHLk",
+        "alt": "Computer programming code on a monitor",
+        "photographer": "Markus Spiske",
+        "photographerUrl": "https://unsplash.com/@markusspiske",
+        "sourceUrl": "https://unsplash.com/photos/AaEQmoufHLk",
+        "selectedAt": "2026-09-27T03:42:02.011919+00:00"
       }
     },
     {
@@ -1898,17 +1898,17 @@
         "markets"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1554246247-6993b606e8b9?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxMXx8Y29tcHV0ZXIlMjB3b3Jrc3RhdGlvbnxlbnwxfDB8fHwxNzg4OTgxNjk2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-06-26-forecast-governance-review-validate-archive",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "S4ivgQRxaPo",
-        "alt": "black flat screen computer monitor on white desk",
-        "photographer": "Ataberk Güler",
-        "photographerUrl": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.546Z"
+        "id": "iZ4QZFbQ2S8",
+        "alt": "gray Dell laptop on table",
+        "photographer": "Greg Rosenke",
+        "photographerUrl": "https://unsplash.com/@greg_rosenke?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/gray-dell-laptop-on-table-iZ4QZFbQ2S8?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:22.136Z"
       }
     },
     {
@@ -1928,17 +1928,17 @@
         "markets"
       ],
       "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1508873699372-7aeab60b44ab?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1541345023926-55d6e0853f4b?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-06-19-alert-escalation-ladders-for-small-teams",
       "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "bU6JyhSI6zo",
-        "alt": "pen, notebook, and smartphone on table",
-        "photographer": "Dose Media",
-        "photographerUrl": "https://unsplash.com/@dose?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/pen-notebook-and-smartphone-on-table-bU6JyhSI6zo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.567Z"
+        "id": "t6Wmvbw_MdI",
+        "alt": "turned-on black smartphone beside laptop computer",
+        "photographer": "Jonathan Kemper",
+        "photographerUrl": "https://unsplash.com/@jupp?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/turned-on-black-smartphone-beside-laptop-computer-t6Wmvbw_MdI?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.938Z"
       }
     },
     {
@@ -1958,17 +1958,17 @@
         "markets"
       ],
       "excerpt": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxidXNpbmVzcyUyMG5ld3NwYXBlcnxlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1444653389962-8149286c578a?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxidXNpbmVzcyUyMG5ld3NwYXBlcnxlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-06-12-catalyst-mapping-with-explicit-invalidation-levels",
       "description": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "WYd_PkCa1BY",
-        "alt": "Business newspaper article",
-        "photographer": "AbsolutVision",
-        "photographerUrl": "https://unsplash.com/@codzilla_swiss?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/business-newspaper-article-WYd_PkCa1BY?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.330Z"
+        "id": "rFUFqjEKzfY",
+        "alt": "person sitting near table holding newspaper",
+        "photographer": "Adeolu Eletu",
+        "photographerUrl": "https://unsplash.com/@adeolueletu?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-sitting-near-table-holding-newspaper-rFUFqjEKzfY?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.450Z"
       }
     },
     {
@@ -1988,17 +1988,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1613347761513-0f37baebfd20?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxM3x8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-06-05-forecast-review-rituals-that-improve-decision-quality",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "Pu96DJ6rct8",
+        "alt": "person using macbook pro on black table",
+        "photographer": "Myriam Jessier",
+        "photographerUrl": "https://unsplash.com/@mjessier?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/person-using-macbook-pro-on-black-table-Pu96DJ6rct8?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.098Z"
       }
     },
     {
@@ -2018,17 +2018,17 @@
         "markets"
       ],
       "excerpt": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1560221328-12fe60f83ab8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-05-29-atr-conditioned-risk-triggers-for-tactical-trades",
       "description": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "fiXLQXAhCfk",
-        "alt": "stock market candlestick chart on dark screen",
-        "photographer": "Maxim Hopman",
-        "photographerUrl": "https://unsplash.com/@nampoh?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/stock-market-candlestick-chart-on-dark-screen-fiXLQXAhCfk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.081Z"
+        "id": "Wb63zqJ5gnE",
+        "alt": "close-up photo of monitor displaying graph",
+        "photographer": "Nicholas Cappello",
+        "photographerUrl": "https://unsplash.com/@bash__profile?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/close-up-photo-of-monitor-displaying-graph-Wb63zqJ5gnE?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.304Z"
       }
     },
     {
@@ -2048,17 +2048,17 @@
         "markets"
       ],
       "excerpt": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1786361295954-fd3e17cfd82a?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1606661403337-ddcadaa22f16?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw0fHxmaW5hbmNpYWwlMjBkaXN0cmljdCUyMGNpdHklMjBza3lsaW5lfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-05-22-liquidity-regime-checklists-for-better-entry-timing",
       "description": "Macro Signals: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "COq9yoofdzw",
-        "alt": "The Manhattan skyline viewed across the water from a row of wooden pilings",
-        "photographer": "Peter Beke",
-        "photographerUrl": "https://unsplash.com/@peter_beke?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/manhattan-skyline-from-wooden-pilings-COq9yoofdzw?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.023Z"
+        "id": "tGOOLTI5cFM",
+        "alt": "high rise buildings under gray sky",
+        "photographer": "Andres Garcia",
+        "photographerUrl": "https://unsplash.com/@andresgarcia?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/high-rise-buildings-under-gray-sky-tGOOLTI5cFM?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:17.966Z"
       }
     },
     {
@@ -2077,17 +2077,17 @@
         "markets"
       ],
       "excerpt": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1608222351212-18fe0ec7b13b?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwzfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-05-15-sagemaker-canvas-baselines-for-weekly-forecast-cycles",
       "description": "SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "S4ivgQRxaPo",
-        "alt": "black flat screen computer monitor on white desk",
-        "photographer": "Ataberk Güler",
-        "photographerUrl": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.546Z"
+        "id": "tR0jvlsmCuQ",
+        "alt": "black and silver laptop computer",
+        "photographer": "path digital",
+        "photographerUrl": "https://unsplash.com/@pathdigital?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/black-and-silver-laptop-computer-tR0jvlsmCuQ?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.518Z"
       }
     },
     {
@@ -2107,17 +2107,17 @@
         "markets"
       ],
       "excerpt": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1709880945165-d2208c6ad2ec?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxmaW5hbmNlJTIwcmVzZWFyY2glMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTd8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1543286386-2e659306cd6c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxmaW5hbmNlJTIwcmVzZWFyY2glMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTd8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-05-08-portfolio-sizing-under-uncertain-macro-backdrops",
       "description": "Portfolio Playbooks: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "8wLZi9OhsWU",
-        "alt": "a calculator sitting on top of a table next to a laptop",
-        "photographer": "Jakub Żerdzicki",
-        "photographerUrl": "https://unsplash.com/@jakubzerdzicki?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/a-calculator-sitting-on-top-of-a-table-next-to-a-laptop-8wLZi9OhsWU?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:21.382Z"
+        "id": "AT77Q0Njnt0",
+        "alt": "pen om paper",
+        "photographer": "Isaac Smith",
+        "photographerUrl": "https://unsplash.com/@isaacmsmith?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/pen-om-paper-AT77Q0Njnt0?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:21.485Z"
       }
     },
     {
@@ -2167,17 +2167,17 @@
         "markets"
       ],
       "excerpt": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1619410283995-43d9134e7656?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw1fHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1607706189992-eae578626c86?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxzb2Z0d2FyZSUyMGRldmVsb3BlciUyMGNvZGV8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-04-24-deployment-discipline-for-fast-safe-market-releases",
       "description": "Build Notes: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "mZnx9429i94",
-        "alt": "code editor displaying react source code",
-        "photographer": "Juanjo Jaramillo",
-        "photographerUrl": "https://unsplash.com/@juanjodev02?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/code-editor-displaying-react-source-code-mZnx9429i94?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:20.764Z"
+        "id": "oXlXu2qukGE",
+        "alt": "Computer screen displaying HTML code for a web development project",
+        "photographer": "Mohammad Rahmani",
+        "photographerUrl": "https://unsplash.com/@afgprogrammer?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/computer-screen-displaying-web-code-oXlXu2qukGE?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:20.820Z"
       }
     },
     {
@@ -2197,17 +2197,17 @@
         "markets"
       ],
       "excerpt": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1774901128281-a884cd447af5?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
       "canonical": "https://quantura.studio/blog/posts/2025-04-17-balanced-ai-forecast-verification-for-high-impact-calls",
       "description": "AI Forecast Analysis: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "JKUTrJ4vK00",
-        "alt": "graphs of performance analytics on a laptop screen",
-        "photographer": "Luke Chesser",
-        "photographerUrl": "https://unsplash.com/@lukechesser?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.400Z"
+        "id": "A9jp72Owzvs",
+        "alt": "Computer screen displaying code and project files",
+        "photographer": "Bernd Dittrich",
+        "photographerUrl": "https://unsplash.com/@hdbernd",
+        "sourceUrl": "https://unsplash.com/photos/A9jp72Owzvs",
+        "selectedAt": "2026-09-27T03:42:02.011919+00:00"
       }
     },
     {
@@ -2227,17 +2227,17 @@
         "markets"
       ],
       "excerpt": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNXx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1763038311036-6d18805537e5?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxNHx8ZGF0YSUyMGFuYWx5c2lzJTIwbGFwdG9wJTIwZGVza3xlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-04-10-private-research-notes-without-workflow-noise",
       "description": "Forecasting Workflows: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "dBI_My696Rk",
-        "alt": "A computer screen displaying a white line graph of financial market data",
-        "photographer": "Chris Liverani",
-        "photographerUrl": "https://unsplash.com/@chrisliverani?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/financial-market-data-line-graph-dBI_My696Rk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.221Z"
+        "id": "KNQUEQwTCY4",
+        "alt": "Woman working on laptop with charts and graphs",
+        "photographer": "Apex Virtual Education",
+        "photographerUrl": "https://unsplash.com/@apexvirtualeducation?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/woman-working-on-laptop-with-charts-and-graphs-KNQUEQwTCY4?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.157Z"
       }
     },
     {
@@ -2257,17 +2257,17 @@
         "markets"
       ],
       "excerpt": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1508873699372-7aeab60b44ab?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1517777298614-cb6eefb19fad?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw4fHxzbWFydHBob25lJTIwZGVzayUyMGJ1c2luZXNzfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-04-03-forecast-boundary-alert-design-that-actually-gets-used",
       "description": "Forecast Alerts: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "bU6JyhSI6zo",
-        "alt": "pen, notebook, and smartphone on table",
-        "photographer": "Dose Media",
-        "photographerUrl": "https://unsplash.com/@dose?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/pen-notebook-and-smartphone-on-table-bU6JyhSI6zo?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.567Z"
+        "id": "PLDkBHbM3Hc",
+        "alt": "shallow focus photography of space gray iPhone 5s",
+        "photographer": "Nicolas Thomas",
+        "photographerUrl": "https://unsplash.com/@nicolasthomas?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/shallow-focus-photography-of-space-gray-iphone-5s-PLDkBHbM3Hc?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:19.997Z"
       }
     },
     {
@@ -2287,17 +2287,17 @@
         "markets"
       ],
       "excerpt": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwyfHxidXNpbmVzcyUyMG5ld3NwYXBlcnxlbnwxfDB8fHwxNzg4OTgxNjE2fDA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1770681381576-f1fdceb2ea01?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
       "canonical": "https://quantura.studio/blog/posts/2025-03-27-narrative-drift-detection-before-consensus-reprices",
       "description": "Market Narratives: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "WYd_PkCa1BY",
-        "alt": "Business newspaper article",
-        "photographer": "AbsolutVision",
-        "photographerUrl": "https://unsplash.com/@codzilla_swiss?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/business-newspaper-article-WYd_PkCa1BY?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:19.330Z"
+        "id": "adFE-OdO7RA",
+        "alt": "Laptop displaying charts next to a notebook and mug",
+        "photographer": "nicoll camacho",
+        "photographerUrl": "https://unsplash.com/@nicollcamacho",
+        "sourceUrl": "https://unsplash.com/photos/adFE-OdO7RA",
+        "selectedAt": "2026-09-27T03:42:02.011919+00:00"
       }
     },
     {
@@ -2347,17 +2347,17 @@
         "markets"
       ],
       "excerpt": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
-      "heroImage": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
+      "heroImage": "https://images.unsplash.com/photo-1689732888407-310424e3a372?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw2fHxzdG9jayUyMG1hcmtldCUyMGFuYWx5c2lzJTIwY29tcHV0ZXJ8ZW58MXwwfHx8MTc4ODk4MTYxNnww&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
       "canonical": "https://quantura.studio/blog/posts/2025-03-13-when-momentum-confirmation-fails-at-the-worst-time",
       "description": "Technical Risk: weekly operator notes on signal quality, scenario framing, and execution controls.",
       "heroPhoto": {
         "provider": "unsplash",
-        "id": "fiXLQXAhCfk",
-        "alt": "stock market candlestick chart on dark screen",
-        "photographer": "Maxim Hopman",
-        "photographerUrl": "https://unsplash.com/@nampoh?utm_source=quantura&utm_medium=referral",
-        "sourceUrl": "https://unsplash.com/photos/stock-market-candlestick-chart-on-dark-screen-fiXLQXAhCfk?utm_source=quantura&utm_medium=referral",
-        "selectedAt": "2026-09-09T23:21:18.081Z"
+        "id": "VLpWpv3oDB4",
+        "alt": "candlestick stock chart on dark screen",
+        "photographer": "Austin Hervias",
+        "photographerUrl": "https://unsplash.com/@ahervias77?utm_source=quantura&utm_medium=referral",
+        "sourceUrl": "https://unsplash.com/photos/candlestick-stock-chart-on-dark-screen-VLpWpv3oDB4?utm_source=quantura&utm_medium=referral",
+        "selectedAt": "2026-09-09T23:21:18.349Z"
       }
     },
     {
@@ -2391,5 +2391,5 @@
       }
     }
   ],
-  "imageryUpdatedAt": "2026-09-26T20:20:42.552Z"
+  "imageryUpdatedAt": "2026-09-27T03:46:55.765Z"
 }

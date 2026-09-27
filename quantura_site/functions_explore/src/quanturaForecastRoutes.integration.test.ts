@@ -12,8 +12,40 @@ import { registerEnsembleForecastRoutes, completeEnsembleJob, publicEnsembleJob,
 import { generatePlatformApiKey, hashPlatformApiKey, workspaceMembershipId } from "./apiAccess";
 import { kalshiPerps } from "./kalshiPerps";
 import { dukascopy } from "./dukascopyClient";
+import {registerGameForecastRoutes,gameDate} from "./gameForecasts";
 
 const emulatorAvailable = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+test("opening a game forecast saves an immutable private snapshot and one Profile request",{skip:!emulatorAvailable},async()=>{
+  const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`games-${Date.now()}`),db=firebaseApp.firestore();
+  const uid=`games_${Date.now()}`,id="b".repeat(32),now=Date.now(),start=Math.floor(now/3600000)*3600000+7200000,end=start+14400000;
+  const fixture={id,provider:"kalshi",schema_version:2,event_title:"A vs B",outcome:"A",symbol:"FIXTURE",contract_id:"FIXTURE:yes",game_date:gameDate(start),
+    game_start:new Date(start).toISOString(),forecast_end:new Date(end).toISOString(),generated_at:new Date(now-600000).toISOString(),input_cutoff:new Date(now-3600000).toISOString(),
+    history_count:82,models:["prophet","granite","chronos","timesfm","toto"],schedule_verified_at:new Date(now-120000).toISOString(),
+    predictions:[{timestamp:new Date(end).toISOString(),quantiles:{"0.01":.01,"0.25":.2,"0.5":.4,"0.75":.6,"0.9":.8,"0.99":.99}}]};
+  const auth:any={verifyIdToken:async(token:string)=>({uid:token,firebase:{sign_in_provider:token==="guest"?"anonymous":"password"}}),getUser:async()=>({disabled:false})};
+  const app=express();app.use(express.json());registerGameForecastRoutes(app,db,auth);const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));
+  const base=`http://127.0.0.1:${(server.address() as any).port}`,headers={Authorization:`Bearer ${uid}`};
+  try {
+    await db.collection("game_forecast_catalog").doc(id).set(fixture);
+    assert.equal((await fetch(`${base}/screener/games/${id}/save`,{method:"POST"})).status,401);
+    assert.equal((await fetch(`${base}/screener/games/${id}/save`,{method:"POST",headers:{Authorization:"Bearer guest"}})).status,401);
+    const response=await fetch(`${base}/screener/games/${id}/save`,{method:"POST",headers});assert.equal(response.status,200,await response.clone().text());
+    const saved=await response.json();assert.match(saved.id,/^[a-f0-9]{40}$/);
+    const requestRef=db.collection("users").doc(uid).collection("requests").doc(saved.request_id);
+    assert.equal((await requestRef.get()).data()!.sourceRef.collection,"user_game_forecasts");
+    await requestRef.update({title:"My research",deleted:true});
+    await db.collection("game_forecast_catalog").doc(id).update({predictions:[{...fixture.predictions[0],quantiles:{...fixture.predictions[0].quantiles,"0.5":.5}}]});
+    const again=await (await fetch(`${base}/screener/games/${id}/save`,{method:"POST",headers})).json();assert.equal(again.id,saved.id);
+    assert.equal((await db.collection("users").doc(uid).collection("requests").get()).size,1);
+    assert.equal((await requestRef.get()).data()!.title,"My research");assert.equal((await requestRef.get()).data()!.deleted,true);
+    await db.collection("game_forecast_catalog").doc(id).delete();
+    const opened=await fetch(`${base}/screener/games/saved/${saved.id}`,{headers});assert.equal(opened.status,200);
+    const item=(await opened.json()).item;assert.equal(item.predictions[0].quantiles["0.5"],.4);assert.equal(Object.keys(item.predictions[0].quantiles).length,6);
+    assert.equal(opened.headers.get("cache-control"),"private, no-store");
+    assert.equal((await fetch(`${base}/screener/games/saved/${saved.id}`,{headers:{Authorization:`Bearer other_${uid}`}})).status,404);
+  } finally {await new Promise<void>(r=>server.close(()=>r()));await firebaseApp.delete();}
+});
 
 test("Dukascopy forecast saves quote provenance, UTC close availability and protected durable jobs",{skip:!emulatorAvailable},async()=>{
   const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`dukas-${Date.now()}`),db=firebaseApp.firestore();

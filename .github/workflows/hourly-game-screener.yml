@@ -12,6 +12,10 @@ on:
         type: boolean
         default: true
         description: 'Recompute saved forecasts from their original pregame cutoff; label them retrospective'
+      refresh_date:
+        type: string
+        default: ''
+        description: 'Optional recent date (YYYY-MM-DD) to upgrade existing saved pregame snapshots'
 permissions:
   contents: read
 concurrency:
@@ -38,6 +42,7 @@ jobs:
       MAX_CONTRACTS: ${{ inputs.max_contracts || 500 }}
       SHARD: ${{ matrix.shard }}
       REFRESH_PUBLISHED: ${{ inputs.refresh_published || false }}
+      REFRESH_DATE: ${{ inputs.refresh_date || '' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -58,6 +63,7 @@ jobs:
         run: |
           extra=()
           if [ "$REFRESH_PUBLISHED" = "true" ]; then extra+=(--refresh-published); fi
+          if [ -n "$REFRESH_DATE" ]; then extra+=(--refresh-date "$REFRESH_DATE"); fi
           python -m market_research.pregame_screener --provider "$PROVIDER" --max-contracts "$MAX_CONTRACTS" --shard "$SHARD" --shards 2 "${extra[@]}"
       - name: Preserve partial or complete encrypted results
         if: always()

@@ -1011,6 +1011,15 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .q-home-video-section { display:grid; grid-template-columns:.8fr 1.2fr; gap:40px; align-items:center; padding-block:64px; }.q-home-video-section h2 { font-size:clamp(1.8rem,3vw,2.6rem); line-height:1.15; }.q-home-video-section p { line-height:1.7; max-width:35ch; }
 .q-home-video-section figure { margin:0; }.q-home-video-section video { display:block; width:100%; aspect-ratio:16/9; border:1px solid var(--border); border-radius:16px; background:#07101f; }.q-home-video-section figcaption { margin-top:12px; }
 .q-home-games { display:flex; align-items:center; justify-content:space-between; gap:32px; border-top:1px solid var(--border); padding-block:48px 72px; }.q-home-games p { max-width:56ch; line-height:1.7; }
+.q-home-audiences,.q-home-guides { padding-block:56px; }
+.q-section-heading { margin-bottom:28px; }.q-section-heading h2 { max-width:28ch;font-size:clamp(1.7rem,3vw,2.5rem);line-height:1.2;margin:12px 0; }
+.q-audience-grid,.q-guide-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px; }
+.q-audience-grid article { display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:26px;border:1px solid var(--border);border-radius:16px;background:var(--card);color:var(--foreground); }
+.q-audience-grid h3,.q-guide-grid h3 { margin:0;font-size:1.2rem;line-height:1.4; }.q-audience-grid p,.q-guide-grid p { margin:0;line-height:1.7;color:var(--muted-foreground); }
+.q-audience-grid a,.q-guide-copy span { margin-top:auto;padding-top:8px;font-weight:600;color:var(--brand-highlight); }
+.q-home-evidence { display:grid;grid-template-columns:1fr 1fr;gap:40px;padding-block:40px;border-block:1px solid var(--border); }.q-home-evidence h2 { font-size:1.65rem;line-height:1.3; }.q-home-evidence p { max-width:54ch;line-height:1.7; }
+.q-home-evidence ul { display:grid;grid-template-columns:1fr 1fr;gap:16px;list-style:none;margin:0;padding:0;align-content:center; }.q-home-evidence li { padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--card); }
+@media(max-width:760px) { .q-audience-grid,.q-guide-grid,.q-home-evidence { grid-template-columns:1fr; }.q-home-audiences,.q-home-guides { padding-block:36px; }.q-home-copy h1 { font-size:clamp(2.2rem,7vw,3rem); } }
 .cta:not(.secondary):not(.ghost) { color:var(--primary-foreground) !important; background:var(--primary) !important; }.cta.secondary { color:var(--secondary-foreground) !important; }
 .home-page .eyebrow { color:var(--muted-foreground) !important; }.home-page main { color:var(--foreground); }
 :where(button,a,input,select,textarea,summary):focus-visible { outline:3px solid var(--focus); outline-offset:3px; }
@@ -1033,3 +1042,11 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .game-probabilities th,.game-probabilities td { padding:10px;text-align:left;border-bottom:1px solid var(--border); }
 .game-probabilities caption { text-align:left;padding-bottom:10px; }
 @media(max-width:600px) { .game-section-heading { flex-wrap:wrap; }.game-screener,.game-dialog { padding:16px; } }
+
+.q-guide-card { overflow:hidden;border:1px solid var(--border);border-radius:16px;background:var(--card);color:var(--foreground); }
+.q-guide-link { display:flex;flex-direction:column;height:calc(100% - 46px);color:inherit;text-decoration:none; }
+.q-guide-link .blog-card-photo { display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;margin:0;border-radius:0; }
+.q-guide-copy { display:flex;flex:1;flex-direction:column;gap:12px;padding:24px 24px 12px; }
+.q-guide-credit { margin:0;padding:0 24px 18px;font-size:.75rem;line-height:1.6;color:var(--muted-foreground); }
+.q-guide-credit a { color:inherit;text-decoration:underline;text-underline-offset:2px; }
+.q-guide-link:hover h3 { text-decoration:underline;text-underline-offset:4px; }

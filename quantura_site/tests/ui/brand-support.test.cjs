@@ -33,13 +33,14 @@ test('brand install icons have distinct maskable artwork and correct dimensions'
 });
 
 test('every current blog post has tracked, hotlinked photography and visible attribution', async () => {
-  const { photoFigure, imageUrl } = await import('../../scripts/blog-photo.mjs');
+  const { photoFigure, imageUrl, validateBlogPhotos } = await import('../../scripts/blog-photo.mjs');
   const registry=JSON.parse(read('brand/blog-photos.json'));
   const manifest=JSON.parse(read('pages/blog/posts.manifest.json'));
   assert.equal(manifest.posts.length,78);
+  validateBlogPhotos(manifest.posts,registry);
   for(const post of manifest.posts) {
     const photo=registry.photos[registry.posts[post.slug]];
-    assert.ok(photo.download_tracked_at);
+    assert.ok(photo.download_tracked_at || photo.source_reviewed_at);
     const html=read(`pages/blog/posts/${post.slug}.html`);
     assert.match(html,/data-unsplash-photo=/); assert.match(html,/utm_source=quantura/);
     assert.match(html,/Illustrative photography/); assert.doesNotMatch(html,/hero-illustration\.svg/);
@@ -48,6 +49,10 @@ test('every current blog post has tracked, hotlinked photography and visible att
   }
   assert.throws(()=>imageUrl({image_url:'https://untrusted.example/x'}));
   assert.throws(()=>photoFigure({download_tracked_at:null}));
+  const duplicate=structuredClone(registry);duplicate.posts[manifest.posts[1].slug]=duplicate.posts[manifest.posts[0].slug];
+  assert.throws(()=>validateBlogPhotos(manifest.posts,duplicate),/Duplicate/);
+  const reusedUrl=structuredClone(registry);reusedUrl.photos[reusedUrl.posts[manifest.posts[1].slug]].image_url=reusedUrl.photos[reusedUrl.posts[manifest.posts[0].slug]].image_url+'&w=320';
+  assert.throws(()=>validateBlogPhotos(manifest.posts,reusedUrl),/Duplicate/);
 });
 
 test('Contentsquare requires consent, excludes private pages and obeys global privacy control', () => {
