@@ -68,7 +68,7 @@
   function ensureGames() {
     if(window.QuanturaGames)return Promise.resolve(window.QuanturaGames);
     if(!gameModulePromise)gameModulePromise=new Promise((resolve,reject)=>{
-      const script=document.createElement("script");script.src="/game-forecasts.js?v=20260926-markets";
+      const script=document.createElement("script");script.src="/game-forecasts.js?v=20260927-game-controls";
       const timeout=setTimeout(()=>{script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));},15000);
       script.onload=()=>{clearTimeout(timeout);if(window.QuanturaGames)resolve(window.QuanturaGames);else {gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));}};
       script.onerror=()=>{clearTimeout(timeout);script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));};document.head.append(script);
@@ -89,33 +89,43 @@
     document.querySelector('.qs-hero-actions a[href="#saved-alerts"]').hidden=games;
     document.getElementById("qs-methodology").hidden=games;
     document.getElementById("qs-empty").querySelector("strong").textContent=games?"No game forecasts match your search.":"No securities match your current filters.";
+    const unit=document.getElementById("qs-metric-unit");if(unit)unit.textContent=games?"games":"markets";
   }
   async function loadGames(request,force) {
     const renderer=await ensureGames();
     if(request.signal.aborted)return;
     if(force||!gameSnapshot||gameSnapshot.until<Date.now()) {
-      const response=await fetch("/api/screener/games",{signal:request.signal,headers:{Accept:"application/json"},cache:force?"reload":"default"});
-      if(!response.ok)throw new Error("Game forecasts are temporarily unavailable. Please retry.");
-      const value=await response.json();if(!Array.isArray(value.items))throw new Error("The game forecast response was incomplete. Please retry.");
+      let value,cursor="";const items=new Map(),seen=new Set();
+      for(let page=0;page<20;page++){
+        const response=await fetch("/api/screener/games"+(cursor?"?cursor="+encodeURIComponent(cursor):""),{signal:request.signal,headers:{Accept:"application/json"},cache:force?"reload":"default"});
+        if(!response.ok)throw new Error("Game forecasts are temporarily unavailable. Please retry.");
+        const next=await response.json();if(!Array.isArray(next.items))throw new Error("The game forecast response was incomplete. Please retry.");
+        if(value&&value.date!==next.date)throw new Error("The game date changed during refresh. Please retry.");
+        value=next;for(const item of next.items)items.set(item.id,item);
+        cursor=next.next_cursor||"";if(!cursor)break;
+        if(!/^[a-f0-9]{32}$/.test(cursor)||seen.has(cursor))throw new Error("The game forecast response was incomplete. Please retry.");seen.add(cursor);
+      }
+      value.items=[...items.values()];value.bounded=Boolean(cursor)||(!("next_cursor"in value)&&value.bounded===true);
       gameSnapshot={value,until:Date.now()+30000};
     }
     if(request.signal.aborted)return;
     const data=gameSnapshot.value,query=current.search.toLowerCase();
-    const items=data.items.filter(item=>[item.event_title,item.outcome,item.provider==="kalshi"?"Kalshi":"Polymarket US"].join(" ").toLowerCase().includes(query));
+    const allGames=renderer.group(data.items),items=allGames.filter(game=>game.search.includes(query));
     const key={gameStart:"game_start",event:"event_title",provider:"provider",lastUpdate:"generated_at"}[current.sort]||"game_start";
     items.sort((a,b)=>(String(a[key]).localeCompare(String(b[key]))||a.id.localeCompare(b.id))*(current.direction==="desc"?-1:1));
     const pages=Math.max(1,Math.ceil(items.length/current.pageSize));current.page=Math.min(current.page,pages);
-    refs.metricMatches.textContent=items.length.toLocaleString();refs.metricTotal.textContent="of "+data.items.length.toLocaleString()+" published outcomes";
+    refs.metricMatches.textContent=items.length.toLocaleString();refs.metricTotal.textContent="of "+allGames.length.toLocaleString()+" today · "+data.items.length.toLocaleString()+" outcome forecasts";
     availableDates=[];refs.dateAvailability.textContent="Today in New York · "+data.date;
-    refs.status.textContent=items.length.toLocaleString()+" outcome forecasts match your search.";
+    refs.status.textContent=items.length.toLocaleString()+" games match your search.";
     refs.freshness.textContent="Hourly pregame forecasts through four hours after kickoff. Updates stop at the start hour."+(data.bounded||data.coverage?.some(p=>p.partial||p.failed)?" Some markets are unavailable in this scan.":"");
     refs.pageLabel.textContent="Page "+current.page+" of "+pages;refs.previous.disabled=current.page<=1;refs.next.disabled=current.page>=pages;
     renderer.render(items.slice((current.page-1)*current.pageSize,current.page*current.pageSize));
     disableExport(true);
     if(gameExport)URL.revokeObjectURL(gameExport);
-    const fields=["provider","event_title","outcome","game_start","forecast_end","generated_at","status"];
+    const fields=["provider","event_title","market_title","outcome","side","contract_id","game_start","forecast_end","generated_at","status"];
+    const exportItems=[...new Map(items.flatMap(game=>game.markets.flatMap(market=>Object.values(market.variants).flatMap(pair=>[pair.yes,pair.no].filter(Boolean)))).map(item=>[item.id,item])).values()];
     const cell=value=>{let text=String(value??"");if(typeof value==="string"&&/^[\s]*[=+@\-]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"';};
-    gameExport=URL.createObjectURL(new Blob([[[...fields,"p01","p25","p50","p75","p90","p99"].map(cell).join(","),...items.map(item=>[...fields.map(key=>item[key]),...['0.01','0.25','0.5','0.75','0.9','0.99'].map(q=>item.endpoint?.[q])].map(cell).join(","))].join("\r\n")],{type:"text/csv;charset=utf-8"}));
+    gameExport=URL.createObjectURL(new Blob([[[...fields,"p01","p25","p50","p75","p90","p99"].map(cell).join(","),...exportItems.map(item=>[...fields.map(key=>item[key]),...['0.01','0.25','0.5','0.75','0.9','0.99'].map(q=>item.endpoint?.[q])].map(cell).join(","))].join("\r\n")],{type:"text/csv;charset=utf-8"}));
     refs.export.href=gameExport;refs.export.download="quantura-games-"+data.date+".csv";refs.export.removeAttribute("aria-disabled");refs.export.classList.remove("disabled");
     setView(items.length?"games":"empty");
   }

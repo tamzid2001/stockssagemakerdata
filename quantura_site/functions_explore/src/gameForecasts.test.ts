@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {gameDate,publicGameForecast} from "./gameForecasts";
+import {gameDate,publicGameForecast,registerGameForecastRoutes} from "./gameForecasts";
 const now=Date.parse("2026-09-26T22:00:00Z");
 const fixture=()=>({id:"a".repeat(32),provider:"kalshi",event_title:"A vs B",outcome:"A",game_date:"2026-09-26",
  game_start:"2026-09-26T23:30:00Z",forecast_end:"2026-09-27T03:30:00Z",generated_at:"2026-09-26T21:10:00Z",input_cutoff:"2026-09-26T21:00:00Z",
@@ -24,4 +24,21 @@ test("six-quantile refresh retains tails, four/five models, and honest retrospec
  const replay={...modern,generated_at:"2026-09-27T02:00:00Z",recomputed_at:"2026-09-27T02:00:00Z",original_generated_at:modern.generated_at};
  assert.ok(publicGameForecast(replay,Date.parse(replay.generated_at),true));
  assert.equal(publicGameForecast({...replay,input_cutoff:"2026-09-26T23:00:00Z"},Date.parse(replay.generated_at)),null);
+});
+test("public contract metadata pairs actual binary sides without leaking worker fields",()=>{
+ const row=publicGameForecast({...fixture(),symbol:"KXMLBGAME-26SEP261915CHCBOS-CHC",contract_id:"KXMLBGAME-26SEP261915CHCBOS-CHC:no",event_id:"KXMLBGAME-26SEP261915CHCBOS",market_id:"CHC",market_title:"Chicago C to win",worker_token:"private"},now)!;
+ assert.equal(row.side,"no");assert.equal(row.symbol,"KXMLBGAME-26SEP261915CHCBOS-CHC");assert.equal(row.worker_token,undefined);
+});
+test("paged game catalog reaches outcomes beyond 1,000 and rejects malformed cursors",async t=>{
+ t.mock.method(Date,"now",()=>now);
+ const routes=new Map<string,Function>(),rows=Array.from({length:1002},(_,n)=>({id:n.toString(16).padStart(32,"0"),data:()=>({...fixture(),id:n.toString(16).padStart(32,"0"),side:"yes"})}));
+ let after="",limit=0,queries=0;
+ const query:any={where:()=>query,orderBy:()=>query,startAfter:(cursor:string)=>{after=cursor;return query;},limit:(n:number)=>{limit=n;return query;},get:async()=>{queries++;const docs=rows.filter(row=>!after||row.id>after).slice(0,limit);return {docs,size:docs.length};}};
+ const db:any={collection:(name:string)=>name==="game_forecast_catalog"?query:{get:async()=>({docs:[]})}};
+ registerGameForecastRoutes({get:(path:string,handler:Function)=>routes.set(path,handler),post:()=>{}}as any,db);
+ const fetchPage=async(cursor="")=>{let value:any;const res:any={setHeader:()=>{},status:(code:number)=>{res.statusCode=code;return res;},json:(payload:any)=>{value=payload;}};await routes.get("/screener/games")!({query:{cursor}},res);return {value,status:res.statusCode||200};};
+ const first=await fetchPage();assert.equal(first.value.items.length,500);
+ const second=await fetchPage(first.value.next_cursor);assert.equal(second.value.items.length,500);
+ const third=await fetchPage(second.value.next_cursor);assert.equal(third.value.items.length,2);assert.equal(third.value.next_cursor,null);assert.equal(third.value.bounded,false);
+ const invalid=await fetchPage("../../private");assert.equal(invalid.status,400);assert.equal(queries,3);
 });

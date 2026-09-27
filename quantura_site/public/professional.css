@@ -1033,6 +1033,25 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .game-card { padding:20px; background:var(--background); border:1px solid var(--border); border-radius:14px; }
 .game-card h3 { font-size:1.1rem; margin:8px 0; }
 .game-card .small,.game-screener .small,.game-dialog .small { color:var(--muted-foreground) !important; }
+.game-card-grid[hidden] { display:none; }
+.game-card { display:flex; flex-direction:column; gap:12px; color:var(--foreground); min-width:0; }
+.game-card p,.game-card h3 { margin:0; }
+.game-card .cta { margin-top:auto; }
+.game-switch { display:flex; gap:8px; padding:0; margin:0; border:0; min-width:0; flex-wrap:wrap; }
+.game-switch legend,.game-market-label { padding:0; margin-bottom:6px; font-size:.8rem; font-weight:600; color:var(--muted-foreground); }
+.game-switch-option { position:relative; flex:1; cursor:pointer; }
+.game-switch-option input { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; white-space:nowrap; }
+.game-switch-option span { display:flex; justify-content:center; align-items:center; min-height:48px; padding:8px 12px; border:1px solid var(--border); border-radius:10px; color:var(--foreground); background:var(--card); font-size:.85rem; font-weight:600; }
+.game-switch-option input:checked + span { background:var(--primary); color:var(--primary-foreground); border-color:var(--primary); }
+.game-switch-option input:focus-visible + span { outline:3px solid var(--focus); outline-offset:3px; }
+.game-switch-option input:disabled + span { color:var(--muted-foreground); border-style:dashed; cursor:not-allowed; }
+.game-card select { width:100%; min-height:48px; font-size:1rem; border:1px solid var(--border); background:var(--card); color:var(--foreground); border-radius:10px; padding:10px; }
+.game-market-label { margin-bottom:-6px; }
+.game-selected-outcome { font-weight:600; }
+.game-probability { font-variant-numeric:tabular-nums; font-weight:600; }
+.game-quantile-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin:0; padding:12px; background:var(--card); border-radius:10px; }
+.game-quantile-summary dt { font-size:.72rem; color:var(--muted-foreground); }
+.game-quantile-summary dd { margin:3px 0 0; font-size:.85rem; font-variant-numeric:tabular-nums; }
 .game-dialog { --game-band:rgba(37,99,235,.18); background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:20px;padding:24px;width:min(760px,calc(100vw - 32px));max-height:85dvh;overflow:auto; }
 :root[data-theme="dark"] .game-dialog { --game-band:rgba(96,165,250,.28); }
 .game-dialog::backdrop { background:rgba(3,9,20,.7); }
