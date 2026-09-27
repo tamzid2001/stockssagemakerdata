@@ -1,0 +1,152 @@
+name: Repair missing mega-cap P01 forecast days
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Original completed mega-cap backtest run with frozen data
+        type: string
+        required: true
+        default: '36280643812'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: megacap-p01-repair-${{ inputs.source_run_id }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: megacap-p01-plan
+          path: plan/
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: megacap-p01-data-*
+          merge-multiple: true
+          path: research/
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - run: python -m pip install --disable-pip-version-check pandas-market-calendars pytest
+      - name: Select only incomplete source chunks
+        id: plan
+        run: |
+          python -m pytest -q market_research/tests/test_megacap_p01_backtest.py
+          python - <<'PY'
+          import json, os
+          from datetime import date
+          from pathlib import Path
+          from market_research.megacap_p01_backtest import plan
+          study=json.loads(Path('plan/study-plan.json').read_text())
+          expected=plan(date.fromisoformat(study['start']),date.fromisoformat(study['end']))
+          if study!=expected: raise ValueError('SOURCE_PLAN_MISMATCH')
+          incomplete=[c for c in study['include'] if not json.loads(Path(f"research/{c['symbol']}-q{c['chunk']}/summary.json").read_text())['complete']]
+          if not incomplete: raise ValueError('NO_MISSING_DAYS_TO_REPAIR')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('matrix='+json.dumps({'include':incomplete},separators=(',',':'))+'\n')
+          print(f'Repairing {len(incomplete)} incomplete chunks; successful days remain unchanged.')
+          PY
+  replay:
+    needs: plan
+    runs-on: ${{ fromJSON(vars.ALPACA_OPTIONS_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      SYMBOL: ${{ matrix.symbol }}
+      CHUNK: ${{ matrix.chunk }}
+      START_DATE: ${{ matrix.start }}
+      END_DATE: ${{ matrix.end }}
+      ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+      ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      CUDA_VISIBLE_DEVICES: ''
+      GRANITE_DEVICE: cpu
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: megacap-p01-data-${{ matrix.symbol }}-${{ matrix.chunk }}
+          path: artifacts/
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - name: Install immutable inference environment
+        run: python -m pip install --disable-pip-version-check --require-hashes -r market_research/requirements.lock
+      - name: Repair only missing days from frozen observations
+        env:
+          HF_HOME: ${{ runner.temp }}/megacap-model-cache
+        run: |
+          export QUANTURA_CODE_SHA="$(git rev-parse HEAD)"
+          python -m market_research.megacap_p01_backtest run \
+            --symbol "$SYMBOL" --start "$START_DATE" --end "$END_DATE" \
+            --feed sip --resume --output "artifacts/${SYMBOL}-q${CHUNK}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: megacap-p01-repaired-${{ matrix.symbol }}-${{ matrix.chunk }}
+          path: artifacts/
+          retention-days: 14
+  report:
+    if: ${{ always() && needs.plan.result == 'success' }}
+    needs: [plan, replay]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: megacap-p01-plan
+          path: plan/
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: megacap-p01-data-*
+          merge-multiple: true
+          path: research/
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: megacap-p01-repaired-*
+          merge-multiple: true
+          path: research/
+      - name: Aggregate original successful days and repaired days
+        run: python -m market_research.megacap_p01_backtest aggregate --artifacts research --plan plan/study-plan.json --output report
+      - name: Publish complete or explicit partial report
+        if: always()
+        run: |
+          if [[ -f report/report.md ]]; then cat report/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: megacap-p01-repaired-year-report
+          path: report/
+          retention-days: 14
