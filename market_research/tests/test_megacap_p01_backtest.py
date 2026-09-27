@@ -97,7 +97,10 @@ def test_aggregate_marks_missing_days_incomplete(tmp_path):
 
 def test_missing_open_bar_forecasts_from_actual_origin_then_crops_six_hours(monkeypatch):
     from market_research.megacap_p01_backtest import forecast, MODELS
-    from ensemble_forecasting import worker
+    import sys
+    from types import ModuleType
+    worker=ModuleType("ensemble_forecasting.worker")
+    monkeypatch.setitem(sys.modules,"ensemble_forecasting.worker",worker)
     origin=OPEN-timedelta(minutes=2)
     history=[MinuteBar(origin-timedelta(minutes=499-i),100,101,99,100)for i in range(500)]
     def execute(job):
@@ -105,7 +108,7 @@ def test_missing_open_bar_forecasts_from_actual_origin_then_crops_six_hours(monk
         assert job['input']['rows'][-1]['timestamp']==origin.isoformat()
         return {'failures':[],'model_runs':[{'model':m,'status':'completed'}for m in MODELS],
                 'predictions':[{'timestamp':(origin+timedelta(minutes=i)).isoformat(),'p01':99,'p50':100}for i in range(1,363)]}
-    monkeypatch.setattr(worker,'execute_job',execute)
+    monkeypatch.setattr(worker,'execute_job',execute,raising=False)
     result=forecast(history,'MSFT',OPEN)
     assert len(result['predictions'])==360
     assert result['predictions'][0]['timestamp']==(OPEN+timedelta(minutes=1)).isoformat()

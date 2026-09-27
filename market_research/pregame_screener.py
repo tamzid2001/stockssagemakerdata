@@ -76,7 +76,7 @@ def document(contract, forecast, now, original=None):
     return {
         "id": identity, "provider": contract["source"], "contract_id": contract["contractId"],
         "schema_version": 2, "symbol": contract["providerSymbol"], "event_id": contract["eventId"],
-        "event_slug": contract.get("eventSlug"), "side": contract.get("side"),
+        "event_slug": contract.get("eventSlug"), "side": contract.get("side"), "market_id": contract.get("marketId"),
         "event_title": contract["eventTitle"], "outcome": contract["outcome"],
         "game_date": game_date(start), "game_start": iso(start), "forecast_end": iso(end),
         "generated_at": iso(now), "input_cutoff": iso(forecast["origin"]),
@@ -115,7 +115,7 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
             if row.get("provider") == source:
                 originals[row["contract_id"]] = row
     contracts, cursor, seen, coverage = {}, "0", set(), {}
-    while cursor not in seen and time.time() < deadline:
+    while (not refresh_date or refresh_date == game_date(time.time())) and cursor not in seen and time.time() < deadline:
         seen.add(cursor)
         rows, coverage = provider.discover("premarket", 20, cursor)
         contracts.update({c["contractId"]: c for c in rows})
@@ -130,6 +130,7 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
                              "eventId": saved["event_id"], "eventSlug": saved.get("event_slug"), "eventTitle": saved["event_title"],
                              "outcome": saved["outcome"], "side": saved.get("side") or (saved["contract_id"].split(":")[-1] if source == "kalshi" else "long"),
                              "eventStart": saved["game_start"], "status": "open"})
+    if refresh_date and refresh_date != game_date(time.time()):cursor=None
     total_eligible=len(selected)
     # Refresh every existing published snapshot before acquiring new outcomes.
     selected.sort(key=lambda c:(c["contractId"] not in originals,c["eventStart"],c["contractId"]))
