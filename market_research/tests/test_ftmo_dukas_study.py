@@ -6,7 +6,7 @@ import types
 import pytest
 
 from market_research.ftmo_dukas_data import UTC, decode, digest, hourly_from_minutes, stamp
-from market_research.ftmo_dukas_engine import Costs, Conversion, RULES, commission, replay, swap_quote, swap_weight
+from market_research.ftmo_dukas_engine import Costs, Conversion, RULES, _metrics, commission, replay, swap_quote, swap_weight
 from market_research.ftmo_dukas_study import MODELS, forecast_day, plan, select_development
 
 
@@ -97,6 +97,19 @@ def test_partial_forecast_hour_cannot_trade_and_open_loss_is_in_equity():
     assert result['open_entries']==1 and result['open_basket'][0]['entry']==100.5
     assert result['full']['net_equity_pnl']==pytest.approx(-.055)
     assert result['open_net_pnl']==pytest.approx(-.055)
+
+
+def test_drawdown_counts_intrahour_peak_before_low_in_path_order():
+    origin=datetime(2026,9,24,18,tzinfo=UTC)
+    end=origin+timedelta(hours=1)
+    candle={'at':end.isoformat(),'start_equity':100000.,'low':99900.,'close':100000.}
+    high_first={**candle,'equity_path':[100000.,100080.,99900.,100000.]}
+    low_first={**candle,'equity_path':[100000.,99900.,100080.,100000.]}
+    high=_metrics([high_first],[],[],[],origin,end)
+    low=_metrics([low_first],[],[],[],origin,end)
+    assert high['max_equity_drawdown']==180.
+    assert low['max_equity_drawdown']==100.
+    assert high['net_equity_pnl']==low['net_equity_pnl']==0.
 
 
 def test_conversion_never_uses_uncompleted_hour_close_and_sign_is_conservative():
