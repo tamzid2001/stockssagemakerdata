@@ -181,18 +181,19 @@
     const first=observations.length?Date.parse(observations[0].timestamp):cutoff;
     const chart=document.createElementNS('http://www.w3.org/2000/svg','svg');chart.setAttribute('viewBox','0 0 720 282');chart.setAttribute('role','img');chart.setAttribute('aria-label','Genuine observed hourly prices and forecast: P01–P99 outer band, P25–P75 inner band and P50 median. The vertical line marks the original data cutoff. Missing historical hours are not connected. Values follow in the tables.');
     const fontSize=12*720/Math.max(280,Math.min(720,(page?.clientWidth||752)-32));
-    const x=t=>52+640*(Date.parse(t)-first)/Math.max(1,last-first),y=p=>242-208*p;
+    const left=Math.max(52,fontSize*3.8+10);
+    const x=t=>left+(692-left)*(Date.parse(t)-first)/Math.max(1,last-first),y=p=>242-208*p;
     const svg=(tag,attrs,text)=>{const n=document.createElementNS(chart.namespaceURI,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text)n.textContent=text;chart.append(n);return n;};
-    for(const p of[0,.25,.5,.75,1]){svg('line',{x1:52,x2:692,y1:y(p),y2:y(p),stroke:'var(--border)'});svg('text',{x:43,y:y(p)+4,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':fontSize},`${p*100}%`);}
+    for(const p of[0,.25,.5,.75,1]){svg('line',{x1:left,x2:692,y1:y(p),y2:y(p),stroke:'var(--border)'});svg('text',{x:left-10,y:y(p)+4,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':fontSize},`${p*100}%`);}
     for(const[lo,hi,opacity]of[['0.01','0.99',.12],['0.25','0.75',.23]])if(rows.every(r=>Number.isFinite(r.quantiles[lo])&&Number.isFinite(r.quantiles[hi])))svg('polygon',{points:[...rows.map(r=>`${x(r.timestamp)},${y(r.quantiles[hi])}`),...rows.slice().reverse().map(r=>`${x(r.timestamp)},${y(r.quantiles[lo])}`)].join(' '),fill:'var(--primary)',opacity});
-    svg('polyline',{points:rows.map(r=>`${x(r.timestamp)},${y(r.quantiles['0.5'])}`).join(' '),fill:'none',stroke:'var(--primary)','stroke-width':3,'stroke-dasharray':'7 3'});
+    svg('polyline',{points:rows.map(r=>`${x(r.timestamp)},${y(r.quantiles['0.5'])}`).join(' '),fill:'none',stroke:'var(--accent-foreground)','stroke-width':3,'stroke-dasharray':'7 3'});
     if(observations.length){
       let path='';observations.forEach((r,i)=>{const connected=i&&Date.parse(r.timestamp)-Date.parse(observations[i-1].timestamp)<=3600000;path+=`${connected?'L':'M'}${x(r.timestamp)},${y(r.price)} `;const dot=svg('circle',{cx:x(r.timestamp),cy:y(r.price),r:2.2,fill:'var(--foreground)','data-observed-history':''});const title=document.createElementNS(chart.namespaceURI,'title');title.textContent=`${time(r.timestamp)} · ${percent(r.price)}`;dot.append(title);});
       svg('path',{d:path,fill:'none',stroke:'var(--foreground)','stroke-width':2,'data-observed-history':''});
     }
     svg('line',{x1:x(item.input_cutoff),x2:x(item.input_cutoff),y1:26,y2:242,stroke:'var(--muted-foreground)','stroke-dasharray':'4 4','data-forecast-cutoff':''});
     svg('text',{x:x(item.input_cutoff),y:18,'text-anchor':x(item.input_cutoff)>560?'end':'start',fill:'var(--muted-foreground)','font-size':fontSize},'Forecast cutoff');
-    svg('text',{x:52,y:264,fill:'var(--muted-foreground)','font-size':fontSize},time(new Date(first).toISOString()));svg('text',{x:692,y:264,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':fontSize},time(rows.at(-1).timestamp));
+    svg('text',{x:left,y:264,fill:'var(--muted-foreground)','font-size':fontSize},time(new Date(first).toISOString()));svg('text',{x:692,y:264,'text-anchor':'end',fill:'var(--muted-foreground)','font-size':fontSize},time(rows.at(-1).timestamp));
     return chart;
   }
   async function show(id,saved=false){
