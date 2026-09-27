@@ -30,7 +30,7 @@ const buildTerminalProfilePanel = (dashboardHtml) => {
   const groups = [
     { name: "auth", label: "Sign in or create an account", guest: true, open: true },
     { name: "profile", label: "Account settings", open: true },
-    { name: "orders", label: "Orders and forecast requests" },
+    { name: "orders", label: "Orders and Requests" },
     { name: "collaboration", label: "Workspaces and collaborators" },
     { name: "developer", label: "API keys and developer access" },
   ];

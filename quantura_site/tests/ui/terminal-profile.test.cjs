@@ -15,12 +15,12 @@ test('archived dashboard account controls render once inside Terminal Profile', 
   assert.match(source, /<!-- TERMINAL_PROFILE_PANEL -->/);
   assert.equal(output.includes('<!-- TERMINAL_PROFILE_PANEL -->'), false);
   assert.equal(buildTerminalProfilePanel(dashboard).includes('Kanban board'), false);
-  assert.match(extractDashboardPanel(dashboard, 'orders'), /id="user-forecasts"/);
+  assert.match(extractDashboardPanel(dashboard, 'orders'), /id="profile-requests"/);
 
   const { document } = new JSDOM(output).window;
   const profile = document.querySelector('[data-panel-router="terminal"] [data-panel="profile"]');
   assert.ok(profile);
-  for (const id of ['email-auth-form', 'user-email', 'user-forecasts', 'workspace-select', 'api-key-form']) {
+  for (const id of ['email-auth-form', 'user-email', 'profile-requests', 'workspace-select', 'api-key-form']) {
     assert.ok(profile.querySelector(`#${id}`), id);
   }
   const ids = [...document.querySelectorAll('[id]')].map((el) => el.id);

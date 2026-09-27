@@ -18,6 +18,7 @@ import { historySelection } from "./eventHistory";
 import { loadPublishedScreenerDataset } from "./quantScreener";
 import { screenerForecastSnapshot } from "./screenerForecast";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
+import {analyticsContext,reportGa4ForecastCompletion} from "./ga4";
 
 type JsonRecord = Record<string, unknown>;
 type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string; adminEmails?: readonly string[] };
@@ -757,7 +758,7 @@ export async function failEnsembleJob(options: Options, ref: FirebaseFirestore.D
 }
 
 export async function completeEnsembleJob(options: Options, ref: FirebaseFirestore.DocumentReference, body: JsonRecord): Promise<JsonRecord> {
-  return options.db.runTransaction(async transaction => {
+  const completed=await options.db.runTransaction(async transaction => {
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists) throw new Error("forecast_job_not_found");
     const job = plain(snapshot.data());
@@ -791,6 +792,8 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
     transaction.set(options.db.collection(CACHE).doc(cacheId),{forecast_id:ref.id,request_hash:job.request_hash,completed_at:completedAt});
     return {...job,...completed};
   });
+  await reportGa4ForecastCompletion(options.db,ref);
+  return completed;
 }
 
 async function indexEnsembleRequest(options: Options, id: string, job: JsonRecord): Promise<void> {
@@ -980,7 +983,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
 
   router.post("/v1/ensemble-forecasts", wrap(options, async (req, res, principal, requestId) => {
     const body = plain(req.body);
-    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule"], "request");
+    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule", "analytics_context"], "request");
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
@@ -1050,6 +1053,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       schema_version: WORKER_SCHEMA_VERSION,
       forecast_id: ref.id,
       user_id: principal.userId,
+      analytics_context: analyticsContext(body.analytics_context),
       guest_session: Boolean(principal.guest),
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,

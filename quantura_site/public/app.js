@@ -2828,7 +2828,7 @@
 
   const getAnalytics = () => {
     try {
-      if (state.cookieConsent !== "accepted") return null;
+      if (state.cookieConsent !== "accepted" || navigator.globalPrivacyControl === true) return null;
       if (typeof firebase === "undefined") return null;
       if (!firebase.analytics) return null;
       return firebase.analytics();
@@ -5080,7 +5080,7 @@
     logEvent("page_view", {
       page_title: document.title,
       page_path: window.location.pathname,
-      page_location: window.location.href,
+      page_location: window.location.origin + window.location.pathname,
     });
     state.initialPageViewSent = true;
   };
@@ -5089,6 +5089,7 @@
     state.cookieConsent = value;
     safeLocalStorageSet(COOKIE_CONSENT_KEY, value);
     document.dispatchEvent(new Event("quantura:consent-change"));
+    try { if (firebase.analytics) firebase.analytics().setAnalyticsCollectionEnabled(value === "accepted" && navigator.globalPrivacyControl !== true); } catch {}
     if (value === "accepted") {
       ensureInitialPageView();
       setUserId(state.user?.uid || null);
@@ -14651,6 +14652,8 @@
         await ensureSessionUser({ reason: "ensemble_forecast_requires_session", message: "Sign in to run an ensemble forecast." });
         await loadEnsembleCapabilities();
         const request = buildEnsembleRequest();
+        const analyticsContext = await window.QuanturaGa4?.capture?.();
+        if (analyticsContext) request.analytics_context = analyticsContext;
         ensembleUiState.lastRequest = request;
         setEnsembleStatus("Creating immutable forecast job…", "working");
         const response = await apiRequestJson("/api/v1/ensemble-forecasts", { method: "POST", body: request, headers: { "Idempotency-Key": `web-${Date.now()}-${createSecureIdChunk(12)}` } });
@@ -15188,6 +15191,10 @@
       if (selectionStatus) selectionStatus.textContent = "";
     });
   };
+
+  document.addEventListener("quantura:request-saved", () => {
+    fetchMyRequestsList({ force: true }).then(renderMyRequestsPanels).catch(() => {});
+  });
 
   const bindMyRequestsPanels = () => {
     const panels = Array.isArray(ui.myRequestsPanels) ? ui.myRequestsPanels : [];
@@ -23410,6 +23417,10 @@
     if (!id) throw new Error("Request ID is required.");
     const item = request && typeof request === "object" ? request : await fetchMyRequestById(id);
     if (!item) throw new Error("Request not found.");
+    if (item.sourceRef?.collection === "user_game_forecasts") {
+      window.location.assign(`/forecasting?panel=forecast&userGameForecastId=${encodeURIComponent(item.sourceRef.id)}`);
+      return item;
+    }
 
     const type = normalizeMyRequestType(item.type) || "forecast";
     const panelId = mapMyRequestTypeToPanel(type, item);

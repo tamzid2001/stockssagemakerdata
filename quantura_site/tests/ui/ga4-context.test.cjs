@@ -1,0 +1,31 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {JSDOM}=require('jsdom');
+const source=fs.readFileSync(path.resolve(__dirname,'../../public/ga4-context.js'),'utf8');
+const setup=()=>new JSDOM('<head></head><body><video data-lazy-video></video></body>',{url:'https://quantura.studio/blog?private=secret#token',runScripts:'outside-only'});
+const boot=w=>{w.eval(source);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));};
+test('editorial analytics stays off until consent and excludes query strings',()=>{
+ const dom=setup(),w=dom.window;boot(w);
+ assert.equal(w['ga-disable-G-R9Y1C8WBKS'],true);assert.equal(w.document.querySelector('script[data-quantura-ga4]'),null);
+ w.localStorage.setItem('quantura_cookie_consent','accepted');w.document.dispatchEvent(new w.Event('quantura:consent-change'));
+ assert.equal(w.document.querySelectorAll('script[data-quantura-ga4]').length,1);
+ const config=Array.from(w.dataLayer).find(args=>args[0]==='config');assert.equal(config[2].page_location,'https://quantura.studio/blog');
+ w.localStorage.setItem('quantura_cookie_consent','denied');w.document.dispatchEvent(new w.Event('quantura:consent-change'));
+ assert.equal(w['ga-disable-G-R9Y1C8WBKS'],true);assert.equal(w.document.querySelectorAll('script[data-quantura-ga4]').length,1);dom.window.close();
+});
+test('GPC overrides an accepted preference; capture uses existing identifiers and current consent',async()=>{
+ const dom=setup(),w=dom.window;w.localStorage.setItem('quantura_cookie_consent','accepted');
+ Object.defineProperty(w.navigator,'globalPrivacyControl',{value:true,configurable:true});boot(w);
+ assert.equal(await w.QuanturaGa4.capture(),null);assert.equal(w.document.querySelector('script[data-quantura-ga4]'),null);
+ Object.defineProperty(w.navigator,'globalPrivacyControl',{value:false,configurable:true});
+ const written=[],user={uid:'fixture-user'};
+ const auth=()=>({currentUser:user,onAuthStateChanged:()=>{}});
+ w.firebase={auth,analytics:()=>({}),firestore:()=>({collection:()=>({doc:uid=>({set:async(data)=>{written.push({uid,data});}})})})};
+ w.gtag=(command,id,key,callback)=>{if(command==='get')callback(key==='client_id'?'123.456':Math.floor(Date.now()/1000));};
+ const context=await w.QuanturaGa4.capture();assert.equal(context.client_id,'123.456');assert.equal(context.analytics_consent,'granted');
+ assert.equal(written[0].data.analyticsConsent,'accepted');assert.doesNotMatch(JSON.stringify(context),/fixture-user|secret|token/);
+ w.gtag=(command,id,key,callback)=>{if(command==='get'){w.localStorage.setItem('quantura_cookie_consent','denied');callback(key==='client_id'?'123.456':Math.floor(Date.now()/1000));}};
+ assert.equal(await w.QuanturaGa4.capture(),null);dom.window.close();
+});

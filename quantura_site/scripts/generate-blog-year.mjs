@@ -2,13 +2,14 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { imageUrl, photoFigure, photoThumbnail, escapeHtml } from "./blog-photo.mjs";
+import { imageUrl, photoFigure, photoThumbnail, escapeHtml, validateBlogPhotos } from "./blog-photo.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
 const editorial = JSON.parse(await fs.readFile(path.join(root, "brand/blog-photos.json"), "utf8"));
 const editorialPhoto = (slug) => editorial.photos[editorial.posts[slug]];
+const researchGuides = JSON.parse(await fs.readFile(path.join(root, "brand/research-guides.json"), "utf8"));
 const pagesDir = path.join(root, "pages", "blog");
 const pagesPostsDir = path.join(pagesDir, "posts");
 const pagesTopicsDir = path.join(pagesDir, "topics");
@@ -17,7 +18,7 @@ const publicPostsDir = path.join(publicBlogDir, "posts");
 const publicTopicsDir = path.join(publicBlogDir, "topics");
 
 const SITE_URL = "https://quantura.studio";
-const ASSET_VERSION = "20260909a";
+const ASSET_VERSION = "20260927-research";
 
 const TOPICS = [
   { slug: "macro-signals", label: "Macro Signals", description: "Regime-aware macro signals and scenario framing for institutional workflows." },
@@ -317,6 +318,7 @@ function buildChecklist(items) {
 }
 
 function buildBody({ title, topic, tags, dateIso, weekIndex, slug }) {
+  if (researchGuides[slug]) return `${photoFigure(editorialPhoto(slug))}${researchGuides[slug].body}<p class="small muted">Updated September 26, 2026.</p>`;
   const spec = CATEGORY_SPECS[topic];
   const topicMeta = TOPIC_BY_SLUG.get(topic);
   const fillerA = FILLER_PARAGRAPHS[weekIndex % FILLER_PARAGRAPHS.length];
@@ -376,11 +378,9 @@ function buildBody({ title, topic, tags, dateIso, weekIndex, slug }) {
   return `
     ${editorialPhoto(slug) ? photoFigure(editorialPhoto(slug)) : ""}
     <p>
-      ${title} is written for operators who need a repeatable bridge between signal intake and action execution.
-      The core objective is to reduce latency without reducing rigor. ${fillerA}
+      Use this guide to make your research assumptions explicit and decide what evidence to review next. ${fillerA}
     </p>
     <p>
-      In this playbook, the emphasis is not prediction theater; it is process reliability.
       ${fillerB}
     </p>
     <p>${extA}</p>
@@ -516,6 +516,7 @@ function blogPostHtml(meta) {
         "image": ${JSON.stringify(socialImage)}
       }
     </script>
+    <script defer src="/ga4-context.js?v=20260927a"></script>
     <script defer src="/app.js?v=${ASSET_VERSION}"></script>
   </head>
   <body>
@@ -531,11 +532,10 @@ function blogPostHtml(meta) {
             <div class="small muted">Published ${humanDate(dateObj)} · Topic: <a href="/blog/topics/${topic}">${topicMeta?.label || topic}</a></div>
           </div>
           <div class="card">
-            <h3>Post metadata</h3>
-            <div class="small"><strong>Slug:</strong> ${slug}</div>
-            <div class="small"><strong>Date:</strong> ${dateIso}</div>
-            <div class="small"><strong>Tags:</strong> ${tags.join(", ")}</div>
-            <div class="small" style="margin-top:8px;"><a href="/blog">Back to blog index</a></div>
+            <h3>Keep exploring</h3>
+            <p class="small">Put this guide to work with your own time series.</p>
+            <a class="cta" href="/forecasting?panel=forecast">Open Forecast</a>
+            <p class="small"><a href="/blog">Browse research guides →</a></p>
           </div>
         </div>
       </section>
@@ -553,7 +553,7 @@ function blogPostHtml(meta) {
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <p class="small">Inspectable forecasts. Research you can revisit.</p>
         </div>
         <div class="small">
           <strong>Research</strong>
@@ -624,6 +624,7 @@ function blogIndexHtml(posts) {
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css?v=${ASSET_VERSION}" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <script defer src="/ga4-context.js?v=20260927a"></script>
     <script defer src="/app.js?v=${ASSET_VERSION}"></script>
   </head>
   <body>
@@ -698,6 +699,7 @@ function topicPageHtml(topicSlug, posts) {
     <link rel="icon" href="/assets/quantura-icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css?v=${ASSET_VERSION}" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+    <script defer src="/ga4-context.js?v=20260927a"></script>
     <script defer src="/app.js?v=${ASSET_VERSION}"></script>
   </head>
   <body>
@@ -784,7 +786,7 @@ async function main() {
     const dateIso = fmtDate(date);
     const topic = TOPIC_SEQUENCE[i];
     const rawTitle = TITLE_LIBRARY[i];
-    const title = rawTitle;
+    let title = rawTitle;
     const baseSlug = `${dateIso}-${slugify(rawTitle)}`;
     let slug = baseSlug;
     let n = 2;
@@ -795,7 +797,8 @@ async function main() {
     usedSlugs.add(slug);
     const spec = CATEGORY_SPECS[topic];
     const tags = uniqTags(topic, spec, i + 1);
-    const excerpt = `${TOPIC_BY_SLUG.get(topic)?.label || "Quantura"}: weekly operator notes on signal quality, scenario framing, and execution controls.`;
+    if (researchGuides[slug]) title = researchGuides[slug].title;
+    const excerpt = researchGuides[slug]?.description || `${TOPIC_BY_SLUG.get(topic)?.label || "Quantura"}: practical guidance for researching markets and reviewing forecast assumptions.`;
 
     posts.push({
       weekIndex: i + 1,
@@ -813,6 +816,7 @@ async function main() {
   }
 
   posts.sort((a, b) => (a.dateIso < b.dateIso ? 1 : -1));
+  validateBlogPhotos(posts, editorial);
 
   await ensureCleanDir(pagesPostsDir);
   await ensureCleanDir(publicPostsDir);

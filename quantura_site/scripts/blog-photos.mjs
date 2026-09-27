@@ -2,7 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { imageUrl, photoFigure, photoThumbnail, escapeHtml, referralUrl } from "./blog-photo.mjs";
+import { imageUrl, photoFigure, photoThumbnail, escapeHtml, referralUrl, validateBlogPhotos } from "./blog-photo.mjs";
 
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registryPath = path.join(site, "brand/blog-photos.json");
@@ -59,15 +59,17 @@ if (process.argv.includes("--stage")) {
   console.log(`Staged ${Object.keys(registry.posts).length} editorial selections for visual review; nothing published.`);
 } else if (process.argv.includes("--publish") || process.argv.includes("--render")) {
   const registry = JSON.parse(await fs.readFile(registryPath, "utf8"));
+  validateBlogPhotos(manifest.posts, registry, { allowUntracked: process.argv.includes("--publish") });
   // Checkpoint each tracked selection so retrying never re-counts completed work.
   if (process.argv.includes("--publish")) for (const photo of Object.values(registry.photos)) {
-    if (photo.download_tracked_at) continue;
+    if (photo.download_tracked_at || photo.selection_method === "official_photo_page") continue;
     const url = new URL(photo.download_location);
     if (url.pathname !== `/photos/${photo.id}/download`) throw new Error("Invalid download tracking endpoint");
     await api(url);
     photo.download_tracked_at = new Date().toISOString();
     await saveRegistry(registry);
   }
+  validateBlogPhotos(manifest.posts, registry);
   const pending = [];
   for (const post of manifest.posts) {
     const photo = registry.photos[registry.posts[post.slug]];
@@ -88,7 +90,7 @@ if (process.argv.includes("--stage")) {
       pending.push([file, html]);
     }
     post.heroImage = imageUrl(photo);
-    post.heroPhoto = { provider: "unsplash", id: photo.id, alt: photo.alt, photographer: photo.photographer, photographerUrl: photo.photographer_url, sourceUrl: photo.photo_url, selectedAt: photo.download_tracked_at };
+    post.heroPhoto = { provider: "unsplash", id: photo.id, alt: photo.alt, photographer: photo.photographer, photographerUrl: photo.photographer_url, sourceUrl: photo.photo_url, selectedAt: photo.download_tracked_at || photo.source_reviewed_at };
   }
   // Use the same reviewed selection in every listing; never choose photos at runtime.
   for (const root of ["pages", "public"]) {

@@ -690,7 +690,7 @@ registerPlatformApiRoutes(ROUTES, {
 });
 registerBacktestRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
 registerScreenerAlertRoutes(ROUTES, { db, auth, publicOrigin: PUBLIC_ORIGIN });
-registerGameForecastRoutes(ROUTES, db);
+registerGameForecastRoutes(ROUTES, db, auth);
 registerSupportChatRoutes(ROUTES, {
   db, auth, publicOrigin: PUBLIC_ORIGIN,
 });

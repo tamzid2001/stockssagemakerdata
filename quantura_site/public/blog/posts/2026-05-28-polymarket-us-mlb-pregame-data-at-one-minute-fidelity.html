@@ -40,7 +40,7 @@
     <script src="/pwa-launch.js?v=20260926a"></script>
     <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260926-support"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260926a" />
+    <link rel="stylesheet" href="/styles.css?v=20260927-research" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">{
   "@context": "https://schema.org",
@@ -69,7 +69,8 @@
     }
   }
 }</script>
-    <script defer src="/app.js?v=20260405a"></script>
+    <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/app.js?v=20260927-research"></script>
   </head>
   <body>
 
@@ -95,12 +96,7 @@
             <div class="small muted">Published May 28, 2026 · Topic: <a href="/blog/topics/forecasting-workflows">Forecasting Workflows</a></div>
           </div>
           <div class="card">
-            <h3>Post metadata</h3>
-            <div class="small"><strong>Slug:</strong> 2026-05-28-polymarket-us-mlb-pregame-data-at-one-minute-fidelity</div>
-            <div class="small"><strong>Date:</strong> 2026-05-28</div>
-            <div class="small"><strong>Tags:</strong> forecasting-workflows, forecast, quantiles, scenarios, process, quantura, markets</div>
-            <div class="small" style="margin-top:8px;"><a href="/blog">Back to blog index</a></div>
-          </div>
+            <h3>Keep exploring</h3><p>Put this research into practice.</p><a href="/forecasting">Open Forecast →</a><p class="small"><a href="/blog">Browse research guides</a></p></div>
         </div>
       </section>
 
@@ -112,14 +108,8 @@
       <img src="https://images.unsplash.com/photo-1534375754046-291eefbbeff7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720" srcset="https://images.unsplash.com/photo-1534375754046-291eefbbeff7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180 320w, https://images.unsplash.com/photo-1534375754046-291eefbbeff7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360 640w, https://images.unsplash.com/photo-1534375754046-291eefbbeff7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540 960w, https://images.unsplash.com/photo-1534375754046-291eefbbeff7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720 1280w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="Spectators and the baseball field at Progressive Field in Cleveland" width="1280" height="720" decoding="async" fetchpriority="high" />
       <figcaption>Photo by <a href="https://unsplash.com/@chris_chow?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Chris Chow</a> on <a href="https://unsplash.com/photos/baseball-stadium-rHERhrnGSsQ?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
     </figure>
-    <p>
-      Polymarket US MLB Pregame Data at One-Minute Fidelity is written for operators who need a repeatable bridge between signal intake and action execution.
-      The core objective is to reduce latency without reducing rigor. In practice, signal quality deteriorates when context windows are inconsistent. Use one ticker context, one date horizon, and one source-of-truth notebook so that forecast updates, indicator changes, and narrative shifts remain comparable over time.
-    </p>
-    <p>
-      In this playbook, the emphasis is not prediction theater; it is process reliability.
-      Research loop compression is not about skipping diligence. It is about reducing avoidable context switching, preserving assumptions in structured form, and minimizing handoff loss between forecasting, validation, and execution review.
-    </p>
+    <p>Use this guide to make your research assumptions explicit and decide what evidence to review next.</p>
+
     <p>A practical way to reduce rework is to keep one shared assumptions register for each live thesis. This register should include confidence bands, expected catalyst timing, and a forced-choice invalidation rule. If a thesis cannot be invalidated with observable market evidence, it is not yet operationally ready. The register also improves handoffs across time zones and between research and execution roles.</p>
     <p>Market environments can change faster than model retraining cycles. Because of that mismatch, every model-driven process needs a regime override policy. The override policy should define exactly when human operators can down-weight or ignore model output, and how that override is recorded. Over time, these overrides become valuable training data for process improvements.</p>
 
@@ -223,7 +213,7 @@ return { scenario, bandWidth };</code></pre>
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <p class="small">Inspectable forecasts. Research you can revisit.</p>
         </div>
         <div class="small">
           <strong>Research</strong>

@@ -38,7 +38,7 @@
     <script src="/pwa-launch.js?v=20260926a"></script>
     <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260926-support"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260903b" />
+    <link rel="stylesheet" href="/styles.css?v=20260927-research" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -50,7 +50,8 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-    <script defer src="/app.js?v=20260903b"></script>
+    <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/app.js?v=20260927-research"></script>
     <script defer src="/data-integrations.js?v=20260920-perps-jev"></script>
     <script defer src="/platform-api.js?v=20260831a"></script>
 
@@ -262,9 +263,11 @@
 	              <h3>Order history</h3>
 	              <div id="user-orders" class="order-list panel-output"></div>
 	            </div>
-	            <div class="card">
-	              <h3>Forecast requests</h3>
-	              <div id="user-forecasts" class="order-list panel-output"></div>
+	            <div class="card" data-my-requests-panel id="profile-requests">
+	              <div class="card-head"><h3>Requests</h3><button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button></div>
+                  <label>Search requests<input type="search" data-my-requests-search placeholder="Title, market, date" /></label>
+                  <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+                  <div class="order-list panel-output" data-my-requests-list></div>
 	            </div>
 	          </div>
 	        </div>
@@ -349,7 +352,7 @@
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <p class="small">Inspectable forecasts. Research you can revisit.</p>
           <div class="footer-social" aria-label="Quantura social links">
             <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>

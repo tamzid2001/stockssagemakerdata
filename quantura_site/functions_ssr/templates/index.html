@@ -4,21 +4,21 @@
     <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura | Explore the market. See the possibilities.</title>
-        <meta name="description" content="Forecast stocks and prediction markets, explore probability ranges, and keep your research in one place." />
+    <title>Quantura | Forecast the range. Understand the evidence.</title>
+        <meta name="description" content="Research stocks and prediction markets with inspectable forecast ranges, genuine historical data, saved results, and structured exports." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="quantura, market intelligence, stock forecasting, historical market data, screener, research workflow, institutional analytics" />
     <link rel="canonical" href="https://quantura.studio/" />
-        <meta property="og:title" content="Quantura | Explore the market. See the possibilities." />
-        <meta property="og:description" content="Search markets, prepare data, generate probability forecasts, screen opportunities, and deliver research through one coherent platform." />
+        <meta property="og:title" content="Quantura | Forecast the range. Understand the evidence." />
+        <meta property="og:description" content="Research stocks and prediction markets with inspectable forecast ranges, genuine historical data, saved results, and structured exports." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/" />
         <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura | Explore the market. See the possibilities." />
-    <meta name="twitter:description" content="Cross-asset forecasts, prediction-market datasets, screeners, backtests, APIs, and collaborative research." />
+    <meta name="twitter:title" content="Quantura | Forecast the range. Understand the evidence." />
+    <meta name="twitter:description" content="Research stocks and prediction markets with inspectable forecast ranges, genuine historical data, saved results, and structured exports." />
     <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/" />
     <meta name="author" content="Quantura" />
@@ -38,7 +38,7 @@
     <script src="/pwa-launch.js?v=20260926a"></script>
     <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260926-support"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260926a" />
+    <link rel="stylesheet" href="/styles.css?v=20260927-research" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -49,7 +49,8 @@
 	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
 	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
-	    <script defer src="/app.js?v=20260926a"></script>
+	    <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/app.js?v=20260927-research"></script>
     <script defer src="/forecasts.js?v=20260908a"></script>
 
     <link rel="stylesheet" href="/screener-buy-preview.css?v=20260926b" />
@@ -89,10 +90,10 @@
         <main id="main-content">
       <section class="q-home-hero container" aria-labelledby="home-intelligence-title">
         <div class="q-home-copy">
-          <p class="eyebrow">A clearer view of what comes next</p>
-          <h1 id="home-intelligence-title">Explore the market.<br /><span>See the possibilities.</span></h1>
-          <p>Forecast stocks and prediction markets with probability ranges, real historical data, and multiple models.</p>
-          <div class="hero-actions"><a class="cta" href="/forecasting">Start a forecast <i class="iconoir-arrow-right" aria-hidden="true"></i></a><a class="cta secondary" href="/screener">Explore the screener</a></div>
+          <p class="eyebrow">Market research, with context</p>
+          <h1 id="home-intelligence-title">Forecast the range.<br /><span>Understand the evidence.</span></h1>
+          <p>Explore stocks and prediction markets with multiple forecasting models. Inspect the data, compare possible outcomes, and keep your research in one place.</p>
+          <div class="hero-actions"><a class="cta" href="/forecasting" data-analytics="home_start_forecast">Start a forecast <i class="iconoir-arrow-right" aria-hidden="true"></i></a><a class="cta secondary" href="/screener" data-analytics="home_open_screener">Explore the screener</a></div>
           <p class="small muted">Free to explore. Sign in to save your work.</p>
         </div>
         <div class="q-home-preview" aria-label="Illustrative probability forecast">
@@ -110,9 +111,21 @@
         </div>
       </section>
       <section class="q-home-features container" aria-label="Your research workflow">
-        <article><i class="iconoir-search" aria-hidden="true"></i><h2>Find a market</h2><p>Search a ticker or paste a Kalshi or Polymarket US link.</p></article>
-        <article><i class="iconoir-graph-up" aria-hidden="true"></i><h2>Explore the range</h2><p>Compare the median with lower and upper probability forecasts.</p></article>
-        <article><i class="iconoir-download" aria-hidden="true"></i><h2>Keep your research</h2><p>Save forecasts to your profile or download data for your next step.</p></article>
+        <article><i class="iconoir-search" aria-hidden="true"></i><h2>Find your question</h2><p>Search a ticker, paste a market link, or bring a CSV.</p></article>
+        <article><i class="iconoir-graph-up" aria-hidden="true"></i><h2>See possible outcomes</h2><p>Compare the median with lower and upper forecast ranges.</p></article>
+        <article><i class="iconoir-download" aria-hidden="true"></i><h2>Keep the context</h2><p>Save the result, review its source and models, or export it.</p></article>
+      </section>
+      <section class="q-home-audiences container" aria-labelledby="home-audiences-title">
+        <div class="q-section-heading"><p class="eyebrow">Built around your research</p><h2 id="home-audiences-title">A useful next step for every question.</h2></div>
+        <div class="q-audience-grid">
+          <article><p class="eyebrow">Investors &amp; traders</p><h3>Find what deserves a closer look.</h3><p>Compare current prices with published forecast ranges. Turn a broad stock screen into a focused research shortlist.</p><a href="/screener" data-analytics="home_investor_screener">Explore stocks →</a></article>
+          <article><p class="eyebrow">Analysts &amp; researchers</p><h3>Make assumptions inspectable.</h3><p>Bring a time series, choose models, and inspect quantiles alongside the history. Save a result you can revisit.</p><a href="/forecasting" data-analytics="home_analyst_forecast">Work with your data →</a></article>
+          <article><p class="eyebrow">Developers</p><h3>Carry research into your workflow.</h3><p>Use protected forecast APIs and structured exports to connect market research with your own tools.</p><a href="https://quantura.mintlify.app/" data-analytics="home_developer_docs">Read the API docs →</a></article>
+        </div>
+      </section>
+      <section class="q-home-evidence container" aria-labelledby="home-evidence-title">
+        <div><p class="eyebrow">A forecast you can examine</p><h2 id="home-evidence-title">See what went into the result.</h2><p>Check the provider, observation window, model choices, and quantile output before using a forecast in your research.</p></div>
+        <ul><li>Source and data cutoff</li><li>Genuine observations</li><li>Model and range details</li><li>Saved results and exports</li></ul>
       </section>
       <section id="home-buy-signals" class="section section-compact container" aria-labelledby="home-buy-title">
         <div class="home-buy-heading"><h2 id="home-buy-title">Latest mega-cap forecasts</h2><a class="cta secondary small" href="/screener?marketCap=mega&amp;sort=marketCap&amp;direction=desc">Open screener</a></div>
@@ -124,6 +137,11 @@
         <figure><video class="hero-video" data-lazy-video="/assets/quantura-intro.mp4?v=20260926-endcard" poster="/assets/quantura-intro-poster.jpg" preload="none" controls playsinline aria-label="Quantura product tour"><track kind="captions" src="/assets/quantura-intro.vtt" srclang="en" label="English" default /></video></figure>
       </section>
       <section class="q-home-games container" aria-labelledby="home-games-title"><div><p class="eyebrow">Prediction markets</p><h2 id="home-games-title">Today's games, in one place.</h2><p>Browse Kalshi and Polymarket US games and open their latest pregame forecast when you need it.</p></div><a class="cta" href="/screener?source=today_games">View today's games</a></section>
+      <section class="q-home-guides container" aria-labelledby="home-guides-title"><div class="q-section-heading"><p class="eyebrow">Research guides</p><h2 id="home-guides-title">Get more from the forecast.</h2><a href="/blog">Browse all guides →</a></div><div class="q-guide-grid">
+<article class="q-guide-card" data-unsplash-photo="JKUTrJ4vK00"><a class="q-guide-link" href="/blog/posts/2026-07-23-forecast-uncertainty-expansion-and-contraction-over-time"><img class="blog-card-photo" src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format" srcset="https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w" sizes="(max-width: 768px) calc(100vw - 48px), 360px" alt="graphs of performance analytics on a laptop screen" width="640" height="360" loading="lazy" decoding="async" /><div class="q-guide-copy"><h3>Read a forecast range</h3><p>Understand quantiles and the questions a median cannot answer.</p><span>Read guide →</span></div></a><p class="q-guide-credit">Photo by <a href="https://unsplash.com/@lukechesser?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Luke Chesser</a> on <a href="https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>.</p></article>
+<article class="q-guide-card" data-unsplash-photo="klWUhr-wPJ8"><a class="q-guide-link" href="/blog/posts/2025-10-02-data-freshness-slas-for-forecast-credibility"><img class="blog-card-photo" src="https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360" srcset="https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180 320w, https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360 640w, https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540 960w" sizes="(max-width: 768px) calc(100vw - 48px), 360px" alt="Rows of black server racks in a data center" width="640" height="360" loading="lazy" decoding="async" /><div class="q-guide-copy"><h3>Check the data behind it</h3><p>Review the source, cutoff, gaps, and model coverage.</p><span>Read guide →</span></div></a><p class="q-guide-credit">Photo by <a href="https://unsplash.com/@imgix?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">imgix</a> on <a href="https://unsplash.com/photos/klWUhr-wPJ8?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>.</p></article>
+<article class="q-guide-card" data-unsplash-photo="Wpnoqo2plFA"><a class="q-guide-link" href="/blog/posts/2026-08-06-chronological-csv-exports-that-open-cleanly-in-spreadsheets"><img class="blog-card-photo" src="https://images.unsplash.com/photo-1529078155058-5d716f45d604?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format" srcset="https://images.unsplash.com/photo-1529078155058-5d716f45d604?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1529078155058-5d716f45d604?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1529078155058-5d716f45d604?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHw3fHxjb21wdXRlciUyMGRhdGElMjB0ZWNobm9sb2d5fGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w" sizes="(max-width: 768px) calc(100vw - 48px), 360px" alt="white printing paper with numbers" width="640" height="360" loading="lazy" decoding="async" /><div class="q-guide-copy"><h3>Keep your research portable</h3><p>Move from a clean time series to an export you can review.</p><span>Read guide →</span></div></a><p class="q-guide-credit">Photo by <a href="https://unsplash.com/@kommumikation?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Mika Baumeister</a> on <a href="https://unsplash.com/photos/white-printing-paper-with-numbers-Wpnoqo2plFA?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>.</p></article>
+</div></section>
     </main>
 
 
@@ -131,7 +149,7 @@
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <p class="small">Inspectable forecasts. Research you can revisit.</p>
           <div class="footer-social" aria-label="Quantura social links">
             <a class="social-link" href="#" data-analytics="social_x" aria-label="X (coming soon)">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.8 7.8L23 22h-6.9l-5.4-6.9L4.7 22H1.6l7.3-8.4L1 2h7.1l4.9 6.3L18.9 2zm-1.2 18h1.7L7.2 3.9H5.4L17.7 20z"/></svg>

@@ -140,3 +140,9 @@ def test_retrospective_refresh_keeps_original_pregame_cutoff_and_is_labeled():
             document(contract('2026-09-26T20:30Z'),result,stamp('2026-09-27T02:00Z'),saved)
     finally:
         forecast.execute_job=original
+
+
+def test_kalshi_schedule_accepts_nested_markets_when_top_level_is_empty():
+    p=KalshiProvider()
+    p._schedule_request=lambda url: ({'event':{'event_ticker':'GAME','markets':[{'ticker':'GAME','status':'open'}]},'markets':[]} if '/events/' in url else {'milestones':[{'primary_event_tickers':['GAME'],'start_date':'2026-09-27T01:30Z'}]})
+    assert stamp(p.verify_schedule(contract())['eventStart'])==stamp('2026-09-27T01:30Z')

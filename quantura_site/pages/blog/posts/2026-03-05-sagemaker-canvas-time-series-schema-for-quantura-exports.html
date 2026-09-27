@@ -13,13 +13,13 @@
     <meta property="og:description" content="SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls." />
     <meta property="og:type" content="article" />
     <meta property="og:url" content="https://quantura.studio/blog/posts/2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports" />
-    <meta property="og:image" content="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SageMaker Canvas Time-Series Schema for Quantura Exports | Quantura Blog" />
     <meta name="twitter:description" content="SageMaker Canvas: weekly operator notes on signal quality, scenario framing, and execution controls." />
-    <meta name="twitter:image" content="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720" />
     <meta name="twitter:url" content="https://quantura.studio/blog/posts/2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports" />
     <meta property="article:published_time" content="2026-03-05" />
     <meta property="article:section" content="SageMaker Canvas" />
@@ -39,7 +39,7 @@
     <script src="/pwa-launch.js?v=20260926a"></script>
     <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260926-support"></script>
-    <link rel="stylesheet" href="/styles.css?v=20260926a" />
+    <link rel="stylesheet" href="/styles.css?v=20260927-research" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">{
   "@context": "https://schema.org",
@@ -59,16 +59,17 @@
   "mainEntityOfPage": "https://quantura.studio/blog/posts/2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports",
   "image": {
     "@type": "ImageObject",
-    "url": "https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&ixlib=rb-4.1.0&q=78&w=1280&h=720&auto=format",
-    "creditText": "Photo by Ataberk Güler on Unsplash",
+    "url": "https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720",
+    "creditText": "Photo by Daniil Komov on Unsplash",
     "creator": {
       "@type": "Person",
-      "name": "Ataberk Güler",
-      "url": "https://unsplash.com/@ataberkguler?utm_source=quantura&utm_medium=referral"
+      "name": "Daniil Komov",
+      "url": "https://unsplash.com/@dkomow"
     }
   }
 }</script>
-    <script defer src="/app.js?v=20260405a"></script>
+    <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/app.js?v=20260927-research"></script>
   </head>
   <body>
 
@@ -94,12 +95,7 @@
             <div class="small muted">Published March 5, 2026 · Topic: <a href="/blog/topics/sagemaker-canvas">SageMaker Canvas</a></div>
           </div>
           <div class="card">
-            <h3>Post metadata</h3>
-            <div class="small"><strong>Slug:</strong> 2026-03-05-sagemaker-canvas-time-series-schema-for-quantura-exports</div>
-            <div class="small"><strong>Date:</strong> 2026-03-05</div>
-            <div class="small"><strong>Tags:</strong> sagemaker-canvas, no-code, mlops, forecasting, quantura, markets</div>
-            <div class="small" style="margin-top:8px;"><a href="/blog">Back to blog index</a></div>
-          </div>
+            <h3>Keep exploring</h3><p>Put this research into practice.</p><a href="/forecasting">Open Forecast →</a><p class="small"><a href="/blog">Browse research guides</a></p></div>
         </div>
       </section>
 
@@ -107,18 +103,12 @@
         <div class="container">
           <article class="card" style="padding: 28px;">
 
-    <figure class="blog-photo" data-unsplash-photo="S4ivgQRxaPo">
-      <img src="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format" srcset="https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w, https://images.unsplash.com/photo-1610736311554-fc17d5c43de8?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxjb21wdXRlciUyMHdvcmtzdGF0aW9ufGVufDF8MHx8fDE3ODg5ODE2OTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720&amp;auto=format 1280w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="black flat screen computer monitor on white desk" width="1280" height="720" decoding="async" fetchpriority="high" />
-      <figcaption>Photo by <a href="https://unsplash.com/@ataberkguler?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Ataberk Güler</a> on <a href="https://unsplash.com/photos/black-flat-screen-computer-monitor-on-white-desk-S4ivgQRxaPo?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
+    <figure class="blog-photo" data-unsplash-photo="GQOylIn892U">
+      <img src="https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720" srcset="https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180 320w, https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360 640w, https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540 960w, https://images.unsplash.com/photo-1763568258367-1c52beb60be7?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=1280&amp;h=720 1280w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1280px) 70vw, 960px" alt="Laptop screen displaying code and data charts" width="1280" height="720" decoding="async" fetchpriority="high" />
+      <figcaption>Photo by <a href="https://unsplash.com/@dkomow?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Daniil Komov</a> on <a href="https://unsplash.com/photos/GQOylIn892U?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>. Illustrative photography.</figcaption>
     </figure>
-    <p>
-      SageMaker Canvas Time-Series Schema for Quantura Exports is written for operators who need a repeatable bridge between signal intake and action execution.
-      The core objective is to reduce latency without reducing rigor. When market conditions shift, stale process can be more dangerous than stale data. Weekly process reviews should compare what was planned, what was executed, and where workflow friction introduced avoidable error.
-    </p>
-    <p>
-      In this playbook, the emphasis is not prediction theater; it is process reliability.
-      Any model-derived recommendation should be treated as a proposal, not a verdict. Cross-checking output with market structure, liquidity context, and catalyst timing prevents over-reliance on a single signal source.
-    </p>
+    <p>Use this guide to make your research assumptions explicit and decide what evidence to review next.</p>
+
     <p>Signal quality degrades quickly when research queues grow without ownership constraints. Enforce explicit owner assignments and review dates per symbol. If a symbol has no owner or next review date, archive it until the thesis is active again. This materially improves focus and reduces false urgency.</p>
     <p>Decision-ready output requires clear narrative discipline. Every thesis should include one paragraph for the base case, one for upside, and one for downside, each tied to measurable evidence. Ambiguous narrative language should be removed. This practice not only improves decision quality but also makes retrospective learning far easier.</p>
 
@@ -242,7 +232,7 @@ return { canvasWorkflow, exportJob };</code></pre>
       <div class="container footer-grid">
         <div>
           <div class="logo">QUANTURA</div>
-          <p class="small">Decision intelligence for market research, forecasting, and execution.</p>
+          <p class="small">Inspectable forecasts. Research you can revisit.</p>
         </div>
         <div class="small">
           <strong>Research</strong>
