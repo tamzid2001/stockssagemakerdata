@@ -119,7 +119,7 @@
         for(const candidate of game.markets.filter(m=>m.variants[selected.provider])){const option=el('option',candidate.title);option.value=candidate.id;option.selected=candidate.id===market.id;select.append(option);}
         select.addEventListener('change',()=>{selected.market=select.value;draw(select.name);});card.append(marketLabel,select);
         card.append(choices('Position','game-side-'+number,[{value:'yes',label:'Yes',checked:selected.side==='yes',disabled:!pair.yes},{value:'no',label:'No',checked:selected.side==='no',disabled:!pair.no}],value=>{selected.side=value;draw('game-side-'+number);}));
-        card.append(provider(row),el('p',`${selected.side==='yes'?'Yes':'No'} · ${row.outcome==='No'?market.title:row.outcome}`,'game-selected-outcome'));
+        card.append(provider(row),el('p',`${selected.side==='yes'?'Yes':'No'} · ${market.title}`,'game-selected-outcome'));
         const summary=el('p',`End-of-horizon P50: ${percent(row.endpoint?.['0.5'])}`,'game-probability');summary.setAttribute('aria-live','polite');card.append(summary);
         const quantiles=el('dl','','game-quantile-summary');for(const q of bands){const value=el('div');value.append(el('dt',label(q)),el('dd',percent(row.endpoint?.[q])));quantiles.append(value);}card.append(quantiles);
         card.append(el('p',`${row.models?.length||0} models · ${row.status==='final_pregame'?'Final pregame forecast':'Updates hourly before start'} · ${row.recomputed_at?'Recomputed':'Updated'} ${time(row.recomputed_at||row.generated_at)}`,'small'));

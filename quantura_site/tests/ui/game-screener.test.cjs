@@ -32,6 +32,7 @@ test('late-mounted Terminal screener renders shared games and actual provider/si
   assert.match(cards.querySelector('.game-probability').textContent,/40.0%/);
   cards.querySelector('input[value="polymarket_us"]').click();
   assert.equal(cards.querySelector('a').search,'?panel=forecast&gameForecastId='+id(4));
+  assert.equal(cards.querySelector('.game-selected-outcome').textContent,'No · Chicago Cubs to win');
   assert.equal(w.document.activeElement.value,'polymarket_us');
   cards.querySelector('input[value="yes"]').click();
   assert.equal(cards.querySelector('a').search,'?panel=forecast&gameForecastId='+id(3));
