@@ -134,6 +134,8 @@ def test_retrospective_refresh_keeps_original_pregame_cutoff_and_is_labeled():
         result=forecast.forecast_window(rows,7,models=('prophet','granite','chronos','toto'),quantiles=GAME_QUANTILES,frequency='1h',failure_policy='fail')
         saved={'generated_at':'2026-09-26T21:10Z'}
         doc=document(contract(),result,stamp('2026-09-27T02:00Z'),saved)
+        assert doc['observations']==[{'timestamp':r['timestamp'],'price':r['target']} for r in result['input_snapshot']]
+        assert len(doc['observations'])==32
         assert doc['recomputed_at']==doc['generated_at']
         assert stamp(doc['input_cutoff'])<=stamp(doc['original_generated_at'])
         assert set(doc['predictions'][-1]['quantiles'])=={'0.01','0.25','0.5','0.75','0.9','0.99'}

@@ -7,6 +7,9 @@
   const refs = {
     source: document.getElementById("qs-source"),
     search: document.getElementById("qs-search"),
+    gameProvider: document.getElementById("qs-game-provider"),
+    gameComparison: document.getElementById("qs-game-comparison"),
+    gameQuantile: document.getElementById("qs-game-quantile"),
     universe: document.getElementById("qs-universe"),
     marketCap: document.getElementById("qs-market-cap"),
     statistic: document.getElementById("qs-statistic"),
@@ -44,6 +47,7 @@
     source: "stocks",
     date: "",
     search: "",
+    gameProvider: "all", gameComparison: "any", gameQuantile: "0.5",
     universe: "all",
     marketCap: "all",
     statistic: "row",
@@ -62,13 +66,13 @@
   let savedAlertsMeta = {};
   let alertPanelLoading = null;
   let availableDates = [];
-  let gameModulePromise, gameSnapshot, gameExport;
+  let gameModulePromise, gameSnapshot, gameExport, gamePrices;
   const stockSortOptions=refs.sort.innerHTML;
   const gamesView=document.getElementById("qs-games");
   function ensureGames() {
     if(window.QuanturaGames)return Promise.resolve(window.QuanturaGames);
     if(!gameModulePromise)gameModulePromise=new Promise((resolve,reject)=>{
-      const script=document.createElement("script");script.src="/game-forecasts.js?v=20260927-game-controls";
+      const script=document.createElement("script");script.src="/game-forecasts.js?v=20260927-game-filters";
       const timeout=setTimeout(()=>{script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));},15000);
       script.onload=()=>{clearTimeout(timeout);if(window.QuanturaGames)resolve(window.QuanturaGames);else {gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));}};
       script.onerror=()=>{clearTimeout(timeout);script.remove();gameModulePromise=null;reject(new Error("Game forecasts could not load. Please retry."));};document.head.append(script);
@@ -83,7 +87,8 @@
     }
     for(const control of [refs.universe,refs.marketCap,refs.statistic,refs.addRule]){control.disabled=nonStock;control.closest(".qs-field, fieldset").hidden=games;}
     root.querySelectorAll('input[name="position"]').forEach(control=>{control.disabled=nonStock;control.closest("fieldset").hidden=games;});
-    refs.search.placeholder=games?"Team, game, outcome, or provider":"Ticker or company, e.g. PLTR";
+    refs.search.placeholder=games?"Team, game, outcome, or market link":"Ticker or company, e.g. PLTR";
+    root.querySelectorAll('.qs-game-filter').forEach(control=>{control.hidden=!games;control.querySelector('select').disabled=!games;});
     document.querySelector(".qs-date-navigation").hidden=games;
     document.getElementById("saved-alerts").hidden=games;
     document.querySelector('.qs-hero-actions a[href="#saved-alerts"]').hidden=games;
@@ -109,25 +114,40 @@
       gameSnapshot={value,until:Date.now()+30000};
     }
     if(request.signal.aborted)return;
-    const data=gameSnapshot.value,query=current.search.toLowerCase();
-    const allGames=renderer.group(data.items),items=allGames.filter(game=>game.search.includes(query));
+    const data=gameSnapshot.value;
+    const display=(checkingPrices=false)=>{
+    const rows=data.items.map(row=>({...row,...(gamePrices?.items?.get(row.id)||{})}));
+    const allGames=renderer.group(rows),items=renderer.filter(rows,{search:current.search,provider:current.gameProvider,comparison:current.gameComparison,quantile:current.gameQuantile});
     const key={gameStart:"game_start",event:"event_title",provider:"provider",lastUpdate:"generated_at"}[current.sort]||"game_start";
     items.sort((a,b)=>(String(a[key]).localeCompare(String(b[key]))||a.id.localeCompare(b.id))*(current.direction==="desc"?-1:1));
     const pages=Math.max(1,Math.ceil(items.length/current.pageSize));current.page=Math.min(current.page,pages);
     refs.metricMatches.textContent=items.length.toLocaleString();refs.metricTotal.textContent="of "+allGames.length.toLocaleString()+" today · "+data.items.length.toLocaleString()+" outcome forecasts";
     availableDates=[];refs.dateAvailability.textContent="Today in New York · "+data.date;
-    refs.status.textContent=items.length.toLocaleString()+" games match your search.";
+    refs.status.textContent=items.length.toLocaleString()+" games match your filters.";
     refs.freshness.textContent="Hourly pregame forecasts through four hours after kickoff. Updates stop at the start hour."+(data.bounded||data.coverage?.some(p=>p.partial||p.failed)?" Some markets are unavailable in this scan.":"");
     refs.pageLabel.textContent="Page "+current.page+" of "+pages;refs.previous.disabled=current.page<=1;refs.next.disabled=current.page>=pages;
-    renderer.render(items.slice((current.page-1)*current.pageSize,current.page*current.pageSize));
+    if(checkingPrices)refs.freshness.textContent+=" Checking current market prices…";
+    else if(gamePrices?.unavailable||gamePrices?.missing)refs.freshness.textContent+=" Some latest prices are unavailable; price filters exclude them.";
+    renderer.render(items.slice((current.page-1)*current.pageSize,current.page*current.pageSize),{quantile:current.gameQuantile,checkingPrices});
     disableExport(true);
     if(gameExport)URL.revokeObjectURL(gameExport);
-    const fields=["provider","event_title","market_title","outcome","side","contract_id","game_start","forecast_end","generated_at","status"];
+    const fields=["provider","event_title","market_title","outcome","side","contract_id","market_url","latest_price","price_kind","price_checked_at","game_start","forecast_end","generated_at","status"];
     const exportItems=[...new Map(items.flatMap(game=>game.markets.flatMap(market=>Object.values(market.variants).flatMap(pair=>[pair.yes,pair.no].filter(Boolean)))).map(item=>[item.id,item])).values()];
     const cell=value=>{let text=String(value??"");if(typeof value==="string"&&/^[\s]*[=+@\-]/.test(text))text="'"+text;return '"'+text.replace(/"/g,'""')+'"';};
     gameExport=URL.createObjectURL(new Blob([[[...fields,"p01","p25","p50","p75","p90","p99"].map(cell).join(","),...exportItems.map(item=>[...fields.map(key=>item[key]),...['0.01','0.25','0.5','0.75','0.9','0.99'].map(q=>item.endpoint?.[q])].map(cell).join(","))].join("\r\n")],{type:"text/csv;charset=utf-8"}));
     refs.export.href=gameExport;refs.export.download="quantura-games-"+data.date+".csv";refs.export.removeAttribute("aria-disabled");refs.export.classList.remove("disabled");
-    setView(items.length?"games":"empty");
+    if(checkingPrices&&current.gameComparison!=='any'){refs.metricMatches.textContent='—';refs.status.textContent='Checking prices against the selected quantile…';setView('loading');}
+    else setView(items.length?"games":"empty");
+    };
+    const stale=!gamePrices||gamePrices.date!==data.date||gamePrices.until<Date.now();
+    if((force||stale)&&(!gamePrices?.pending||gamePrices.date!==data.date)){
+      const entry={date:data.date,until:Date.now()+60000,pending:null,items:new Map(),missing:0,unavailable:false};
+      entry.pending=fetch('/api/screener/games/prices',{signal:AbortSignal.timeout(18000),cache:force?'reload':'default'})
+        .then(async response=>{if(!response.ok)throw Error();const value=await response.json();if(value.date!==data.date||!Array.isArray(value.items))throw Error();entry.items=new Map(value.items.map(item=>[item.id,item]));entry.missing=value.missing||0;})
+        .catch(()=>{entry.unavailable=true;}).finally(()=>{entry.pending=null;});gamePrices=entry;
+    }
+    display(Boolean(gamePrices?.pending));
+    if(gamePrices?.pending){await gamePrices.pending;if(!request.signal.aborted)display();}
   }
 
   function escapeHtml(value) {
@@ -208,6 +228,7 @@
       ...current,
       source: refs.source?.value || "stocks",
       search: String(refs.search.value || "").trim(),
+      gameProvider: refs.gameProvider?.value || "all", gameComparison: refs.gameComparison?.value || "any", gameQuantile: refs.gameQuantile?.value || "0.5",
       universe: refs.universe.value || "all",
       marketCap: refs.marketCap.value || "all",
       statistic: refs.statistic.value || "row",
@@ -225,6 +246,9 @@
     if(refs.source)refs.source.value=state.source || "stocks";
     sourceControls(state);
     refs.search.value = state.search || "";
+    if(refs.gameProvider)refs.gameProvider.value=state.gameProvider||"all";
+    if(refs.gameComparison)refs.gameComparison.value=state.gameComparison||"any";
+    if(refs.gameQuantile)refs.gameQuantile.value=state.gameQuantile||"0.5";
     refs.universe.value = state.universe || "all";
     refs.marketCap.value = state.marketCap || "all";
     refs.statistic.value = state.statistic || "row";
@@ -251,7 +275,10 @@
     const state = { ...defaults, positions: [] };
     const date = String(params.get("date") || "");
     if (/^\d{4}-\d{2}-\d{2}$/.test(date)) state.date = date;
-    state.search = String(params.get("search") || "").slice(0, 80);
+    state.search = String(params.get("search") || "").slice(0, 512);
+    if(['all','kalshi','polymarket_us'].includes(params.get('gameProvider')))state.gameProvider=params.get('gameProvider');
+    if(['any','above','below'].includes(params.get('gameComparison')))state.gameComparison=params.get('gameComparison');
+    if(['0.01','0.25','0.5','0.75','0.9','0.99'].includes(params.get('gameQuantile')))state.gameQuantile=params.get('gameQuantile');
     Object.keys(allowed).forEach((key) => {
       const value = params.get(key);
       if (allowed[key].includes(value)) state[key] = value;
@@ -278,6 +305,7 @@
     if (state.date && state.source === "stocks") params.set("date", state.date);
     if (window.location.pathname === "/forecasting") params.set("panel", "screener");
     if (state.search) params.set("search", state.search);
+    if(state.source==='today_games')for(const key of ['gameProvider','gameComparison','gameQuantile'])if(state[key]!==defaults[key])params.set(key,state[key]);
     if (state.universe !== "all") params.set("universe", state.universe);
     if (state.marketCap !== "all") params.set("marketCap", state.marketCap);
     if (state.statistic !== "row") params.set("statistic", state.statistic);
@@ -302,7 +330,7 @@
 
   function updateFilterCount(state) {
     const active = [state.search, state.universe !== "all", state.marketCap !== "all"]
-      .filter(Boolean).length + state.positions.length + state.quantileRules.length;
+      .filter(Boolean).length + state.positions.length + state.quantileRules.length + (state.source==='today_games'?Number(state.gameProvider!=='all')+Number(state.gameComparison!=='any'):0);
     refs.filterCount.textContent = `${active} active`;
   }
 

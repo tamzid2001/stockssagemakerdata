@@ -1034,6 +1034,14 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .game-card h3 { font-size:1.1rem; margin:8px 0; }
 .game-card .small,.game-screener .small,.game-dialog .small { color:var(--muted-foreground) !important; }
 .game-card-grid[hidden] { display:none; }
+.market-search-workspace[hidden],.qs-game-filter[hidden] { display:none !important; }
+.game-market-links { display:flex; flex-wrap:wrap; gap:8px; }
+.game-exchange-link { display:flex; align-items:center; min-height:48px; padding:8px 12px; border:1px solid var(--border); border-radius:10px; color:var(--foreground); background:var(--card); font-size:.85rem; }
+.game-exchange-link:focus-visible { outline:3px solid var(--focus); outline-offset:3px; }
+.game-price-comparison { font-variant-numeric:tabular-nums; font-weight:600; }
+.game-history-controls { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-block:16px; }
+.game-history-controls label { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:48px; }
+.game-history-controls select { min-height:48px; font-size:1rem; }
 .game-card { display:flex; flex-direction:column; gap:12px; color:var(--foreground); min-width:0; }
 .game-card p,.game-card h3 { margin:0; }
 .game-card .cta { margin-top:auto; }
@@ -1069,3 +1077,8 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .q-guide-credit { margin:0;padding:0 24px 18px;font-size:.75rem;line-height:1.6;color:var(--muted-foreground); }
 .q-guide-credit a { color:inherit;text-decoration:underline;text-underline-offset:2px; }
 .q-guide-link:hover h3 { text-decoration:underline;text-underline-offset:4px; }
+
+.game-forecast-page details[hidden] { display: none; }
+
+.quant-screener-page #qs-search { padding-left: 38px; min-height: 48px; font-size: 16px; }
+.qs-game-filter select { min-height: 48px; font-size: 16px; }

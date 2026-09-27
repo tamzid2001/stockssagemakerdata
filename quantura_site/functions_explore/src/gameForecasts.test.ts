@@ -42,3 +42,26 @@ test("paged game catalog reaches outcomes beyond 1,000 and rejects malformed cur
  const third=await fetchPage(second.value.next_cursor);assert.equal(third.value.items.length,2);assert.equal(third.value.next_cursor,null);assert.equal(third.value.bounded,false);
  const invalid=await fetchPage("../../private");assert.equal(invalid.status,400);assert.equal(queries,3);
 });
+
+test("detail exposes genuine observations and safe market links while the paged catalog omits history",()=>{
+ const input={...fixture(),symbol:"KXMLBGAME-26SEP261915CHCBOS-CHC",event_id:"KXMLBGAME-26SEP261915CHCBOS",
+ observations:[{timestamp:"2026-09-26T20:00:00Z",price:.4}],private_token:"hidden"};
+ const detail=publicGameForecast(input,now,true)!;
+ assert.equal((detail.observations as any[]).length,1);assert.equal(detail.private_token,undefined);
+ assert.equal(new URL(String(detail.market_url)).hostname,"kalshi.com");
+ assert.equal(publicGameForecast(input,now)!.observations,undefined);
+});
+
+test("saved history remains private and rejects a different user's snapshot",async()=>{
+ const routes=new Map<string,Function>();let savedReads=0;
+ const db:any={collection:(name:string)=>({doc:()=>({get:async()=>{
+  if(name==='user_game_forecasts'){savedReads++;return {exists:true,data:()=>({ownerUid:'owner',forecast:fixture()})};}
+  return {exists:true,data:()=>({plan:'free'})};
+ }})})};
+ const auth:any={verifyIdToken:async()=>({uid:'someone_else',firebase:{sign_in_provider:'password'}})};
+ registerGameForecastRoutes({get:(path:string,handler:Function)=>routes.set(path,handler),post:()=>{}}as any,db,auth);
+ let status=200,payload:any;const res:any={setHeader:()=>{},status:(n:number)=>{status=n;return res;},json:(value:any)=>{payload=value;}};
+ const route=routes.get('/screener/games/saved/:id/history')!;
+ await route({params:{id:'a'.repeat(40)},headers:{}},res);assert.equal(status,401);assert.equal(savedReads,0);
+ await route({params:{id:'a'.repeat(40)},headers:{authorization:'Bearer session'}},res);assert.equal(status,404);assert.equal(payload.error,'not_found');
+});
