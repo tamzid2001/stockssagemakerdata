@@ -132,7 +132,7 @@ class QuanturaProvider:
             if len(starts) != 1:
                 raise ValueError("SCHEDULE_MISSING_OR_CONFLICTING")
             start = starts.pop()
-            updated.update(status="closed" if market.get("status") in {"closed", "finalized", "settled", "determined"} else "open")
+            updated.update(marketId=symbol, status="closed" if market.get("status") in {"closed", "finalized", "settled", "determined"} else "open")
             source = "Kalshi linked sports milestone"
         else:
             root = "https://gateway.polymarket.us/v1/"
@@ -153,7 +153,9 @@ class QuanturaProvider:
             if not kickoff:
                 raise ValueError("SCHEDULE_MISSING")
             start = stamp(kickoff)
-            updated.update(side="long" if side.get("long") is not False else "short",
+            if not market.get("id"):
+                raise ValueError("SCHEDULE_IDENTITY_MISSING")
+            updated.update(marketId=str(market["id"]), side="long" if side.get("long") is not False else "short",
                            status="closed" if market.get("closed") or market.get("status") == "MARKET_STATUS_RESOLVED" else "open")
         updated.update(eventStart=iso(start), scheduleSource=source, scheduleVerifiedAt=iso(int(time.time())), live=time.time() >= start)
         return updated

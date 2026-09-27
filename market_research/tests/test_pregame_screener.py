@@ -101,11 +101,12 @@ def test_four_or_five_models_depend_on_real_history_and_approved_timesfm():
 def test_polymarket_schedule_uses_game_start_not_market_listing_date():
     p=QuanturaProvider()
     c={**contract(),"source":"polymarket_us","providerSymbol":"aec-game","contractId":"side-1"}
-    p._schedule_request=lambda _: {"market":{"slug":"aec-game","startDate":"2026-09-25T01:00:00Z","gameStartTime":"2026-09-27T01:30:00Z","marketSides":[{"id":"side-1","long":True}]}}
+    p._schedule_request=lambda _: {"market":{"id":"market-1","slug":"aec-game","startDate":"2026-09-25T01:00:00Z","gameStartTime":"2026-09-27T01:30:00Z","marketSides":[{"id":"side-1","long":True}]}}
     verified=p.verify_schedule(c)
+    assert verified['marketId']=='market-1'
     assert stamp(verified['eventStart'])==stamp('2026-09-27T01:30:00Z')
     assert game_date(stamp(verified['eventStart']))=='2026-09-26'
-    p._schedule_request=lambda _: {"market":{"slug":"aec-game","startDate":"2026-09-25T01:00:00Z","marketSides":[{"id":"side-1","long":True}]}}
+    p._schedule_request=lambda _: {"market":{"id":"market-1","slug":"aec-game","startDate":"2026-09-25T01:00:00Z","marketSides":[{"id":"side-1","long":True}]}}
     with pytest.raises(ValueError,match='SCHEDULE_MISSING'):
         p.verify_schedule(c)
 
