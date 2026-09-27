@@ -123,7 +123,8 @@ def _metrics(curve, baskets, entries, sessions, first: datetime, last: datetime)
     # Every replay starts flat; a diagnostic slice begins with its actual equity, including held positions.
     start_equity=points[0]['start_equity'];peak=start_equity;dd=0.
     for r in points:
-        dd=max(dd,peak-r['low']);peak=max(peak,r['close'])
+        for value in r['equity_path']:
+            dd=max(dd,peak-value);peak=max(peak,value)
     closed=[r for r in baskets if first < stamp(r['accounted_at']) <= last]
     legs=[r for r in entries if first < stamp(r['accounted_at']) <= last]
     daily=[r for r in sessions if first <= stamp(r['start']) < last]
@@ -227,9 +228,13 @@ def replay(symbol: str, side: str, rows: list[dict], forecasts: list[dict], spec
                 value=conversion.usd(swap_quote(spec,side,lots,(last_bid+last_ask)/2,days,costs),quote_at)
                 leg['swap']+=value;cash+=value;accrued_swap+=value
         low_equity=equity(last_bid,last_ask,quote_at)
+        equity_path=[beginning,low_equity]
         sold=bought=False
         if row and not bar_tradeable(at,spec):
-            low_equity=min(low_equity,equity(bid['l'],ask['h'],at))
+            keys=('o','l','h','c')if ordering=='low_first'else ('o','h','l','c')
+            for key in keys:
+                value=equity(bid[key],ask[key],at)
+                equity_path.append(value);low_equity=min(low_equity,value)
         if row and bar_tradeable(at,spec):
             info=predictions.get(at);allowed=False;level=None
             prior=features[at]
@@ -264,7 +269,8 @@ def replay(symbol: str, side: str, rows: list[dict], forecasts: list[dict], spec
                 close(exit_open,at,at);sold=True
             elif allowed and level is not None and direction*(entry_open-level)<=1e-10:
                 bought=buy(entry_open,at,at,bid['o'],ask['o'])
-            low_equity=min(low_equity,equity(bid['o'],ask['o'],at))
+            value=equity(bid['o'],ask['o'],at)
+            equity_path.append(value);low_equity=min(low_equity,value)
             for left,right in zip(keys,keys[1:]):
                 previous_exit=bid[left]if side=='long'else ask[left];exit_price=bid[right]if side=='long'else ask[right]
                 previous_entry=ask[left]if side=='long'else bid[left];entry_price=ask[right]if side=='long'else bid[right];active=target()
@@ -274,11 +280,13 @@ def replay(symbol: str, side: str, rows: list[dict], forecasts: list[dict], spec
                     # At most one addition per observed hourly bar. Crossing times are unknown.
                     spread=ask['o']-bid['o']
                     bought=buy(level,end,at,level-spread if side=='long'else level,level if side=='long'else level+spread)
-                low_equity=min(low_equity,equity(bid[right],ask[right],at))
+                value=equity(bid[right],ask[right],at)
+                equity_path.append(value);low_equity=min(low_equity,value)
         if row:
             last_bid,last_ask=bid['c'],ask['c'];last_quote_at=at
             last_equity=equity(last_bid,last_ask,at,'c')
         else:last_equity=equity(last_bid,last_ask,quote_at)
+        equity_path.append(last_equity)
         session_exposed=session_exposed or bool(basket) or bought or sold
         daily_loss=max(0.,daily_balance-low_equity);max_daily_loss=max(max_daily_loss,daily_loss)
         if daily_loss>5000 and first_daily_breach is None:first_daily_breach=end.isoformat()
@@ -287,7 +295,7 @@ def replay(symbol: str, side: str, rows: list[dict], forecasts: list[dict], spec
         margin=abs(conversion.usd(volume*float(spec['contractSize'])*(last_bid+last_ask)/2,quote_at))/float(spec['leverageStandard'])
         max_margin=max(max_margin,margin)
         if basket and margin>low_equity and first_margin_breach is None:first_margin_breach=end.isoformat()
-        curve.append({'at':end.isoformat(),'start_equity':beginning,'low':min(low_equity,last_equity),'close':last_equity})
+        curve.append({'at':end.isoformat(),'start_equity':beginning,'low':min(low_equity,last_equity),'close':last_equity,'equity_path':equity_path})
         at=end
     sessions.append({'start':session_start.isoformat(),'end':last.isoformat(),'pnl':last_equity-session_equity,'exposed':session_exposed})
     full=_metrics(curve,baskets,trades,sessions,first,last)

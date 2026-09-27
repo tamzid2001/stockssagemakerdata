@@ -44,6 +44,8 @@ Historical maintenance, holiday sessions, dividend-adjusted swaps, percentage fe
 
 Daily-loss checks compare equity, including unrealized losses, fees and swaps, with midnight **balance**, not midnight equity. Closing only at profit cannot hide carried losses in this check.
 
+Drawdown follows the assumed sequence of executable hourly opens, highs, lows and closes, including intrahour equity peaks before a loss. Session W/L measures equity changes from 18:00 UTC to the next 18:00 UTC (the final session ends at 17:00); carried targets and swaps remain active during the one-hour gap between forecast windows.
+
 ## Selection and validation
 
 Nine fixed candidates: unfiltered baseline, median direction, median plus 3-hour momentum, median plus 6-hour momentum, median with a three-entry cap, 3-hour momentum with the cap, median with a three-hour entry delay, median with stable volatility, and median with a commission/one-night-swap feasibility check. All averaging obeys current P01/P99 and spacing rules.
