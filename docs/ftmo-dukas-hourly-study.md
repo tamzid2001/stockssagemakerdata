@@ -57,3 +57,9 @@ The selected rule is frozen. Later validation starts flat and compares it with a
 Outputs include every rule/cost/path summary, fresh later validation, fresh post-launch baselines, closed entry/basket W/L, exposed-session W/L, commissions, swaps, open liabilities, maximum lots/margin, drawdown and limit breaches. Baseline and selected trade logs are retained. Missing forecasts produce an explicit incomplete report instead of silently skipping losing days.
 
 The workflow has no broker credentials or order endpoints. Intermediate artifacts expire in seven days; the report expires in fourteen days.
+
+## Triggered second-forecast variant
+
+`ftmo-trigger-reforecast.yml` evaluates the eight FX/index assets (excluding gold/BTC) using a minute-confirmed primary P01/P99 breach. One causal five-model second forecast per side/session uses the latest 500 completed genuine H1 observations through 17:00 UTC. The ladder then waits for its refreshed P01/P99 and the first full H1 bar after measured inference. Longs average only lower; shorts only higher; each leg is 0.01 lot with the existing 10-pip/10-point spacing and basket target. Baskets carry; exits remain active after the horizon, but additions require an active refreshed forecast.
+
+The report retains primary controls, actual second-model outputs, source audits, inference durations, triggers with unchanged H1 inputs, triggers with no full actionable bar, both hourly path orders, cost sensitivities and open liabilities. This retrospective replay does not establish a stable forward edge or an FTMO Challenge pass.

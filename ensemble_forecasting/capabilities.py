@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .schemas import ForecastRequest, ModelId
+from .frequencies import FREQUENCIES
 
 
 def _registry_path() -> Path:
@@ -106,4 +107,5 @@ def public_capabilities(runtime_mode: str = "production") -> dict[str, Any]:
         "default_quantiles": MODEL_REGISTRY["defaultQuantiles"],
         "max_requested_quantiles": MODEL_REGISTRY["maxRequestedQuantiles"],
         "models": models,
+        "frequencies": FREQUENCIES,
     }

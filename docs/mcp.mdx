@@ -17,6 +17,7 @@ read-only API tools:
 - `quantura_resolve_market_link`
 - `quantura_browse_event_markets`
 - `quantura_get_search_capabilities`
+- `quantura_get_forecast_capabilities` — supported intervals, calendar boundaries and current model access
 - `quantura_get_my_access`
 - `quantura_list_workspaces`
 
@@ -33,3 +34,7 @@ compatible. No trading, mutation or expensive forecast job is enabled as an MCP 
 
 [OpenAPI source](https://quantura.studio/api/openapi.json) ·
 [Q Search](/docs/q-search) · [Q Download](/docs/q-download)
+
+## Strategy and interval guides
+
+Read [Forecast intervals](/docs/forecast-frequencies) and [Build a quantile strategy](/docs/algorithmic-strategy) through documentation search. The capability tool reads `GET /api/v1/forecast/models`; weekly/monthly and intraday aliases match the live OpenAPI schema. Forecast and backtest creation still use the authorized HTTP API.

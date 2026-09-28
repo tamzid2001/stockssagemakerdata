@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal, Mapping
 
 import numpy as np
+from .frequencies import normalize_frequency
 
 ModelId = Literal["prophet", "toto", "granite", "chronos", "timesfm"]
 Transform = Literal["auto", "log", "none", "logit"]
@@ -81,7 +82,7 @@ class ForecastRequest:
             model_checkpoints=model_checkpoints,
             model_revisions=dict(revisions),
             failure_policy=str(payload.get("failure_policy", "fail")),  # type: ignore[arg-type]
-            frequency=str(payload.get("frequency", "1D")),
+            frequency=normalize_frequency(str(payload.get("frequency", "1D"))),
             calendar=str(payload.get("calendar", "NYSE")),
             runtime_mode=str(payload.get("runtime_mode", "production")),  # type: ignore[arg-type]
             max_quantiles=int(payload.get("max_quantiles", 21)),

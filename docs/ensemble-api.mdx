@@ -5,7 +5,7 @@ description: "Configure five approved time-series models, custom quantiles, and 
 
 # Quantura Forecast
 
-The default **Q Forecast** workspace at `/forecasting` uses this asynchronous ensemble service. Configure the models and click **Run forecast** once; progress, final quantiles, and CSV/JSON downloads appear in the same panel. Models and custom quantiles are in Advanced settings; there is one Run forecast button. Previously saved legacy forecasts remain readable; their compatibility endpoints are unchanged.
+The default **Forecast** workspace at `/forecasting` uses this asynchronous ensemble service. Configure the models and click **Run forecast** once; progress, final quantiles, and CSV/JSON downloads appear in the same panel. Models and custom quantiles are in Advanced settings; there is one Run forecast button. Previously saved legacy forecasts remain readable; their compatibility endpoints are unchanged.
 
 ## Free website, local-time controls and CSV uploads
 
@@ -169,3 +169,7 @@ New forecasts use the immutable Toto checkpoint revision exposed as `checkpoint_
 The larger Toto checkpoint increases memory use and loading time. Forecasts remain asynchronous, with sequential model execution on the CPU worker; a larger parameter count is not a claim of better forecasting accuracy. Context is a maximum number of **observed rows**, not necessarily elapsed minutes or calendar days when history contains gaps or closed sessions.
 
 The configured platform administrator can use the approved model set in their own workspaces under Research compute limits without changing their subscription. The ensemble API verifies the administrator's current, verified Firebase account against its server-side allowlist. Editable profile fields and client role labels cannot grant this access. API-key scopes, other workspace memberships, Viewer write restrictions, runtime availability and TimesFM's independent commercial-license/access gates still apply.
+
+## Interval and strategy guides
+
+Forecast supports 1, 5, 15 and 30 minutes; 1 and 4 hours; daily; Monday UTC weekly; and calendar-month observations. `prediction_length` counts bars. Weekly/monthly inputs use only completed periods, and refresh retains the exact interval. See [Forecast intervals](/docs/forecast-frequencies) for aliases, end-date handling and provider limits, and [Build a quantile strategy](/docs/algorithmic-strategy) for valid backtest requests and the separate averaged-ladder methodology.

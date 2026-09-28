@@ -8,7 +8,7 @@
     "dark": "/favicon/quantura-logo-dark.svg",
     "href": "https://quantura.studio"
   },
-  "description": "Build with Quantura Forecast (Q Forecast), ensemble quantiles, Q Search, Q Download, workspaces and provider-backed datasets.",
+  "description": "Build with Quantura Forecast, interval-aware ensembles, market search and downloads, reproducible strategy research and workspace APIs.",
   "colors": {
     "primary": "#0B1526",
     "light": "#3AB5A2",
@@ -51,13 +51,20 @@
               "docs/q-search",
               "docs/q-download",
               "docs/ensemble-api",
-              "docs/backtesting",
+              "docs/forecast-frequencies",
               "docs/screener-alerts",
               "docs/kalshi-perpetuals",
               "docs/q-support",
               "docs/mcp",
-              "docs/data-provenance",
               "docs/errors"
+            ]
+          },
+          {
+            "group": "Algorithmic strategy research",
+            "pages": [
+              "docs/algorithmic-strategy",
+              "docs/backtesting",
+              "docs/data-provenance"
             ]
           },
           {

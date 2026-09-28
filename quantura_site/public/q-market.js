@@ -55,9 +55,11 @@
     const dukascopy=row.source==="dukascopy";
     const prediction=row.resource_type==="prediction_market_contract";
     const frequency=settings.frequency;
-    if(!["1Min","1Hour","1Day","raw","5m","15m","30m","4h","final"].includes(frequency) || (!prediction && !["1Min","1Hour","1Day",...(dukascopy?["5m","15m","30m","4h"]:[])].includes(frequency)))throw Error("Choose a supported interval.");
+    const intervals=["1Min","1Hour","1Day","5m","15m","30m","4h","1w","1Week","1Month","1month"];
+    if(![...intervals,...(prediction?["raw","final"]:[])].includes(frequency))throw Error("Choose a supported interval.");
+    if(settings.kind==="options" && !["1Min","1Hour","1Day"].includes(frequency))throw Error("Option history supports minute, hourly or daily bars.");
     const limit=Number(settings.limit);if(![500,1000,2000,50000].includes(limit))throw Error("Choose a supported row limit.");
-    const interval=frequency==="1Min"?60000:frequency==="1Hour"?3600000:86400000;
+    const interval=({"1Min":1,"5m":5,"15m":15,"30m":30,"1Hour":60,"4h":240,"1Day":1440,"1w":10080,"1Week":10080,"1Month":44640,"1month":44640})[frequency]*60000||86400000;
     let start=settings.range==="dates"?isoLocal(settings.start):null;
     if(settings.range==="dates"&&!start)throw Error("Choose the start of the date range.");
     if(start && Date.parse(start)>=Date.parse(end))throw Error("Start must be before the end time.");
@@ -71,8 +73,8 @@
     if(row.source==="kalshi_perps" && limit>5000)throw Error("Perpetual history supports at most 5,000 rows per request. Choose 2,000 or fewer here.");
     const option=settings.kind==="options";
     if(option&&!settings.optionSymbol)throw Error("Choose a specific call or put from the chain.");
-    if(option || row.source==="kalshi_perps") start ||= new Date(Date.parse(end)-Math.max(7*86400000,limit*interval*3)).toISOString();
-    return {url:row.source==="kalshi_perps"?"/api/market-data/perps/history":option?"/api/market-data/options/history":"/api/market-data/stocks/history",body:{source:dukascopy?"dukascopy":"auto",price_side:dukascopy?(settings.price_side||"bid"):undefined,page_mode:dukascopy||undefined,symbol:row.symbol,contractSymbol:option?settings.optionSymbol:undefined,start:start||undefined,end,timeframe:frequency,frequency:({"1Min":"1min","1Hour":"1h","1Day":"1D"})[frequency],limit,session:settings.session,adjustment:dukascopy?"raw":settings.adjustment,format:"json"}};
+    if(option) start ||= new Date(Date.parse(end)-Math.max(7*86400000,limit*interval*3)).toISOString();
+    return {url:row.source==="kalshi_perps"?"/api/market-data/perps/history":option?"/api/market-data/options/history":"/api/market-data/stocks/history",body:{source:dukascopy?"dukascopy":"auto",price_side:dukascopy?(settings.price_side||"bid"):undefined,page_mode:dukascopy||undefined,symbol:row.symbol,contractSymbol:option?settings.optionSymbol:undefined,start:start||undefined,end,timeframe:frequency,frequency:({"1Min":"1min","1Hour":"1h","1Day":"1D","5m":"5min","15m":"15min","30m":"30min","4h":"4h","1w":"1W-MON","1Week":"1W-MON","1Month":"1MS","1month":"1MS"})[frequency],limit,session:settings.session,adjustment:dukascopy?"raw":settings.adjustment,format:"json"}};
   }
   function snapshot(payload,row,settings,request){
     if(!Array.isArray(payload.rows))throw Error("The provider did not return an exportable dataset.");

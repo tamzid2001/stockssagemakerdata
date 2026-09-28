@@ -28,3 +28,7 @@ for a direct CSV attachment. Cancel preview to stop waiting.
 **Upload CSV** still forecasts your own series. Existing authenticated
 workspace-file clients remain supported; those operations are no longer
 published in docs or MCP discovery.
+
+## Intervals and Dukascopy
+
+Stocks and Dukascopy expose 5m, 15m, 30m, 4h, weekly and calendar-month bars in addition to minute/hour/day. Dukascopy uses its published instrument catalog, preserves bid or ask selection and downloads candle archives rather than annual ticks. Follow paged JSON cursors before exporting. Kalshi/Polymarket event and perpetual intervals follow their actual available history; missing bars remain missing. Options retain their minute/hour/day contract. See [Forecast intervals](/docs/forecast-frequencies).

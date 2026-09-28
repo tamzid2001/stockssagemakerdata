@@ -19,6 +19,7 @@ import { loadPublishedScreenerDataset } from "./quantScreener";
 import { screenerForecastSnapshot } from "./screenerForecast";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 import {analyticsContext,reportGa4ForecastCompletion} from "./ga4";
+import {forecastFrequency,forecastFrequencyCapabilities,frequencyEnd,frequencyTimeframe,predictionPeriods} from "./forecastFrequency";
 
 type JsonRecord = Record<string, unknown>;
 type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string; adminEmails?: readonly string[] };
@@ -107,7 +108,7 @@ function sendData(res: Response, data: unknown, requestId: string, meta: JsonRec
 export async function tickerOverlayRows(source: JsonRecord, frequency: string, cutoff: number, now = Date.now(), fetchHistory = fetchStockHistoryData) {
   const common = { symbol: text(source.symbol), source: source.provider, end: new Date(now).toISOString(), session: source.session || (frequency === "1D" ? "regular" : "extended"), adjustment: source.adjustment || "raw", feed: source.feed || undefined, price_side:source.price_side || "bid", limit: 500 };
   const requests = [fetchHistory({ ...common, start: new Date(Math.max(cutoff - 60000, now - 7 * 86400_000)).toISOString(), timeframe: "1Min" })];
-  if (frequency !== "1min") requests.push(fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe: source.provider==="dukascopy"?frequency:frequency === "1D" ? "1Day" : "1Hour", limit: 2000 }));
+  if (frequency !== "1min") requests.push(fetchHistory({ ...common, start: new Date(cutoff).toISOString(), timeframe: frequencyTimeframe(frequency), limit: 2000 }));
   // A rate-limited minute endpoint must not hide available daily/hourly closes,
   // and an unavailable coarse endpoint must not hide genuine recent quotes.
   const results = await Promise.allSettled(requests);
@@ -127,7 +128,7 @@ export async function tickerOverlayRows(source: JsonRecord, frequency: string, c
     return history.rows.flatMap(row => {
       const start = Date.parse(row.timestamp), target = finite(row.close);
       if (!Number.isFinite(start) || target === null) return [];
-      const end = history.provider==="dukascopy" ? start+(history.barIntervalMinutes || (interval==="1D"?1440:interval==="1min"?1:60))*60000 : interval === "1D" ? start : start + (interval === "1min" ? 60000 : 3600000);
+      const end = history.provider!=="dukascopy" && interval === "1D" ? start : frequencyEnd(start,interval);
       // A daily bar's label is not its close time. Until its session has ended
       // conservatively show today's minute closes as provisional, not final.
       if (end <= cutoff || end > now || (history.provider!=="dukascopy" && interval === "1D" && sessionDate(start) >= sessionDate(now))) return [];
@@ -228,6 +229,7 @@ export function publicModelCapabilities(plan: PlanKey = "free"): JsonRecord {
     default_quantiles: modelRegistry.defaultQuantiles,
     max_requested_quantiles: modelRegistry.maxRequestedQuantiles,
     runtime_mode: mode,
+    frequencies: forecastFrequencyCapabilities(),
     models,
   };
 }
@@ -476,13 +478,12 @@ export function resolvePredictionEnd(body: JsonRecord, lastTimestamp: string, fr
   if (!body.prediction_end_at) return body;
   const value = text(body.prediction_end_at, 100), end = Date.parse(value), last = Date.parse(lastTimestamp);
   if (!/(Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(end) || end <= last) throw new Error("prediction_end_at_unsupported");
-  const match = frequency.match(/^(\d+)(min|h|D)$/i);
-  if (!match) throw new Error("prediction_end_frequency_unsupported");
-  const interval = Number(match[1]) * ({ min: 60000, h: 3600000, d: 86400000 }[match[2].toLowerCase()] || 0);
   // Daily NYSE ranges are calendar windows; the Python worker enumerates the
   // real exchange sessions within that window, including holiday exclusions.
   const dailyExchange = /^(NYSE|XNYS)$/.test(String(body.calendar || "NYSE")) && frequency === "1D";
-  const steps = dailyExchange ? Math.floor(end / 86400000) - Math.floor(last / 86400000) : Math.floor((end-last) / interval);
+  let steps;
+  try{steps = dailyExchange ? Math.floor(end / 86400000) - Math.floor(last / 86400000) : predictionPeriods(last,end,frequency);}
+  catch{throw new Error("prediction_end_frequency_unsupported");}
   return { ...body, prediction_length: steps, horizon_mode: dailyExchange ? "calendar_days" : "frequency_periods" };
 }
 
@@ -549,12 +550,12 @@ async function materializeSource(
       // Fetch a sufficient bucket, then take exactly the latest eligible N rows.
       limit: [500, 1000, 1500, 2000, 50000].find(size => size >= limit),
     });
-    const interval = history.barIntervalMinutes ? history.barIntervalMinutes*60000 : history.timeframe === "1Min" ? 60000 : history.timeframe === "1Hour" ? 3600000 : 0;
-    const completedRows = history.rows.map(row => ({...row,timestamp:interval ? new Date(Date.parse(row.timestamp)+interval).toISOString() : row.timestamp})).filter(row => Date.parse(row.timestamp) <= (cutoff ?? Date.now()));
+    const frequency=forecastFrequency(history.timeframe);
+    const completedRows = history.rows.map(row => ({...row,timestamp:frequency==="1D" && history.provider!=="dukascopy" ? row.timestamp : new Date(frequencyEnd(Date.parse(row.timestamp),frequency)).toISOString()})).filter(row => Date.parse(row.timestamp) <= (cutoff ?? Date.now()));
     return {
       rows: normalizeSeriesRows(completedRows, "timestamp", text(source.field || "close", 50) || "close", 2, 50000).slice(-limit),
       source: { type: "ticker", symbol:history.symbol || symbol, limit, field: text(source.field || "close", 50), provider: history.provider, source_requested: history.sourceRequested, fallback_used: history.fallbackUsed, adjustment: history.adjustment, session: history.session, feed: history.feed, exchange_timezone: history.exchangeTimezone || "UTC", start: source.start || null, end: source.end || null, ...(history.provider==="dukascopy"?{price_side:history.priceSide,provenance:history.metadata,warnings:history.warnings,timestamp_convention:"bucket_end",units:(history.metadata?.instrument as any)?.unit}: {}) },
-      frequency: ({ "1Day": "1D", "1Hour": "1h", "1Min": "1min", "5Min":"5min", "15Min":"15min", "30Min":"30min", "4Hour":"4h" } as Record<string, string>)[history.timeframe] || text(source.frequency || "1D", 30),
+      frequency,
       timezone: "UTC",
     };
   }
@@ -991,7 +992,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     normalizeEnsembleConfiguration(body, access.plan);
     const cutoff = absoluteHistoryCutoff(body);
     const materialized = await materializeSource(options, principal, workspaceId, body.source, cutoff);
-    const calendarBody = materialized.source.provider==="dukascopy" ? {...body,calendar:"NONE",horizon_mode:"frequency_periods"} : materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
+    const calendarBody = materialized.source.provider==="dukascopy" || materialized.source.type==="ticker" && materialized.frequency!=="1D" ? {...body,calendar:"NONE",horizon_mode:"frequency_periods"} : materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
     const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(calendarBody, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
     if (configuration.analysis_mode === "recent_signal_search") {
       const requiredQuantiles = configuration.search_signal_rule === "cutoff_above_p99" ? [.99] : [.1,.5,.9];

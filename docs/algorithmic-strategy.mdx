@@ -1,0 +1,100 @@
+---
+title: "Build a quantile strategy"
+description: "Create an asynchronous forecast, test executable research rules and retain the evidence needed to reproduce them."
+---
+
+# Build a quantile strategy
+
+Quantura separates forecasting from execution. A forecast supplies time-stamped quantiles; a strategy specifies a decision rule, position sizing, fill assumptions and risk limits. The API and MCP documentation do not authorize broker orders.
+
+## 1. Freeze a source and interval
+
+Use [Search](/docs/q-search) to select the exact provider instrument or market outcome. Use [Download](/docs/q-download) to inspect the observations and price units. Retain the source, quote side, adjustment, timezone, interval and cutoff with the exported snapshot.
+
+Examples: `EURUSD` from Dukascopy is a provider FX quote; a Dukascopy equity CFD is not an exchange share; a Kalshi game contract is a decimal probability. Distances such as one dollar, ten pips and ten index points cannot be interchanged.
+
+## 2. Request and await an ensemble
+
+```json
+{
+  "source":{"type":"ticker","provider":"dukascopy","symbol":"EURUSD","frequency":"1Hour","price_side":"bid","limit":500},
+  "prediction_length":23,
+  "horizon_mode":"frequency_periods",
+  "calendar":"NONE",
+  "quantiles":[0.01,0.25,0.5,0.75,0.9,0.99],
+  "transform":"log",
+  "failure_policy":"fail",
+  "models":{
+    "prophet":{"enabled":true,"weight":1},
+    "chronos":{"enabled":true,"weight":1}
+  }
+}
+```
+
+Submit this body to `POST /api/v1/ensemble-forecasts` with your authorized session/API key and an `Idempotency-Key`. Poll the returned status URL until completed or failed. Persist the configuration, timestamps, result hash and effective weights before evaluating a signal. Select additional available models from `GET /api/v1/forecast/models`; all requested tail quantiles must have genuine model support.
+
+For a daily 18:00–17:00 UTC session, 23 hourly steps start after the last actual input. If its cutoff is earlier than 18:00 because of missing observations, request enough periods to bridge that gap or use `prediction_end_at` for the next 17:00 UTC boundary. Start taking decisions only after inference actually completes; a backdated cutoff does not make the forecast available in the past.
+
+## 3. Run the supported public rule builder
+
+`POST /api/v1/backtests` provides a bounded **long-only, one-position** quantile-rule replay. This valid example enters below P01 and exits at P50:
+
+```json
+{
+  "source":{"type":"ticker","symbol":"SPY","provider":"auto","frequency":"1Hour"},
+  "forecast":{"prediction_length":6,"quantiles":[0.01,0.5],"models":{"prophet":{"enabled":true,"weight":1}},"failure_policy":"fail"},
+  "replay":{"context_rows":128,"evaluation_windows":2},
+  "strategy":{"schema_version":2,"type":"quantile_rules","entry_logic":"all","rules":[
+    {"id":"buy_below_p01","kind":"entry","condition":"at_or_below","quantile":0.01},
+    {"id":"take_p50","kind":"take_profit","target_mode":"quantile","quantile":0.5}
+  ]},
+  "execution":{"starting_capital":1000,"position_fraction":0.1,"commission_bps":10,"slippage_bps":5}
+}
+```
+
+This example illustrates the public schema. It does not reproduce the year-long averaged basket study: the public builder has no short ladders, basket-average targets, broker lots, swap engine or median-direction filter. Inspect `GET /api/v1/backtests/strategy-schema` for supported fields; unsupported rules are rejected.
+
+Signals use completed closes and fill at the next observed bar open. Read the completed result and export `GET /api/v1/backtests/{id}/strategy`. The export remains `live_eligible: false`. See [Backtesting](/docs/backtesting) for limits and fill assumptions.
+
+## 4. Reproduce the averaged-basket research
+
+The repository's dedicated research workers implement the separate SPY and FTMO-style studies. [FTMO hourly methodology](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/ftmo-dukas-hourly-study.md) documents the matrix workflow, frozen costs and source limitations.
+
+| Rule | Long ladder | Short ladder |
+| --- | --- | --- |
+| Initial signal | Observed price below an available P01 | Observed price above an available P99 |
+| Averaging direction | Lower only | Higher only |
+| Each research leg | 0.01 lot | 0.01 lot |
+| Spacing and basket target | Instrument-specific distance | Same instrument-specific distance |
+| Exit quote | Bid at least average ask entry + distance | Ask at most average bid entry − distance |
+| Carry | Until target; mark any open liability at the cutoff | Same |
+
+The tested starting distances are 10 pips for FX and 10 points for indices; gold/BTC studies use separate dollar distances. Long and short statistics remain separate. Maintain volume/margin checks and record every leg. A basket hitting a gross target can still lose after commissions and swaps.
+
+The triggered variant detects a primary P01/P99 breach from real minute observations, runs a second forecast using the latest 500 **completed H1** observations through the remaining 17:00 UTC horizon, and waits for the refreshed P01/P99. New ladder additions start only on a full hourly bar after measured inference. Carrying exits stay active after the forecast window; there are no additions without a valid refreshed forecast.
+
+```text
+on a genuinely completed observation:
+    reject missing, stale or not-yet-published forecast rows
+    calculate equity including spread, commissions, swaps and open legs
+    test the executable basket target before considering a new addition
+    if a primary P01/P99 breach occurs, request the causal second forecast
+    wait for its completion and the next full actionable hourly bar
+    add only on the required side of its quantile and beyond spacing/padding
+    retain one addition per observed hour and enforce margin/volume constraints
+    archive the decision, observed quote, forecast ID, costs and basket state
+```
+
+## 5. Compare losses and drawdown honestly
+
+Evaluate basket win rate, **entry-leg** win rate, losing-session rate, realized profit, open P&L, drawdown, maximum ladder, time in market, margin and cost sensitivity together. Carry-until-target can produce a high closed-basket win rate while leaving losing positions open.
+
+Freeze entry padding, median-direction filters and ladder caps on the earlier development period. Evaluate the chosen settings on a later period starting flat; keep a baseline and both possible hourly OHLC orders. Report failed/missing forecast days and current-cost assumptions.
+
+The research comparison uses a $100,000 account with a static $90,000 equity floor and a $5,000 daily-loss diagnostic referenced to midnight account balance in Europe/Prague. The account-limit definitions follow the [FTMO 2-Step trading objectives](https://ftmo.com/en/trading-objectives/). These are diagnostic checks, not a demonstrated challenge pass or live loss-prevention system. Broker specifications, minimum executable volumes and historical swaps must be verified for the actual account before any execution design.
+
+## 6. Use the HTTP API and MCP for their documented roles
+
+Forecast/backtest creation uses the authenticated HTTP API with `forecasts:write` or `backtests:run` and current workspace permission. Read endpoints recheck access. MCP documentation search and the read-only forecast-capabilities tool help discover supported frequencies/models; they do not start jobs or place orders.
+
+[Authentication](/docs/authentication) · [Forecast intervals](/docs/forecast-frequencies) · [MCP](/docs/mcp)

@@ -1,0 +1,63 @@
+---
+title: "Forecast intervals and calendar periods"
+description: "Use completed 5-minute, 15-minute, 30-minute, 4-hour, weekly and monthly observations consistently across the website and API."
+---
+
+# Forecast intervals
+
+Choose **Observed bars** in Forecast. The interval controls the historical series and each future forecast step; it does not merely change the chart display. The same selection is retained when reopening, refreshing or downloading a forecast.
+
+| Selection | Accepted market alias | Stored worker frequency |
+| --- | --- | --- |
+| Minute | `1Min`, `1min`, `1m` | `1min` |
+| 5 minutes | `5Min`, `5m`, `5min` | `5min` |
+| 15 minutes | `15Min`, `15m`, `15min` | `15min` |
+| 30 minutes | `30Min`, `30m`, `30min` | `30min` |
+| Hourly | `1Hour`, `1h` | `1h` |
+| 4 hours | `4Hour`, `4h` | `4h` |
+| Daily | `1Day`, `1D` | `1D` |
+| Weekly | `1Week`, `1w` | `1W-MON` |
+| Monthly | `1Month`, `1MS` | `1MS` |
+
+Use `1Month` for months and lowercase `1m` for minutes. Calendar weeks begin Monday at 00:00 UTC; months begin on the first at 00:00 UTC. A monthly forecast step is a real calendar month, including February and leap years, rather than 30 elapsed days.
+
+## Completed observations
+
+Stocks and Dukascopy weekly/monthly bars aggregate genuine daily observations. Stock daily bars are grouped by the provider’s exchange session date; Dukascopy daily bars use UTC dates. Four-hour stock bars aggregate genuine hourly observations. Prediction markets and perpetuals aggregate their available native observations. Empty buckets remain absent; open buckets are excluded. No observation is invented to meet a model's minimum history requirement.
+
+Download rows retain bucket-start timestamps where the provider uses them. The forecasting service converts those closes to their availability at the bucket end. Kalshi end-stamped candles remain end-stamped. Results identify the effective provider and input cutoff.
+
+Daily US-stock `trading_sessions` horizons use NYSE sessions and exclude exchange holidays. Other market intervals use `frequency_periods` and a UTC calendar grid: a predicted timestamp can fall during a market closure and is not evidence of an executable quote. Custom CSV offsets retain the existing dataset workflow.
+
+## Submit a forecast
+
+`prediction_length` counts **bars**. For example, 12 steps at 5 minutes forecast one hour; 3 steps at 4 hours forecast 12 hours; 3 monthly steps forecast three calendar boundaries. The website offers duration units and an exact calendar end time.
+
+```bash
+curl -X POST 'https://quantura.studio/api/v1/ensemble-forecasts' \
+  -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: eurusd-monthly-review-v1' \
+  -d '{
+    "source": {"type":"ticker","provider":"dukascopy","symbol":"EURUSD","frequency":"1Month","price_side":"bid","limit":120},
+    "prediction_length":3,
+    "horizon_mode":"frequency_periods",
+    "calendar":"NONE",
+    "quantiles":[0.01,0.25,0.5,0.75,0.9,0.99],
+    "transform":"log",
+    "models":{"prophet":{"enabled":true,"weight":1}},
+    "failure_policy":"fail"
+  }'
+```
+
+Inspect `GET /api/v1/forecast/models` before choosing models. It returns a `frequencies` array alongside model capabilities. Model access, minimum context, requested quantiles and horizon limits still apply. An hourly sports market may have enough history for an ensemble while having too few weekly/monthly observations; the service reports that failure instead of fabricating a history.
+
+For an exact end instant use `prediction_end_at`, with a timezone, and include `source.frequency`. The server counts only future period boundaries through that instant. An end before the next complete period cannot create a forecast step.
+
+## Download the same interval
+
+`POST /api/market-data/stocks/history` accepts the market aliases above in `timeframe`. Dukascopy additionally supports paged downloads and separate bid/ask closes. Follow every `next_cursor` with unchanged settings before exporting the combined snapshot. Weekly pages retain weeks crossing annual archive boundaries.
+
+Event exports use `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`, `1w` or `1month`. Perpetual history accepts the canonical forecast frequencies. Provider retention, request bounds, entitlements and rate limits remain in effect; selecting an interval does not guarantee 500 observations.
+
+[Forecast API](/docs/ensemble-api) · [Market downloads](/docs/q-download) · [MCP access](/docs/mcp)

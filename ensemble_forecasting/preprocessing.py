@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .schemas import PreparedSeries
+from .frequencies import normalize_frequency
 
 
 def prepare_series(
@@ -52,7 +53,7 @@ def prepare_series(
         transformed = np.log(values).astype(np.float32)
     else:
         transformed = values.copy()
-    inferred = _infer_frequency(data["timestamp"]) if frequency in {"", "infer"} else frequency
+    inferred = _infer_frequency(data["timestamp"]) if frequency in {"", "infer"} else normalize_frequency(frequency)
     timestamp_values = tuple(value.isoformat().replace("+00:00", "Z") for value in data["timestamp"])
     digest_payload = {
         "timestamps": timestamp_values,

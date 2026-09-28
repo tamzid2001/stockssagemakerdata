@@ -10,7 +10,7 @@ test("perpetual prices normalize contract values to the underlying spot scale",(
   assert.equal(normalized.underlying_units_per_contract,0.0001);assert.equal(normalized.unit,"USD per underlying unit");
   assert.equal(normalized.asset_class,"perpetual");assert.equal(normalized.resource_type,"perpetual_contract");
   for(const v of ["../../orders","BTC","KXBTC15M-OTHER"])assert.throws(()=>perpTicker(v));
-  assert.equal(perpFrequency("1Day"),"1D");assert.throws(()=>perpFrequency("5min"));
+  assert.equal(perpFrequency("1Day"),"1D");assert.equal(perpFrequency("5min"),"5min");assert.equal(perpFrequency("1Month"),"1MS");assert.throws(()=>perpFrequency("2min"));
 });
 test("trade closes are sorted, cutoff-bounded, duplicate checked, without null/previous/quote filling",()=>{
   const rows=normalizePerpCandles([bar(180),bar(60),bar(120,null),bar(240),bar(60)],60,180,.0001);
@@ -39,6 +39,28 @@ test("catalog screener displays timestamped reference spot and never fabricates 
   const service=new KalshiPerpsService(async url=>Response.json(String(url).endsWith("/markets")?{markets:[market]}:{ticker:market.ticker,candlesticks:[bar(1789919400)]}),()=>1789919400000);
   const dataset=await service.screener();assert.equal(dataset.items[0].actual_price,81000);assert.equal(dataset.items[0].quote_source,"kalshi_perps_reference_spot");assert.equal(dataset.items[0].p50,null);
   assert.match(String(dataset.items[0].forecast_view_url),/marketSource=kalshi_perps/);
+});
+test("five-minute perpetual bars use completed native closes and omit empty and open buckets",async()=>{
+  const start=Date.parse("2026-09-21T00:00:00Z"),end=start+12*60000;
+  const service=new KalshiPerpsService(async url=>{
+    if(String(url).endsWith("/markets"))return Response.json({markets:[market]});
+    assert.equal(new URL(String(url)).searchParams.get("period_interval"),"1");
+    return Response.json({ticker:market.ticker,candlesticks:[bar(start/1000+60,"8.1"),bar(start/1000+300,"8.2"),bar(start/1000+660,"8.3")]});
+  },()=>end);
+  const result=await service.history({symbol:market.ticker,frequency:"5m",start,end,limit:5});
+  assert.equal(result.frequency,"5min");assert.equal(result.rows.length,1);
+  assert.equal(result.rows[0].timestamp,new Date(start+300000).toISOString());assert.equal(result.rows[0].close,82000);
+});
+test("default monthly perpetual history stays bounded and reads UTC hour closes",async()=>{
+  const now=Date.parse("2026-09-21T00:00Z");let candleCalls=0;
+  const service=new KalshiPerpsService(async url=>{
+    if(String(url).endsWith("/markets"))return Response.json({markets:[market]});
+    const query=new URL(String(url)).searchParams;
+    assert.equal(query.get("period_interval"),"60");assert.ok(Number(query.get("start_ts"))>=0);candleCalls++;
+    return Response.json({ticker:market.ticker,candlesticks:[]});
+  },()=>now);
+  const result=await service.history({symbol:market.ticker,frequency:"1Month"});
+  assert.equal(result.frequency,"1MS");assert.equal(result.rows.length,0);assert.equal(result.metadata.base_frequency,"1h");assert.ok(candleCalls<=20);
 });
 test("perpetual history HTTP JSON/CSV and structured errors use same service",async()=>{
   const service=new KalshiPerpsService(async url=>Response.json(String(url).endsWith("/markets")?{markets:[market]}:{ticker:market.ticker,candlesticks:[bar(1789919400)]}),()=>1789919400000);

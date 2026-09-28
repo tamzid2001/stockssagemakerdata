@@ -38,3 +38,7 @@ The existing [ensemble job lifecycle](/docs/ensemble-api), scopes, current works
 ## Provider access and rights
 
 The adapter follows [Kalshi's perpetuals OpenAPI](https://docs.kalshi.com/perps_openapi.yaml). The public market-data mirror is used; no Kalshi account key is sent for market discovery or history. Access may be rate-limited or unavailable. Redistribution and commercial data licensing require review of Kalshi's terms; API access is not proof of redistribution rights.
+
+## Additional intervals
+
+History and forecasting support 5/15/30-minute, 4-hour, weekly and calendar-month periods, aggregated from genuine native closes. Empty and unfinished buckets stay absent. Weekly/monthly history uses Monday/first-of-month UTC boundaries; native daily closes retain their provider boundary. Bounded native history may supply fewer than the requested number of aggregated bars. See [Forecast intervals](/docs/forecast-frequencies).

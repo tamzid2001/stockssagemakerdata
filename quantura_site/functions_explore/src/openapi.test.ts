@@ -57,6 +57,7 @@ test("Mintlify MCP exposes only the approved read-only allowlist", () => {
   });
   assert.deepEqual(tools.sort((a, b) => a.name.localeCompare(b.name)), [
     { method: "get", name: "quantura_browse_event_markets" },
+    { method: "get", name: "quantura_get_forecast_capabilities" },
     { method: "get", name: "quantura_get_my_access" },
     { method: "get", name: "quantura_get_search_capabilities" },
     { method: "get", name: "quantura_list_workspaces" },
