@@ -53,14 +53,18 @@ test("Dukascopy forecast saves quote provenance, UTC close availability and prot
   process.env.QUANTURA_ENSEMBLE_WORKER_MODE="manual";
   process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM="true";
   dukascopy.history=async(input:any)=>({provider:"dukascopy",sourceRequested:"dukascopy",fallbackUsed:false,symbol:"XAU-USD",timeframe:input.timeframe,priceSide:"ask",feed:"ask",adjustment:"raw",session:"provider",exchangeTimezone:"UTC",barIntervalMinutes:input.timeframe==="1Day"?1440:60,
-    metadata:{price_scale:3,bucket_timezone:"UTC",instrument:{unit:"USD quote price"}},warnings:[],rows:Array.from({length:48},(_,i)=>({timestamp:new Date(Date.UTC(2026,7,1)+(i*(input.timeframe==="1Day"?86400000:3600000))).toISOString(),close:2600+i}))});
+    metadata:{price_scale:3,bucket_timezone:"UTC",instrument:{unit:"USD quote price"}},warnings:[],rows:Array.from({length:48},(_,i)=>({timestamp:new Date((input.start?Math.floor((Date.now()-60*86400000)/86400000)*86400000:Date.UTC(2026,0,1))+(i*(input.timeframe==="1Day"?86400000:3600000))).toISOString(),close:2600+i}))});
   const auth:any={verifyIdToken:async(token:string)=>({uid:token,firebase:{sign_in_provider:"anonymous"}}),getUser:async()=>({disabled:false})};
   const app=express();app.use(express.json());registerEnsembleForecastRoutes(app,{db,auth,publicOrigin:"https://quantura.studio"});const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));const base=`http://127.0.0.1:${(server.address() as any).port}`;
-  try{for(const frequency of ["1Hour","1Day"]){const response=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}_${frequency}`,"Content-Type":"application/json"},body:JSON.stringify({source:{type:"ticker",provider:"dukascopy",symbol:"XAUUSD",price_side:"ask",frequency,limit:48},prediction_length:2,horizon_mode:"trading_sessions",calendar:"NYSE",quantiles:[.1,.5,.9],models:{prophet:{enabled:true,weight:1}}})});
+  try{for(const frequency of ["1Hour","1Day"]){const response=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}_${frequency}`,"Content-Type":"application/json"},body:JSON.stringify({source:{type:"ticker",provider:"dukascopy",symbol:"XAUUSD",price_side:"ask",frequency,limit:48},history_lag_minutes:180*1440,prediction_length:2,horizon_mode:"trading_sessions",calendar:"NYSE",quantiles:[.1,.5,.9],models:{prophet:{enabled:true,weight:1}}})});
     assert.equal(response.status,202,await response.clone().text());const id=(await response.json()).data.forecast_id,job=(await db.collection("ensemble_forecast_jobs").doc(id).get()).data()!;
     assert.equal(job.source.provider,"dukascopy");assert.equal(job.source.price_side,"ask");assert.equal(job.source.provenance.price_scale,3);assert.equal(job.request.calendar,"NONE");assert.equal(job.request.horizon_mode,"frequency_periods");
     const rows=(await db.collection("ensemble_forecast_jobs").doc(id).collection("input_chunks").doc("0000").get()).data()!.rows;
-    assert.equal(rows.length,48);assert.equal(rows[0].timestamp,frequency==="1Day"?"2026-08-02T00:00:00.000Z":"2026-08-01T01:00:00.000Z");
+    assert.equal(rows.length,48);assert.equal(rows[0].timestamp,frequency==="1Day"?"2026-01-02T00:00:00.000Z":"2026-01-01T01:00:00.000Z");
+    const overlay=await fetch(`${base}/v1/ensemble-forecasts/${id}/observations`,{headers:{Authorization:`Bearer ${uid}_${frequency}`}});
+    assert.equal(overlay.status,200);const observed=(await overlay.json()).data;
+    assert.equal(observed.availability,"available","retained stock overlays are not expired by a 90-day market-window limit");
+    assert.ok(observed.rows.length>0);assert.ok(observed.rows.every((row:any)=>Date.parse(row.timestamp)>Date.parse(observed.input_cutoff)));
     assert.equal((await fetch(`${base}/v1/ensemble-forecasts/${id}/observations`,{headers:{Authorization:`Bearer other_${uid}`}})).status,403);
   }}finally{dukascopy.history=original;if(oldClaim===undefined)delete process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM;else process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM=oldClaim;if(oldMode===undefined)delete process.env.QUANTURA_ENSEMBLE_WORKER_MODE;else process.env.QUANTURA_ENSEMBLE_WORKER_MODE=oldMode;await new Promise<void>(r=>server.close(()=>r()));await firebaseApp.delete();}
 });

@@ -34,6 +34,8 @@ Select latest observations or a calendar/relative cutoff. For 120/180 days use 1
 
 [Historical forecast guide](https://quantura.mintlify.app/docs/historical-forecasts).
 
+Stock-price overlays can use retained history beyond 90 days. Recent minute quotes remain bounded to seven days; prediction-market/perpetual live overlays have a separate 90-day availability window. Saved predictions are never revised by overlay retrieval.
+
 ## API workflow
 
 1. Resolve provider identity and freeze source metadata/cutoff.

@@ -45,6 +45,8 @@ For reproducible research, prefer an explicit `history_cutoff_at`, such as `2026
 
 The saved source includes the requested UTC cutoff, effective provider and a historical-replay label. The input series records its actual final observation. Forecast timestamps begin after that observation, which can be earlier than the requested cutoff when the source has gaps.
 
+Stock replays can overlay retained observations beyond 90 days, including daily history after a 120/180-day cutoff. Retrieval remains bounded; recent minute quotes use a seven-day window. Prediction-market and perpetual live overlays retain their separate 90-day window, and return an explicit availability state when it expires. Forecast creation and the overlay are separate operations.
+
 ## Request metadata and errors
 
 Optional website `analytics_context` is sanitized separately from model configuration and excluded from cache identity. Missing, invalid or unavailable optional telemetry cannot block a forecast. API clients can omit it entirely.

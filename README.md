@@ -9,7 +9,7 @@ Quantura connects stocks, FX, metals, indices, perpetual contracts and predictio
 ## What's new in v2.1.0
 
 - **Nine forecast intervals:** 1, 5, 15 and 30 minutes; 1 and 4 hours; daily, weekly and monthly. Weekly/monthly observations use real calendar boundaries, with matching website, API, worker and download support.
-- **Latest and historical forecasts:** fix optional telemetry blocking request validation; support deep 120/180-day cutoffs when genuine provider history exists.
+- **Latest and historical forecasts:** fix optional telemetry blocking request validation; support deep 120/180-day cutoffs and retained stock-price overlays when genuine provider history exists.
 - **More data sources:** Dukascopy's full published instrument catalog, bid/ask downloads and efficient native candle archives; verified stock-provider fallback and rate-limit handling.
 - **Today's games in Screener:** Kalshi/Polymarket US provider and outcome controls, actual market links, historical overlays and saved forecast navigation. Pregame runs use four or five available real models and six quantiles.
 - **Reproducible backtesting:** SPY and mega-cap studies, separate long/short FTMO-style ladders, costs/open-liability reporting and causal triggered reforecasts.
