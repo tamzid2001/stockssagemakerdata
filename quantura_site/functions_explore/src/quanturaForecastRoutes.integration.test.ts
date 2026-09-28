@@ -211,6 +211,8 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
       assert.equal(replay.status,202,await replay.clone().text());
       const job=(await replay.json()).data;
       assert.equal(job.source.analysis_mode,"historical_replay");assert.equal(job.source.history_lag_minutes,days*1440);
+      // Close each replay fixture so it does not consume another job's quota assertion.
+      assert.equal((await call(`/internal/ensemble-forecasts/${job.forecast_id}/fail`,workerToken,{code:"REPLAY_TEST_FINISHED",retryable:false})).status,200);
     }
     assert.equal((await ref.get()).data()?.evaluation_policy,null,"new requests never opt users into a holdout");
     assert.equal((await ref.collection("input_chunks").doc("0000").get()).data()?.rows.length, 40);
