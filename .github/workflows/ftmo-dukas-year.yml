@@ -3,6 +3,19 @@ run-name: FTMO hourly long/short · ${{ inputs.start_date }}–${{ inputs.end_da
 on:
   workflow_dispatch:
     inputs:
+      study_mode:
+        description: Original daily forecast or minute-triggered second forecast
+        required: true
+        type: choice
+        options:
+          - original
+          - trigger_reforecast
+        default: original
+      parent_run_id:
+        description: Completed original yearly run for the triggered experiment
+        required: true
+        type: string
+        default: '36343000036'
       start_date:
         description: First UTC 18:00 origin date, inclusive
         required: true
@@ -20,11 +33,21 @@ on:
         default: 'EURUSD.sim,USDJPY.sim,GBPUSD.sim,GBPJPY.sim,USDCAD.sim,US500.sim,US30.sim,US100.sim,XAUUSD.sim,BTCUSD.sim'
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: ftmo-dukas-${{ inputs.start_date }}-${{ inputs.end_date }}
   cancel-in-progress: false
 jobs:
+  trigger-study:
+    if: ${{ inputs.study_mode == 'trigger_reforecast' }}
+    uses: ./.github/workflows/ftmo-trigger-reforecast.yml
+    with:
+      parent_run_id: ${{ inputs.parent_run_id }}
+      symbols: ${{ inputs.symbols }}
+    secrets:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
   plan:
+    if: ${{ inputs.study_mode != 'trigger_reforecast' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

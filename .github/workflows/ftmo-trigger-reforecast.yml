@@ -1,0 +1,279 @@
+name: FTMO triggered second-forecast research
+on:
+  workflow_dispatch:
+    inputs:
+      parent_run_id:
+        description: Completed yearly run containing frozen quotes and primary forecasts
+        type: string
+        required: true
+        default: '36343000036'
+      symbols:
+        type: string
+        required: true
+        default: 'EURUSD.sim,USDJPY.sim,GBPUSD.sim,GBPJPY.sim,USDCAD.sim,US500.sim,US30.sim,US100.sim'
+  workflow_call:
+    inputs:
+      parent_run_id:
+        type: string
+        required: true
+      symbols:
+        type: string
+        required: true
+    secrets:
+      HF_TOKEN:
+        required: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ftmo-trigger-${{ inputs.parent_run_id }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      assets: ${{ steps.plan.outputs.assets }}
+      symbols: ${{ steps.plan.outputs.symbols }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pytest==8.4.2
+      - name: Verify causal triggers, remaining horizon and source coverage
+        run: python -m pytest -q market_research/tests/test_ftmo_trigger_reforecast.py market_research/tests/test_ftmo_dukas_study.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-dukas-plan
+          run-id: ${{ inputs.parent_run_id }}
+          github-token: ${{ github.token }}
+          path: plan/
+      - name: Freeze the new strategy over the identical primary study
+        id: plan
+        env:
+          REQUESTED_SYMBOLS: ${{ inputs.symbols }}
+          PARENT_RUN_ID: ${{ inputs.parent_run_id }}
+        run: |
+          python - <<'PY'
+          import json,os,re,shutil
+          from pathlib import Path
+          from market_research.ftmo_trigger_reforecast import SYMBOLS
+          symbols=os.environ['REQUESTED_SYMBOLS'].split(',')
+          if not symbols or len(set(symbols))!=len(symbols) or any(s not in SYMBOLS for s in symbols):
+              raise ValueError('EIGHT_APPROVED_ASSETS_ONLY')
+          if not re.fullmatch(r'[0-9]+',os.environ['PARENT_RUN_ID']):raise ValueError('NUMERIC_PARENT_RUN_REQUIRED')
+          path=Path('plan/study-plan.json');study=json.loads(path.read_text())
+          if any(s not in study['symbols'] for s in symbols):raise ValueError('PARENT_SYMBOL_NOT_PRESENT')
+          shutil.copy2(path,path.with_name('primary-study-plan.json'))
+          study['parent_run_id']=os.environ['PARENT_RUN_ID'];study['requested_symbols']=symbols
+          study['triggered_study']={'schema_version':'ftmo-triggered-second-v1','lot_per_entry':0.01,
+            'trigger':'first minute-confirmed executable-price P01/P99 breach per side/session',
+            'refresh':'five real models, latest 500 completed H1 closes, until next-day 17:00 UTC',
+            'entry':'first full H1 bar after measured inference; refreshed P01/P99',
+            'averaging':'longs lower; shorts higher; at most one addition per observed H1 bar; uncapped',
+            'spacing_and_target':'10 FX pips / 10 index points','carry_until_target':True,
+            'selection':'fixed experiment; no parameter optimization','orders_sent':0}
+          path.write_text(json.dumps(study,indent=2)+'\n')
+          with open(os.environ['GITHUB_OUTPUT'],'a')as f:
+              f.write('assets='+json.dumps({'include':[{'symbol':s}for s in symbols]},separators=(',',':'))+'\n')
+              f.write('symbols='+','.join(symbols)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ftmo-trigger-plan
+          path: plan/
+          retention-days: 14
+  prepare:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.assets) }}
+    env:
+      SYMBOL: ${{ matrix.symbol }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-trigger-plan
+          path: plan/
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-dukas-source-${{ matrix.symbol }}
+          run-id: ${{ inputs.parent_run_id }}
+          github-token: ${{ github.token }}
+          path: sources/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ftmo-dukas-forecasts-${{ matrix.symbol }}-*
+          merge-multiple: true
+          run-id: ${{ inputs.parent_run_id }}
+          github-token: ${{ github.token }}
+          path: primary/
+      - name: Confirm crossings from real minute data and audit frozen H1 candles
+        run: >-
+          python -m market_research.ftmo_trigger_reforecast prepare
+          --symbol "$SYMBOL" --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json
+          --source "sources/$SYMBOL" --primary primary --output "triggers/$SYMBOL"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ftmo-trigger-input-${{ matrix.symbol }}
+          path: |
+            sources/
+            primary/
+            triggers/
+          retention-days: 14
+          if-no-files-found: error
+  forecast:
+    needs: [plan, prepare]
+    runs-on: ${{ fromJSON(vars.ALPACA_OPTIONS_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.assets) }}
+    env:
+      SYMBOL: ${{ matrix.symbol }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      CUDA_VISIBLE_DEVICES: ''
+      GRANITE_DEVICE: cpu
+      OMP_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: market_research/requirements.lock
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-trigger-input-${{ matrix.symbol }}
+          path: input/
+      - name: Install the identical pinned five-model inference environment
+        run: python -m pip install --disable-pip-version-check --require-hashes -r market_research/requirements.lock
+      - name: Generate actual second forecasts with strictly causal histories
+        env:
+          HF_HOME: ${{ runner.temp }}/ftmo-trigger-model-cache
+        run: >-
+          python -m market_research.ftmo_trigger_reforecast forecast --symbol "$SYMBOL"
+          --source "input/sources/$SYMBOL" --triggers "input/triggers/$SYMBOL/triggers.json"
+          --output "refreshed/$SYMBOL"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ftmo-trigger-forecasts-${{ matrix.symbol }}
+          path: refreshed/
+          retention-days: 14
+          if-no-files-found: error
+  replay:
+    if: ${{ always() && needs.plan.result == 'success' && needs.prepare.result == 'success' }}
+    needs: [plan, prepare, forecast]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.assets) }}
+    env:
+      SYMBOL: ${{ matrix.symbol }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-trigger-plan
+          path: plan/
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-trigger-input-${{ matrix.symbol }}
+          path: input/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ftmo-dukas-source-*
+          merge-multiple: true
+          run-id: ${{ inputs.parent_run_id }}
+          github-token: ${{ github.token }}
+          path: input/sources/
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-trigger-forecasts-${{ matrix.symbol }}
+          path: refreshed/
+      - name: Replay both sides, costs and hourly paths with an unchanged primary control
+        run: >-
+          python -m market_research.ftmo_trigger_reforecast replay --symbol "$SYMBOL"
+          --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --sources input/sources
+          --primary input/primary --triggers input/triggers --forecasts refreshed
+          --output "replays/$SYMBOL"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ftmo-trigger-replay-${{ matrix.symbol }}
+          path: replays/
+          retention-days: 14
+          if-no-files-found: ignore
+  report:
+    if: ${{ always() && needs.plan.result == 'success' }}
+    needs: [plan, prepare, forecast, replay]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-trigger-plan
+          path: plan/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ftmo-trigger-replay-*
+          merge-multiple: true
+          path: replays/
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-dukas-year-report
+          run-id: ${{ inputs.parent_run_id }}
+          github-token: ${{ github.token }}
+          path: baseline/
+      - name: Report actual results; reject missing forecasts and changed control cash flows
+        env:
+          SYMBOLS: ${{ needs.plan.outputs.symbols }}
+        run: >-
+          python -m market_research.ftmo_trigger_reforecast aggregate --symbols "$SYMBOLS"
+          --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --reports replays
+          --baseline baseline/results.json.gz --output report
+      - name: Show the report in the run summary
+        if: always()
+        run: |
+          if [[ -f report/report.md ]]; then cat report/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ftmo-trigger-year-report
+          path: report/
+          retention-days: 30
+          if-no-files-found: ignore
