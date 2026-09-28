@@ -7,6 +7,20 @@ import urllib.error
 import time
 import copy
 import re
+import math
+from email.utils import parsedate_to_datetime
+
+
+def retry_after_seconds(headers):
+    value = headers.get("Retry-After", "") if headers else ""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        try:
+            seconds = parsedate_to_datetime(value).timestamp() - time.time()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return max(0., seconds) if math.isfinite(seconds) else None
 
 
 class QuanturaProvider:
@@ -53,8 +67,13 @@ class QuanturaProvider:
                             "metadata": {"availability": "missing_history"},
                         }
                 if error.code in {429, 502, 503, 504} and attempt < 3:
-                    time.sleep(2**attempt)
-                    continue
+                    delay = max(10 * 2**attempt if error.code == 429 else 2**attempt,
+                                retry_after_seconds(error.headers) or 0.)
+                    # Longer server cooldowns fail explicitly instead of retrying
+                    # earlier than allowed or consuming the entire pregame window.
+                    if delay <= 120:
+                        time.sleep(delay)
+                        continue
                 # Retain only the adapter's bounded error code, never a URL or response body.
                 try:
                     code = json.load(error).get("error", "")
