@@ -63,7 +63,7 @@ jobs:
 
       - name: Install mock-smoke dependencies
         if: ${{ inputs.smoke_mode != 'real' && inputs.smoke_mode != 'toto' }}
-        run: python -m pip install --disable-pip-version-check numpy pandas pandas-market-calendars httpx pytest
+        run: python -m pip install --disable-pip-version-check numpy pandas pandas-market-calendars httpx pytest pyyaml==6.0.3
 
       - name: Install locked production inference environment
         if: ${{ inputs.smoke_mode == 'real' || inputs.smoke_mode == 'toto' }}
