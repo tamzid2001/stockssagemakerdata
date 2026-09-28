@@ -81,7 +81,7 @@ Hugging Face repository access and commercial production rights are separate con
 
 ## Select live games or paste a market link
 
-On Q Forecast, choose **Live moneylines** to browse full-game outcomes, or paste an HTTPS `polymarket.us` or `kalshi.com` event/market link in market search. Select the intended team/side and use the single **Run forecast** action. Kalshi YES and NO are separate contracts: NO is not automatically another team's moneyline. Soccer draw outcomes remain explicit.
+On Forecast, select a game in Screener or paste an HTTPS `polymarket.us` or `kalshi.com` event/market link in market search. Select the intended team/side and use the single **Run forecast** action. Kalshi YES and NO are separate contracts: NO is not automatically another team's moneyline. Soccer draw outcomes remain explicit.
 
 In **Sports / Prediction Markets**, use **Download from a market link**, choose the side(s), date range and interval, preview, then download CSV or JSON. Resolved markets can be downloaded or analyzed in explicitly labeled historical replay mode, not presented as new prospective forecasts.
 
@@ -173,3 +173,5 @@ The configured platform administrator can use the approved model set in their ow
 ## Interval and strategy guides
 
 Forecast supports 1, 5, 15 and 30 minutes; 1 and 4 hours; daily; Monday UTC weekly; and calendar-month observations. `prediction_length` counts bars. Weekly/monthly inputs use only completed periods, and refresh retains the exact interval. See [Forecast intervals](/docs/forecast-frequencies) for aliases, end-date handling and provider limits, and [Build a quantile strategy](/docs/algorithmic-strategy) for valid backtest requests and the separate averaged-ladder methodology.
+
+[Historical forecasts](/docs/historical-forecasts) covers 120/180-day cutoffs, exact UTC dates, metadata validation and retained-history errors. Latest and historical requests use the same API; optional analytics metadata cannot block model configuration.

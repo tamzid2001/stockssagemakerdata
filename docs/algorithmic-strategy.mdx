@@ -85,6 +85,21 @@ on a genuinely completed observation:
     archive the decision, observed quote, forecast ID, costs and basket state
 ```
 
+### Start the repository research workflow
+
+The original yearly matrix can be run from GitHub Actions or the authenticated GitHub CLI. This example limits the matrix to EURUSD and pins the release code:
+
+```bash
+gh workflow run ftmo-dukas-year.yml \
+  --repo tamzid2001/stockssagemakerdata --ref v2.1.0 \
+  -f study_mode=original -f symbols=EURUSD.sim \
+  -f start_date=2025-09-26 -f end_date=2026-09-25
+gh run list --repo tamzid2001/stockssagemakerdata \
+  --workflow ftmo-dukas-year.yml --limit 5
+```
+
+This runs real research models and downloads; the repository operator must provision approved checkpoint access/licensing and artifact secrets. Source, forecast, replay and report jobs form a matrix. Download the completed report artifacts before retention expires. The triggered workflow requires a completed parent yearly run with its frozen plan/source/forecast artifacts still available. Inspect that run's exact artifacts rather than relying on an expired default run ID.
+
 ## 5. Compare losses and drawdown honestly
 
 Evaluate basket win rate, **entry-leg** win rate, losing-session rate, realized profit, open P&L, drawdown, maximum ladder, time in market, margin and cost sensitivity together. Carry-until-target can produce a high closed-basket win rate while leaving losing positions open.

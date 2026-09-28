@@ -9,6 +9,7 @@ Quantura connects stocks, FX, metals, indices, perpetual contracts and predictio
 ## What's new in v2.1.0
 
 - **Nine forecast intervals:** 1, 5, 15 and 30 minutes; 1 and 4 hours; daily, weekly and monthly. Weekly/monthly observations use real calendar boundaries, with matching website, API, worker and download support.
+- **Latest and historical forecasts:** fix optional telemetry blocking request validation; support deep 120/180-day cutoffs when genuine provider history exists.
 - **More data sources:** Dukascopy's full published instrument catalog, bid/ask downloads and efficient native candle archives; verified stock-provider fallback and rate-limit handling.
 - **Today's games in Screener:** Kalshi/Polymarket US provider and outcome controls, actual market links, historical overlays and saved forecast navigation. Pregame runs use four or five available real models and six quantiles.
 - **Reproducible backtesting:** SPY and mega-cap studies, separate long/short FTMO-style ladders, costs/open-liability reporting and causal triggered reforecasts.
@@ -43,7 +44,7 @@ Market aliases include `5m`, `15m`, `30m`, `4h`, `1w` and `1Month`. A forecast l
 
 The ensemble registry includes Prophet, Toto, IBM Granite, Chronos and TimesFM. Availability depends on genuine context length, requested quantiles, checkpoint access and licensing. Unsupported tails do not receive invented model values. Inspect `GET /api/v1/forecast/models` for current capabilities and frequencies.
 
-[Interval guide](docs/forecast-frequencies.mdx) · [Forecast API](docs/ensemble-api.mdx) · [Model methodology](docs/ensemble-forecasting.md)
+[Historical cutoffs](docs/historical-forecasts.mdx) · [Interval guide](docs/forecast-frequencies.mdx) · [Forecast API](docs/ensemble-api.mdx) · [Model methodology](docs/ensemble-forecasting.md)
 
 ### Data sources
 
@@ -91,14 +92,46 @@ The public site, SSR and request APIs run on Vercel. Firebase provides identity 
 
 ```mermaid
 flowchart LR
-    User[Website or API client] --> Vercel[Web, SSR and API]
-    Vercel --> Firebase[Authentication and persistence]
-    Vercel --> Sources[Market data providers]
-    Vercel --> Jobs[GitHub Actions workers]
-    Jobs --> Models[Time-series models]
-    Jobs --> Results[Private results and research artifacts]
-    Results --> Vercel
+    Clients[Website/PWA and scoped API clients] --> API[Vercel web, SSR and request API]
+    API --> Identity[Firebase Authentication]
+    API <--> State[Firestore and private storage]
+    API --> Data[Provider history and verified identities]
+    API --> Workers[GitHub Actions forecast/research workers]
+    Workers --> Models[Approved time-series models]
+    Workers -->|Claim, progress and result callbacks| API
+    Workers -->|Research source downloads| Data
+    Workers --> Artifacts[Encrypted research artifacts with retention]
+    API --> Legacy[AWS SageMaker and S3 workflows]
+    MCP[MCP clients] --> Docs[Mintlify docs and read-only allowlist]
+    Docs -->|API tools when enabled by the host| API
 ```
+
+### Forecast request lifecycle
+
+```mermaid
+sequenceDiagram
+    participant Client as Website / API client
+    participant API as Quantura API
+    participant Data as Market provider
+    participant Store as Private job storage
+    participant Worker as Forecast worker
+    Client->>API: Source, interval, cutoff, horizon and models
+    API->>API: Authorize; separate optional telemetry
+    API->>Data: Fetch genuine observations through cutoff
+    Data-->>API: Actual bars and provenance
+    API->>Store: Freeze eligible inputs and configuration
+    API->>Worker: Dispatch job ID
+    API-->>Client: Queued job ID and status URL
+    Worker->>API: Claim authorized job and frozen inputs
+    Worker->>Worker: Run pinned models and combine supported quantiles
+    Worker->>API: Validated result, timestamps and hash
+    API->>Store: Persist private result and completion state
+    Client->>API: Poll job / export result
+    API-->>Client: Authorized forecast and separate observation overlay
+```
+
+Historical requests follow this same lifecycle. A 120/180-day cutoff selects earlier data before the N-bar limit; inference and publication still occur now. Optional consented telemetry stays outside the model configuration and forecast cache identity.
+
 
 | Path | Purpose |
 | --- | --- |

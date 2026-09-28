@@ -38,3 +38,5 @@ compatible. No trading, mutation or expensive forecast job is enabled as an MCP 
 ## Strategy and interval guides
 
 Read [Forecast intervals](/docs/forecast-frequencies) and [Build a quantile strategy](/docs/algorithmic-strategy) through documentation search. The capability tool reads `GET /api/v1/forecast/models`; weekly/monthly and intraday aliases match the live OpenAPI schema. Forecast and backtest creation still use the authorized HTTP API.
+
+[Historical cutoff guide](/docs/historical-forecasts) explains latest inputs, 120/180-day replays and provider retention. The HTTP forecast request separates optional website analytics metadata from inference configuration; this does not change MCP authorization or enable job mutations.

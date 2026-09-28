@@ -236,6 +236,12 @@ test('primary form builds prediction-market minute and single-model requests wit
   w.document.getElementById('ensemble-history-lag').value='2';
   w.document.getElementById('ensemble-history-lag-unit').value='days';
   assert.equal(w.build().history_lag_minutes,2880);
+  for(const days of [120,180]) {
+    w.document.getElementById('ensemble-history-lag').value=String(days);
+    assert.equal(w.build().history_lag_minutes,days*1440);
+  }
+  w.document.getElementById('ensemble-cutoff-mode').value='latest';
+  assert.equal(w.build().history_lag_minutes,0);
   w.document.getElementById('ensemble-ticker-frequency').value='1Hour';
   assert.equal(w.build().frequency,'1h');assert.equal(w.build().horizon_mode,'frequency_periods');
   assert.equal(w.build().source.session,'extended');

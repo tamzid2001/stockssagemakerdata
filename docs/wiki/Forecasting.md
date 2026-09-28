@@ -28,6 +28,12 @@ Prophet, Toto, Granite, Chronos and TimesFM participate according to context, ho
 
 Historical overlays distinguish the original input series from subsequently observed prices. A first prediction is compared only with its matching completed interval; shorter or later observations cannot replace it.
 
+## Latest and deep historical cutoffs
+
+Select latest observations or a calendar/relative cutoff. For 120/180 days use 172800/259200 top-level `history_lag_minutes`; there is no fixed 90-day cutoff-age cap. Available observations still depend on provider retention. The cutoff is applied before the N-bar limit, and replays are generated now. Optional consented website telemetry is separated from model configuration so it cannot block latest or historical requests.
+
+[Historical forecast guide](https://quantura.mintlify.app/docs/historical-forecasts).
+
 ## API workflow
 
 1. Resolve provider identity and freeze source metadata/cutoff.

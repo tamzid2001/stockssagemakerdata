@@ -230,6 +230,7 @@ export function publicModelCapabilities(plan: PlanKey = "free"): JsonRecord {
     max_requested_quantiles: modelRegistry.maxRequestedQuantiles,
     runtime_mode: mode,
     frequencies: forecastFrequencyCapabilities(),
+    historical_cutoffs: {latest_available:true,relative_unit:"minutes",absolute_timezone_required:true,cutoff_age_limit:"available_timeline_and_provider_retention",selection_order:"cutoff_before_latest_N",replay_generated_now:true},
     models,
   };
 }
@@ -274,8 +275,17 @@ type NormalizedConfiguration = {
   effective_central_weights: Partial<Record<ModelId, number>>;
 };
 
+const CONFIGURATION_FIELDS = ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule"] as const;
+
+/** Request telemetry is optional metadata, never a model field or cache input. */
+export function ensembleRequestConfiguration(raw: JsonRecord): JsonRecord {
+  assertOnlyKeys(raw,[...CONFIGURATION_FIELDS,"analytics_context"],"request");
+  const {analytics_context:_analytics,...configuration}=raw;
+  return configuration;
+}
+
 export function normalizeEnsembleConfiguration(body: JsonRecord, plan: PlanKey): NormalizedConfiguration {
-  assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule"], "configuration");
+  assertOnlyKeys(body, CONFIGURATION_FIELDS, "configuration");
   const analysisModeRaw = text(body.analysis_mode || "forecast", 40);
   if (analysisModeRaw !== "forecast") throw new Error("analysis_mode_unsupported");
   if (body.search_max_cutoffs !== undefined || body.search_signal_rule !== undefined) throw new Error("signal_search_retired");
@@ -983,8 +993,8 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
   }));
 
   router.post("/v1/ensemble-forecasts", wrap(options, async (req, res, principal, requestId) => {
-    const body = plain(req.body);
-    assertOnlyKeys(body, ["workspace_id", "source", "prediction_length", "prediction_end_at", "history_cutoff_at", "horizon_mode", "quantiles", "transform", "context_length", "failure_policy", "model_failure_policy", "frequency", "calendar", "models", "toto_variant", "history_lag_minutes", "analysis_mode", "search_max_cutoffs", "search_signal_rule", "analytics_context"], "request");
+    const rawBody = plain(req.body);
+    const body = ensembleRequestConfiguration(rawBody);
     const workspaceId = text(body.workspace_id || principal.userId, 220);
     const access = await resolveWorkspaceAccess(options.db, principal, workspaceId);
     authorizeWorkspaceAction(principal, access, "forecasts:write", "write");
@@ -1054,7 +1064,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       schema_version: WORKER_SCHEMA_VERSION,
       forecast_id: ref.id,
       user_id: principal.userId,
-      analytics_context: analyticsContext(body.analytics_context),
+      analytics_context: analyticsContext(rawBody.analytics_context),
       guest_session: Boolean(principal.guest),
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
