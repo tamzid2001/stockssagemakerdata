@@ -13,11 +13,11 @@ const encoded=(prices:number[],time=Date.parse("2025-01-02T00:00Z"),step=1,scale
 });
 const gold=snapshot.instruments.find(x=>x.code==="XAU-USD")!;
 const meta={...gold,histories:[{period:"MINUTE",from:Date.parse("2003-05-05")},{period:"HOUR",from:Date.parse("2003-05-05")}],tradeSchedule:[{sessions:{MONDAY:[{start:"18:00:00",end:"17:00:00"}]}}]};
-function fixture(history=(path:string)=>encoded([2623.655,2625.185,2632.735],Date.parse("2025-01-02"),60)) {
+function fixture(history=(path:string)=>encoded([2623.655,2625.185,2632.735],Date.parse("2025-01-02"),60),instrumentMetadata=meta) {
   const calls:string[]=[];
   const request=(async(url:any)=>{const path=new URL(String(url)).pathname.replace("/v1","");calls.push(path);
     if(path==="/instruments")return Response.json(snapshot);
-    if(path==="/instruments/XAU-USD")return Response.json(meta);
+    if(path==="/instruments/XAU-USD")return Response.json(instrumentMetadata);
     return Response.json(history(path));}) as typeof fetch;
   return {client:new DukascopyClient(request),calls};
 }
@@ -27,6 +27,21 @@ test("signed deltas preserve gold, JPY and ordinary FX decimal scales",()=>{
   }
   const payload=encoded([100,101]);payload.closes[1]=NaN;assert.throws(()=>decodeDukascopyCandles(payload,3),/invalid candle/);
   const truncated=encoded([100,101]);truncated.times.pop();assert.throws(()=>decodeDukascopyCandles(truncated,3),/invalid candle/);
+});
+test("weekly daily archives preserve cross-year weeks when download pages are combined",async()=>{
+  const {client,calls}=fixture(path=>{
+    assert.match(path,/^\/candles\/day\/XAU-USD\/BID\/\d{4}$/);
+    const year=Number(path.split("/").at(-1)),start=Date.UTC(year,0,1),days=(Date.UTC(year+1,0,1)-start)/86400000;
+    return encoded(Array.from({length:days},(_,i)=>100+i),start,1440);
+  },{...meta,histories:[{period:"DAY",from:Date.parse("2003-05-05")}]});
+  const input={symbol:"XAUUSD",start:"2014-01-01",end:"2026-01-05T00:00:00Z",timeframe:"1Week",limit:0};
+  const full=await client.history(input),combined=[];
+  let cursor;
+  do{const page=await client.history({...input,cursor},true);combined.push(...page.rows);cursor=page.next_cursor;}while(cursor);
+  assert.deepEqual(combined,full.rows);
+  assert.equal(new Set(combined.map(row=>row.timestamp)).size,combined.length);
+  assert.ok(combined.some(row=>row.timestamp==="2020-12-28T00:00:00.000Z"));
+  assert.ok(calls.filter(path=>path.includes("/candles/")).every(path=>path.includes("/candles/day/")));
 });
 test("UTC aggregation takes the chronological last observed close, skips open buckets and leaves gaps",()=>{
   const start=Date.parse("2025-01-02"),rows=decodeDukascopyCandles(encoded([100,102,101],start,14),3);

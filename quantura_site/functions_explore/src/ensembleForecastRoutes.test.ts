@@ -20,8 +20,22 @@ import {
   validateGuestForecastClaim,
   validateUploadedSeries,
   tickerOverlayRows,
+  ensembleRequestConfiguration,
 } from "./ensembleForecastRoutes";
 import {automaticSportsHistoryPhase, eventHistoryRange} from "./eventHistory";
+
+test("optional request metadata cannot block latest or 120/180-day historical forecasts",()=>{
+  const now=Date.parse("2026-09-28T20:00Z");
+  for(const days of [0,120,180])for(const analytics_context of [undefined,{analytics_consent:"granted",client_id:"1.2",session_id:Math.floor(now/1000),consent_at:new Date(now).toISOString()},"invalid optional telemetry"]){
+    const raw={source:{type:"ticker",symbol:"AAPL",frequency:"1Day"},history_lag_minutes:days*1440,models:{prophet:{enabled:true,weight:1}},quantiles:[.01,.5,.99],analytics_context};
+    const config=ensembleRequestConfiguration(raw);
+    assert.equal(Object.hasOwn(config,"analytics_context"),false);
+    assert.equal(normalizeEnsembleConfiguration(config,"free").prediction_length,30);
+    assert.equal(absoluteHistoryCutoff(config,now),days?now-days*86400000:undefined);
+    assert.equal(Object.hasOwn(raw,"analytics_context"),true,"original request metadata is not mutated");
+  }
+  assert.throws(()=>ensembleRequestConfiguration({model_checkpoints:{prophet:"unapproved"}}),/request_field_unsupported/);
+});
 
 test("explicit single-model and partial multi-model requests never add implicit Prophet", () => {
   for(const id of ["prophet","chronos","granite","toto"] as const) {

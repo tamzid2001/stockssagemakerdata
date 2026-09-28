@@ -13780,7 +13780,7 @@
     let selected;
     if (source.type === "prediction_market") selected = { type: source.type, provider: source.provider, symbol: source.symbol, contract_id: source.contract_id, frequency: job.frequency, history_phase: source.history_phase || "both", history_lookback_minutes: source.history_lookback_minutes || 0, limit: source.limit ?? 500 };
     else if (source.type === "kalshi_perp") selected = {type:source.type,symbol:source.symbol,frequency:job.frequency,limit:source.limit??500};
-    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: ({'1D':'1Day','1h':'1Hour','1min':'1Min'})[job.frequency] || job.frequency, limit: source.limit ?? 500, ...(source.price_side ? {price_side:source.price_side} : {}), ...(source.adjustment ? {adjustment:source.adjustment} : {}), ...(source.session ? {session:source.session} : {}), ...(source.feed ? {feed:source.feed} : {}) };
+    else if (source.type === "ticker") selected = { type: source.type, symbol: source.symbol, provider: source.provider || "auto", field: source.field || "close", frequency: window.QuanturaForecastControls.frequencyMeta(job.frequency).timeframe, limit: source.limit ?? 500, ...(source.price_side ? {price_side:source.price_side} : {}), ...(source.adjustment ? {adjustment:source.adjustment} : {}), ...(source.session ? {session:source.session} : {}), ...(source.feed ? {feed:source.feed} : {}) };
     else if (source.type === "workspace_dataset") selected = { type: source.type, dataset_id: source.dataset_id, timestamp_column: source.timestamp_column || "timestamp", target_column: source.target_column || "target", frequency: job.frequency, timezone: source.timezone || "UTC" };
     else throw new Error("This immutable inline series cannot refresh automatically. Submit an updated dataset.");
     return { workspace_id: job.workspace_id, ...(job.toto_variant ? {toto_variant: job.toto_variant} : {}), source: selected, prediction_length: job.prediction_length, horizon_mode: job.horizon_mode, quantiles: job.quantiles,
@@ -13980,10 +13980,6 @@
     const intervals=document.getElementById("ensemble-ticker-frequency");
     if(intervals){
       const value=intervals.value;
-      for(const option of intervals.querySelectorAll('[data-dukascopy-interval]'))option.remove();
-      if(dukascopy)for(const [value,label] of [["5min","5 minutes"],["15min","15 minutes"],["30min","30 minutes"],["4h","4 hours"]]){
-        const option=document.createElement("option");option.value=value;option.textContent=label;option.dataset.dukascopyInterval="true";intervals.append(option);
-      }
       intervals.value=[...intervals.options].some(o=>o.value===value)?value:"1Hour";
     }
     document.querySelectorAll("[data-ensemble-history-count]").forEach(field => {
@@ -13991,23 +13987,24 @@
       field.querySelector("input").disabled = field.hidden;
     });
     const horizon = document.getElementById("ensemble-horizon-mode");
-    const frequency = ["ticker","kalshi_perp"].includes(type) ? document.getElementById("ensemble-ticker-frequency")?.value : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : document.getElementById("ensemble-market-frequency")?.value;
+    const frequency = ["ticker","kalshi_perp"].includes(type) ? document.getElementById("ensemble-ticker-frequency")?.value : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : type === "workspace_dataset" ? ensembleDatasetFrequency(new FormData(ui.ensembleForecastForm)) : document.getElementById("ensemble-market-frequency")?.value;
     const intraday = dukascopy || type !== "ticker" || frequency !== "1Day";
     if (horizon) {
       horizon.closest(".field").hidden = intraday;
       if (intraday) horizon.value = "frequency_periods";
       else if (horizon.value === "frequency_periods") horizon.value = "trading_sessions";
     }
-    const unit = frequency === "1Day" || frequency === "1D" ? "days" : ["1Hour","1h","4h"].includes(frequency) ? "hours" : "minutes";
+    const unit = window.QuanturaForecastControls.frequencyMeta(frequency).unit;
     const lagUnit = document.getElementById("ensemble-history-lag-unit");
     if (lagUnit && lagUnit.dataset.sourceContext !== `${type}:${frequency}`) {
-      lagUnit.value = unit;
+      lagUnit.value = ["weeks","months","periods"].includes(unit)?"days":unit;
       lagUnit.dataset.sourceContext = `${type}:${frequency}`;
     }
     const predictionUnit = document.getElementById("ensemble-prediction-unit");
-    if (predictionUnit) {
+    if (predictionUnit && predictionUnit.dataset.sourceContext !== `${type}:${frequency}`) {
       predictionUnit.value = unit;
       predictionUnit.dataset.frequency = frequency || "1D";
+      predictionUnit.dataset.sourceContext = `${type}:${frequency}`;
     }
   };
 
@@ -14023,7 +14020,7 @@
     const source = sourceType === "series"
       ? { type: "series", name: ensembleUiState.csvName, rows: window.QuanturaForecastControls.csvSeries(ensembleUiState.csvTable || {headers:[],rows:[]}, document.getElementById("ensemble-csv-date").value, document.getElementById("ensemble-csv-target").value), timestamp_column: "timestamp", target_column: "target", frequency: document.getElementById("ensemble-csv-frequency").value, timezone: ensembleTimeZone() }
       : sourceType === "kalshi_perp"
-      ? {type:"kalshi_perp",symbol:String(data.get("ticker")||"").trim().toUpperCase(),frequency:({"1Day":"1D","1Hour":"1h","1Min":"1min"})[data.get("ticker_frequency")],limit:historyLimit}
+      ? {type:"kalshi_perp",symbol:String(data.get("ticker")||"").trim().toUpperCase(),frequency:window.QuanturaForecastControls.frequencyMeta(data.get("ticker_frequency")).frequency,limit:historyLimit}
       : sourceType === "prediction_market"
       ? window.QuanturaForecastControls.predictionMarketSource(selection, { frequency: String(data.get("market_frequency") || "1min"), history_phase: String(data.get("history_phase") || "both"), history_lookback_minutes: ensembleDurationMinutes(data.get("history_lookback") || 0, String(data.get("history_lookback_unit") || "minutes")), limit: historyLimit })
       : sourceType === "workspace_dataset"
@@ -14056,9 +14053,8 @@
     const lag = cutoffMode === "relative" ? ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes"), Infinity) : 0;
     const cutoffAt = cutoffMode === "date" ? window.QuanturaForecastControls.cutoffInstant(document.getElementById("ensemble-history-cutoff").value) : undefined;
     const endAt = document.getElementById("ensemble-prediction-mode")?.value === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-prediction-end").value) : undefined;
-    const frequencyMinutes = ({"1Day":1440,"1D":1440,"1Hour":60,"1h":60,"4h":240,"1Min":1,"1min":1,"5min":5,"15min":15,"30min":30})[source.frequency] || 1440;
-    const durationUnit = document.getElementById("ensemble-prediction-unit")?.value || (frequencyMinutes === 1440 ? "days" : frequencyMinutes === 60 ? "hours" : "minutes");
-    const steps = endAt ? 30 : Number(data.get("prediction_length") || 30) * ({days:1440,hours:60,minutes:1})[durationUnit] / frequencyMinutes;
+    const durationUnit = document.getElementById("ensemble-prediction-unit")?.value || window.QuanturaForecastControls.frequencyMeta(source.frequency).unit;
+    const steps = endAt ? 30 : window.QuanturaForecastControls.durationBars(data.get("prediction_length") || 30,durationUnit,source.frequency);
     if (!Number.isInteger(steps) || steps < 1 || steps > 512) throw new Error("Choose a duration aligned with the observation interval, from 1 to 512 bars.");
     return {
       workspace_id: state.activeWorkspaceId || state.user?.uid || "",
@@ -14072,7 +14068,7 @@
       quantiles: getEnsembleQuantiles(),
       transform: sourceType === "prediction_market" ? "logit" : String(data.get("transform") || "auto"),
       context_length: contextRaw ? Number(contextRaw) : null,
-      frequency: sourceType === "ticker" ? ({"1Day":"1D","1Hour":"1h","1Min":"1min"})[source.frequency] || source.frequency : source.frequency,
+      frequency: window.QuanturaForecastControls.frequencyMeta(source.frequency).frequency,
       calendar: sourceType === "ticker" && source.provider!=="dukascopy" && source.frequency === "1Day" ? "NYSE" : "NONE",
       model_failure_policy: String(data.get("model_failure_policy") || "fail"),
       models,
@@ -14410,10 +14406,10 @@
       set("ensemble-source-type", configuration.source.type);
       set("ensemble-ticker", configuration.source.symbol);
       set("ensemble-provider", configuration.source.provider);
-      if (configuration.source.type === "ticker") set("ensemble-ticker-frequency", configuration.source.frequency);
+      if (configuration.source.type === "ticker") set("ensemble-ticker-frequency", window.QuanturaForecastControls.frequencyMeta(configuration.source.frequency).timeframe);
       if (configuration.source.type === "ticker") set("ensemble-ticker-session", configuration.source.session || "extended");
-      if (configuration.source.type === "kalshi_perp") set("ensemble-ticker-frequency", ({"1D":"1Day","1h":"1Hour","1min":"1Min"})[configuration.source.frequency]);
-      if (configuration.source.type === "prediction_market") set("ensemble-market-frequency", configuration.source.frequency);
+      if (configuration.source.type === "kalshi_perp") set("ensemble-ticker-frequency", window.QuanturaForecastControls.frequencyMeta(configuration.source.frequency).timeframe);
+      if (configuration.source.type === "prediction_market") set("ensemble-market-frequency", window.QuanturaForecastControls.frequencyMeta(configuration.source.frequency).frequency);
       set("ensemble-history-phase", configuration.source.history_phase || "both");
       set("ensemble-history-limit", configuration.source.limit ?? 500);
       set("ensemble-history-lookback", configuration.source.history_lookback_minutes || 0);
@@ -14434,7 +14430,8 @@
     set("ensemble-prediction-length", configuration.prediction_length);
     set("ensemble-toto-variant", configuration.toto_variant);
     set("ensemble-prediction-mode", "duration");
-    set("ensemble-prediction-unit", /min/i.test(configuration.frequency || "") ? "minutes" : /h/i.test(configuration.frequency || "") ? "hours" : "days");
+    // Saved prediction_length counts bars, not elapsed minutes or hours.
+    set("ensemble-prediction-unit", "periods");
     set("ensemble-cutoff-mode", configuration.history_controls?.history_lag_minutes || configuration.history_lag_minutes ? "relative" : "latest");
     document.getElementById("ensemble-cutoff-mode")?.dispatchEvent(new Event("change"));
     document.getElementById("ensemble-prediction-mode")?.dispatchEvent(new Event("change"));

@@ -196,13 +196,24 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     const request = { workspace_id: workspace, source: { type: "series", frequency: "1min", rows: Array.from({ length: 40 }, (_, i) => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), target: .4 })) }, prediction_length: 2, horizon_mode: "frequency_periods", quantiles: [.1, .5, .9], models: { prophet: { enabled: true, weight: 1 } } };
     assert.equal((await call("/v1/ensemble-forecasts", keys[1], request)).status, 403);
     assert.equal((await call("/v1/ensemble-forecasts", "invalid", request)).status, 401);
-    const created = await call("/v1/ensemble-forecasts", keys[0], request);
+    const telemetry={analytics_consent:"granted",client_id:"123.456",session_id:Math.floor(Date.now()/1000),consent_at:new Date().toISOString()};
+    const created = await call("/v1/ensemble-forecasts", keys[0], {...request,analytics_context:telemetry});
     assert.equal(created.status, 202, await created.clone().text());
     const id = (await created.json()).data.forecast_id;
     const requestIndex = db.collection("users").doc(owner).collection("requests").doc(`ensemble__${id}`);
     assert.equal((await requestIndex.get()).data()?.sourceRef.id,id);
     await requestIndex.set({title:"My custom saved forecast",titleEdited:true},{merge:true});
     const ref = db.collection("ensemble_forecast_jobs").doc(id);
+    assert.equal((await ref.get()).data()?.analytics_context?.client_id,"123.456");
+    assert.equal(Object.hasOwn((await ref.get()).data()!.request,"analytics_context"),false);
+    for(const days of [120,180]){
+      const replay=await call("/v1/ensemble-forecasts",keys[0],{...request,history_lag_minutes:days*1440,analytics_context:telemetry});
+      assert.equal(replay.status,202,await replay.clone().text());
+      const job=(await replay.json()).data;
+      assert.equal(job.source.analysis_mode,"historical_replay");assert.equal(job.source.history_lag_minutes,days*1440);
+      // Close each replay fixture so it does not consume another job's quota assertion.
+      assert.equal((await call(`/internal/ensemble-forecasts/${job.forecast_id}/fail`,workerToken,{code:"REPLAY_TEST_FINISHED",retryable:false})).status,200);
+    }
     assert.equal((await ref.get()).data()?.evaluation_policy,null,"new requests never opt users into a holdout");
     assert.equal((await ref.collection("input_chunks").doc("0000").get()).data()?.rows.length, 40);
     // A server-verified prediction-market fixture exercises the trusted two-bar

@@ -8,6 +8,7 @@ import { contractGroup, eventMarketPage } from "./qSearchEvents";
 import { rankVerifiedCandidates } from "./qSearchRanking";
 import rateLimit from "express-rate-limit";
 import { dukascopy } from "./dukascopyClient";
+import { FORECAST_FREQUENCIES } from "./forecastFrequency";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -21,14 +22,16 @@ export function searchClientAddress(req: Pick<Request,"headers"|"ip"|"socket">, 
 }
 
 export const PROVIDER_CAPABILITIES = {
-  dukascopy: { label:"Dukascopy",assetClasses:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],search:true,history:true,forecasting:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],granularities:["1min","5min","15min","30min","1h","4h","1D"],redistributionStatus:"review_required" },
-  kalshi_perps: { label: "Kalshi Perpetuals", assetClasses: ["perpetual"], search: true, history: true, forecasting: ["perpetual"], granularities: ["1min","1h","1D"], redistributionStatus: "review_required" },
+  dukascopy: { label:"Dukascopy",assetClasses:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],search:true,history:true,forecasting:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],granularities:["1min","5min","15min","30min","1h","4h","1D","1W-MON","1MS"],redistributionStatus:"review_required" },
+  kalshi_perps: { label: "Kalshi Perpetuals", assetClasses: ["perpetual"], search: true, history: true, forecasting: ["perpetual"], granularities: ["1min","5min","15min","30min","1h","4h","1D","1W-MON","1MS"], redistributionStatus: "review_required" },
   alpaca: {
     label: "Alpaca",
     assetClasses: ["equity", "etf", "option"],
     search: false,
     history: true,
     forecasting: ["equity", "etf"],
+    granularities: FORECAST_FREQUENCIES,
+    optionGranularities: ["1min", "1h", "1D"],
     redistributionStatus: "review_required",
   },
   yahoo: {
@@ -37,6 +40,8 @@ export const PROVIDER_CAPABILITIES = {
     search: true,
     history: true,
     forecasting: ["equity", "etf", "fx", "commodity_proxy", "rate_proxy", "crypto"],
+    granularities: FORECAST_FREQUENCIES,
+    optionGranularities: ["1min", "1h", "1D"],
     redistributionStatus: "review_required",
   },
   polymarket_us: {
@@ -45,6 +50,7 @@ export const PROVIDER_CAPABILITIES = {
     search: true,
     history: true,
     forecasting: ["prediction_market"],
+    granularities: FORECAST_FREQUENCIES,
     redistributionStatus: "review_required",
   },
   kalshi: {
@@ -53,6 +59,7 @@ export const PROVIDER_CAPABILITIES = {
     search: true,
     history: true,
     forecasting: ["prediction_market"],
+    granularities: FORECAST_FREQUENCIES,
     redistributionStatus: "review_required",
   },
 } as const;

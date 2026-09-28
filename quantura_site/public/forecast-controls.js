@@ -127,14 +127,13 @@
     const latest=candidates.length ? Math.max(...candidates) : Date.parse(job.predictions?.[0]?.timestamp);
     const end=Math.max(latest,Date.parse(job.predictions?.at(-1)?.timestamp));
     if(!Number.isFinite(latest)||!Number.isFinite(end))return null;
-    const frequency=String(job.frequency || "1D").toLowerCase();
-    const amount=Number.parseInt(frequency,10)||1;
-    const unit=/min|^\d+m$/.test(frequency)?60_000:/hour|^\d+h$/.test(frequency)?3600_000:/week|^\d+w$/.test(frequency)?7*86400_000:86400_000;
+    const meta=frequencyMeta(job.frequency || "1D");
     const firstPrediction=Date.parse(job.predictions?.[0]?.timestamp);
     // Later overlays must not push the saved forecast's first rows offscreen.
     const anchor=Number.isFinite(firstPrediction)?Math.min(latest,firstPrediction):latest;
-    let start=anchor-amount*unit;
-    if(job.source?.type==="ticker" && frequency==="1d" && job.chart_calendar?.sessions) {
+    const anchorDate=new Date(anchor);
+    let start=meta.unit==="months"?Date.UTC(anchorDate.getUTCFullYear(),anchorDate.getUTCMonth()-1,1):anchor-(meta.minutes || 1440)*60000;
+    if(job.source?.type==="ticker" && meta.frequency==="1D" && job.chart_calendar?.sessions) {
       const date=new Date(anchor).toISOString().slice(0,10);
       const previous=job.chart_calendar.sessions.filter(day=>day<date).at(-1);
       if(previous)start=Date.parse(previous+"T00:00:00Z");
@@ -182,6 +181,26 @@
     }
     return closed.length?[{values:closed,dvalue:86400_000}]:[];
   }
+  function frequencyMeta(value) {
+    if(String(value).trim()==="1M")return {frequency:"1ME",timeframe:"1ME",unit:"periods",minutes:null};
+    const key=String(value||"1D").toLowerCase();
+    const aliases={"1m":"1min","1min":"1min","5m":"5min","5min":"5min","15m":"15min","15min":"15min","30m":"30min","30min":"30min","1h":"1h","1hour":"1h","4h":"4h","4hour":"4h","1d":"1D","1day":"1D","1w":"1W-MON","1week":"1W-MON","1w-mon":"1W-MON","1month":"1MS","1mo":"1MS","1ms":"1MS"};
+    const frequency=aliases[key];
+    if(!frequency){
+      const custom=key.match(/^(\d+)(min|h|d|w)$/);
+      const minutes=custom?Number(custom[1])*({min:1,h:60,d:1440,w:10080})[custom[2]]:null;
+      return {frequency:value,timeframe:value,unit:"periods",minutes};
+    }
+    return {frequency,timeframe:({"1min":"1Min","5min":"5Min","15min":"15Min","30min":"30Min","1h":"1Hour","4h":"4Hour","1D":"1Day","1W-MON":"1Week","1MS":"1Month"})[frequency],
+      minutes:({"1min":1,"5min":5,"15min":15,"30min":30,"1h":60,"4h":240,"1D":1440,"1W-MON":10080})[frequency]||null,
+      unit:frequency==="1MS"?"months":frequency==="1W-MON"?"weeks":frequency==="1D"?"days":/[h]$/.test(frequency)?"hours":"minutes"};
+  }
+  function durationBars(amount,unit,value) {
+    const meta=frequencyMeta(value), n=Number(amount);
+    if(unit==="periods" || unit==="months" && meta.frequency==="1MS")return n;
+    if(!meta.minutes || unit==="months")throw new Error("Use calendar date and time or bars for this interval.");
+    return n*({minutes:1,hours:60,days:1440,weeks:10080})[unit]/meta.minutes;
+  }
   function predictionMarketSource(selection, settings = {}) {
     const provider = selection?.source || selection?.provider || selection?.contract?.source;
     const symbol = selection?.symbol || selection?.contract?.providerSymbol;
@@ -191,7 +210,7 @@
     }
     return {type: "prediction_market", ...settings, provider, symbol, contract_id: contractId};
   }
-  const helpers = Object.freeze({ predictionMarketSource, localValue, localInstant, cutoffInstant, normalizeWeightsTwoDecimals, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
+  const helpers = Object.freeze({ frequencyMeta, durationBars, predictionMarketSource, localValue, localInstant, cutoffInstant, normalizeWeightsTwoDecimals, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);

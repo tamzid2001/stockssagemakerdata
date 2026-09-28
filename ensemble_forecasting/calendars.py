@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+from .frequencies import frequency_offset
 
 
 def build_future_timestamps(
@@ -20,7 +21,7 @@ def build_future_timestamps(
             raise ValueError("trading-session horizons currently require the NYSE calendar")
         dates = _nyse_dates(last, prediction_length, horizon_mode)
     elif horizon_mode == "frequency_periods":
-        offset = pd.tseries.frequencies.to_offset(frequency)
+        offset = frequency_offset(frequency)
         dates = pd.date_range(start=last + offset, periods=prediction_length, freq=offset)
     else:
         raise ValueError("unsupported horizon_mode")

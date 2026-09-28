@@ -100,6 +100,13 @@ test("Kalshi hourly aggregation does not move candle observations to an earlier 
   const row=predictionObservation("kalshi","fixture:yes","2026-08-20T10:15:00Z",{price:.55});row.raw.end_period_ts=Date.parse(row.timestamp)/1000;
   const hourly=resamplePredictionObservations([row],"1h","leave");assert.equal(hourly[0].timestamp,"2026-08-20T11:00:00.000Z");
 });
+test("calendar prediction-market aggregates retain real month boundaries and genuine gaps",()=>{
+  const rows=[predictionObservation("kalshi","fixture:yes","2024-01-31T00:00:00Z",{price:.55}),predictionObservation("kalshi","fixture:yes","2024-04-01T00:00:00Z",{price:.6})];
+  rows.forEach(row=>{row.raw.end_period_ts=Date.parse(row.timestamp)/1000;});
+  const result=resamplePredictionObservations(rows,"1month","leave");
+  assert.deepEqual(result.map(row=>row.timestamp),["2024-02-01T00:00:00.000Z","2024-04-01T00:00:00.000Z"]);
+  assert.ok(result.every(row=>!row.is_forward_filled));
+});
 import { userFromRequest, validateAwsIntegration } from "./awsIntegration";
 
 function withAlpacaEnvironment(): void {

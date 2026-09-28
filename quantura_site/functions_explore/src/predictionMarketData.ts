@@ -1,5 +1,6 @@
 import { constants, createPrivateKey, sign } from "node:crypto";
 import { Router } from "express";
+import {forecastFrequency,frequencyBounds,frequencyEnd,frequencyMinutes} from "./forecastFrequency";
 import { historySelection, eventHistoryRange, quoteHistoryQuality, automaticSportsHistoryPhase, type HistorySelection } from "./eventHistory";
 import { parseMarketLink } from "./marketLink";
 import { KALSHI_API_BASE, kalshiPrice, kalshiCandlePrice, kalshiMilestoneStart } from "./kalshiProtocol";
@@ -19,7 +20,7 @@ const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
 export type PredictionMarketSource = "polymarket_us" | "kalshi";
-export type PredictionMarketFrequency = "raw" | "1m" | "5m" | "15m" | "30m" | "1h" | "1d" | "final";
+export type PredictionMarketFrequency = "raw" | "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1month" | "final";
 export type MissingIntervalMode = "leave" | "forward_fill" | "drop";
 export type PredictionMarketExportMode = "raw" | "normalized" | "canvas";
 export type PredictionMarketTarget = "price" | "bid" | "ask" | "midpoint";
@@ -263,7 +264,7 @@ function providerSource(value: unknown): PredictionMarketSource {
 
 function frequency(value: unknown): PredictionMarketFrequency {
   const selected = text(value, 20).toLowerCase() as PredictionMarketFrequency;
-  if (["raw", "1m", "5m", "15m", "30m", "1h", "1d", "final"].includes(selected)) return selected;
+  if (["raw", "1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1month", "final"].includes(selected)) return selected;
   throw new PredictionMarketDataError("invalid_frequency", "Choose a supported historical frequency.");
 }
 
@@ -799,7 +800,7 @@ export function kalshiCandleRows(contract: PredictionMarketContract, rawCandles:
 }
 
 async function kalshiCandles(contract: PredictionMarketContract, startMs: number, endMs: number, requestedFrequency: PredictionMarketFrequency): Promise<NormalizedPredictionObservation[]> {
-  const period = requestedFrequency === "1d" ? 1440 : requestedFrequency === "1h" ? 60 : 1;
+  const period = requestedFrequency==="1d" ? 1440 : ["1h","4h","1w","1month"].includes(requestedFrequency) ? 60 : 1;
   const stepSeconds = period === 1 ? 4_000 * 60 : period === 60 ? 2_000 * 3600 : 1_000 * 86400;
   const ticker = cleanIdentifier(contract.providerSymbol, 180).toUpperCase();
   const rows: NormalizedPredictionObservation[] = [];
@@ -888,7 +889,10 @@ const FREQUENCY_MS: Record<Exclude<PredictionMarketFrequency, "raw" | "final">, 
   "15m": 15 * 60_000,
   "30m": 30 * 60_000,
   "1h": 60 * 60_000,
+  "4h": 4 * 60 * 60_000,
   "1d": 24 * 60 * 60_000,
+  "1w": 7 * 24 * 60 * 60_000,
+  "1month": 31 * 24 * 60 * 60_000,
 };
 
 function dedupeAndSort(rows: NormalizedPredictionObservation[]): { rows: NormalizedPredictionObservation[]; duplicates: number } {
@@ -921,7 +925,8 @@ export function resamplePredictionObservations(
     if (!Number.isFinite(timestamp)) return;
     // Exchange candles are end-stamped. A 10:15 close belongs at 11:00 when
     // aggregating hourly, never at 10:00 where its price was not yet known.
-    const bucketMs = row.raw.end_period_ts != null ? Math.ceil(timestamp / intervalMs) * intervalMs : Math.floor(timestamp / intervalMs) * intervalMs;
+    const [bucketStart,bucketEnd]=frequencyBounds(row.raw.end_period_ts!=null?timestamp-1:timestamp,selectedFrequency);
+    const bucketMs = row.raw.end_period_ts != null ? bucketEnd : bucketStart;
     const key = `${row.item_id}:${bucketMs}`;
     const previous = buckets.get(key);
     const volumeAccumulator = row.volume === null ? previous?.volumeAccumulator ?? null : (previous?.volumeAccumulator ?? 0) + row.volume;
@@ -945,7 +950,7 @@ export function resamplePredictionObservations(
     const start = Math.min(...byTimestamp.keys());
     const end = Math.max(...byTimestamp.keys());
     let previous: NormalizedPredictionObservation | null = null;
-    for (let timestamp = start; timestamp <= end; timestamp += intervalMs) {
+    for (let timestamp = start; timestamp <= end; timestamp=frequencyEnd(timestamp,selectedFrequency)) {
       const current = byTimestamp.get(timestamp);
       if (current) previous = current;
       if (!previous) continue;
@@ -1332,20 +1337,25 @@ export function forecastObservationLimit(value: unknown, maximum = 500): number 
 
 export async function predictionForecastHistory(source: PredictionMarketSource, symbol: string, contractId: string, frequencyValue: string, options: { allowResolved?: boolean; since?: number; until?: number; minimumRows?: number; limit?: number; selection?: HistorySelection; automaticPhase?: boolean; includeQuotes?: boolean; preserveTimestamp?: number } = {}) {
   const limit = forecastObservationLimit(options.limit);
-  if (!["1min", "1h", "1D"].includes(frequencyValue)) throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, or daily history.", 422);
+  try{frequencyValue=forecastFrequency(frequencyValue);}catch{throw new PredictionMarketDataError("frequency_unsupported", "Choose minute, hourly, daily, weekly or monthly history.", 422);}
   const contracts = await resolveMarketIdentifier(source, symbol, "market");
   const contract = contracts.find(c => c.contractId === contractId);
   if (!contract) throw new PredictionMarketDataError("contract_not_found", "Select a team/side belonging to this market.", 422);
   if (!options.allowResolved && ["closed", "settled"].includes(contract.status)) throw new PredictionMarketDataError("market_resolved", "This market has ended. Download its history instead of creating a future forecast.", 422);
   const now = options.until ?? Date.now();
   if (!Number.isFinite(now) || now > Date.now()) throw new PredictionMarketDataError("input_cutoff_invalid", "Input cutoff must not be in the future.", 422);
-  const interval = frequencyValue === "1min" ? 60_000 : frequencyValue === "1h" ? 3600_000 : 86400_000;
+  const interval = frequencyMinutes(frequencyValue)*60000;
   const selection = { ...(options.selection || historySelection({})), ...(options.automaticPhase ? {history_phase:automaticSportsHistoryPhase(Date.parse(contract.eventStart || ""),now)} : {}) };
   const start = Math.max(Date.parse(contract.availableFrom || "") || 0, options.since || now - Math.min(90 * 86400_000, Math.max(7 * 86400_000, 1500 * interval)));
-  const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: frequencyValue === "1min" ? "1m" : frequencyValue === "1D" ? "1d" : "1h", mode: "normalized", target: "price", missing: "leave", ...selection });
+  const selectedFrequency=({"1min":"1m","5min":"5m","15min":"15m","30min":"30m","1D":"1d","1W-MON":"1w","1MS":"1month"} as Record<string,PredictionMarketFrequency>)[frequencyValue] || frequencyValue as PredictionMarketFrequency;
+  const dataset = await prepareDataset({ source, contracts: [contract], start: new Date(start).toISOString(), end: new Date(now).toISOString(), frequency: selectedFrequency, mode: "normalized", target: "price", missing: "leave", ...selection });
   // Forecast one consistent selected-side quote target. A Kalshi minute may
   // have a real book close but no trade; do not discard it or mix trade/ask.
-  const observations: Array<Record<string, unknown>> = dataset.rows.map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(Date.parse(String(row.timestamp)) + interval).toISOString() });
+  const observations: Array<Record<string, unknown>> = dataset.rows.filter(row=>{
+    const timestamp=Date.parse(String(row.timestamp));
+    const bucket=frequencyBounds(source==="kalshi"?timestamp-1:timestamp,frequencyValue)[0];
+    return bucket>=start;
+  }).map(row => source === "kalshi" ? { ...row, price: row.ask } : { ...row, timestamp: new Date(frequencyEnd(Date.parse(String(row.timestamp)),frequencyValue)).toISOString() });
   const { rows, observed_rows, gap_count } = forecastObservationWindow(observations, interval, now, options.minimumRows ?? 2, limit, options.preserveTimestamp);
   const quality = quoteHistoryQuality(rows, Date.parse(contract.eventStart || ""));
   const quoteByTime = new Map(observations.map(row => [String(row.timestamp), row]));

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { AlpacaError, type AlpacaBar } from "./alpacaClient";
 import snapshot from "./dukascopyInstruments.json";
+import {aggregateObservedBars,forecastFrequency,frequencyMinutes,frequencyTimeframe,frequencyBounds} from "./forecastFrequency";
 
 // These are the first-party endpoints used by Dukascopy's Historical Data Export
 // widget. Its delta JSON candle feed avoids downloading/decompressing every tick.
@@ -14,10 +15,14 @@ const FREQUENCIES: Record<string,[string,number]> = {
   m15:["15Min",15], "15m":["15Min",15], "15min":["15Min",15], m30:["30Min",30], "30m":["30Min",30], "30min":["30Min",30],
   h1:["1Hour",60], "1h":["1Hour",60], "1hour":["1Hour",60], h4:["4Hour",240], "4h":["4Hour",240], "4hour":["4Hour",240],
   d1:["1Day",1440], "1d":["1Day",1440], "1day":["1Day",1440],
+  "1w":["1Week",10080], "1week":["1Week",10080], "1w-mon":["1Week",10080],
+  "1month":["1Month",44640], "1mo":["1Month",44640], "1ms":["1Month",44640],
 };
 export function dukascopyFrequency(value: unknown): [string,number] {
-  const result = FREQUENCIES[String(value || "1Hour").toLowerCase()];
-  if (!result) throw new AlpacaError("invalid_request", "Dukascopy supports M1, M5, M15, M30, H1, H4 and D1 candles.",422);
+  const input=String(value || "1Hour").toLowerCase();
+  let result = FREQUENCIES[input];
+  if(!result)try {const f=forecastFrequency(input);result=[frequencyTimeframe(f),frequencyMinutes(f)];}catch{}
+  if (!result) throw new AlpacaError("invalid_request", "Dukascopy supports minute, hourly, daily, Monday UTC weekly and calendar-month candles.",422);
   return result;
 }
 const fail = () => new AlpacaError("upstream","Dukascopy returned invalid candle data. Retry; no incomplete download was saved.",502);
@@ -80,13 +85,13 @@ function date(value: unknown, end=false): number {
   if (!Number.isFinite(parsed) || (dateOnly && new Date(parsed).toISOString().slice(0,10)!==raw)) throw new AlpacaError("invalid_request","Choose a valid date.",422);
   return parsed+(end&&dateOnly?DAY:0);
 }
-function ranges(start: number,end: number,hourly: boolean) {
+function ranges(start: number,end: number,hourly: boolean,daily=false) {
   const result:Array<{start:number,end:number,path:string}>=[];
-  const current=new Date(start);current.setUTCHours(0,0,0,0);if(hourly)current.setUTCDate(1);
+  const current=new Date(start);current.setUTCHours(0,0,0,0);if(hourly || daily)current.setUTCDate(1);if(daily)current.setUTCMonth(0);
   while(current.getTime()<end) {
     const a=current.getTime(), y=current.getUTCFullYear(), m=current.getUTCMonth()+1, d=current.getUTCDate();
-    if(hourly)current.setUTCMonth(current.getUTCMonth()+1);else current.setUTCDate(current.getUTCDate()+1);
-    result.push({start:a,end:current.getTime(),path:hourly?`/candles/trade/hour/{code}/{side}/${y}/${m}`:`/candles/minute/{code}/{side}/${y}/${m}/${d}`});
+    if(daily)current.setUTCFullYear(y+1);else if(hourly)current.setUTCMonth(current.getUTCMonth()+1);else current.setUTCDate(current.getUTCDate()+1);
+    result.push({start:a,end:current.getTime(),path:daily?`/candles/day/{code}/{side}/${y}`:hourly?`/candles/trade/hour/{code}/{side}/${y}/${m}`:`/candles/minute/{code}/{side}/${y}/${m}/${d}`});
     if(result.length>20_000)throw new AlpacaError("invalid_request","This range is too large. Download a smaller date range.",422);
   }
   return result;
@@ -163,15 +168,21 @@ export class DukascopyClient {
         timezoneAligned=["2025-01-15T00:00:00Z","2025-07-15T00:00:00Z"].every(t=>formatter.format(new Date(t))==="00");
       } catch {timezoneAligned=false;}
     }
-    const hourly=minutes>=60 && aligned && timezoneAligned && metadata.histories.some((h:any)=>h.period==="HOUR" && Number.isFinite(Number(h.from)));
-    const period=hourly?"HOUR":"MINUTE", first=metadata.histories.find((h:any)=>h.period===period);
+    const calendarPeriod=["1Week","1Month"].includes(timeframe);
+    const daily=calendarPeriod && metadata.histories.some((h:any)=>h.period==="DAY" && Number.isFinite(Number(h.from)));
+    const hourly=!daily && minutes>=60 && aligned && timezoneAligned && metadata.histories.some((h:any)=>h.period==="HOUR" && Number.isFinite(Number(h.from)));
+    const period=daily?"DAY":hourly?"HOUR":"MINUTE", first=metadata.histories.find((h:any)=>h.period===period);
     if(!first || !Number.isFinite(Number(first.from)))throw new AlpacaError("no_data","Dukascopy does not publish candles for this instrument.",422);
     const requestedStart=start;start=Math.max(start,Number(first.from));
     if(start>=end)throw new AlpacaError("no_data","This range ends before Dukascopy's available history.",404);
-    const plan=ranges(start,end,hourly), hash=crypto.createHash("sha256").update(JSON.stringify([item.code,requestedSide,start,end,timeframe,limit,requestedEnd])).digest("hex").slice(0,24);
+    const plan=ranges(start,end,hourly,daily), hash=crypto.createHash("sha256").update(JSON.stringify([item.code,requestedSide,start,end,timeframe,limit,requestedEnd])).digest("hex").slice(0,24);
     let offset=0;
     if(cursor){if(cursor.h!==hash || !Number.isInteger(cursor.o)||cursor.o<0||cursor.o>=plan.length)throw new AlpacaError("invalid_request","This download cursor does not match the current settings.",422);offset=cursor.o;}
-    const chunkCount=hourly?12:7, selected=page?plan.slice(offset,offset+chunkCount):plan;
+    const chunkCount=hourly?12:7, requestedFiles=page?plan.slice(offset,offset+chunkCount):plan;
+    // A Monday week can cross a year-file/page boundary. Include its prior
+    // daily file and defer incomplete page-end buckets to the next page.
+    const overlap=page && daily && timeframe==="1Week" && offset>0;
+    const selected=overlap?[plan[offset-1],...requestedFiles]:requestedFiles;
     if(!page && selected.length>180)throw new AlpacaError("invalid_request","Use the paged download for this date range, or a smaller forecast history.",422);
     const output:AlpacaBar[][]=new Array(selected.length);let position=0,failed=false;const deadline=Date.now()+40_000;
     await Promise.all(Array.from({length:Math.min(4,selected.length)},async()=>{
@@ -185,11 +196,13 @@ export class DukascopyClient {
         } catch(error) {failed=true;throw error;}
       }
     }));
-    const rows=aggregateDukascopy(output.flat(),minutes,start,end,hourly?60:1);
-    const next=page&&offset+selected.length<plan.length?Buffer.from(JSON.stringify({h:hash,o:offset+selected.length,e:end})).toString("base64url"):null;
+    const aggregationStart=overlap?Math.max(start,frequencyBounds(requestedFiles[0].start-1,timeframe)[0]):start;
+    const aggregationEnd=page && calendarPeriod?Math.min(end,requestedFiles.at(-1)!.end):end;
+    const rows=calendarPeriod?aggregateObservedBars(output.flat(),timeframe,aggregationStart,aggregationEnd,daily?1440:hourly?60:1):aggregateDukascopy(output.flat(),minutes,start,end,hourly?60:1);
+    const next=page&&offset+requestedFiles.length<plan.length?Buffer.from(JSON.stringify({h:hash,o:offset+requestedFiles.length,e:end})).toString("base64url"):null;
     return {provider:"dukascopy",sourceRequested:"dukascopy",fallbackUsed:false,symbol:item.code,timeframe,feed:requestedSide,priceSide:requestedSide,adjustment:"raw",session:"provider",exchangeTimezone:"UTC",barIntervalMinutes:minutes,
       rows:page||!limit?rows:rows.slice(-limit),next_cursor:next,
-      metadata:{instrument:dukascopyResource(item),price_scale:metadata.priceScale,source:BASE,bucket_timezone:"UTC",timestamp_convention:"bucket_start",close_available_at:"bucket_start + interval",volume_unit:"provider quote volume (not exchange traded share volume)",base_interval:hourly?"1Hour":"1Min",range_start:new Date(start).toISOString(),range_end:new Date(end).toISOString(),available_from:new Date(Number(first.from)).toISOString(),catalog_stale:catalog.stale,completed_files:offset+selected.length,total_files:plan.length},
+      metadata:{instrument:dukascopyResource(item),price_scale:metadata.priceScale,source:BASE,bucket_timezone:"UTC",timestamp_convention:"bucket_start",close_available_at:calendarPeriod?"calendar bucket end":"bucket_start + interval",volume_unit:"provider quote volume (not exchange traded share volume)",base_interval:daily?"1Day":hourly?"1Hour":"1Min",range_start:new Date(start).toISOString(),range_end:new Date(end).toISOString(),available_from:new Date(Number(first.from)).toISOString(),catalog_stale:catalog.stale,completed_files:offset+requestedFiles.length,total_files:plan.length},
       warnings:["Dukascopy bid/ask quotes; CFDs are not exchange share prices. Gaps are not filled. Only completed UTC candles are included.",...(catalog.stale?["Instrument catalog uses the last verified snapshot; history is retrieved from Dukascopy."]:[]),...(start>requestedStart?["The range begins before available history; the returned start is shown in metadata."]:[])]};
   }
 }

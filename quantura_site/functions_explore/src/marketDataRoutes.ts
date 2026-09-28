@@ -1,5 +1,6 @@
 import { yahooRetrySeconds } from "./yahooRequests";
 import { Router } from "express";
+import {aggregateObservedBars,forecastFrequency,frequencyMinutes,frequencyTimeframe} from "./forecastFrequency";
 import { AlpacaClient, AlpacaError, barsToCsv, publicAlpacaError, type AlpacaBar } from "./alpacaClient";
 import { YahooFinanceClient } from "./yahooMarketData";
 import { dukascopy } from "./dukascopyClient";
@@ -24,13 +25,9 @@ function inferredRange(timeframeValue: unknown, limit: number, endValue: unknown
   const endParsed = Date.parse(String(endValue || ""));
   const end = Number.isFinite(endParsed) ? new Date(endParsed) : new Date(Math.floor(Date.now() / 60000) * 60000);
   if (limit === 0) return { start: "1970-01-01T00:00:00.000Z", end: end.toISOString() };
-  const timeframe = String(timeframeValue || "1Day").toLowerCase();
-  const minutesPerRow = timeframe.includes("day") || timeframe === "1d"
-    ? 60 * 24 * 2
-    : timeframe.includes("hour") || timeframe === "1h"
-      ? 60 * 3
-      : Math.max(1, Number.parseInt(timeframe, 10) || 1) * 3;
-  const lookbackMs = Math.max(7 * 86400000, Math.min(20 * 365 * 86400000, limit * minutesPerRow * 60000));
+  const frequency=forecastFrequency(timeframeValue || "1Day");
+  const minutesPerRow=frequencyMinutes(frequency)*(frequency==="1MS"?1.5:3);
+  const lookbackMs = Math.max(7 * 86400000, Math.min(100 * 366 * 86400000, limit * minutesPerRow * 60000));
   return { start: new Date(end.getTime() - lookbackMs).toISOString(), end: end.toISOString() };
 }
 
@@ -54,6 +51,26 @@ export type StockHistoryResult = {
 /** Shared provider-aware history service used by downloads and forecast jobs. */
 export async function fetchStockHistoryData(body: Record<string, unknown>, clients: { alpaca?: AlpacaClient; yahoo?: YahooFinanceClient } = {}): Promise<StockHistoryResult> {
   if (String(body.source || body.provider).toLowerCase() === "dukascopy") return dukascopy.history(body);
+  let frequency;
+  try{frequency=forecastFrequency(body.timeframe || body.interval || "1Day");}
+  catch{throw new AlpacaError("invalid_request","Choose 1, 5, 15 or 30 minutes; 1 or 4 hours; daily, weekly or monthly bars.",422);}
+  if(["4h","1W-MON","1MS"].includes(frequency)) {
+    const limit=requestedLimit(body.limit), range=inferredRange(frequency,limit,body.end);
+    const start=Date.parse(String(body.start || range.start)),end=Math.min(Date.parse(String(body.end || range.end)),Date.now());
+    if(!Number.isFinite(start)||!Number.isFinite(end)||start>=end)throw new AlpacaError("invalid_request","Choose a valid history range.",422);
+    const base=frequency==="4h"?"1Hour":"1Day";
+    const result=await fetchStockHistoryData({...body,timeframe:base,start:new Date(start).toISOString(),end:new Date(end).toISOString(),limit:50000},clients);
+    // Daily equity bars label an exchange session (Alpaca: NY midnight;
+    // Yahoo: local session opening). Group by its actual local date, not
+    // timestamp + 24h, which loses the last US session of a month. The
+    // next UTC date boundary is a conservative close availability time.
+    const sessionDate=base==="1Day"?new Intl.DateTimeFormat("en-CA",{timeZone:result.exchangeTimezone || "UTC",year:"numeric",month:"2-digit",day:"2-digit"}):null;
+    const nativeRows=sessionDate?result.rows.map(row=>({...row,timestamp:sessionDate.format(new Date(row.timestamp))+"T00:00:00.000Z"})):result.rows;
+    const rows=aggregateObservedBars(nativeRows,frequency,start,end,base==="1Hour"?60:1440);
+    return {...result,timeframe:frequencyTimeframe(frequency),rows:limit?rows.slice(-limit):rows,
+      metadata:{...result.metadata,bucket_timezone:"UTC",timestamp_convention:"bucket_start",close_available_at:"calendar bucket end",base_interval:base,daily_bucket_basis:sessionDate?"exchange_session_date":undefined,completed_bars_only:true,missing_intervals:"not_filled",base_history_bounded:result.rows.length===50000},
+      warnings:[...(result.warnings||[]),...(result.rows.length===50000?["Base history reached the 50,000-observation bound; narrow or split this download range."]:[]),"Calendar weeks begin Monday UTC; months begin on the first UTC day. Daily stock bars group by exchange session date. Partial periods and missing buckets are not filled."]};
+  }
   const source = stockSource(body.source || body.provider);
   const limit = requestedLimit(body.limit);
   const range = inferredRange(body.timeframe || body.interval, limit, body.end);
@@ -61,7 +78,7 @@ export async function fetchStockHistoryData(body: Record<string, unknown>, clien
     symbol: String(body.symbol || body.ticker || ""),
     start: String(body.start || range.start),
     end: String(body.end || range.end),
-    timeframe: String(body.timeframe || body.interval || "1Day"),
+    timeframe: frequencyTimeframe(frequency),
     adjustment: String(body.adjustment || "raw"),
     feed: String(body.feed || ""),
     session: String(body.session || "regular"),

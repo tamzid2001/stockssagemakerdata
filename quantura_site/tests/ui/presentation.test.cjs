@@ -236,6 +236,12 @@ test('primary form builds prediction-market minute and single-model requests wit
   w.document.getElementById('ensemble-history-lag').value='2';
   w.document.getElementById('ensemble-history-lag-unit').value='days';
   assert.equal(w.build().history_lag_minutes,2880);
+  for(const days of [120,180]) {
+    w.document.getElementById('ensemble-history-lag').value=String(days);
+    assert.equal(w.build().history_lag_minutes,days*1440);
+  }
+  w.document.getElementById('ensemble-cutoff-mode').value='latest';
+  assert.equal(w.build().history_lag_minutes,0);
   w.document.getElementById('ensemble-ticker-frequency').value='1Hour';
   assert.equal(w.build().frequency,'1h');assert.equal(w.build().horizon_mode,'frequency_periods');
   assert.equal(w.build().source.session,'extended');
@@ -269,6 +275,7 @@ test('primary form builds prediction-market minute and single-model requests wit
 
 test('refresh retains last N observations and phase filters; old forecasts default safely', () => {
   const d=dom(page('forecasting.html'));const w=d.window;
+  w.QuanturaForecastControls=require('../../public/forecast-controls.js');
   w.eval('const refreshedEnsembleRequest ='+source('app.js').split('  const refreshedEnsembleRequest =')[1].split('  const setEnsembleBusy =')[0]+'\nwindow.refresh=refreshedEnsembleRequest;');
   const job={source:{type:'prediction_market',limit:45,history_phase:'in_game',history_lookback_minutes:120},frequency:'1min'};
   assert.equal(w.refresh(job).source.limit,45);
@@ -276,6 +283,7 @@ test('refresh retains last N observations and phase filters; old forecasts defau
   assert.equal(w.refresh(job).source.history_phase,'in_game');
   assert.equal(w.refresh({...job,source:{type:'ticker',limit:60}}).source.limit,60);
   assert.equal(w.refresh({...job,source:{type:'ticker'}}).source.limit,500);
+  assert.equal(w.refresh({...job,frequency:'1MS',source:{type:'ticker'}}).source.frequency,'1Month');
   d.window.close();
 });
 

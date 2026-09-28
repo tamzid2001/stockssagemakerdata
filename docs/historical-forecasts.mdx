@@ -1,0 +1,60 @@
+---
+title: "Latest and historical forecasts"
+description: "Run the same forecast workflow on the latest observations or a cutoff 120/180 days in the past."
+---
+
+# Latest and historical forecasts
+
+The data cutoff chooses which observations the model can see. It does not change when inference actually runs. A historical replay is generated now and labeled accordingly.
+
+## Website
+
+1. Select an instrument or market outcome in Search and open Forecast.
+2. Choose the observed-bar interval, last N observations and models.
+3. Under **Data cutoff**, choose **Latest available**, **Calendar date and time**, or **Minutes / hours / days ago**.
+4. For 120/180 days in the past, choose **Days ago** and enter `120` or `180`.
+5. Set the forecast horizon and run. Newer observations stay separate as an overlay.
+
+The cutoff is applied **before** selecting the latest N genuine bars. There is no fixed 90-day cutoff-age restriction. Available history depends on the exact provider, instrument and interval; Yahoo minute retention differs from daily stocks or Dukascopy archives. Missing bars are not invented.
+
+## API request
+
+For the latest data, omit both cutoff fields or use `history_lag_minutes: 0`. For an elapsed duration, use top-level minutes:
+
+| Cutoff | `history_lag_minutes` |
+| --- | ---: |
+| 120 days ago | `172800` |
+| 180 days ago | `259200` |
+
+```json
+{
+  "source":{"type":"ticker","provider":"auto","symbol":"AAPL","frequency":"1Day","limit":500},
+  "history_lag_minutes":259200,
+  "prediction_length":30,
+  "horizon_mode":"trading_sessions",
+  "calendar":"NYSE",
+  "quantiles":[0.01,0.25,0.5,0.75,0.9,0.99],
+  "models":{"prophet":{"enabled":true,"weight":1}},
+  "failure_policy":"fail"
+}
+```
+
+Submit to `POST /api/v1/ensemble-forecasts` with an authorized session/API key and an `Idempotency-Key`. Poll until completed or failed. Provider availability and model minimum context still apply.
+
+For reproducible research, prefer an explicit `history_cutoff_at`, such as `2026-04-01T20:00:00Z`, instead of a moving relative duration. Do not combine it with a positive `history_lag_minutes`. The website converts calendar inputs from your device timezone to UTC; API timestamps must include an offset. Relative days are elapsed 24-hour periods, not exchange-session counts.
+
+The saved source includes the requested UTC cutoff, effective provider and a historical-replay label. The input series records its actual final observation. Forecast timestamps begin after that observation, which can be earlier than the requested cutoff when the source has gaps.
+
+## Request metadata and errors
+
+Optional website `analytics_context` is sanitized separately from model configuration and excluded from cache identity. Missing, invalid or unavailable optional telemetry cannot block a forecast. API clients can omit it entirely.
+
+`CONFIGURATION_FIELD_UNSUPPORTED` indicates an unsupported inference field, not a limit on how far in the past the cutoff can be. Current requests retain strict validation for model IDs, checkpoints, weights and supported fields. Future dates, conflicting cutoff fields, unavailable source history, insufficient context and provider rate limits have separate validation/provider errors.
+
+A prediction market's historical side/contract must still resolve through its provider. Selecting a past cutoff does not fabricate an expired contract or unavailable archived quotes. Event-export range bounds limit the downloaded span, not the age of an otherwise available historical cutoff.
+
+## MCP and research use
+
+Read this guide through the documentation MCP and inspect supported models/intervals through forecast capabilities where API tools are available. Run authenticated forecast jobs through the HTTP API. Retain forecast ID, result hash, publication time and source provenance before replaying rules; a cutoff in the past is not evidence the model or forecast existed then.
+
+[Forecast API](/docs/ensemble-api) · [Intervals](/docs/forecast-frequencies) · [Algorithmic strategy](/docs/algorithmic-strategy) · [MCP](/docs/mcp)

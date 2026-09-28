@@ -1,12 +1,13 @@
 import type { Router } from "express";
 import { PredictionMarketDataError } from "./predictionMarketData";
 import type { QuantScreenerDataset } from "./quantScreener";
+import {FORECAST_FREQUENCIES,forecastFrequency,frequencyBounds,frequencyMinutes,type ForecastFrequency} from "./forecastFrequency";
 
 // Public market-data mirror verified against Kalshi's perps OpenAPI. Never send
 // account credentials here, and never route margin contracts through binary APIs.
 const ORIGIN = "https://api.elections.kalshi.com/trade-api/v2";
 export const PERPS_SOURCE = "kalshi_perps";
-export const PERPS_INTERVALS = { "1min": 1, "1h": 60, "1D": 1440 } as const;
+export const PERPS_INTERVALS = Object.fromEntries(FORECAST_FREQUENCIES.map(f=>[f,frequencyMinutes(f)])) as Record<ForecastFrequency,number>;
 type RecordData = Record<string, any>;
 const record = (v: unknown): RecordData => v && typeof v === "object" && !Array.isArray(v) ? v as RecordData : {};
 const decimal = (v: unknown): number | null => {
@@ -30,9 +31,7 @@ export function perpTicker(v: unknown): string {
   return ticker;
 }
 export function perpFrequency(v: unknown): keyof typeof PERPS_INTERVALS {
-  const key = ({"1Min":"1min","1Hour":"1h","1Day":"1D"} as Record<string,string>)[String(v)] || String(v || "1h");
-  if (!(key in PERPS_INTERVALS)) throw new PredictionMarketDataError("perp_interval_invalid", "Perpetual history supports minute, hourly or daily bars.", 422);
-  return key as keyof typeof PERPS_INTERVALS;
+  try{return forecastFrequency(v || "1h");}catch{throw new PredictionMarketDataError("perp_interval_invalid", "Choose minute, hourly, daily, weekly or monthly bars.", 422);}
 }
 export function normalizePerpMarket(input: unknown) {
   const m = record(input), symbol = perpTicker(m.ticker);
@@ -107,7 +106,7 @@ export class KalshiPerpsService {
   async search(query: string, limit=20) {
     const q=query.toLowerCase();return (await this.markets()).filter(m=>`${m.symbol} ${m.name} ${m.provider_asset_class}`.toLowerCase().includes(q)).slice(0,limit);
   }
-  async history(input: {symbol:unknown;frequency?:unknown;start?:unknown;end?:unknown;limit?:unknown}) {
+  async history(input: {symbol:unknown;frequency?:unknown;start?:unknown;end?:unknown;limit?:unknown}): Promise<{provider:string;symbol:string;frequency:string;timeframe:string;market:ReturnType<typeof normalizePerpMarket>;rows:ReturnType<typeof normalizePerpCandles>;count:number;metadata:RecordData;warnings:string[]}> {
     const symbol=perpTicker(input.symbol), frequency=perpFrequency(input.frequency);
     const limit=input.limit===undefined?500:Number(input.limit);
     if(!Number.isInteger(limit)||limit<1||limit>5000)throw new PredictionMarketDataError("perp_row_limit_invalid","Choose 1–5000 observations per request.",422);
@@ -115,9 +114,30 @@ export class KalshiPerpsService {
     const until=input.end ? parse(input.end) : this.now();
     const interval=PERPS_INTERVALS[frequency]*60;
     const end=Math.floor(Math.min(until,this.now())/1000);
-    const start=input.start ? Math.floor(parse(input.start)/1000) : end-interval*Math.max(1000,limit*3);
+    // Calendar aggregates need UTC-hour closes: native daily perpetual bars
+    // can end away from midnight and straddle a UTC month/week boundary.
+    const baseFrequency=["5min","15min","30min"].includes(frequency)?"1min":["4h","1W-MON","1MS"].includes(frequency)?"1h":frequency;
+    const baseInterval=PERPS_INTERVALS[baseFrequency]*60;
+    const start=input.start ? Math.floor(parse(input.start)/1000) : Math.max(0,end-Math.min(interval*Math.max(1000,limit*3),baseInterval*20000));
     if(!Number.isFinite(start)||!Number.isFinite(end)||start>=end||start<0||end-start>interval*20000)
       throw new PredictionMarketDataError("perp_date_range_invalid","Use a valid date range of at most 20,000 intervals. Split larger downloads into date ranges.",422);
+    if(!["1min","1h","1D"].includes(frequency)) {
+      const base=baseFrequency;
+      const history=await this.history({...input,frequency:base,start:start*1000,end:end*1000,limit:5000});
+      const buckets=new Map<number,typeof history.rows[number]>();
+      const coveredStart=Math.max(start*1000,Date.parse(history.rows[0]?.timestamp || "")-PERPS_INTERVALS[base]*60000);
+      for(const row of history.rows) {
+        const [bucket,finish]=frequencyBounds(Date.parse(row.timestamp)-1,frequency);
+        if(bucket<coveredStart || finish>end*1000)continue;
+        const previous=buckets.get(finish);
+        if(!previous)buckets.set(finish,{...row,timestamp:new Date(finish).toISOString()});
+        else {previous.high=previous.high===null||row.high===null?null:Math.max(previous.high,row.high);previous.low=previous.low===null||row.low===null?null:Math.min(previous.low,row.low);previous.close=row.close;previous.volume=previous.volume===null||row.volume===null?null:previous.volume+row.volume;}
+      }
+      const rows=[...buckets.values()].slice(-limit);
+      return {...history,frequency,timeframe:frequency,rows,count:rows.length,
+        metadata:{...history.metadata,base_frequency:base,calendar_week_start:"Monday UTC",calendar_month_start:"first UTC day",completed_bars_only:true,base_history_bounded:history.rows.length===5000},
+        warnings:[...history.warnings,...(rows.length<limit?[`Only ${rows.length} completed ${frequency} observations are available in this bounded request.`]:[])]};
+    }
     const market=(await this.markets()).find(m=>m.symbol===symbol);
     if(!market)throw new PredictionMarketDataError("perp_not_found","This perpetual contract is not listed by Kalshi.",404);
     return this.cached(`history:${symbol}:${frequency}:${start}:${end}:${limit}`,60_000,async()=>{
