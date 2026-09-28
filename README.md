@@ -116,7 +116,7 @@ sequenceDiagram
     participant Store as Private job storage
     participant Worker as Forecast worker
     Client->>API: Source, interval, cutoff, horizon and models
-    API->>API: Authorize; separate optional telemetry
+    API->>API: Authorize and separate optional telemetry
     API->>Data: Fetch genuine observations through cutoff
     Data-->>API: Actual bars and provenance
     API->>Store: Freeze eligible inputs and configuration
