@@ -149,3 +149,105 @@ def test_kalshi_schedule_accepts_nested_markets_when_top_level_is_empty():
     p=KalshiProvider()
     p._schedule_request=lambda url: ({'event':{'event_ticker':'GAME','markets':[{'ticker':'GAME','status':'open'}]},'markets':[]} if '/events/' in url else {'milestones':[{'primary_event_tickers':['GAME'],'start_date':'2026-09-27T01:30Z'}]})
     assert stamp(p.verify_schedule(contract())['eventStart'])==stamp('2026-09-27T01:30Z')
+
+
+def screener_dependencies(monkeypatch, tmp_path, discover, status_error=False):
+    from types import SimpleNamespace
+    from market_research import pregame_screener, store
+
+    class Database:
+        status = None
+        def collection(self, name):
+            return self
+        def where(self, *args):
+            return self
+        def limit(self, *args):
+            return self
+        def stream(self):
+            return []
+        def batch(self):
+            return self
+        def document(self, name):
+            return self
+        def set(self, value):
+            if status_error:
+                raise RuntimeError("database is unavailable")
+            self.status = value.copy()
+
+    db = Database()
+    monkeypatch.setattr(store, 'Store', lambda *args: SimpleNamespace(db=db))
+    monkeypatch.setattr(pregame_screener, 'KalshiProvider', lambda: SimpleNamespace(discover=discover))
+    monkeypatch.setenv('QUANTURA_RESEARCH_DIR', str(tmp_path / 'not-created-yet'))
+    monkeypatch.setenv('QUANTURA_RESEARCH_ARTIFACT_KEY', '12' * 32)
+    return pregame_screener, db
+
+
+@pytest.mark.parametrize('status_error', [False, True])
+def test_discovery_rate_limit_preserves_encrypted_failure_without_masking_root_cause(tmp_path, monkeypatch, status_error):
+    import json
+    import zipfile
+    from market_research.artifact import package, decrypt
+
+    def discover(*args):
+        raise RuntimeError('DATA_HTTP_429_RATE_LIMITED')
+    worker, db = screener_dependencies(monkeypatch, tmp_path, discover, status_error)
+    with pytest.raises(RuntimeError, match='^DATA_HTTP_429_RATE_LIMITED$'):
+        worker.run('kalshi', 500, shard=0, shards=2)
+    source = tmp_path / 'not-created-yet'
+    report = json.loads((source / worker.REPORT_FILENAME).read_text())
+    assert report['run_status'] == 'failed' and report['partial']
+    assert report['failure_stage'] == 'discovery'
+    assert report['error_code'] == 'DATA_HTTP_429_RATE_LIMITED'
+    assert report['successful'] == report['discovery_pages'] == 0
+    if status_error:
+        assert report['status_error_code'] == 'PREGAME_STATUS_PUBLICATION_FAILED'
+    else:
+        assert db.status == report
+    package(source, tmp_path / 'failed.enc')
+    decrypt(tmp_path / 'failed.enc', tmp_path / 'verified.zip')
+    with zipfile.ZipFile(tmp_path / 'verified.zip') as archive:
+        assert archive.namelist() == [worker.REPORT_FILENAME, 'manifest.json']
+        assert json.loads(archive.read(worker.REPORT_FILENAME)) == report
+
+
+def test_bootstrap_failure_preserves_report_without_exception_credentials(tmp_path, monkeypatch):
+    import json
+    from market_research import store
+    worker, _ = screener_dependencies(monkeypatch, tmp_path, lambda *args: ([], {}))
+    def fail(*args):
+        raise RuntimeError('credential-value-must-never-be-archived')
+    monkeypatch.setattr(store, 'Store', fail)
+    with pytest.raises(RuntimeError):
+        worker.run('kalshi', 500)
+    text = (tmp_path / 'not-created-yet' / worker.REPORT_FILENAME).read_text()
+    report = json.loads(text)
+    assert report['failure_stage'] == 'initialize'
+    assert report['error_code'] == 'PREGAME_WORKER_FAILED'
+    assert 'credential-value' not in text
+
+
+def test_discovery_is_paced_one_page_at_a_time_and_empty_day_completes(tmp_path, monkeypatch):
+    import json
+    calls, delays = [], []
+    def discover(mode, pages, cursor):
+        calls.append((mode, pages, cursor))
+        return [], {'next_cursor': 'next-page' if cursor == '0' else None}
+    worker, db = screener_dependencies(monkeypatch, tmp_path, discover)
+    monkeypatch.setattr(worker.time, 'sleep', delays.append)
+    worker.run('kalshi', 500)
+    assert calls == [('premarket', 1, '0'), ('premarket', 1, 'next-page')]
+    assert delays == [1.25]
+    report = json.loads((tmp_path / 'not-created-yet' / worker.REPORT_FILENAME).read_text())
+    assert report['discovery_pages'] == 2 and report['eligible'] == 0
+    assert report['run_status'] == 'completed' and not report['partial']
+    assert db.status == report
+
+
+def test_status_publication_failure_keeps_local_report_and_fails_job(tmp_path, monkeypatch):
+    import json
+    worker, _ = screener_dependencies(monkeypatch, tmp_path, lambda *args: ([], {'next_cursor': None}), True)
+    with pytest.raises(RuntimeError, match='^PREGAME_STATUS_PUBLICATION_FAILED$'):
+        worker.run('kalshi', 500)
+    report = json.loads((tmp_path / 'not-created-yet' / worker.REPORT_FILENAME).read_text())
+    assert report['run_status'] == 'failed'
+    assert report['failure_stage'] == 'status' and report['partial']

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+import re
 import signal
 from pathlib import Path
 import time
@@ -97,53 +98,66 @@ def document(contract, forecast, now, original=None):
 
 
 def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_date=None):
-    from .forecast import forecast_window
-    from .store import Store
-    provider = KalshiProvider() if source == "kalshi" else QuanturaProvider()
-    db = Store("pregame-screener-readonly", "pregame").db
-    # This collection contains only public game forecast outputs, never user data.
-    old = db.collection(COLLECTION).where("game_date", "<", game_date(time.time() - 3 * 86400)).limit(500).stream()
-    batch = db.batch()
-    removed = 0
-    for doc in old:
-        batch.delete(doc.reference)
-        removed += 1
-    if removed:
-        batch.commit()
-    deadline = time.time() + 48 * 60
     target_date = refresh_date or game_date(time.time())
-    originals = {}
-    if refresh_published:
-        for saved in db.collection(COLLECTION).where("game_date", "==", target_date).limit(1000).stream():
-            row = saved.to_dict()
-            if row.get("provider") == source:
-                originals[row["contract_id"]] = row
-    contracts, cursor, seen, coverage = {}, "0", set(), {}
-    while (not refresh_date or refresh_date == game_date(time.time())) and cursor not in seen and time.time() < deadline:
-        seen.add(cursor)
-        rows, coverage = provider.discover("premarket", 20, cursor)
-        contracts.update({c["contractId"]: c for c in rows})
-        cursor = coverage.get("next_cursor")
-        if not cursor:
-            break
-    selected = sorted((c for c in contracts.values() if eligible(c, time.time())), key=lambda c: (c["eventStart"], c["contractId"]))
-    # Recalculate older saved snapshots using only their immutable pregame cutoff.
-    for saved in originals.values():
-        if saved["contract_id"] not in {c["contractId"] for c in selected}:
-            selected.append({"source": source, "contractId": saved["contract_id"], "providerSymbol": saved["symbol"],
-                             "eventId": saved["event_id"], "eventSlug": saved.get("event_slug"), "eventTitle": saved["event_title"],
-                             "outcome": saved["outcome"], "side": saved.get("side") or (saved["contract_id"].split(":")[-1] if source == "kalshi" else "long"),
-                             "eventStart": saved["game_start"], "status": "open"})
-    if refresh_date and refresh_date != game_date(time.time()):cursor=None
-    total_eligible=len(selected)
-    # Refresh every existing published snapshot before acquiring new outcomes.
-    selected.sort(key=lambda c:(c["contractId"] not in originals,c["eventStart"],c["contractId"]))
-    selected = [c for c in selected[:maximum] if int(digest(c["contractId"])[:8],16) % shards == shard]
-    report = {"provider": source, "game_date": target_date, "eligible": len(selected), "successful": 0,
-              "skipped": 0, "failed": 0, "partial": bool(cursor) or total_eligible > maximum,
+    report = {"provider": source, "game_date": target_date, "eligible": 0, "successful": 0,
+              "skipped": 0, "failed": 0, "partial": True, "run_status": "running",
               "shard": shard, "shards": shards, "refresh_published":refresh_published,
-              "discovery": coverage, "removed_expired": removed, "failures": []}
+              "discovery": {}, "discovery_pages": 0, "removed_expired": 0, "failures": []}
+    output = Path(os.environ.get("QUANTURA_RESEARCH_DIR", "/tmp/quantura-pregame"))
+    output.mkdir(parents=True, exist_ok=True)
+    # A bootstrap/provider failure must still leave an allowlisted encrypted report.
+    (output / REPORT_FILENAME).write_text(json.dumps(report))
+    db = None
+    phase = "initialize"
     try:
+        from .forecast import forecast_window
+        from .store import Store
+        provider = KalshiProvider() if source == "kalshi" else QuanturaProvider()
+        db = Store("pregame-screener-readonly", "pregame").db
+        phase = "cleanup"
+        # This collection contains only public game forecast outputs, never user data.
+        old = db.collection(COLLECTION).where("game_date", "<", game_date(time.time() - 3 * 86400)).limit(500).stream()
+        batch = db.batch()
+        for doc in old:
+            batch.delete(doc.reference)
+            report["removed_expired"] += 1
+        if report["removed_expired"]:
+            batch.commit()
+        deadline = time.time() + 48 * 60
+        originals = {}
+        if refresh_published:
+            for saved in db.collection(COLLECTION).where("game_date", "==", target_date).limit(1000).stream():
+                row = saved.to_dict()
+                if row.get("provider") == source:
+                    originals[row["contract_id"]] = row
+        phase = "discovery"
+        contracts, cursor, seen = {}, "0", set()
+        while (not refresh_date or refresh_date == game_date(time.time())) and cursor not in seen and time.time() < deadline:
+            seen.add(cursor)
+            # One page at a time avoids the unpaced twenty-page Kalshi burst.
+            rows, coverage = provider.discover("premarket", 1, cursor)
+            contracts.update({c["contractId"]: c for c in rows})
+            report["discovery"] = coverage
+            report["discovery_pages"] += 1
+            cursor = coverage.get("next_cursor")
+            if not cursor:
+                break
+            time.sleep(1.25)
+        selected = sorted((c for c in contracts.values() if eligible(c, time.time())), key=lambda c: (c["eventStart"], c["contractId"]))
+        # Recalculate older saved snapshots using only their immutable pregame cutoff.
+        for saved in originals.values():
+            if saved["contract_id"] not in {c["contractId"] for c in selected}:
+                selected.append({"source": source, "contractId": saved["contract_id"], "providerSymbol": saved["symbol"],
+                                 "eventId": saved["event_id"], "eventSlug": saved.get("event_slug"), "eventTitle": saved["event_title"],
+                                 "outcome": saved["outcome"], "side": saved.get("side") or (saved["contract_id"].split(":")[-1] if source == "kalshi" else "long"),
+                                 "eventStart": saved["game_start"], "status": "open"})
+        if refresh_date and refresh_date != game_date(time.time()):cursor=None
+        total_eligible=len(selected)
+        # Refresh every existing published snapshot before acquiring new outcomes.
+        selected.sort(key=lambda c:(c["contractId"] not in originals,c["eventStart"],c["contractId"]))
+        selected = [c for c in selected[:maximum] if int(digest(c["contractId"])[:8],16) % shards == shard]
+        report.update(eligible=len(selected), partial=bool(cursor) or total_eligible > maximum)
+        phase = "forecast"
         for contract in selected:
             if time.time() >= deadline:
                 report["partial"] = True
@@ -206,18 +220,34 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
                 report["failed"] += 1
                 report["failures"].append({"contract_id": contract["contractId"], "code": str(error) if str(error).isupper() else "HISTORY_OR_MODEL_UNAVAILABLE"})
                 print(json.dumps({"event": "pregame_skipped", **report["failures"][-1]}), flush=True)
+        if report["eligible"] and not report["successful"] and report["failed"]:
+            raise RuntimeError("NO_QUALIFYING_PREGAME_FORECASTS")
+        report["run_status"] = "partial" if report["partial"] else "completed"
+    except Exception as error:
+        report.update(run_status="failed", partial=True, failure_stage=phase,
+                      error_code=str(error) if re.fullmatch(r"[A-Z][A-Z0-9_]{0,100}", str(error)) else "PREGAME_WORKER_FAILED")
+        raise
     finally:
         report["updated_at"] = iso(int(time.time()))
-        db.collection("game_forecast_status").document(source if shards==1 else f"{source}-{shard}").set(report)
-        output = Path(os.environ.get("QUANTURA_RESEARCH_DIR", "/tmp/quantura-pregame"))
-        output.mkdir(parents=True, exist_ok=True)
+        # Preserve local diagnostics even if publishing status to Firestore fails.
         (output / REPORT_FILENAME).write_text(json.dumps(report))
+        status_failed = False
+        if db is not None:
+            try:
+                db.collection("game_forecast_status").document(source if shards==1 else f"{source}-{shard}").set(report)
+            except Exception:
+                status_failed = report["run_status"] != "failed"
+                report["status_error_code"] = "PREGAME_STATUS_PUBLICATION_FAILED"
+                if status_failed:
+                    report.update(run_status="failed", partial=True, failure_stage="status",
+                                  error_code="PREGAME_STATUS_PUBLICATION_FAILED")
+                (output / REPORT_FILENAME).write_text(json.dumps(report))
         print(json.dumps({"event": "pregame_summary", **report}), flush=True)
         if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
             with open(summary, "a") as stream:
                 stream.write(f"## {source}: today's pregame forecasts\n\n10 days of completed hourly observations. Forecast end: game start + 4 hours. No inference/publication from the start hour onward.\n\n`{json.dumps(report)}`\n")
-    if report["eligible"] and not report["successful"] and report["failed"]:
-        raise RuntimeError("NO_QUALIFYING_PREGAME_FORECASTS")
+        if status_failed:
+            raise RuntimeError("PREGAME_STATUS_PUBLICATION_FAILED") from None
 
 
 if __name__ == "__main__":
