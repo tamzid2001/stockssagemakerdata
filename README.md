@@ -176,6 +176,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the wider application test suite and 
 
 Use `./deploy.sh` after committing and validating changes. The default Vercel workflow deploys API, compatibility API, newsletter, SSR and website projects in that order from `git archive HEAD`. Uncommitted changes are not deployed. `DEPLOY_DRY_RUN=true ./deploy.sh` prints the plan without publishing.
 
+The stock screener checks hourly for the latest unpublished completed NYSE session. Exchange dates and frozen close cutoffs survive delayed Actions runs and UTC midnight. Validated JSON/CSV assets publish before the completion marker; failed scans stay eligible for retry.
+
 Keep secrets in encrypted runtime/CI stores. Do not commit `.env` files, credentials, model tokens or raw private research artifacts. Read [secret handling](docs/secrets.md), [repository-size maintenance](docs/repository-size-maintenance.md) and [SECURITY.md](SECURITY.md).
 
 [Wiki: architecture and operations](https://github.com/tamzid2001/stockssagemakerdata/wiki/Architecture-and-Operations) · [Troubleshooting](TROUBLESHOOTING.md)

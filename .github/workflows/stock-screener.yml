@@ -27,7 +27,7 @@ on:
         required: false
         default: false
   schedule:
-    - cron: "5 17,18,20,21 * * 1-5" # Actual NYSE close gate selects one eligible daily scan.
+    - cron: "17 * * * *" # Catch up the latest unpublished NYSE close, even after Actions delays.
 
 permissions: {}
 
@@ -65,16 +65,33 @@ jobs:
           cache: pip
       - name: Install universe dependencies
         run: python -m pip install --disable-pip-version-check pandas requests lxml pandas-market-calendars==5.4.0
-      - name: Check actual exchange close
+      - name: Read last validated publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p screener-work/published
+          if gh release view screener-latest --json assets > screener-work/published/release.json 2> screener-work/published/release-error.txt; then
+            if jq -e '.assets | any(.name == "run-manifest.json")' screener-work/published/release.json > /dev/null; then
+              gh release download screener-latest --pattern run-manifest.json --dir screener-work/published --clobber
+            fi
+          elif ! grep -q '^release not found$' screener-work/published/release-error.txt; then
+            cat screener-work/published/release-error.txt >&2
+            exit 1
+          fi
+      - name: Select latest unpublished exchange session
         id: session
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           args=()
           if [[ "$EVENT_NAME" == workflow_dispatch ]]; then args+=(--manual); fi
-          python scripts/screener_schedule.py "${args[@]}" >> "$GITHUB_OUTPUT"
+          python scripts/screener_schedule.py "${args[@]}" --publication-manifest screener-work/published/run-manifest.json >> "$GITHUB_OUTPUT"
       - name: Generate S&P 500, Nasdaq, SPY, and earnings universe
         if: steps.session.outputs.should_run == 'true'
+        env:
+          SCAN_DATE: ${{ steps.session.outputs.scan_date }}
+          SESSION_CLOSE: ${{ steps.session.outputs.session_close }}
         shell: bash
         run: |
           if [[ -n "$MAX_TICKERS" && "$PUBLISH_RESULTS" == true ]]; then
@@ -87,7 +104,8 @@ jobs:
             --output screener-work/universe/universe.json
             --matrix-output screener-work/universe/matrix.json
             --chunk-count "${CHUNK_COUNT}"
-            --scan-date "$(date -u +%F)"
+            --scan-date "$SCAN_DATE"
+            --session-close "$SESSION_CLOSE"
           )
           if [[ -n "${MAX_TICKERS}" ]]; then
             command+=(--max-tickers "${MAX_TICKERS}")
@@ -275,6 +293,9 @@ jobs:
             "screener-work/final/quantura-screener-${SCAN_DATE}.json.gz" \
             screener-work/final/quantura-screener-latest.json \
             screener-work/final/quantura-screener-latest.csv \
+            --clobber
+          # Publish this completion marker only after all website assets succeed.
+          gh release upload screener-latest \
             screener-work/final/run-manifest.json \
             --clobber
           CUTOFF_DATE="$(date -u -d "${SCAN_DATE} -13 days" +%F)"
