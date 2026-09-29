@@ -17,7 +17,9 @@ Market-cap presets use these boundaries: Mega at least $200 billion, Large from 
 
 The matrix assigns every symbol to exactly one deterministic SHA-256 chunk. Chunks prefer batched Alpaca IEX daily bars using server-only `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `ALPACA_DATA_URL`, and `ALPACA_DATA_FEED`. When credentials or the provider are unavailable, the chunk uses batched adjusted Yahoo daily closes and records that fallback in its artifact.
 
-Each symbol with sufficient history uses the same `quantura_quantile_drift_v1` methodology as the application: historical log-return drift and volatility-scaled P10/P50/P90 boundaries for a ten-business-day horizon. Actual price is the most recent adjusted completed daily close. Missing market data, insufficient prediction history, unsupported instruments, and per-symbol failures are retained as explicit statuses rather than silently discarded.
+Each symbol with sufficient history uses the shared five-model weekly ensemble: Prophet, Toto, Granite, Chronos and approved/licensed TimesFM, with P01/P10/P25/P50/P75/P90/P99 for the next seven NYSE sessions. Central model weights are equal; tails use only supporting models. All chunks freeze history at the selected completed NYSE close. No completed session is intentionally withheld. A missing latest-session bar is reported instead of generating a fresh forecast from an older close.
+
+The hourly scheduler selects the latest completed NYSE session using the exchange calendar, including daylight saving, holidays and early closes. It compares that session with the last validated publication marker. Delayed GitHub runs and UTC midnight cannot miss the scan or change its exchange date; later runs retry an unpublished session and skip one already published. Manual runs can refresh that same session explicitly.
 
 ## Coverage and publication
 
@@ -25,7 +27,7 @@ Every chunk uploads an immutable artifact and has a same-day/universe-hash cache
 
 `coverage = successfully evaluated symbols / eligible symbols`
 
-The scheduled threshold is 90 percent. Below that threshold the Action fails after uploading diagnostics and preserves the previous `screener-latest` release. Passing runs publish JSON, CSV, and a run manifest. The backend applies validated server-side filtering, sorting, and pagination to the JSON asset and proxies the CSV without exposing a GitHub or Alpaca credential.
+The scheduled threshold is 90 percent. Below that threshold the Action fails after uploading diagnostics and preserves the previous `screener-latest` release. Passing runs publish JSON, CSV and a dated archive before uploading the completion manifest. Failed asset publication cannot mark a session complete. The backend applies validated server-side filtering, sorting, and pagination to the JSON asset and proxies the CSV without exposing a GitHub or Alpaca credential.
 
 ## Safe representative validation
 

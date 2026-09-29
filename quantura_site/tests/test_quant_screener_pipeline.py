@@ -1,4 +1,5 @@
 import importlib.util
+import datetime as dt
 import json
 from pathlib import Path
 
@@ -166,6 +167,27 @@ def test_missing_history_is_reported_not_silently_dropped():
     row = pipeline.completed_row(base_item("PLTR"), [], None, "test")
     assert row["status"] == "missing_market_data"
     assert row["forecast_available"] is False
+
+
+def test_delayed_chunks_freeze_inputs_at_the_selected_close(monkeypatch):
+    rows = [{"timestamp": f"2026-09-{day}T00:00:00Z", "close": price}
+            for day, price in [(25, 100), (28, 101), (29, 102)]]
+    inputs = []
+    monkeypatch.setattr(pipeline, "build_forecast", lambda history: inputs.append(history))
+    cutoff = dt.datetime.fromisoformat("2026-09-28T20:00:00+00:00")
+    result = pipeline.completed_row(base_item("AAPL"), rows, None, "test", as_of=cutoff)
+    assert [r["timestamp"][:10] for r in inputs[0]] == ["2026-09-25", "2026-09-28"]
+    assert result["actual_price"] == 101
+    assert result["actual_price_timestamp"].startswith("2026-09-28")
+
+
+def test_missing_latest_session_is_not_published_as_a_fresh_forecast(monkeypatch):
+    monkeypatch.setattr(pipeline, "build_forecast", lambda *_: (_ for _ in ()).throw(AssertionError("stale forecast")))
+    result = pipeline.completed_row(base_item("AAPL"), [{"timestamp": "2026-09-25T00:00:00Z", "close": 100}],
+                                    None, "test", as_of=dt.datetime.fromisoformat("2026-09-28T20:00:00+00:00"))
+    assert result["status"] == "missing_market_data"
+    assert result["error_code"] == "latest_session_bar_unavailable"
+    assert result["forecast_available"] is False
 
 
 def test_quantile_position_and_distances_are_strict():

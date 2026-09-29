@@ -430,6 +430,7 @@ def command_universe(args: argparse.Namespace) -> int:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "scan_date": scan_date,
+        "session_close": getattr(args, "session_close", None),
         "generated_at": iso_now(),
         "universe_hash": digest,
         "runtime_seconds": runtime_seconds,
@@ -612,8 +613,9 @@ def distance(price: float, boundary: float) -> tuple[float, float]:
     return round(absolute, 6), round(percentage, 6)
 
 
-def completed_row(item: Mapping[str, Any], history: Sequence[Mapping[str, Any]], market_cap: float | None, price_source: str) -> dict[str, Any]:
-    history = completed_history(history, utc_now())
+def completed_row(item: Mapping[str, Any], history: Sequence[Mapping[str, Any]], market_cap: float | None, price_source: str,
+                  *, as_of: dt.datetime | None = None) -> dict[str, Any]:
+    history = completed_history(history, as_of or utc_now())
     row = dict(item)
     row.update(
         {
@@ -635,6 +637,9 @@ def completed_row(item: Mapping[str, Any], history: Sequence[Mapping[str, Any]],
         return row
     row["actual_price"] = round(price, 6)
     row["actual_price_timestamp"] = str(latest.get("timestamp") or "")
+    if as_of and str(latest["timestamp"])[:10] != as_of.date().isoformat():
+        row["error_code"] = "latest_session_bar_unavailable"
+        return row
     forecast = build_forecast(history)
     if not forecast:
         row["status"] = "missing_predictions"
@@ -699,7 +704,8 @@ def command_chunk(args: argparse.Namespace) -> int:
                 return 0
 
     symbols = [normalize_symbol(item["ticker"]) for item in chunk_items]
-    end = dt.date.today()
+    end = dt.date.fromisoformat(universe["scan_date"])
+    as_of = dt.datetime.fromisoformat(universe["session_close"]) if universe.get("session_close") else None
     start = end - dt.timedelta(days=760)
     price_source = "alpaca_daily_bar_close"
     provider_error = ""
@@ -718,7 +724,7 @@ def command_chunk(args: argparse.Namespace) -> int:
         if symbol in completed_symbols:
             continue
         try:
-            rows.append(completed_row(item, histories.get(symbol) or [], market_caps.get(symbol), price_source))
+            rows.append(completed_row(item, histories.get(symbol) or [], market_caps.get(symbol), price_source, as_of=as_of))
         except Exception as error:
             failed = dict(item)
             failed.update(
@@ -744,6 +750,7 @@ def command_chunk(args: argparse.Namespace) -> int:
         "schema_version": SCHEMA_VERSION,
         "forecast_config_hash": configuration_hash(),
         "scan_date": universe.get("scan_date"),
+        "session_close": universe.get("session_close"),
         "generated_at": iso_now(),
         "universe_hash": expected_hash,
         "chunk": args.chunk,
@@ -818,6 +825,7 @@ def coverage_manifest(universe: Mapping[str, Any], rows: Sequence[Mapping[str, A
         "schema_version": SCHEMA_VERSION,
         "status": "complete" if coverage >= threshold else "degraded",
         "scan_date": universe.get("scan_date"),
+        "session_close": universe.get("session_close"),
         "generated_at": iso_now(),
         "last_successful_complete_scan": iso_now() if coverage >= threshold else None,
         "universe_hash": universe.get("universe_hash"),
@@ -834,8 +842,8 @@ def coverage_manifest(universe: Mapping[str, Any], rows: Sequence[Mapping[str, A
         "coverage_threshold": threshold,
         "coverage_ok": coverage >= threshold,
         "runtime_seconds": round(time.monotonic() - started, 2),
-        "actual_price_definition": "Most recent completed split-adjusted daily close at publication. The website overlays newer completed minute closes with an explicit source and timestamp. Alpaca IEX is preferred; Yahoo is the fallback.",
-        "forecast_methodology": "Five-model ensemble; one completed NYSE session withheld; next seven NYSE sessions; 20% central weights, tails renormalized; Toto 4M; split-adjusted price basis.",
+        "actual_price_definition": "Completed split-adjusted daily close for the selected NYSE session. Missing latest-session bars are reported, not replaced with an older close. Alpaca IEX is preferred; Yahoo is the fallback.",
+        "forecast_methodology": "Five-model ensemble through the selected completed NYSE close; next seven NYSE sessions; 20% central weights, tails renormalized; Toto 4M; split-adjusted price basis.",
         "market_cap_convention": "Mega ≥ $200B; Large $10B–$200B; Mid $2B–$10B; Small $300M–$2B; Micro < $300M. ETFs are unclassified.",
         "earnings_source": (universe.get("earnings") or {}).get("source") or "unavailable",
     }
@@ -906,6 +914,7 @@ def build_parser() -> argparse.ArgumentParser:
     universe.add_argument("--chunk-count", type=int, default=DEFAULT_CHUNK_COUNT)
     universe.add_argument("--max-tickers", type=int)
     universe.add_argument("--scan-date")
+    universe.add_argument("--session-close", help="Freeze all chunks at the selected NYSE close (ISO-8601 with timezone)")
     universe.add_argument("--earnings-days", type=int, default=30)
     universe.add_argument("--skip-earnings", action="store_true")
     universe.set_defaults(handler=command_universe)

@@ -8,6 +8,8 @@ Stock filters compare the latest observed price with the selected quantile or fo
 
 Perpetual prices are normalized to underlying units. A market reference quote is not a completed trade or fabricated forecast; unavailable quantiles remain unavailable.
 
+Stock scans run after the latest completed NYSE close. Hourly recovery checks compare that exchange session with the last validated publication, so delayed GitHub runs and UTC midnight do not skip or misdate updates. Every chunk uses that same close; incomplete coverage preserves the previous publication and remains eligible for retry.
+
 ## Today's games
 
 - Filter Kalshi-only or Polymarket US-only cards, or inspect matched game outcomes from both providers.
