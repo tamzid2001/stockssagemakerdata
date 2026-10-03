@@ -4,6 +4,8 @@ This repo keeps secrets on the server side only. Client bundles must never embed
 
 ## Runtime loader
 
+- The public runtime is Vercel. Use sensitive environment variables for production/preview credentials; redeploy the consuming project after updates. Never use public frontend aliases for private credentials.
+- Vercel compatibility loader: `quantura_site/functions_legacy_vercel/secrets_loader.py`.
 - Server module: `quantura_site/functions/secrets_loader.py`
 - Functions entrypoint: `quantura_site/functions/main.py`
 - Firebase Functions global bindings: `set_global_options(..., secrets=secrets_loader.secret_bindings())`
@@ -54,6 +56,18 @@ Treasury Fiscal Data API does not require authentication.
 - `INSTAGRAM_ACCESS_TOKEN`
 - `TIKTOK_ACCESS_TOKEN`
 - `META_CAPI_ACCESS_TOKEN`
+
+### Partner setup
+
+- `OPENAI_ADS_PIXEL_ID`: public pixel identifier; browser and server must match.
+- `OPENAI_ADS_CONVERSIONS_API_KEY`: server-only conversion reporting.
+- `OPENAI_ADS_MANAGEMENT_API_KEY`: separate management credential, not a pixel or conversion key.
+- `PINTEREST_APP_ID` / `PINTEREST_APP_SECRET`: Pinterest app configuration.
+- `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET`: TikTok app configuration.
+- `GEMINI_PREDICTION_API_KEY` / `GEMINI_PREDICTION_API_SECRET`: prediction-provider credentials, separate from Google's `GEMINI_API_KEY`.
+- `CALENDLY_ACCESS_TOKEN`: server-only Calendly access.
+
+See [measurement setup and coverage](partner-measurement.md). Provisioning credentials does not activate OAuth publishing, trading or booking flows.
 
 ### Optional channel webhook overrides
 

@@ -178,6 +178,12 @@ Use `./deploy.sh` after committing and validating changes. The default Vercel wo
 
 The stock screener checks hourly for the latest unpublished completed NYSE session. Exchange dates and frozen close cutoffs survive delayed Actions runs and UTC midnight. Validated JSON/CSV assets publish before the completion marker; failed scans stay eligible for retry.
 
+Publication reads the checked-in model registry directly and is checked with Python site packages disabled, so aggregation does not require the inference worker's pandas/Pydantic stack. On October 3, the recovered October 2 scan published 3,568 valid five-model forecasts out of 3,607 stocks (98.92% coverage), with 39 explicitly unavailable histories/predictions.
+
+Vercel function projects skip Git builds when their runtime inputs have not changed, including sitemap-only commits. Missing Git comparison metadata and explicit CLI deployments always build. Test files and caches are excluded from runtime bundles. Retention is set to one day for failed/canceled builds, seven days for previews, and fourteen days for production; active aliases and platform rollback protections still apply. Functions Storage is accrued GB-month usage, so deletions reduce future storage rather than resetting the month's usage.
+
+Public-page OpenAI Ads and AWS Marketplace/Zift measurement follows the optional analytics choice and Global Privacy Control. Confirmed contact leads use matching browser/server event IDs. Pinterest domain verification is in the public HTML; credentials remain server-only. See [measurement and integrations](docs/partner-measurement.md).
+
 Keep secrets in encrypted runtime/CI stores. Do not commit `.env` files, credentials, model tokens or raw private research artifacts. Read [secret handling](docs/secrets.md), [repository-size maintenance](docs/repository-size-maintenance.md) and [SECURITY.md](SECURITY.md).
 
 [Wiki: architecture and operations](https://github.com/tamzid2001/stockssagemakerdata/wiki/Architecture-and-Operations) · [Troubleshooting](TROUBLESHOOTING.md)

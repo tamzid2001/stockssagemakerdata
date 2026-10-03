@@ -5553,7 +5553,7 @@
           <div>
             <h3>Choose your cookie preference</h3>
             <p class="small">
-              Essential cookies keep sign-in and core features working. Optional analytics help us improve Quantura.
+              Essential cookies keep sign-in and core features working. Optional analytics measure site use and campaign results.
               <a href="/privacy">Privacy policy</a>
             </p>
           </div>
@@ -5582,6 +5582,10 @@
     }
     return banner;
   };
+
+  document.addEventListener("quantura:open-cookie-preferences", () => {
+    ensureCookieModal().classList.remove("hidden");
+  });
 
   const ensureFeedbackModal = () => {
     let modal = document.getElementById("feedback-modal");
@@ -27376,7 +27380,9 @@
 
       try {
         const submitContact = functions.httpsCallable("submit_contact");
-        await submitContact(payload);
+        payload.adsContext = window.QuanturaAds?.capture() || null;
+        const contactResponse = await submitContact(payload);
+        window.QuanturaAds?.leadCreated(contactResponse?.data?.adsEventId || "");
         ui.contactForm.reset();
         showToast("Message sent. We'll respond within one business day.");
         logEvent("contact_submit", { source: window.location.pathname });
