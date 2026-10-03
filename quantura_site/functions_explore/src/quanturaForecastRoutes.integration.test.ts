@@ -238,7 +238,9 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/complete`, workerToken, {...result,result_hash:"different"})).status,409);
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/progress`, workerToken, {completed_models:0,total_models:1})).status,409);
     const usage = await db.collection("ensemble_forecast_usage").where("workspace_id","==",workspace).get();
-    assert.equal(usage.docs[0].data().active,0,"callbacks release the quota exactly once");
+    const admission=usage.docs.find(doc=>doc.data().leases!==undefined);
+    assert.ok(admission,"workspace admission state is persisted");
+    assert.deepEqual(admission.data().leases,{},"callbacks release each exact job lease exactly once");
     assert.equal((await requestIndex.get()).data()?.title,"My custom saved forecast");
     assert.equal((await requestIndex.get()).data()?.outputsMeta.status,"completed");
     const saved = (await (await call(`/v1/ensemble-forecasts/${id}`,keys[0])).json()).data;
