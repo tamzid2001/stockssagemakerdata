@@ -33,12 +33,19 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
-    <script defer src="/app.js?v=20260927-research"></script>
+    <script defer src="/app.js?v=20261003-header-trial"></script>
     <script defer src="/forecasts.js?v=20260908a"></script>
     <script type="application/ld+json">__FORECAST_STRUCTURED_DATA__</script>
-  </head>
+  <script defer src="/q-market.js?v=20261003-header"></script>
+<script defer src="/market-search.js?v=20261003-header"></script>
+</head>
   <body class="forecast-detail-page" data-forecast-slug="__FORECAST_SLUG__">
-    <header class="header"><div class="container nav"><a class="logo" href="/"><span>QUANTURA</span></a><nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/screener">Screener</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav><div class="nav-actions"><span id="header-user-status" class="pill">Guest</span><button class="cta secondary" id="header-auth" type="button">Sign in</button></div></div></header>
+    <header class="header"><div class="container nav"><a class="logo" href="/"><span>QUANTURA</span></a><nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a></nav><section class="market-search-workspace header-market-search" aria-label="Search markets">
+<form id="market-search-form" class="market-search-form" role="search">
+<div class="field"><label class="visually-hidden" for="market-search-query">Search markets</label><input id="market-search-query" name="q" type="search" minlength="2" maxlength="2048" autocomplete="off" enterkeyhint="search" placeholder="Search markets" required /></div>
+<input id="market-search-source" type="hidden" value="auto" />
+<button class="header-search-submit" type="submit" aria-label="Search"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+</form><p id="market-search-status" class="small" role="status" aria-live="polite"></p><div id="market-search-results" class="market-search-results" role="region" aria-label="Market search results" hidden></div></section><div class="nav-actions"><span id="header-user-status" class="pill">Guest</span><button class="cta secondary" id="header-auth" type="button">Sign in</button></div></div></header>
     <main>
       <section class="forecast-detail-hero"><div class="container"><a class="small forecast-back-link" href="/forecasts">← All forecasts</a><div id="forecast-detail-state" class="forecast-state" aria-live="polite">Loading forecast record…</div><article id="forecast-detail" hidden></article></div></section>
       <section class="section" id="forecast-probability-history" hidden><div class="container"><div class="forecast-section-heading"><div><div class="eyebrow">Immutable revisions</div><h2>Probability history</h2><p class="small">Every published update remains queryable. Historical probabilities are never overwritten.</p></div></div><div id="forecast-history-chart" class="forecast-history-chart"></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Revision</th><th>Probability</th><th>Change</th><th>Input cutoff</th><th>Published</th><th>Reason</th></tr></thead><tbody id="forecast-history-body"></tbody></table></div></div></section>

@@ -68,6 +68,21 @@ test("H1 uses monthly candles, date-only ends are inclusive, bid/ask and price p
   await assert.rejects(client.history({symbol:"XAUUSD",start:"2025-02-30",end:"2025-03-03"}),/valid date/);
   await assert.rejects(client.history({symbol:"XAUUSD",start:"2025-01-02",end:"2025-01-03",price_side:"mid"}),/bid or ask/);
 });
+test("gold forecasts bound the historical range to N and use verified hourly files without schedule metadata",async()=>{
+  const {client,calls}=fixture(undefined,{...meta,tradeSchedule:[]});
+  await client.history({symbol:"XAUUSD",start:"2003-01-01",end:"2025-01-04",timeframe:"1Day",limit:500},false,true);
+  const files=calls.filter(path=>path.includes("/candles/"));
+  assert.ok(files.length<60,"does not download two decades of minute files");
+  assert.ok(files.every(path=>path.includes("/trade/hour/")));
+  assert.ok(files.every(path=>Number(path.split("/").at(-2))>=2020));
+});
+test("nonaligned provider hours fall back to real minute candles instead of relabeling closes",async()=>{
+  const {client,calls}=fixture(path=>encoded([100,101],Date.parse(path.includes("/trade/hour/")?"2025-01-02T00:30Z":"2025-01-02T00:00Z"),60));
+  const result=await client.history({symbol:"XAUUSD",start:"2025-01-02",end:"2025-01-03",timeframe:"1Hour",limit:500},false,true);
+  assert.equal(result.metadata.base_interval,"1Min");
+  assert.ok(calls.some(path=>path.includes("/candles/minute/")));
+  assert.equal(result.rows[0].timestamp,"2025-01-02T00:00:00.000Z");
+});
 test("paged ranges carry a settings-bound cursor and never treat upstream failures as empty history",async()=>{
   const {client,calls}=fixture(()=>encoded([]));
   const input={symbol:"XAUUSD",start:"2023-01-01",end:"2024-01-31",timeframe:"H1",limit:0};

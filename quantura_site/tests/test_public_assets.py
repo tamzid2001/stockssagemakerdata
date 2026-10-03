@@ -234,7 +234,7 @@ def test_single_pro_plan_preserves_free_preview_and_server_owned_prices():
 
 def test_platform_api_keys_collaboration_and_openapi_are_discoverable():
     dashboard = (PAGES / "dashboard.html").read_text()
-    docs = (PAGES / "developers-api.html").read_text()
+    docs = json.loads((ROOT / "functions_explore/src/apiDocumentation.json").read_text())["html"]
     client = (PUBLIC / "platform-api.js").read_text()
     backend = (ROOT / "functions_explore" / "src" / "apiAccess.ts").read_text()
     openapi = (ROOT / "functions_explore" / "src" / "openapi.ts").read_text()
@@ -276,7 +276,7 @@ def test_five_model_ensemble_is_integrated_into_existing_forecast_workspace():
     client = (PUBLIC / "app.js").read_text()
     backend = (ROOT / "functions_explore" / "src" / "ensembleForecastRoutes.ts").read_text()
     workflow = (ROOT.parent / ".github" / "workflows" / "ensemble-forecast.yml").read_text()
-    docs = (PAGES / "developers-api.html").read_text()
+    docs = json.loads((ROOT / "functions_explore/src/apiDocumentation.json").read_text())["html"]
     assert forecasting.count('id="ensemble-forecast-form"') == 1
     for marker in [
         'id="ensemble-forecast-form"',
@@ -507,9 +507,7 @@ def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
         ">Terminal<",
         ">Screener<",
         ">Profile<",
-        ">Quantura Forecasts<",
-        ">API reference<",
-        ">Developer documentation<",
+        ">Forecasts<",
         ">Data licensing<",
     ]:
         assert marker in client

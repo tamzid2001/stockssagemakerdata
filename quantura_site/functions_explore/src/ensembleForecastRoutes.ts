@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import {reserveForecast,releaseForecast} from "./forecastAdmission";
 import type { Request, Response, Router } from "express";
 import type admin from "firebase-admin";
 import {
@@ -95,6 +96,7 @@ export function apiError(error: unknown): { status: number; code: string; messag
 function sendError(res: Response, error: unknown, requestId: string): void {
   const normalized = apiError(error);
   res.setHeader("X-Request-ID", requestId);
+  if(normalized.status===429)res.setHeader("Retry-After","60");
   console.warn(JSON.stringify({ event: "ensemble_request_failed", request_id: requestId, code: /^[A-Z_0-9.]{1,100}$/.test(normalized.code) ? normalized.code : "REQUEST_FAILED", status: normalized.status }));
   res.status(normalized.status).json({ error: { code: normalized.code, message: normalized.message, request_id: requestId } });
 }
@@ -556,10 +558,11 @@ async function materializeSource(
       session: source.session || (source.frequency === "1Day" ? "regular" : "extended"),
       feed: source.feed || undefined,
       price_side:source.price_side || "bid",
+      forecast_mode:true,
       field:source.field || "close",
       // Provider download buckets are coarser than the requested forecast size.
       // Fetch a sufficient bucket, then take exactly the latest eligible N rows.
-      limit: [500, 1000, 1500, 2000, 50000].find(size => size >= limit),
+      limit: source.provider==="dukascopy"?limit:[500, 1000, 1500, 2000, 50000].find(size => size >= limit),
     });
     const frequency=forecastFrequency(history.timeframe);
     const completedRows = history.rows.map(row => ({...row,timestamp:frequency==="1D" && history.provider!=="dukascopy" ? row.timestamp : new Date(frequencyEnd(Date.parse(row.timestamp),frequency)).toISOString()})).filter(row => Date.parse(row.timestamp) <= (cutoff ?? Date.now()));
@@ -624,27 +627,29 @@ async function loadInputRows(ref: FirebaseFirestore.DocumentReference, minimumRo
   return normalizeSeriesRows(rows, "timestamp", "target", minimumRows);
 }
 
-async function enforceComputeQuota(options: Options, plan: PlanKey, workspaceId: string): Promise<void> {
+function admissionRef(options:Options,workspaceId:string) {
+  return options.db.collection(USAGE).doc(crypto.createHash("sha256").update(`admission:${workspaceId}`).digest("hex"));
+}
+
+async function enforceComputeQuota(options: Options, plan: PlanKey, workspaceId: string,jobId:string): Promise<void> {
   const date = new Date().toISOString().slice(0, 10);
-  const limit = PLAN_ENTITLEMENTS[plan].forecastComputePerDay;
   const ref = options.db.collection(USAGE).doc(crypto.createHash("sha256").update(`${workspaceId}:${date}`).digest("hex"));
+  const admission=admissionRef(options,workspaceId);
   await options.db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
+    const slots=await transaction.get(admission);
     const count = Number(snapshot.data()?.count || 0);
-    const active = Number(snapshot.data()?.active || 0);
-    const concurrentLimit = plan === "research" ? 5 : plan === "quant" ? 3 : 1;
-    if (count >= limit) throw new Error("forecast_daily_quota_exceeded");
-    if (active >= concurrentLimit) throw new Error("forecast_concurrent_limit_exceeded");
-    transaction.set(ref, { workspace_id: workspaceId, date, count: count + 1, active: active + 1, updated_at: new Date().toISOString() }, { merge: true });
+    const reserved=reserveForecast(slots.data()||{},plan,jobId,count);
+    transaction.set(admission,{...reserved,workspace_id:workspaceId});
+    transaction.set(ref, { workspace_id: workspaceId, date, count: count + 1, updated_at: new Date().toISOString() }, { merge: true });
   });
 }
 
-async function releaseComputeSlot(options: Options, workspaceId: string): Promise<void> {
-  const date = new Date().toISOString().slice(0, 10);
-  const ref = options.db.collection(USAGE).doc(crypto.createHash("sha256").update(`${workspaceId}:${date}`).digest("hex"));
+async function releaseComputeSlot(options: Options, workspaceId: string,jobId:string): Promise<void> {
+  const ref = admissionRef(options,workspaceId);
   await options.db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(ref);
-    transaction.set(ref, { active: Math.max(0, Number(snapshot.data()?.active || 0) - 1), updated_at: new Date().toISOString() }, { merge: true });
+    if(snapshot.exists)transaction.update(ref, {leases:releaseForecast(snapshot.data()||{},jobId)});
   }).catch(() => undefined);
 }
 
@@ -759,12 +764,11 @@ export async function failEnsembleJob(options: Options, ref: FirebaseFirestore.D
     if (!snapshot.exists) throw new Error("forecast_job_not_found");
     const job = plain(snapshot.data());
     if (!["queued","running"].includes(String(job.status)) || (onlyQueued && job.status !== "queued") || (expiredOnly && !expiredEnsembleJobCode(job))) return false;
-    const date = String(job.created_at).slice(0,10);
-    const usage = options.db.collection(USAGE).doc(crypto.createHash("sha256").update(`${job.workspace_id}:${date}`).digest("hex"));
+    const usage = admissionRef(options,String(job.workspace_id));
     const usageSnap = await transaction.get(usage);
     const now = new Date().toISOString();
     transaction.set(ref,{status:"failed",completed_at:now,updated_at:now,lease_expires_at:null,error}, {merge:true});
-    if (usageSnap.exists) transaction.set(usage,{active:Math.max(0,Number(usageSnap.data()?.active || 0)-1),updated_at:now},{merge:true});
+    if (usageSnap.exists) transaction.update(usage,{leases:releaseForecast(usageSnap.data()||{},ref.id)});
     return true;
   });
 }
@@ -784,8 +788,7 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
     const validated = validateWorkerResult(body, job);
     if (existing.exists && existing.data()?.result_hash !== body.result_hash) throw new Error("forecast_result_invalid");
     const completedAt = new Date().toISOString();
-    const usageDate = String(job.created_at).slice(0, 10);
-    const usage = options.db.collection(USAGE).doc(crypto.createHash("sha256").update(`${job.workspace_id}:${usageDate}`).digest("hex"));
+    const usage = admissionRef(options,String(job.workspace_id));
     const usageSnap = await transaction.get(usage);
     // Recover an old partial completion too: preserve its immutable result.
     if (!existing.exists) transaction.create(resultRef, {
@@ -799,7 +802,7 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
       ...(validated.recentSignalSearch ? {analysis_cutoff_at:validated.recentSignalSearch.history_cutoff_at} : {}),
       progress:{completed_models:Array.isArray(body.models)?body.models.length:0,total_models:Array.isArray(body.models)?body.models.length:0,current_model:null}};
     transaction.set(ref, completed, {merge:true});
-    if (usageSnap.exists) transaction.set(usage,{active:Math.max(0,Number(usageSnap.data()?.active || 0)-1),updated_at:completedAt},{merge:true});
+    if (usageSnap.exists) transaction.update(usage,{leases:releaseForecast(usageSnap.data()||{},ref.id)});
     const cacheId = crypto.createHash("sha256").update(`${job.workspace_id}:${job.request_hash}`).digest("hex");
     transaction.set(options.db.collection(CACHE).doc(cacheId),{forecast_id:ref.id,request_hash:job.request_hash,completed_at:completedAt});
     return {...job,...completed};
@@ -929,7 +932,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const scanId=text(req.query.scan_id || req.body?.scan_id,160);
     if(scanId.startsWith("perps-")) {
       const items=await loadPerpForecasts(options.db);
-      return perpForecastSnapshot({items,scan_id:scanId,scan_date:"",generated_at:"",manifest:{},schema_version:"quantura_perps_ensemble_v1"},text(req.params.ticker,40),scanId);
+      return perpForecastSnapshot({items,scan_id:scanId,scan_date:"",generated_at:"",manifest:{},schema_version:"quantura_perps_daily_ensemble_v2"},text(req.params.ticker,40),scanId);
     }
     const scanDate=/^(\d{4}-\d{2}-\d{2})-/.exec(scanId)?.[1];
     const dataset=await loadPublishedScreenerDataset(
@@ -1063,8 +1066,8 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
         return;
       }
     }
-    await enforceComputeQuota(options, access.plan, workspaceId);
     const ref = options.db.collection(JOBS).doc();
+    await enforceComputeQuota(options, access.plan, workspaceId,ref.id);
     const now = new Date().toISOString();
     const job = {
       schema_version: WORKER_SCHEMA_VERSION,
@@ -1098,8 +1101,8 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       started_at: null,
       completed_at: null,
     };
-    await ref.create(job);
     try {
+      await ref.create(job);
       await indexEnsembleRequest(options, ref.id, job);
       await persistInputChunks(ref, materialized.rows);
       if (idempotencyKey) {
@@ -1110,7 +1113,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       await ref.set({ dispatched_at: new Date().toISOString(), dispatch_backend: text(process.env.QUANTURA_ENSEMBLE_WORKER_MODE || "github_actions", 40) }, { merge: true });
     } catch (error) {
       await ref.set({ status: "failed", error: { code: "WORKER_DISPATCH_FAILED", retryable: true }, completed_at: new Date().toISOString() }, { merge: true });
-      await releaseComputeSlot(options, workspaceId);
+      await releaseComputeSlot(options, workspaceId,ref.id);
       throw error;
     }
     res.status(202);
@@ -1132,8 +1135,8 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     const configuration = normalizeEnsembleConfiguration(plain(original.request), access.plan);
     const rows = await loadInputRows(originalRef, ["prediction_market","kalshi_perp"].includes(text(plain(original.source).type)) ? 2 : 40);
     validateModelHistory(configuration, rows.length);
-    await enforceComputeQuota(options, access.plan, workspaceId);
     const ref = options.db.collection(JOBS).doc();
+    await enforceComputeQuota(options, access.plan, workspaceId,ref.id);
     const now = new Date().toISOString();
     const checkpoints = plain(original.model_checkpoints);
     const job = {
@@ -1176,7 +1179,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       await ref.set({ dispatched_at: new Date().toISOString(), dispatch_backend: text(process.env.QUANTURA_ENSEMBLE_WORKER_MODE || "github_actions", 40) }, { merge: true });
     } catch (error) {
       await ref.set({ status: "failed", error: { code: "WORKER_DISPATCH_FAILED", retryable: true }, completed_at: new Date().toISOString() }, { merge: true }).catch(() => undefined);
-      await releaseComputeSlot(options, workspaceId);
+      await releaseComputeSlot(options, workspaceId,ref.id);
       throw error;
     }
     res.status(202);

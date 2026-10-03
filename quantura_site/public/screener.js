@@ -422,7 +422,7 @@
       `${availableDates.length} saved ${availableDates.length===1?"scan":"scans"} in the 14-day window${dateIndex>0?" · viewing archived output":" · latest published scan"}.`;
     refs.tableWrap.querySelectorAll('th').forEach(th=>{if(th.textContent.trim()==="P10")th.hidden=perps; if(/Distance P(?:10|25)/.test(th.textContent))th.textContent=`Distance ${perps?"P25":"P10"} / P50 / P90`;});
     refs.freshness.textContent = perps
-      ? `Five-model hourly ensemble · next 24 hours · ${Number(payload.manifest?.forecasts_published||0)} published forecasts. Prices in USD per underlying unit. ${(payload.warnings || []).join(" ")}`
+      ? `Five-model daily ensemble · next seven days · ${Number(payload.manifest?.forecasts_published||0)} published forecasts. Prices in USD per underlying unit. ${(payload.warnings || []).join(" ")}`
       : `${dateIndex>0?"Archived":"Latest"} scan ${formatDate(payload.generatedAt, true)} · completed daily close · seven future trading sessions · no intraday tracking. ${weekly?"Five-model weekly ensemble.":"Prior validated scan."} ${(payload.warnings || []).join(" ")}`;
     refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} ${perps ? "markets" : "securities"} match the active research filters.`;
     current.page = Number(payload.page || current.page || 1);

@@ -51,7 +51,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
-    <script defer src="/app.js?v=20260927-research"></script>
+    <script defer src="/app.js?v=20261003-header-trial"></script>
     <script defer src="/data-integrations.js?v=20260920-perps-jev"></script>
     <script defer src="/platform-api.js?v=20260831a"></script>
 
@@ -59,7 +59,9 @@
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
-  </head>
+  <script defer src="/q-market.js?v=20261003-header"></script>
+<script defer src="/market-search.js?v=20261003-header"></script>
+</head>
   <body>
     <header class="header">
       <div class="container nav">
@@ -67,8 +69,13 @@
           <img class="logo-img" src="/assets/quantura-icon.svg" alt="" aria-hidden="true" />
           <span>QUANTURA</span>
         </a>
-        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
-        <div class="nav-actions">
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="/about">About</a></nav>
+        <section class="market-search-workspace header-market-search" aria-label="Search markets">
+<form id="market-search-form" class="market-search-form" role="search">
+<div class="field"><label class="visually-hidden" for="market-search-query">Search markets</label><input id="market-search-query" name="q" type="search" minlength="2" maxlength="2048" autocomplete="off" enterkeyhint="search" placeholder="Search markets" required /></div>
+<input id="market-search-source" type="hidden" value="auto" />
+<button class="header-search-submit" type="submit" aria-label="Search"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+</form><p id="market-search-status" class="small" role="status" aria-live="polite"></p><div id="market-search-results" class="market-search-results" role="region" aria-label="Market search results" hidden></div></section><div class="nav-actions">
 
           <span id="header-user-status" class="pill">Logged Out</span>
           <button class="cta secondary icon-only" id="header-auth" type="button" aria-label="Sign in" title="Sign in"><i class="iconoir-log-in" aria-hidden="true"></i></button>
@@ -228,8 +235,10 @@
         <div class="container">
           <div class="section-title">
             <div><div class="eyebrow">Account / Developer</div><h2>API Keys</h2><p class="small">Create personal credentials for Quantura's versioned API. Workspace roles and plan access are evaluated dynamically on every request.</p></div>
-            <div class="hero-actions"><a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>Interactive API docs</span></a><a class="cta secondary" href="/api/openapi.json"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>OpenAPI</span></a></div>
+            <div class="hero-actions" id="profile-api-docs-links" hidden><a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>Interactive API docs</span></a><a class="cta secondary" href="/api/openapi.json"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>OpenAPI</span></a></div>
           </div>
+          <p id="profile-api-docs-status" class="small" role="status">API documentation is included with an active 14-day Pro trial or subscription.</p>
+          <a class="cta secondary" id="profile-api-trial" href="/pricing">Explore Pro</a>
           <div class="content-grid developer-key-grid">
             <form id="api-key-form" class="card" autocomplete="off">
               <h3>Create API key</h3>

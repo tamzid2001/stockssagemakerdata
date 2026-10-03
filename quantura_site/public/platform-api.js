@@ -8,6 +8,17 @@
   const secretHost = document.getElementById("api-key-secret");
   const statusHost = document.getElementById("api-key-status");
   const refreshButton = document.getElementById("api-key-refresh");
+  const docsLinks=document.getElementById("profile-api-docs-links"),docsStatus=document.getElementById("profile-api-docs-status"),trialLink=document.getElementById("profile-api-trial");
+  let accessSequence=0;
+  async function loadDocsAccess(){
+    const run=++accessSequence;if(docsLinks)docsLinks.hidden=true;
+    try{
+      const access=await sessionRequest("/api/shop/subscription-access");if(run!==accessSequence)return;
+      if(docsLinks)docsLinks.hidden=!access.docs_available;
+      if(trialLink)trialLink.hidden=access.docs_available;
+      if(docsStatus)docsStatus.textContent=access.docs_available?access.subscription_status==="trialing"?`Pro trial · ends ${formatDate(access.trial_ends_at)}.`:"Pro API documentation is ready.":"API documentation is included with an active 14-day Pro trial or subscription.";
+    }catch{if(run===accessSequence && docsStatus)docsStatus.textContent="Sign in to check your API documentation access.";}
+  }
   const readDefaults = new Set(["account:read", "workspaces:read", "forecasts:read", "predictions:read", "screener:read", "market_data:read", "options:read", "sports:read", "datasets:read", "backtests:read", "api_usage:read", "sagemaker:read"]);
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
@@ -63,6 +74,7 @@
   }
 
   async function loadKeys() {
+    void loadDocsAccess();
     refreshButton.disabled = true;
     try {
       const [keys] = await Promise.all([sessionRequest("/api/account/api-keys"), scopesHost.querySelector("input") ? Promise.resolve() : loadScopes()]);
@@ -119,6 +131,7 @@
   if (window.firebase?.auth) window.firebase.auth().onAuthStateChanged((user) => {
     if (user && !user.isAnonymous) void loadKeys();
     else {
+      ++accessSequence;if(docsLinks)docsLinks.hidden=true;if(trialLink)trialLink.hidden=false;
       scopesHost.innerHTML = '<span class="small muted">Sign in to load available scopes.</span>';
       listHost.innerHTML = '<div class="empty-state">Sign in to manage API keys.</div>';
     }

@@ -136,7 +136,7 @@ export class DukascopyClient {
     matches.sort((a,b)=>Number(identity(b.code)===alias)-Number(identity(a.code)===alias)||a.name.localeCompare(b.name));
     return {rows:matches.slice(0,limit).map(dukascopyResource),total:matches.length,catalog_count:catalog.instruments.length,stale:catalog.stale};
   }
-  async history(input: RecordValue, page=false): Promise<any> {
+  async history(input: RecordValue, page=false,forecast=false,forceMinute=false): Promise<any> {
     const [timeframe,minutes]=dukascopyFrequency(input.timeframe || input.interval);
     const requestedSide=String(input.price_side || input.side || "bid").toLowerCase();
     if(!["bid","ask"].includes(requestedSide))throw new AlpacaError("invalid_request","Choose bid or ask prices.",422);
@@ -155,6 +155,9 @@ export class DukascopyClient {
     if(input.cursor){try{if(String(input.cursor).length>300)throw Error();cursor=JSON.parse(Buffer.from(String(input.cursor),"base64url").toString());if(!Number.isFinite(cursor?.e)||cursor!.e>now || requestedEnd!==null&&cursor!.e>requestedEnd)throw Error();}catch{throw new AlpacaError("invalid_request","This download cursor is invalid.",422);}}
     const end=cursor?.e ?? (requestedEnd!==null?Math.min(requestedEnd,now):Math.floor(now/MINUTE)*MINUTE);
     let start=input.start?date(input.start):end-Math.max(7*DAY,(limit||50000)*minutes*MINUTE*3);
+    // A forecast requests the last N eligible observations, not a full export
+    // of every file since a historical start. Apply this after the cutoff.
+    if(forecast && limit>0)start=Math.max(start,end-Math.max(7*DAY,limit*minutes*MINUTE*3));
     if(start>=end)throw new AlpacaError("invalid_request","End must be after start.",422);
     // Trade-session hour candles may start at :30 or :15. For such instruments
     // derive UTC H1/H4/D1 from minutes, rather than relabeling session candles.
@@ -170,7 +173,7 @@ export class DukascopyClient {
     }
     const calendarPeriod=["1Week","1Month"].includes(timeframe);
     const daily=calendarPeriod && metadata.histories.some((h:any)=>h.period==="DAY" && Number.isFinite(Number(h.from)));
-    const hourly=!daily && minutes>=60 && aligned && timezoneAligned && metadata.histories.some((h:any)=>h.period==="HOUR" && Number.isFinite(Number(h.from)));
+    const hourly=!daily && !forceMinute && minutes>=60 && timezoneAligned && metadata.histories.some((h:any)=>h.period==="HOUR" && Number.isFinite(Number(h.from)));
     const period=daily?"DAY":hourly?"HOUR":"MINUTE", first=metadata.histories.find((h:any)=>h.period===period);
     if(!first || !Number.isFinite(Number(first.from)))throw new AlpacaError("no_data","Dukascopy does not publish candles for this instrument.",422);
     const requestedStart=start;start=Math.max(start,Number(first.from));
@@ -178,24 +181,28 @@ export class DukascopyClient {
     const plan=ranges(start,end,hourly,daily), hash=crypto.createHash("sha256").update(JSON.stringify([item.code,requestedSide,start,end,timeframe,limit,requestedEnd])).digest("hex").slice(0,24);
     let offset=0;
     if(cursor){if(cursor.h!==hash || !Number.isInteger(cursor.o)||cursor.o<0||cursor.o>=plan.length)throw new AlpacaError("invalid_request","This download cursor does not match the current settings.",422);offset=cursor.o;}
-    const chunkCount=hourly?12:7, requestedFiles=page?plan.slice(offset,offset+chunkCount):plan;
+    const bounded=forecast && plan.length>120;
+    const chunkCount=hourly?12:7, requestedFiles=page?plan.slice(offset,offset+chunkCount):bounded?plan.slice(-120):plan;
     // A Monday week can cross a year-file/page boundary. Include its prior
     // daily file and defer incomplete page-end buckets to the next page.
     const overlap=page && daily && timeframe==="1Week" && offset>0;
     const selected=overlap?[plan[offset-1],...requestedFiles]:requestedFiles;
     if(!page && selected.length>180)throw new AlpacaError("invalid_request","Use the paged download for this date range, or a smaller forecast history.",422);
     const output:AlpacaBar[][]=new Array(selected.length);let position=0,failed=false;const deadline=Date.now()+40_000;
-    await Promise.all(Array.from({length:Math.min(4,selected.length)},async()=>{
+    try{await Promise.all(Array.from({length:Math.min(4,selected.length)},async()=>{
       while(!failed && position<selected.length){const index=position++, chunk=selected[index];
         if(Date.now()>deadline){failed=true;throw new AlpacaError("network","Dukascopy took too long. Retry using a smaller history window.",504);}
         try {
         const path=chunk.path.replace("{code}",item.code).replace("{side}",requestedSide.toUpperCase());
         const data=await this.json(path,chunk.end<now-DAY?1800_000:30_000), rows=decodeDukascopyCandles(data,metadata.priceScale);
-        if(hourly && rows.some(r=>Date.parse(r.timestamp)%3600_000!==0))throw new AlpacaError("upstream","Provider hour candles are not UTC aligned. Choose minute bars for this instrument.",422);
+        if(hourly && rows.some(r=>Date.parse(r.timestamp)%3600_000!==0))throw Error("DUKASCOPY_HOUR_ALIGNMENT");
         output[index]=rows.filter(r=>Date.parse(r.timestamp)>=chunk.start && Date.parse(r.timestamp)<chunk.end);
         } catch(error) {failed=true;throw error;}
       }
-    }));
+    }));}catch(error){
+      if(error instanceof Error && error.message==="DUKASCOPY_HOUR_ALIGNMENT")return this.history(input,page,forecast,true);
+      throw error;
+    }
     const aggregationStart=overlap?Math.max(start,frequencyBounds(requestedFiles[0].start-1,timeframe)[0]):start;
     const aggregationEnd=page && calendarPeriod?Math.min(end,requestedFiles.at(-1)!.end):end;
     const rows=calendarPeriod?aggregateObservedBars(output.flat(),timeframe,aggregationStart,aggregationEnd,daily?1440:hourly?60:1):aggregateDukascopy(output.flat(),minutes,start,end,hourly?60:1);
@@ -203,7 +210,7 @@ export class DukascopyClient {
     return {provider:"dukascopy",sourceRequested:"dukascopy",fallbackUsed:false,symbol:item.code,timeframe,feed:requestedSide,priceSide:requestedSide,adjustment:"raw",session:"provider",exchangeTimezone:"UTC",barIntervalMinutes:minutes,
       rows:page||!limit?rows:rows.slice(-limit),next_cursor:next,
       metadata:{instrument:dukascopyResource(item),price_scale:metadata.priceScale,source:BASE,bucket_timezone:"UTC",timestamp_convention:"bucket_start",close_available_at:calendarPeriod?"calendar bucket end":"bucket_start + interval",volume_unit:"provider quote volume (not exchange traded share volume)",base_interval:daily?"1Day":hourly?"1Hour":"1Min",range_start:new Date(start).toISOString(),range_end:new Date(end).toISOString(),available_from:new Date(Number(first.from)).toISOString(),catalog_stale:catalog.stale,completed_files:offset+requestedFiles.length,total_files:plan.length},
-      warnings:["Dukascopy bid/ask quotes; CFDs are not exchange share prices. Gaps are not filled. Only completed UTC candles are included.",...(catalog.stale?["Instrument catalog uses the last verified snapshot; history is retrieved from Dukascopy."]:[]),...(start>requestedStart?["The range begins before available history; the returned start is shown in metadata."]:[])]};
+      warnings:["Dukascopy bid/ask quotes; CFDs are not exchange share prices. Gaps are not filled. Only completed UTC candles are included.",...(bounded?["Forecast history uses the latest 120 provider files within the selected range. Fewer than N genuine observations may be available; use a paged CSV upload for a larger history."]:[]),...(catalog.stale?["Instrument catalog uses the last verified snapshot; history is retrieved from Dukascopy."]:[]),...(start>requestedStart?["The range begins before available history; the returned start is shown in metadata."]:[])]};
   }
 }
 export const dukascopy = new DukascopyClient();

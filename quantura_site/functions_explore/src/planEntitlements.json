@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2026-10-03-pro",
+  "schemaVersion": "2026-10-03-pro-trial-unlimited",
   "plans": {
     "free": {
       "label": "Free",
@@ -18,7 +18,7 @@
       "monthlyCents": 20000,
       "annualCents": 200000,
       "apiReadPerMinute": 60,
-      "forecastComputePerDay": 50,
+      "forecastComputePerDay": -1,
       "bulkExportsPerMonth": 5,
       "backtestsPerMonth": 0,
       "workspaceLimit": 4,
