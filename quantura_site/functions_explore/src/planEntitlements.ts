@@ -19,7 +19,8 @@ export type PlanEntitlement = {
 const allFeatures = config.plans.free.features;
 export const PLAN_ENTITLEMENTS = Object.fromEntries(Object.entries(config.plans).map(([key, plan]) => [key, {
   ...plan, monthlyCents: 0, annualCents: 0, features: allFeatures,
-  forecastComputePerDay: Math.max(config.plans.free.forecastComputePerDay, plan.forecastComputePerDay),
+  // -1 is the internal unlimited sentinel. Public responses use null + a flag.
+  forecastComputePerDay: plan.forecastComputePerDay<0?-1:Math.max(config.plans.free.forecastComputePerDay, plan.forecastComputePerDay),
   bulkExportsPerMonth: Math.max(config.plans.free.bulkExportsPerMonth, plan.bulkExportsPerMonth),
   backtestsPerMonth: Math.max(config.plans.free.backtestsPerMonth, plan.backtestsPerMonth),
   collaboratorSeats: Math.max(config.plans.free.collaboratorSeats, plan.collaboratorSeats),
@@ -41,6 +42,7 @@ export function publicPlanEntitlements(): Record<string, unknown> {
   return {
     schemaVersion: PLAN_ENTITLEMENTS_SCHEMA_VERSION,
     access_model: "pro_subscription_with_free_preview",
-    plans: { pro: { ...PLAN_ENTITLEMENTS.pro, monthlyCents:config.plans.pro.monthlyCents, annualCents:config.plans.pro.annualCents } },
+    plans: { pro: { ...PLAN_ENTITLEMENTS.pro, forecastComputePerDay:null,unlimitedForecasts:true,trialDays:14,
+      forecastConcurrentLimit:3,forecastStartsPerMinute:3,monthlyCents:config.plans.pro.monthlyCents, annualCents:config.plans.pro.annualCents } },
   };
 }

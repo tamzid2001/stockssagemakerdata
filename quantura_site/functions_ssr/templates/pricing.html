@@ -52,12 +52,19 @@
 	    <script defer src="/ga4-context.js?v=20260927a"></script>
     <script defer src="/pricing.js?v=20261003-pro"></script>
     <link rel="stylesheet" href="/pricing.css?v=20261003-pro" />
-    <script defer src="/app.js?v=20260927-research"></script>
-  </head><body class="pricing-page"><header class="header">
+    <script defer src="/app.js?v=20261003-header-trial"></script>
+  <script defer src="/q-market.js?v=20261003-header"></script>
+<script defer src="/market-search.js?v=20261003-header"></script>
+</head><body class="pricing-page"><header class="header">
       <div class="container nav">
         <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
-        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/screener">Screener</a><a href="/pricing" aria-current="page">Pricing</a><a href="/shop">Shop</a><a href="/blog">Blog</a><a href="https://quantura.mintlify.app/">API Docs</a></nav>
-        <div class="nav-actions">
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/pricing" aria-current="page">Pricing</a><a href="/shop">Shop</a><a href="/blog">Blog</a></nav>
+        <section class="market-search-workspace header-market-search" aria-label="Search markets">
+<form id="market-search-form" class="market-search-form" role="search">
+<div class="field"><label class="visually-hidden" for="market-search-query">Search markets</label><input id="market-search-query" name="q" type="search" minlength="2" maxlength="2048" autocomplete="off" enterkeyhint="search" placeholder="Search markets" required /></div>
+<input id="market-search-source" type="hidden" value="auto" />
+<button class="header-search-submit" type="submit" aria-label="Search"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+</form><p id="market-search-status" class="small" role="status" aria-live="polite"></p><div id="market-search-results" class="market-search-results" role="region" aria-label="Market search results" hidden></div></section><div class="nav-actions">
           <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
           <span id="header-user-status" class="pill">Guest</span>
           <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
@@ -84,37 +91,37 @@
           <h2><span data-pricing-price>$200/mo</span></h2>
           <p class="pro-cycle-copy" data-pricing-cycle-copy>Pay yearly for $2,000. Save $400.</p>
           <p>For investors, analysts, and developers who want an inspectable view of what could happen next.</p>
-          <div class="purchase-panel" data-purchase-panel data-web-only="true" data-product="Quantura Pro Monthly" data-monthly-product="Quantura Pro Monthly" data-yearly-product="Quantura Pro Annual" data-price="200" data-monthly-price="200" data-yearly-price="2000" data-currency="USD" data-iap-plan="pro" data-monthly-iap-plan="pro" data-yearly-iap-plan="annual_pro">
-            <button class="cta" type="button" data-action="purchase" data-label-auth="Get Pro" data-label-guest="Get Pro">Get Pro</button>
-            <p class="purchase-note small" role="status">Secure checkout with Stripe.</p>
+          <div class="purchase-panel" data-purchase-panel data-web-only="true" data-trial-days="14" data-product="Quantura Pro Monthly" data-monthly-product="Quantura Pro Monthly" data-yearly-product="Quantura Pro Annual" data-price="200" data-monthly-price="200" data-yearly-price="2000" data-currency="USD" data-iap-plan="pro" data-monthly-iap-plan="pro" data-yearly-iap-plan="annual_pro">
+            <button class="cta" type="button" data-action="purchase" data-label-auth="Start 14-day free trial" data-label-guest="Start 14-day free trial">Start 14-day free trial</button>
+            <p class="purchase-note small" role="status">14 days free. Secure checkout with Stripe.</p>
             <p class="purchase-success hidden" role="status"></p>
           </div>
-          <p class="small muted">USD · billed monthly or annually. Applicable taxes are shown at checkout. Cancel renewal in your account.</p>
+          <p class="small muted"><span data-trial-billing-copy>14 days free, then $200/month or $2,000/year. Cancel before the trial ends to avoid a charge.</span> Applicable taxes are shown at checkout.</p>
           <a href="/forecasting?panel=profile" id="billing-portal-link" class="pro-billing-link">Manage subscription</a>
         </div>
         <div class="pro-plan-features">
           <h3>One workspace. The full research loop.</h3>
           <ul>
-            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Multi-model forecasts</strong><span>Compare probability ranges, data cutoffs, and the observations behind them.</span></div></li>
+            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Unlimited daily forecasts</strong><span>Run multi-model forecasts and inspect the observations behind each range.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Market discovery & screening</strong><span>Stocks, perpetuals, and today's prediction-market games.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Historical data & exports</strong><span>Download supported sources and keep your research portable.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>API & MCP access</strong><span>Connect forecasts and datasets to your own research tools.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Saved requests & workspaces</strong><span>Revisit results, share research, and manage your account.</span></div></li>
           </ul>
-          <div class="pro-usage"><span><strong>50</strong> forecast jobs/day</span><span><strong>60</strong> API requests/min</span></div>
-          <p class="small muted">Provider history, model minimums, licensing, and fair-use limits apply. Forecasts are research estimates, not guaranteed returns.</p>
+
         </div>
       </div>
     </article>
     <aside class="enterprise-contact"><div><p class="eyebrow">FOR TEAMS</p><h2>Need a custom fit?</h2><p>Tell us about your data, volume, and integration needs. We'll scope a tailored enterprise proposal.</p></div><button type="button" class="cta secondary" id="enterprise-open" aria-haspopup="dialog" aria-controls="enterprise-dialog">Contact enterprise <i class="iconoir-arrow-up-right" aria-hidden="true"></i></button></aside>
   </section>
   <section class="container pricing-faq" aria-labelledby="pricing-faq-title"><h2 id="pricing-faq-title">A few things to know</h2>
+    <details><summary>How does the 14-day free trial work?</summary><p>New Pro accounts get 14 days of the full Pro plan, including API access. A payment method is required. Your selected monthly or annual plan starts billing when the trial ends. Cancel in Manage subscription before then to avoid a charge. One trial per account.</p></details>
     <details><summary>How does annual billing work?</summary><p>You pay $2,000 once per year. Monthly billing is $200 each month, or $2,400 over a year. Annual billing saves $400. Both include the same Pro features.</p></details>
     <details><summary>Can I cancel?</summary><p>Yes. Use Manage subscription to open Stripe's billing portal and cancel renewal. Your access continues through the paid period.</p></details>
     <details><summary>What can I forecast?</summary><p>Supported stocks, crypto and perpetuals, prediction markets, and uploaded time series. Availability depends on the provider and the genuine history each selected model requires.</p></details>
   </section>
   <dialog id="enterprise-dialog" class="enterprise-dialog" aria-labelledby="enterprise-title">
-    <button class="enterprise-close" id="enterprise-close" type="button" aria-label="Close enterprise contact"><i class="iconoir-cancel" aria-hidden="true"></i></button>
+    <button class="enterprise-close" id="enterprise-close" type="button" aria-label="Close enterprise contact"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
     <p class="eyebrow">QUANTURA FOR TEAMS</p><h2 id="enterprise-title">Let's shape your research workflow.</h2><p>Share your requirements for a custom pricing proposal.</p>
     <form id="contact-form" action="/api/submit_contact" method="post">
       <div class="field"><label class="label" for="contact-name">Name</label><input id="contact-name" name="name" autocomplete="name" maxlength="120" required /></div>

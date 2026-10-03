@@ -26,6 +26,16 @@
     if(chip)chip.textContent="Your CSV · choose the file and columns below. Use Search to return to a market.";
   });
   // Old ticker/download links still hydrate through verified provider discovery.
+  if(root.document.getElementById("ensemble-source-type")){
+    try{
+      const pending=JSON.parse(root.sessionStorage.getItem("quantura_pending_market_selection")||"null");
+      root.sessionStorage.removeItem("quantura_pending_market_selection");
+      if(pending && Date.now()-Number(pending.at)<60000 && api.validResource(pending.resource)){
+        // Wait until deferred forecast controls and the app router are mounted.
+        root.addEventListener("load",()=>root.dispatchEvent(new root.CustomEvent("quantura:market-selected",{detail:{resource:pending.resource,intent:pending.intent}})),{once:true});
+      }
+    }catch{}
+  }
   const params=new URLSearchParams(root.location.search),symbol=params.get("ticker");
   if(symbol && !params.has("ensembleForecastId") && !params.has("screenerTicker")) {
     const query=new URLSearchParams({q:symbol,source:params.get("marketSource")==="kalshi_perps"?"kalshi_perps":"auto"});

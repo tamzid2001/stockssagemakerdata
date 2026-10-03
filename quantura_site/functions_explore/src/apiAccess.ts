@@ -177,9 +177,17 @@ export function extractBearer(req: Request): string {
 }
 
 async function userPlan(db: FirebaseFirestore.Firestore, userId: string): Promise<PlanKey> {
+  const billing=await db.collection("billing_accounts").doc(userId).get();
+  if(billing.exists){
+    const value=billing.data()||{};
+    return value.subscriptionStatus==="active" || (value.subscriptionStatus==="trialing" && Number(value.trialEnd)*1000>Date.now())?"pro":"free";
+  }
   const snapshot = await db.collection("users").doc(userId).get();
   const value = (snapshot.data() || {}) as Record<string, any>;
-  return normalizePlan(value.plan || value.subscriptionTier || value.profile?.plan);
+  const plan=normalizePlan(value.plan || value.subscriptionTier || value.profile?.plan);
+  // Pro entitlements originate only from signed Stripe events, never editable
+  // profile fields. Historical Quant/Research records retain their old behavior.
+  return plan==="pro"?"free":plan;
 }
 
 export async function authenticatePlatformRequest(

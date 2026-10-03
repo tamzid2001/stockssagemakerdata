@@ -2,12 +2,14 @@
   "use strict";
   const form=document.getElementById("market-search-form"),queryInput=document.getElementById("market-search-query"),status=document.getElementById("market-search-status"),results=document.getElementById("market-search-results");
   if(!form||!queryInput||!status||!results)return;
+  if(window.QuanturaMarketSearchReady)return;
+  window.QuanturaMarketSearchReady=true;
   const workspace=form.closest(".market-search-workspace")||form.parentElement;
   const resources=new Map(),cache=new Map();let timer,controller,sequence=0,eventView=null,lastGroups={},lastErrors={};
   const escapeHtml=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
   const providerLabel=s=>({alpaca:"Alpaca",yahoo:"Yahoo Finance",dukascopy:"Dukascopy",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
   queryInput.setAttribute("aria-controls","market-search-results");queryInput.setAttribute("aria-describedby","market-search-status");queryInput.setAttribute("aria-expanded","false");queryInput.maxLength=2048;
-  function closeResults(){clearTimeout(timer);controller?.abort();controller=null;++sequence;results.hidden=true;results.removeAttribute("aria-busy");queryInput.setAttribute("aria-expanded","false");}
+  function closeResults(){clearTimeout(timer);controller?.abort();controller=null;++sequence;results.hidden=true;results.removeAttribute("aria-busy");queryInput.setAttribute("aria-expanded","false");workspace.classList.remove("search-expanded");}
   const outside=e=>{if(!workspace.contains(e.target))closeResults();};
   document.addEventListener("pointerdown",outside,true);document.addEventListener("click",outside,true);document.addEventListener("focusin",outside);
   window.addEventListener("quantura:panel-changed",closeResults);
@@ -23,7 +25,7 @@
       ${prediction?`<button class="cta secondary small" type="button" data-market-action="add-download">+ Export outcome</button>${eventId(row)?'<button class="cta secondary small" type="button" data-market-action="event">All event markets</button>':''}`:row.source!=="dukascopy"&&["equity","etf"].includes(row.asset_class)?'<button class="cta secondary small" type="button" data-market-action="options">Options</button>':''}
       </div></article>`;
   }
-  function show(){results.hidden=false;queryInput.setAttribute("aria-expanded","true");}
+  function show(){results.hidden=false;queryInput.setAttribute("aria-expanded","true");workspace.classList.add("search-expanded");}
   function render(groups,errors={}){
     resources.clear();show();
     results.innerHTML=Object.entries(groups).sort(([a],[b])=>Number(b==="alpaca")-Number(a==="alpaca")).filter(([,rows])=>rows.length).map(([source,rows])=>`<section class="market-search-group"><h3>${escapeHtml(providerLabel(source))}</h3>${rows.map(card).join("")}</section>`).join("")+Object.keys(errors).map(s=>`<p class="notice small">${escapeHtml(providerLabel(s))}: ${errors[s]==="catalog_snapshot"?"live catalog unavailable; showing the last verified catalog":"temporarily unavailable"}.</p>`).join("");
@@ -46,7 +48,7 @@
   async function search(rank=false){
     clearTimeout(timer);controller?.abort();const run=++sequence,{query,mode,source="auto"}=discoveryQuery(queryInput.value.trim());eventView=null;
     if(query.length<2&&mode!=="live"&&source!=="dukascopy"){closeResults();status.textContent="Enter at least two characters to search markets.";return;}
-    controller=new AbortController();results.setAttribute("aria-busy","true");status.textContent="Searching configured providers…";
+    controller=new AbortController();show();results.setAttribute("aria-busy","true");status.textContent="Searching markets…";
     try{
       const link=/^https?:\/\//i.test(query);
       const params=new URLSearchParams(link?{url:query}:{q:query,source,limit:"20",mode,...(rank&&/\s/.test(query)?{rank:"true"}:{})});
@@ -100,6 +102,9 @@
     if(!row)return;
     const intent=action.includes("forecast")?"forecast":action==="options"?"options":action==="add-download"?"add-download":"download";
     if(intent!=="add-download")closeResults();
+    if(!window.__quanturaSetPanel && intent!=="add-download"){
+      try{sessionStorage.setItem("quantura_pending_market_selection",JSON.stringify({resource:row,intent,at:Date.now()}));}catch{}
+    }
     window.QuanturaMarketSelection=row;
     if(intent==="forecast"){
       const source=document.getElementById("ensemble-source-type"),ticker=document.getElementById("ensemble-ticker"),provider=document.getElementById("ensemble-provider");

@@ -3,7 +3,9 @@ import admin from "firebase-admin";
 import helmet from "helmet";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import Stripe from "stripe";
-import { proSubscriptionPlan, proCheckoutOptions, subscriptionAccess } from "./subscriptionBilling";
+import { randomUUID } from "node:crypto";
+import documentation from "./apiDocumentation.json";
+import { proSubscriptionPlan, proCheckoutOptions, subscriptionAccess, billingAccess, BILLING_ACCOUNTS } from "./subscriptionBilling";
 import {
   SHOP_SHIPPING_POLICY,
   getCatalogBySku,
@@ -70,13 +72,16 @@ async function billingIdentity(req:Request,res:Response) {
 
 async function syncProSubscription(subscription:Stripe.Subscription) {
   const access=subscriptionAccess(subscription);if(!access)return;
-  const ref=db.collection('users').doc(access.uid);
+  const ref=db.collection(BILLING_ACCOUNTS).doc(access.uid);
   await db.runTransaction(async tx=>{
     const current=await tx.get(ref),data=current.data()||{};
     if(access.plan==='free' && data.stripeSubscriptionId && data.stripeSubscriptionId!==access.subscriptionId)return;
     if(data.stripeSubscriptionId!==access.subscriptionId && Number(data.stripeSubscriptionCreatedAt)>access.createdAt)return;
-    tx.set(ref,{plan:access.plan,subscriptionTier:access.plan,stripeCustomerId:access.customerId,stripeSubscriptionId:access.subscriptionId,
-      subscriptionStatus:access.status,cancelAtPeriodEnd:access.cancelAtPeriodEnd,stripeSubscriptionCreatedAt:access.createdAt,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    const update={plan:access.plan,subscriptionTier:access.plan,stripeCustomerId:access.customerId,stripeSubscriptionId:access.subscriptionId,
+      subscriptionStatus:access.status,cancelAtPeriodEnd:access.cancelAtPeriodEnd,stripeSubscriptionCreatedAt:access.createdAt,
+      pendingCheckout:null,trialEnd:access.trialEnd,hasUsedTrial:access.hasUsedTrial || data.hasUsedTrial===true,updatedAt:admin.firestore.FieldValue.serverTimestamp()};
+    tx.set(ref,update,{merge:true});
+    tx.set(db.collection('users').doc(access.uid),update,{merge:true});
   });
 }
 
@@ -299,6 +304,23 @@ app.options("/api/shop/subscription-checkout", (req, res) => {
   res.status(204).send("");
 });
 
+app.get("/api/shop/subscription-access",async (req,res)=>{
+  if(!applyCheckoutCors(req,res)){res.status(403).json({error:"origin_not_allowed"});return;}
+  res.set("Cache-Control","private, no-store");
+  const principal=await billingIdentity(req,res);if(!principal)return;
+  const value=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
+  res.json({data:billingAccess(value)});
+});
+
+app.get("/api/shop/api-docs",async (req,res)=>{
+  if(!applyCheckoutCors(req,res)){res.status(403).json({error:"origin_not_allowed"});return;}
+  res.set("Cache-Control","private, no-store");
+  const principal=await billingIdentity(req,res);if(!principal)return;
+  const value=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
+  if(!billingAccess(value).docs_available){res.status(403).json({error:"pro_required",message:"API documentation requires an active Pro trial or subscription."});return;}
+  res.json({data:documentation});
+});
+
 app.post("/api/shop/subscription-checkout", async (req, res) => {
   if (!applyCheckoutCors(req, res)) {
     res.status(403).json({ error: "origin_not_allowed" });
@@ -334,12 +356,24 @@ app.post("/api/shop/subscription-checkout", async (req, res) => {
   }
 
   try {
-    const existing=(await db.collection("users").doc(uid).get()).data()||{};
-    if(existing.stripeSubscriptionId && ["active","trialing"].includes(existing.subscriptionStatus)) {
-      res.status(409).json({error:"subscription_already_active",message:"You already have Pro. Use Manage subscription to change your billing."});
-      return;
-    }
-    const session = await stripe.checkout.sessions.create(proCheckoutOptions(plan,uid,email,PUBLIC_ORIGIN));
+    const trial=payload.trial===true,ref=db.collection(BILLING_ACCOUNTS).doc(uid),now=Date.now(),key=randomUUID();
+    // Server-only ledger and a durable idempotency key serialize checkout across
+    // instances. A retry cannot create a second trial, including across cycles.
+    const reservation=await db.runTransaction(async tx=>{
+      const existing=(await tx.get(ref)).data()||{};
+      if(billingAccess(existing).docs_available)throw new Error("subscription_already_active");
+      if(trial && existing.hasUsedTrial===true)throw new Error("trial_already_used");
+      const pending=existing.pendingCheckout;
+      if(pending && Number(pending.expiresAt)>now){
+        if(pending.cycle!==plan.cycle || pending.trial!==trial)throw new Error("checkout_in_progress");
+        return pending;
+      }
+      const pendingCheckout={key,cycle:plan.cycle,trial,expiresAt:now+23*60*60*1000};
+      tx.set(ref,{pendingCheckout},{merge:true});return pendingCheckout;
+    });
+    const checkout=proCheckoutOptions(plan,uid,email,PUBLIC_ORIGIN,trial);
+    checkout.expires_at=Math.floor(reservation.expiresAt/1000);
+    const session = await stripe.checkout.sessions.create(checkout,{idempotencyKey:`quantura-pro-${uid}-${reservation.key}`});
     const url = asString(session.url).trim();
     if (!url) {
       res.status(502).json({ error: "missing_checkout_url" });
@@ -347,6 +381,8 @@ app.post("/api/shop/subscription-checkout", async (req, res) => {
     }
     res.status(200).json({ url, sessionId: sanitizeToken(session.id, 220) });
   } catch (error: any) {
+    const messages:Record<string,string>={subscription_already_active:"You already have Pro. Use Manage subscription to change your billing.",trial_already_used:"Your account has already used its free trial. Choose a paid Pro subscription.",checkout_in_progress:"A checkout is already open for your account. Finish that checkout or retry after it expires."};
+    if(messages[error?.message]){res.status(409).json({error:error.message,message:messages[error.message]});return;}
     console.error("[shopApi] subscription checkout session creation failed", error);
     res.status(500).json({
       error: "subscription_checkout_failed",
@@ -382,7 +418,7 @@ app.post("/api/shop/portal", async (req, res) => {
   const payload = asRecord(req.body);
   const principal=await billingIdentity(req,res);if(!principal)return;
   const returnUrl = normalizeReturnUrl(payload.returnUrl);
-  const profile=await db.collection('users').doc(principal.uid).get();
+  const profile=await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get();
   let customerId = sanitizeToken(profile.data()?.stripeCustomerId,180);
   try {
     if(!customerId) {

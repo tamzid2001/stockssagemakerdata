@@ -88,7 +88,7 @@ A high closed-basket win rate can coexist with losing positions left open. Repor
 
 ## Pro subscriptions
 
-[Quantura Pro](https://quantura.studio/pricing) is $200/month or $2,000/year, with authenticated Stripe Checkout and customer-owned billing portal access. Signed webhook events update Pro status; cancellation at period end retains access until the subscription ends. Enterprise requests use the contact popup for custom pricing. Existing free research preview and historical subscriptions are preserved.
+[Quantura Pro](https://quantura.studio/pricing) is $200/month or $2,000/year, with a 14-day free trial, unlimited daily forecasts, authenticated Stripe Checkout and customer-owned billing portal access. Signed webhook events maintain a private billing ledger and update Pro status; trials are limited to one per account. Pro admission uses three concurrent jobs and a three-start/minute token bucket per workspace, with job-specific release across midnight and expiring abandoned leases. cancellation at period end retains access until the subscription ends. Enterprise requests use the contact popup for custom pricing. Existing free research preview and historical subscriptions are preserved.
 
 ## Architecture and repository map
 
@@ -197,3 +197,7 @@ Keep secrets in encrypted runtime/CI stores. Do not commit `.env` files, credent
 [Contribution guide](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Security policy](SECURITY.md) · [License](LICENSE)
 
 Provider data and model checkpoints can have separate licensing and redistribution conditions. Quantura forecasts and backtests are research tools, not guaranteed outcomes or financial advice.
+
+### October 3 account and navigation updates
+
+Search is compact in the shared header; Screener and API Docs are available from the workspace/Profile. API documentation markup is served only to verified accounts with an active Stripe Pro trial or subscription, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.

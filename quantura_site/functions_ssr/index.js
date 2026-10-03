@@ -159,7 +159,7 @@ const resolveTemplate = (pathname) => {
   if (dashboardAliases.has(route)) return "dashboard.html";
 
   if (route === "/screener") return "screener.html";
-  if (route === "/developers/api" || route === "/docs/api") return "developers-api.html";
+  if (["/developers/api", "/docs/api", "/developers-api"].includes(route)) return "developers-api.html";
   if (route === "/research") return "research.html";
   if (route === "/pricing") return "pricing.html";
   if (route === "/purchase") return "pricing.html";
@@ -453,10 +453,6 @@ const ssrHandler = async (req, res) => {
   if (["/notifications", "/dashboard/notifications", "/watchlist"].includes(requestPath)) { res.redirect(302, "/screener#saved-alerts"); return; }
   if (["/dashboard", "/dashboard.html", "/account", "/productivity", "/productivity.html", "/collaboration", "/admin", "/admin.html", "/admin/forecasts", "/profile"].includes(requestPath) || requestPath.startsWith("/dashboard/")) {
     res.redirect(302, "/forecasting?panel=profile");
-    return;
-  }
-  if (["/developers/api", "/docs/api", "/developers-api"].includes(requestPath)) {
-    res.redirect(308, "https://quantura.mintlifysite.com/");
     return;
   }
   if (requestPath === "/studio") {

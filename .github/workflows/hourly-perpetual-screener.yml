@@ -1,12 +1,12 @@
-name: Hourly Kalshi perpetual screener — five-model ensemble
+name: Daily Kalshi perpetual screener — five-model ensemble
 on:
   schedule:
-    - cron: '13 * * * *'
+    - cron: '13 0 * * *'
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: hourly-perpetual-screener
+  group: daily-perpetual-screener
   cancel-in-progress: false
 jobs:
   screener:
@@ -32,5 +32,5 @@ jobs:
         run: echo "HF_HOME=$RUNNER_TEMP/quantura-perps-hf" >> "$GITHUB_ENV"
       - name: Install pinned forecast runtime
         run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
-      - name: Publish real hourly forecasts
+      - name: Publish real seven-day forecasts
         run: python -m ensemble_forecasting.kalshi_perp_screener --shard "$SHARD" --shards 4

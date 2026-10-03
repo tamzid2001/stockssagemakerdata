@@ -18,18 +18,18 @@ import requests
 from scripts.weekly_screener import weekly_configuration
 
 ORIGIN = "https://api.elections.kalshi.com/trade-api/v2"
-ENGINE = "quantura_perps_ensemble_v1"
+ENGINE = "quantura_perps_daily_ensemble_v2"
 QUANTILES = (.01, .25, .5, .75, .9, .99)
 NAMES = ("p01", "p25", "p50", "p75", "p90", "p99")
 
 
 def configuration():
     config = weekly_configuration()
-    return {**config, "prediction_length": 24, "frequency": "1h", "calendar": "NONE",
+    return {**config, "prediction_length": 7, "frequency": "1D", "calendar": "NONE",
             "horizon_mode": "frequency_periods", "quantiles": list(QUANTILES), "failure_policy": "fail"}
 
 
-def completed_hourly(candles, market, cutoff):
+def completed_daily(candles, market, cutoff):
     units = float(market["contract_size"]) * float(market["underlying_multiplier"])
     if not math.isfinite(units) or units <= 0:
         raise ValueError("INVALID_CONTRACT_EXPOSURE")
@@ -43,7 +43,7 @@ def completed_hourly(candles, market, cutoff):
             continue
         row = {"timestamp": datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z"), "target": close}
         if ts in rows and rows[ts] != row:
-            raise ValueError("CONFLICTING_HOURLY_CLOSE")
+            raise ValueError("CONFLICTING_DAILY_CLOSE")
         rows[ts] = row
     return [rows[ts] for ts in sorted(rows)][-512:]
 
@@ -57,14 +57,14 @@ def build_snapshot(market, history, result, generated_at):
     if completed != expected or result.get("failures"):
         raise ValueError("ALL_FIVE_MODELS_REQUIRED")
     predictions = result.get("predictions", [])
-    if len(predictions) != 24:
+    if len(predictions) != 7:
         raise ValueError("INVALID_HORIZON")
     rows, prior = [], datetime.fromisoformat(history[-1]["timestamp"].replace("Z", "+00:00")).timestamp()
     for prediction in predictions:
         values = [float(prediction["quantiles"][str(q)]) for q in QUANTILES]
         timestamp = prediction["timestamp"]
         epoch = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp()
-        if epoch != prior + 3600 or not all(math.isfinite(v) and v > 0 for v in values) or values != sorted(values):
+        if epoch != prior + 86400 or not all(math.isfinite(v) and v > 0 for v in values) or values != sorted(values):
             raise ValueError("INVALID_PREDICTIONS")
         rows.append({"timestamp": timestamp, "date": timestamp[:10], **dict(zip(NAMES, values))})
         prior = epoch
@@ -100,15 +100,15 @@ def run(shard=0, shards=1):
     config = configuration()
     for market in selected:
         try:
-            cutoff = int(time.time())//3600*3600
-            candles = get(f"/margin/markets/{market['ticker']}/candlesticks", {"start_ts": cutoff-999*3600, "end_ts": cutoff, "period_interval": 60, "include_latest_before_start": "false"})
+            cutoff = int(time.time())//86400*86400
+            candles = get(f"/margin/markets/{market['ticker']}/candlesticks", {"start_ts": cutoff-999*86400, "end_ts": cutoff, "period_interval": 1440, "include_latest_before_start": "false"})
             if candles.get("ticker") != market["ticker"]:
                 raise ValueError("TICKER_MISMATCH")
-            history = completed_hourly(candles["candlesticks"], market, cutoff)
+            history = completed_daily(candles["candlesticks"], market, cutoff)
             if len(history) < 32:
-                raise ValueError("INSUFFICIENT_GENUINE_HOURLY_HISTORY")
-            if datetime.fromisoformat(history[-1]["timestamp"].replace("Z", "+00:00")).timestamp() < cutoff-24*3600:
-                raise ValueError("HOURLY_HISTORY_NOT_CURRENT")
+                raise ValueError("INSUFFICIENT_GENUINE_DAILY_HISTORY")
+            if datetime.fromisoformat(history[-1]["timestamp"].replace("Z", "+00:00")).timestamp() < cutoff-2*86400:
+                raise ValueError("DAILY_HISTORY_NOT_CURRENT")
             ref = db.collection("perp_forecast_catalog").document(market["ticker"])
             previous = ref.get().to_dict() or {}
             if previous.get("history_cutoff_at") == history[-1]["timestamp"] and previous.get("forecast_engine") == ENGINE:
@@ -116,7 +116,7 @@ def run(shard=0, shards=1):
             request = {key: value for key, value in config.items() if key not in {"model_checkpoints", "model_revisions", "history_lag_sessions", "adjustment", "model_failure_policy"}}
             result = execute_job({"request": request, "source": {"type": "kalshi_perp", "symbol": market["ticker"], "provider": "kalshi_perps"}, "runtime_mode": "production",
                                   "model_checkpoints": config["model_checkpoints"], "model_revisions": config["model_revisions"],
-                                  "input": {"rows": history, "frequency": "1h", "timezone": "UTC"}}, minimum_history_rows=32)
+                                  "input": {"rows": history, "frequency": "1D", "timezone": "UTC"}}, minimum_history_rows=32)
             snapshot = build_snapshot(market, history, result, datetime.now(timezone.utc).isoformat())
             # Monotonic publication protects against delayed/concurrent workers.
             from google.cloud import firestore

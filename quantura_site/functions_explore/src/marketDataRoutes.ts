@@ -50,7 +50,7 @@ export type StockHistoryResult = {
 
 /** Shared provider-aware history service used by downloads and forecast jobs. */
 export async function fetchStockHistoryData(body: Record<string, unknown>, clients: { alpaca?: AlpacaClient; yahoo?: YahooFinanceClient } = {}): Promise<StockHistoryResult> {
-  if (String(body.source || body.provider).toLowerCase() === "dukascopy") return dukascopy.history(body);
+  if (String(body.source || body.provider).toLowerCase() === "dukascopy") return dukascopy.history(body,false,body.forecast_mode===true);
   let frequency;
   try{frequency=forecastFrequency(body.timeframe || body.interval || "1Day");}
   catch{throw new AlpacaError("invalid_request","Choose 1, 5, 15 or 30 minutes; 1 or 4 hours; daily, weekly or monthly bars.",422);}

@@ -6450,12 +6450,13 @@
       const success = panel.querySelector(".purchase-success");
       const stripe = panel.querySelector('[data-action="stripe"]');
       if (!button || !note) return;
-      button.disabled = false;
+      button.disabled = panel.dataset.subscriptionActive === "true";
       button.textContent = accountAuthed
         ? button.dataset.labelAuth || "Checkout now"
         : button.dataset.labelGuest || "Checkout now";
       if (panel.dataset.webOnly === "true") {
-        note.textContent = nativeIapRuntime ? "Subscribe on quantura.studio." : accountAuthed ? "Secure checkout with Stripe." : "Sign in to start your Pro subscription.";
+        if(panel.dataset.subscriptionActive === "true")button.textContent="Pro is active";
+        note.textContent = nativeIapRuntime ? "Subscribe on quantura.studio." : panel.dataset.trialDays === "14" ? "14 days free. Sign in to start your trial." : "Secure checkout with Stripe.";
       } else if (accountAuthed) {
         note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
       } else if (nativeIapRuntime) {
@@ -8807,12 +8808,10 @@
     navs.forEach((nav) => {
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Terminal</span></a>
-        ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>`}
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/shop" data-analytics="nav_shop">${icon("shopping-bag")}<span>Shop</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
         <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
-        <a href="https://quantura.mintlify.app/" data-analytics="nav_developers">${icon("code")}<span>API Docs</span></a>
       `;
     });
     navActions.forEach((group) => {
@@ -8861,7 +8860,7 @@
           <strong>Platform</strong>
           <div><a href="/forecasting">Terminal</a></div>
           <div><a href="/screener">Screener</a></div>
-          <div><a href="/forecasts">Quantura Forecasts</a></div>
+          <div><a href="/forecasts">Forecasts</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/forecasting?panel=profile">Profile</a></div>
           <div><a href="/pricing">Pro pricing</a> · Free preview</div>
@@ -8871,9 +8870,7 @@
         resources.className = "small";
         resources.innerHTML = `
           <strong>Developers &amp; company</strong>
-          <div><a href="/developers/api">API reference</a></div>
           <div><a href="/forecasting?panel=profile#terminal-profile-developer">API keys</a></div>
-          <div><a href="https://quantura.mintlify.app/" target="_blank" rel="noopener noreferrer">Developer documentation</a></div>
           <div><a href="/contact">Data licensing</a></div>
           <div><a href="/about">About</a></div>
           <div><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/disclaimer">Disclaimer</a></div>
@@ -24394,6 +24391,7 @@
       const payload = {
         tier,
         cycle,
+        trial:panel.dataset.trialDays === "14",
         product: String(panel.dataset.product || "Quantura Subscription"),
         productId: resolveNativeIapProductId(panel),
         user: {
