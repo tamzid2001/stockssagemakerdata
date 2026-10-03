@@ -52,11 +52,12 @@ def test_pages_include_analytics():
     assert "firebase-messaging-compat" in dashboard_html
 
 
-def test_archived_pricing_does_not_boot_analytics_or_app():
+def test_pro_pricing_loads_checkout_and_accessible_enterprise_contact():
     html = (PAGES / "pricing.html").read_text()
-    assert "url=/forecasting" in html
-    assert "app.js" not in html
-    assert "firebase-analytics" not in html
+    assert "url=/forecasting" not in html
+    assert "app.js" in html
+    assert 'id="enterprise-dialog"' in html
+    assert 'id="contact-form"' in html
 
 
 def test_vercel_observability_is_built_and_loaded_globally():
@@ -76,9 +77,6 @@ def test_vercel_observability_is_built_and_loaded_globally():
 
     for page in PAGES.rglob("*.html"):
         html = page.read_text()
-        if page.name == "pricing.html":
-            assert 'url=/forecasting' in html
-            continue
         assert "/app.js" in html or "/vercel-observability.js" in html, f"Observability missing from {page}"
 
     for direct_page in [PUBLIC / "shop/success.html"]:
@@ -220,9 +218,12 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
     assert "Preview rows will appear here." in client
 
 
-def test_paid_pricing_is_archived_and_free_access_is_explicit():
+def test_single_pro_plan_preserves_free_preview_and_server_owned_prices():
     pricing = (PAGES / "pricing.html").read_text().lower()
-    assert 'url=/forecasting' in pricing
+    assert 'url=/forecasting' not in pricing
+    assert 'data-monthly-price="200"' in pricing
+    assert 'data-yearly-price="2000"' in pricing
+    assert pricing.count('data-pricing-plan-card') == 1
     home = (PAGES / "index.html").read_text().lower()
     assert "free to explore" in home
     assert "are billed by aws to the connected account" in (PAGES / "research.html").read_text().lower()

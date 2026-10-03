@@ -85,8 +85,11 @@
       refs.sort.innerHTML=games?'<option value="gameStart">Game start</option><option value="event">Event</option><option value="provider">Provider</option><option value="lastUpdate">Last update</option>':stockSortOptions;
       refs.sort.dataset.mode=games?"games":"stocks";
     }
-    for(const control of [refs.universe,refs.marketCap,refs.statistic,refs.addRule]){control.disabled=nonStock;control.closest(".qs-field, fieldset").hidden=games;}
-    root.querySelectorAll('input[name="position"]').forEach(control=>{control.disabled=nonStock;control.closest("fieldset").hidden=games;});
+    const perps=state.source==="kalshi_perps";
+    for(const control of [refs.universe,refs.marketCap]){control.disabled=nonStock;control.closest(".qs-field").hidden=nonStock;}
+    for(const control of [refs.statistic,refs.addRule]){control.disabled=games;control.closest(".qs-field, fieldset").hidden=games;}
+    root.querySelectorAll('input[name="position"]').forEach(control=>{const unavailable=perps && /p10/.test(control.value);control.disabled=games||unavailable;control.closest("fieldset").hidden=games;control.closest("label").hidden=unavailable;});
+    refs.statistic.querySelector('option[value="row"]').textContent=perps?"First forecast hour":"Comparison session";
     refs.search.placeholder=games?"Team, game, outcome, or market link":"Ticker or company, e.g. PLTR";
     root.querySelectorAll('.qs-game-filter').forEach(control=>{control.hidden=!games;control.querySelector('select').disabled=!games;});
     document.querySelector(".qs-date-navigation").hidden=games;
@@ -255,11 +258,8 @@
     renderRules(state.quantileRules || []);
     refs.sort.value = state.sort || "ticker";
     refs.direction.value = state.direction || "asc";
-    const perps=state.source!=="stocks";
-    for(const control of [refs.universe,refs.marketCap,refs.statistic,refs.addRule])control.disabled=perps;
     root.querySelectorAll('input[name="position"]').forEach((input) => {
       input.checked = state.positions.includes(input.value);
-      input.disabled = perps;
     });
   }
 
@@ -354,7 +354,7 @@
     const options=(values,selected)=>values.map(([value,label])=>`<option value="${value}"${value===selected?" selected":""}>${label}</option>`).join("");
     refs.rules.innerHTML=rules.map((rule,i)=>`<div class="qs-rule">
       <select data-rule="statistic" aria-label="Rule ${i+1} statistic">${options([["avg","Average"],["min","Minimum"],["max","Maximum"]],rule.statistic)}</select>
-      <select data-rule="quantile" aria-label="Rule ${i+1} quantile">${options(["p01","p10","p25","p50","p75","p90","p99"].map(q=>[q,q.toUpperCase()]),rule.quantile)}</select>
+      <select data-rule="quantile" aria-label="Rule ${i+1} quantile">${options((current.source==="kalshi_perps"?["p01","p25","p50","p75","p90","p99"]:["p01","p10","p25","p50","p75","p90","p99"]).map(q=>[q,q.toUpperCase()]),rule.quantile)}</select>
       <select data-rule="operator" aria-label="Rule ${i+1} comparison">${options([["gt","More than price +"],["gte","At least price +"],["lt","Less than price −"],["lte","At most price −"]],rule.operator)}</select>
       <label><input data-rule="percent" aria-label="Rule ${i+1} percent difference" type="number" min="0" max="100000" step="any" value="${escapeHtml((rule.operator==="lt" || rule.operator==="lte")?Math.abs(rule.percent):rule.percent)}"> %</label>
       <button type="button" class="cta secondary small" data-remove-rule="${i}" aria-label="Remove filter ${i+1}"><i class="iconoir-cancel" aria-hidden="true"></i></button>
@@ -364,7 +364,7 @@
 
   function rowHtml(row) {
     const memberships = Array.isArray(row.universe_memberships) ? row.universe_memberships : [];
-    const position = positionView(row.quantile_position);
+    const position = current.source === "kalshi_perps" && Number.isFinite(row.actual_price) && Number.isFinite(row.p25) ? [row.actual_price < row.p25 ? "Below P25" : row.actual_price < row.p50 ? "P25 → P50" : row.actual_price <= row.p90 ? "P50 → P90" : "Above P90", "qs-position-between"] : positionView(row.quantile_position);
     const suppliedUrl = String(row.analysis_url || row.forecast_view_url || "");
     const analysisUrl = suppliedUrl.startsWith("/") && !suppliedUrl.startsWith("//")
       ? suppliedUrl
@@ -373,9 +373,9 @@
     return `<tr>
       <td data-label="Security"><div class="qs-security">${window.QuanturaLogos?.markup(row)||""}<a href="${escapeHtml(analysisUrl)}" aria-label="Open ${escapeHtml(row.ticker)} forecast analysis">${escapeHtml(row.ticker)}</a><span class="qs-universe-tags">${memberships.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</span><span class="qs-company" title="${escapeHtml(row.company_name || "")}">${escapeHtml(row.company_name || "Company name unavailable")}</span>${row.forecast_view_url?.startsWith("/forecasting?")?`<a class="cta secondary small qs-view-forecast" href="${escapeHtml(row.forecast_view_url)}"><i class="iconoir-graph-up" aria-hidden="true"></i>${row.forecast_action === "create" ? "Forecast" : "View forecast"}</a>`:'<small>Weekly forecast not published</small>'}<button class="qs-row-toggle" type="button" data-row-toggle aria-expanded="false" aria-label="Show more metrics for ${escapeHtml(row.ticker)}"><span>More metrics</span><i class="iconoir-nav-arrow-down" aria-hidden="true"></i></button></div></td>
       <td data-label="Actual" class="qs-mono qs-mobile-core"${actualStamp}>${escapeHtml(formatPrice(row.actual_price))}<small>${escapeHtml(formatDate(row.actual_price_timestamp,true))}</small><small>${escapeHtml(String(row.quote_session || "historical").replace(/_/g," "))} · ${escapeHtml(String(row.quote_source || row.data_source || "historical").replace(/_/g," "))}</small></td>
-      ${["p01","p10","p25","p50","p75","p90","p99"].map(q=>`<td data-label="${q.toUpperCase()}" class="qs-mono ${["p10","p50","p90","p99"].includes(q)?"qs-mobile-core":"qs-mobile-detail"}" title="${escapeHtml(current.statistic === "row" ? "Comparison session" : `Horizon ${current.statistic}`)}">${escapeHtml(formatPrice(current.statistic === "row" ? row[q] : row.quantile_stats?.[q]?.[current.statistic]))}</td>`).join("")}
+      ${["p01","p10","p25","p50","p75","p90","p99"].map(q=>`<td data-label="${q.toUpperCase()}"${current.source==="kalshi_perps"&&q==="p10"?" hidden":""} class="qs-mono ${["p25","p50","p90","p99"].includes(q)?"qs-mobile-core":"qs-mobile-detail"}" title="${escapeHtml(current.statistic === "row" ? current.source==="kalshi_perps"?"First forecast hour":"Comparison session" : `Horizon ${current.statistic}`)}">${escapeHtml(formatPrice(current.statistic === "row" ? row[q] : row.quantile_stats?.[q]?.[current.statistic]))}</td>`).join("")}
       <td data-label="Position" class="qs-mobile-detail"><span class="${position[1]}">${escapeHtml(position[0])}</span></td>
-      <td data-label="Distance P10 / P50 / P90" class="qs-mobile-detail"><div class="qs-distance-stack">${distanceView(row.distance_p10_pct)}${distanceView(row.distance_p50_pct)}${distanceView(row.distance_p90_pct)}</div></td>
+      <td data-label="Distance ${current.source === "kalshi_perps" ? "P25" : "P10"} / P50 / P90" class="qs-mobile-detail"><div class="qs-distance-stack">${distanceView(current.source === "kalshi_perps" ? row.distance_p25_pct : row.distance_p10_pct)}${distanceView(row.distance_p50_pct)}${distanceView(row.distance_p90_pct)}</div></td>
       <td data-label="Market cap" class="qs-mono qs-mobile-detail">${escapeHtml(formatCap(row.market_cap, row.is_etf))}</td>
       <td data-label="Updated" class="qs-mobile-detail" title="Forecast horizon ends ${escapeHtml(formatDate(row.forecast_date, false))}">${escapeHtml(formatDate(row.last_forecast_update, true))}</td>
     </tr>`;
@@ -418,10 +418,11 @@
     refs.dateInput.max=availableDates[0] || "";
     refs.datePrevious.disabled=perps || dateIndex<0 || dateIndex>=availableDates.length-1;
     refs.dateNext.disabled=perps || dateIndex<=0;
-    refs.dateAvailability.textContent=perps ? "Perpetual prices are currently on demand; no daily archive." :
+    refs.dateAvailability.textContent=perps ? "Hourly forecasts refresh throughout the day; only the latest snapshot is retained." :
       `${availableDates.length} saved ${availableDates.length===1?"scan":"scans"} in the 14-day window${dateIndex>0?" · viewing archived output":" · latest published scan"}.`;
+    refs.tableWrap.querySelectorAll('th').forEach(th=>{if(th.textContent.trim()==="P10")th.hidden=perps; if(/Distance P(?:10|25)/.test(th.textContent))th.textContent=`Distance ${perps?"P25":"P10"} / P50 / P90`;});
     refs.freshness.textContent = perps
-      ? `Scan ${formatDate(payload.generatedAt, true)} · Kalshi reference prices normalized by contract exposure, with normalized completed trades as fallback. Quotes are not real-time ticks. ${(payload.warnings || []).join(" ")}`
+      ? `Five-model hourly ensemble · next 24 hours · ${Number(payload.manifest?.forecasts_published||0)} published forecasts. Prices in USD per underlying unit. ${(payload.warnings || []).join(" ")}`
       : `${dateIndex>0?"Archived":"Latest"} scan ${formatDate(payload.generatedAt, true)} · completed daily close · seven future trading sessions · no intraday tracking. ${weekly?"Five-model weekly ensemble.":"Prior validated scan."} ${(payload.warnings || []).join(" ")}`;
     refs.status.textContent = `${Number(payload.total || 0).toLocaleString()} of ${Number(payload.universeCount || 0).toLocaleString()} ${perps ? "markets" : "securities"} match the active research filters.`;
     current.page = Number(payload.page || current.page || 1);

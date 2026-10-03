@@ -16,7 +16,8 @@ import { kalshiPerps, perpFrequency } from "./kalshiPerps";
 import { PredictionMarketDataError, predictionForecastHistory, forecastObservationLimit } from "./predictionMarketData";
 import { historySelection } from "./eventHistory";
 import { loadPublishedScreenerDataset } from "./quantScreener";
-import { screenerForecastSnapshot } from "./screenerForecast";
+import { screenerForecastSnapshot, perpForecastSnapshot } from "./screenerForecast";
+import { loadPerpForecasts } from "./perpScreener";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 import {analyticsContext,reportGa4ForecastCompletion} from "./ga4";
 import {forecastFrequency,forecastFrequencyCapabilities,frequencyEnd,frequencyTimeframe,predictionPeriods} from "./forecastFrequency";
@@ -926,10 +927,14 @@ function internal(options: Options, handler: (req: Request, res: Response, reque
 export function registerEnsembleForecastRoutes(router: Router, options: Options): void {
   const publishedSnapshot = async (req: Request) => {
     const scanId=text(req.query.scan_id || req.body?.scan_id,160);
+    if(scanId.startsWith("perps-")) {
+      const items=await loadPerpForecasts(options.db);
+      return perpForecastSnapshot({items,scan_id:scanId,scan_date:"",generated_at:"",manifest:{},schema_version:"quantura_perps_ensemble_v1"},text(req.params.ticker,40),scanId);
+    }
     const scanDate=/^(\d{4}-\d{2}-\d{2})-/.exec(scanId)?.[1];
     const dataset=await loadPublishedScreenerDataset(
       process.env.GITHUB_REPO_OWNER || "tamzid2001", process.env.GITHUB_REPO_NAME || "stockssagemakerdata",scanDate);
-    return screenerForecastSnapshot(dataset,text(req.params.ticker,20),scanId);
+    return screenerForecastSnapshot(dataset,text(req.params.ticker,40),scanId);
   };
   // Public, precomputed data only: opening a screener row does not run models or create private requests.
   router.get("/v1/screener/forecasts/:ticker", async (req,res) => {
@@ -953,7 +958,8 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       const {job}=await publishedSnapshot(req);const key=`screener:${job.published_screener.scan_id}:${req.params.ticker}:${Math.floor(Date.now()/60000)}`;
       let cached=observationCache.get(key);
       if(!cached || cached.until<Date.now()) {
-        const value=tickerOverlayRows(job.source,"1D",Date.parse(job.input_cutoff_at)).then(rows=>({rows,observed_at:new Date().toISOString(),availability:"available"})).catch(error=>{observationCache.delete(key);throw error;});
+        const overlay=job.source.type==="kalshi_perp"?kalshiPerps.history({symbol:job.source.symbol,frequency:"1h",start:Date.parse(job.input_cutoff_at),limit:500}).then(result=>result.rows.filter(row=>Date.parse(row.timestamp)>Date.parse(job.input_cutoff_at)).map(row=>({timestamp:row.timestamp,target:row.close}))):tickerOverlayRows(job.source,"1D",Date.parse(job.input_cutoff_at));
+        const value=overlay.then(rows=>({rows,observed_at:new Date().toISOString(),availability:"available"})).catch(error=>{observationCache.delete(key);throw error;});
         cached={until:Date.now()+60_000,value};observationCache.set(key,cached);
         while(observationCache.size>50)observationCache.delete(observationCache.keys().next().value!);
       }

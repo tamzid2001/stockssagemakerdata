@@ -6454,7 +6454,9 @@
       button.textContent = accountAuthed
         ? button.dataset.labelAuth || "Checkout now"
         : button.dataset.labelGuest || "Checkout now";
-      if (accountAuthed) {
+      if (panel.dataset.webOnly === "true") {
+        note.textContent = nativeIapRuntime ? "Subscribe on quantura.studio." : accountAuthed ? "Secure checkout with Stripe." : "Sign in to start your Pro subscription.";
+      } else if (accountAuthed) {
         note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
       } else if (nativeIapRuntime) {
         note.textContent = guestSession || sessionAuthed
@@ -8806,6 +8808,7 @@
       nav.innerHTML = `
         <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Terminal</span></a>
         ${document.querySelector(".app-sidebar") ? "" : `<a href="/screener" data-analytics="nav_screener">${icon("search")}<span>Screener</span></a>`}
+        <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/shop" data-analytics="nav_shop">${icon("shopping-bag")}<span>Shop</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
         <a href="/about" data-analytics="nav_about">${icon("info-circle")}<span>About</span></a>
@@ -8861,7 +8864,7 @@
           <div><a href="/forecasts">Quantura Forecasts</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/forecasting?panel=profile">Profile</a></div>
-          <div>Free tools · fair-use limits</div>
+          <div><a href="/pricing">Pro pricing</a> · Free preview</div>
         `;
       }
       if (resources instanceof HTMLElement) {
@@ -13849,13 +13852,12 @@
     if (!latest) {host.textContent="No observed quote available for the selected side.";return;}
     const summary = ensembleDistributionSummary({...job,history:[latest]});
     const end = job.predictions?.at(-1), ended = !end || Date.parse(end.timestamp) <= now;
-    const age = Math.max(0, Math.floor((now-Date.parse(latest.timestamp))/60000));
     const format = v=>Number(v).toLocaleString(undefined,{maximumFractionDigits:4});
     const median = end?.quantiles?.['0.5'];
     const higher = summary.probabilityHigher;
     const direction = Number.isFinite(Number(median)) ? `Forecast-end P50: ${format(median)} — ${Number(median)>Number(latest.target)?"above":Number(median)<Number(latest.target)?"below":"equal to"} the current quote.` : "P50 was not requested.";
     const probability = ended ? "This forecast horizon has ended; no remaining-horizon probability is implied." : higher === null || higher === undefined ? "Current quote is outside the interpolable quantile range; no tail probability is invented." : `Saved forecast implies approximately ${Math.round(higher*100)}% above / ${Math.round((1-higher)*100)}% below this quote at ${ensembleLocalTime(end.timestamp)}. This is not an updated conditional forecast or a validated win rate.`;
-    host.innerHTML = `${window.QuanturaLogos?.markup({symbol:job.source?.symbol,provider:job.source?.provider})||""}<strong>${escapeHtml(ensembleMarketIdentity(job).side)} · latest observed quote ${escapeHtml(format(latest.target))}</strong><p>${escapeHtml(ensembleLocalTime(latest.timestamp))} · ${age > 2 ? "Stale: " : ""}${age} min old · checked every minute, not a tick stream.</p><p>Nearest end-of-horizon quantile: ${escapeHtml(ensembleQuantileLabel(summary.nearest))}. ${escapeHtml(direction)}</p><p>${escapeHtml(probability)} A median denotes approximately 50% of modeled outcomes on each side, not a trading win rate.</p>`;
+    host.innerHTML = `${window.QuanturaLogos?.markup({symbol:job.source?.symbol,provider:job.source?.provider})||""}<strong>${escapeHtml(ensembleMarketIdentity(job).side)} · latest observed quote ${escapeHtml(format(latest.target))}</strong><p>${escapeHtml(ensembleLocalTime(latest.timestamp))}</p><p>Nearest end-of-horizon quantile: ${escapeHtml(ensembleQuantileLabel(summary.nearest))}. ${escapeHtml(direction)}</p><p>${escapeHtml(probability)} A median denotes approximately 50% of modeled outcomes on each side, not a trading win rate.</p>`;
   };
 
   const setEnsembleStatus = (message, tone = "") => {
@@ -24278,6 +24280,10 @@
     button.textContent = "Opening checkout...";
 
     try {
+      if (nativeBillingProvider && panel.dataset.webOnly === "true") {
+        window.location.assign("https://quantura.studio/pricing");
+        return;
+      }
       if (nativeBillingProvider) {
         if (!hasSessionUser()) {
           try {
@@ -24343,6 +24349,9 @@
   };
 
   const handleStripeCheckout = async (panel, functions) => {
+    if (isNativeIapRuntime() && panel.dataset.webOnly === "true") {
+      window.location.assign("https://quantura.studio/pricing");return;
+    }
     if (isNativeIapRuntime()) {
       const sent = requestNativeInAppPurchase(panel, { orderId: "", source: "stripe_button" });
       if (!sent) {
@@ -24350,6 +24359,7 @@
       }
       return;
     }
+    if (!hasFullAccount() && panel.dataset.webOnly === "true") {requireFullAccount("Sign in to link Pro to your account.");return;}
     if (!hasSessionUser()) {
       try {
         await ensureSessionUser({
@@ -24398,10 +24408,7 @@
 
       const response = await fetch("/api/shop/subscription-checkout", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        headers: { ...(await buildApiAuthHeaders({includeJson:true})), Accept:"application/json" },
         credentials: "same-origin",
         body: JSON.stringify(payload),
       });
@@ -24473,10 +24480,7 @@
 
       const response = await fetch("/api/shop/portal", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        headers: { ...(await buildApiAuthHeaders({includeJson:true})), Accept:"application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
           email,
@@ -27378,16 +27382,23 @@
         meta: buildMeta(),
       };
 
+      const submitButton=ui.contactForm.querySelector('button[type="submit"]'),contactStatus=document.getElementById("contact-status");
+      if(submitButton.disabled)return;submitButton.disabled=true;
+      if(contactStatus)contactStatus.textContent="Sending your request…";
       try {
         const submitContact = functions.httpsCallable("submit_contact");
         payload.adsContext = window.QuanturaAds?.capture() || null;
         const contactResponse = await submitContact(payload);
         window.QuanturaAds?.leadCreated(contactResponse?.data?.adsEventId || "");
         ui.contactForm.reset();
+        if(contactStatus)contactStatus.textContent="Request sent. We’ll respond within one business day.";
         showToast("Message sent. We'll respond within one business day.");
         logEvent("contact_submit", { source: window.location.pathname });
       } catch (error) {
+        if(contactStatus)contactStatus.textContent=error.message || "Unable to send message. Please retry.";
         showToast(error.message || "Unable to send message.", "warn");
+      } finally {
+        submitButton.disabled=false;
       }
     });
 

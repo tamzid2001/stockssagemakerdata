@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 import helmet from "helmet";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import Stripe from "stripe";
+import { proSubscriptionPlan, proCheckoutOptions, subscriptionAccess } from "./subscriptionBilling";
 import {
   SHOP_SHIPPING_POLICY,
   getCatalogBySku,
@@ -54,63 +55,30 @@ type RateRecord = {
   resetAtMs: number;
 };
 
-type SubscriptionTier = "pro" | "quant" | "research";
-type SubscriptionCycle = "monthly" | "yearly";
-type SubscriptionPlan = {
-  tier: SubscriptionTier;
-  cycle: SubscriptionCycle;
-  amountCents: number;
-  label: string;
-  description: string;
-};
-
 const checkoutRateLimiter = new Map<string, RateRecord>();
 const SECRET_NAME_CACHE = new Map<string, string>();
 
-const SUBSCRIPTION_PLANS: Record<string, SubscriptionPlan> = {
-  pro_monthly: {
-    tier: "pro",
-    cycle: "monthly",
-    amountCents: 3900,
-    label: "Quantura Pro Monthly",
-    description: "Full forecasting, research, options, screener, alerts, and data export workflow.",
-  },
-  pro_yearly: {
-    tier: "pro",
-    cycle: "yearly",
-    amountCents: 37400,
-    label: "Quantura Pro Annual",
-    description: "Annual Quantura Pro plan with discounted yearly billing.",
-  },
-  quant_monthly: {
-    tier: "quant",
-    cycle: "monthly",
-    amountCents: 9900,
-    label: "Quantura Quant Monthly",
-    description: "Programmatic research with Chronos, ensemble forecasting, backtests, bulk exports, and API access.",
-  },
-  quant_yearly: {
-    tier: "quant",
-    cycle: "yearly",
-    amountCents: 95000,
-    label: "Quantura Quant Annual",
-    description: "Annual Quantura Quant plan with discounted yearly billing.",
-  },
-  research_monthly: {
-    tier: "research",
-    cycle: "monthly",
-    amountCents: 24900,
-    label: "Quantura Research Monthly",
-    description: "Research-team plan with collaboration, larger datasets, automation, and priority processing.",
-  },
-  research_yearly: {
-    tier: "research",
-    cycle: "yearly",
-    amountCents: 239000,
-    label: "Quantura Research Annual",
-    description: "Annual Quantura Research plan with discounted yearly billing.",
-  },
-};
+async function billingIdentity(req:Request,res:Response) {
+  try {
+    const token=asString(req.headers.authorization).match(/^Bearer (.+)$/i)?.[1];
+    if(!token)throw Error();
+    const user=await admin.auth().verifyIdToken(token,true);
+    if(user.firebase?.sign_in_provider==='anonymous')throw Error();
+    return user;
+  }catch{res.status(401).json({error:'sign_in_required',message:'Sign in to manage a Pro subscription.'});return null;}
+}
+
+async function syncProSubscription(subscription:Stripe.Subscription) {
+  const access=subscriptionAccess(subscription);if(!access)return;
+  const ref=db.collection('users').doc(access.uid);
+  await db.runTransaction(async tx=>{
+    const current=await tx.get(ref),data=current.data()||{};
+    if(access.plan==='free' && data.stripeSubscriptionId && data.stripeSubscriptionId!==access.subscriptionId)return;
+    if(data.stripeSubscriptionId!==access.subscriptionId && Number(data.stripeSubscriptionCreatedAt)>access.createdAt)return;
+    tx.set(ref,{plan:access.plan,subscriptionTier:access.plan,stripeCustomerId:access.customerId,stripeSubscriptionId:access.subscriptionId,
+      subscriptionStatus:access.status,cancelAtPeriodEnd:access.cancelAtPeriodEnd,stripeSubscriptionCreatedAt:access.createdAt,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+  });
+}
 
 const app = express();
 app.use(helmet());
@@ -145,6 +113,11 @@ app.post("/api/shop/webhook/stripe", express.raw({ type: "application/json" }), 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       await persistCheckoutCompletedOrder(session, stripe);
+      if(session.mode==="subscription" && typeof session.subscription==="string")await syncProSubscription(await stripe.subscriptions.retrieve(session.subscription));
+    } else if (["customer.subscription.updated","customer.subscription.deleted","customer.subscription.created"].includes(event.type)) {
+      const subscription=event.data.object as Stripe.Subscription;
+      // Read current provider state rather than granting from an old delivery.
+      await syncProSubscription(event.type==="customer.subscription.deleted"?subscription:await stripe.subscriptions.retrieve(subscription.id));
     }
     res.status(200).json({ received: true });
   } catch (error: any) {
@@ -347,57 +320,26 @@ app.post("/api/shop/subscription-checkout", async (req, res) => {
     return;
   }
 
+  const principal=await billingIdentity(req,res);if(!principal)return;
   const payload = asRecord(req.body);
-  const user = asRecord(payload.user);
-  const email = normalizeEmail(user.email || payload.email);
-  const uid = sanitizeToken(user.uid || payload.uid, 160);
-  const plan = resolveSubscriptionPlan(payload);
+  const email = normalizeEmail(principal.email);
+  const uid = principal.uid;
+  const plan = proSubscriptionPlan(payload);
   if (!plan) {
     res.status(400).json({
       error: "invalid_plan",
-      message: "Unknown subscription plan. Supported tiers: go, plus, business, pro.",
+      message: "Choose Pro with monthly or yearly billing.",
     });
     return;
   }
 
   try {
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer_email: email || undefined,
-      client_reference_id: uid || undefined,
-      allow_promotion_codes: true,
-      success_url: `${PUBLIC_ORIGIN}/pricing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${PUBLIC_ORIGIN}/pricing?checkout=cancel`,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "usd",
-            unit_amount: plan.amountCents,
-            recurring: {
-              interval: plan.cycle === "yearly" ? "year" : "month",
-            },
-            product_data: {
-              name: plan.label,
-              description: plan.description,
-              metadata: {
-                tier: plan.tier,
-                cycle: plan.cycle,
-              },
-            },
-          },
-        },
-      ],
-      metadata: {
-        uid,
-        email,
-        source: "quantura_pricing",
-        tier: plan.tier,
-        cycle: plan.cycle,
-        amountCents: String(plan.amountCents),
-      },
-    });
-
+    const existing=(await db.collection("users").doc(uid).get()).data()||{};
+    if(existing.stripeSubscriptionId && ["active","trialing"].includes(existing.subscriptionStatus)) {
+      res.status(409).json({error:"subscription_already_active",message:"You already have Pro. Use Manage subscription to change your billing."});
+      return;
+    }
+    const session = await stripe.checkout.sessions.create(proCheckoutOptions(plan,uid,email,PUBLIC_ORIGIN));
     const url = asString(session.url).trim();
     if (!url) {
       res.status(502).json({ error: "missing_checkout_url" });
@@ -438,25 +380,15 @@ app.post("/api/shop/portal", async (req, res) => {
   }
 
   const payload = asRecord(req.body);
-  const inputCustomerId = sanitizeToken(payload.customerId, 120);
-  const inputEmail = normalizeEmail(payload.email);
+  const principal=await billingIdentity(req,res);if(!principal)return;
   const returnUrl = normalizeReturnUrl(payload.returnUrl);
-
-  if (!inputCustomerId && !inputEmail) {
-    res.status(400).json({ error: "customer_lookup_required", message: "Provide customerId or email." });
-    return;
-  }
-
-  let customerId = inputCustomerId;
+  const profile=await db.collection('users').doc(principal.uid).get();
+  let customerId = sanitizeToken(profile.data()?.stripeCustomerId,180);
   try {
-    if (!customerId && inputEmail) {
-      const customers = await stripe.customers.list({
-        email: inputEmail,
-        limit: 1,
-      });
-      customerId = asString(customers.data?.[0]?.id);
+    if(!customerId) {
+      const orders=await db.collection('orders').where('userId','==',principal.uid).limit(100).get();
+      customerId=sanitizeToken(orders.docs.find(doc=>doc.data().stripeCustomerId)?.data().stripeCustomerId,180);
     }
-
     if (!customerId) {
       res.status(404).json({ error: "customer_not_found" });
       return;
@@ -716,6 +648,14 @@ async function persistCheckoutCompletedOrder(session: Stripe.Checkout.Session, s
     customerEmail: normalizeEmail(customerDetails.email || session.customer_email),
     customerId: sanitizeToken(session.customer as string, 180),
     uid: sanitizeToken(metadata.uid, 180),
+    userId: sanitizeToken(metadata.uid, 180),
+    userEmail: normalizeEmail(customerDetails.email || session.customer_email),
+    subscriptionTier: metadata.source==="quantura_pricing"?"pro":null,
+    product: metadata.source==="quantura_pricing"?"Quantura Pro":"Shop purchase",
+    price: asFinite(session.amount_total,0)/100,
+    paymentProvider:"stripe",
+    stripeCustomerId: sanitizeToken(session.customer as string,180),
+    stripeSubscriptionId: typeof session.subscription==="string"?session.subscription:null,
     source: sanitizeText(metadata.source, 120) || "quantura_shop",
     shipping: {
       name: sanitizeText(customerDetails.name || shippingDetails.name, 200),
@@ -886,47 +826,6 @@ function findSkuByProductName(name: string): string {
   if (!clean) return "";
   const item = getCatalogPublicItems().find((row) => sanitizeText(row.name, 220).toLowerCase() === clean);
   return item ? sanitizeToken(item.sku, 64).toUpperCase() : "";
-}
-
-function normalizeSubscriptionTier(value: unknown): SubscriptionTier | null {
-  const raw = sanitizeText(value, 60).toLowerCase();
-  if (!raw) return null;
-  if (
-    raw.includes("annual_business") ||
-    raw === "business" ||
-    raw === "quanturabusiness" ||
-    raw === "desk" ||
-    raw === "research" ||
-    raw === "quanturaresearch"
-  ) return "research";
-  if (raw === "quant" || raw === "quanturaquant") return "quant";
-  if (
-    raw.includes("annual_plus") ||
-    raw.includes("annual_go") ||
-    raw === "plus" ||
-    raw === "premium" ||
-    raw === "go" ||
-    raw === "goplan"
-  ) return "pro";
-  if (raw === "pro" || raw === "quanturapro") return "pro";
-  return null;
-}
-
-function normalizeSubscriptionCycle(value: unknown, tierHint: unknown): SubscriptionCycle {
-  const cycleRaw = sanitizeText(value, 32).toLowerCase();
-  if (cycleRaw === "yearly" || cycleRaw === "annual" || cycleRaw === "year") return "yearly";
-  const hint = sanitizeText(tierHint, 60).toLowerCase();
-  if (hint.includes("annual_") || hint.includes("year")) return "yearly";
-  return "monthly";
-}
-
-function resolveSubscriptionPlan(payload: Record<string, unknown>): SubscriptionPlan | null {
-  const tierRaw = payload.tier || payload.plan || payload.planKey || payload.productId || payload.product;
-  const tier = normalizeSubscriptionTier(tierRaw);
-  if (!tier) return null;
-  const cycle = normalizeSubscriptionCycle(payload.cycle, tierRaw);
-  const key = `${tier}_${cycle}`;
-  return SUBSCRIPTION_PLANS[key] || null;
 }
 
 async function discoverSecretValueByPattern(pattern: RegExp): Promise<string> {

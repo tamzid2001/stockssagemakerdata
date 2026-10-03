@@ -53,7 +53,7 @@ The ensemble registry includes Prophet, Toto, IBM Granite, Chronos and TimesFM. 
 | Alpaca / Yahoo Finance | Stocks, ETFs and supported market history | Effective provider, adjustment and exchange timezone are retained; provider history limits apply |
 | Dukascopy | Full published catalog: FX, metals, indices and other provider CFDs | Bid/ask quotes and instrument-specific scales; equity CFDs are not exchange shares |
 | Kalshi / Polymarket US | Exact binary outcomes and game forecasts | Outcome IDs, quote targets and verified game starts; probability units |
-| Kalshi perpetuals | Perpetual contract discovery and history | Prices normalized to underlying exposure; separate from binary markets |
+| Kalshi perpetuals | Discovery, downloads and hourly five-model screener ensembles | Underlying units; 24-hour horizon; six quantiles, immutable input overlay and saved requests |
 | Workspace / CSV | User-supplied time series | Validated timestamps, numeric target and explicit frequency |
 
 The checked-in Dukascopy snapshot contains 1,504 instruments; the service refreshes the provider catalog and identifies stale snapshots. Candle archives avoid the multi-year hourly tick-download loop. Available history, request bounds, rate limits and redistribution rights still depend on the provider.
@@ -85,6 +85,10 @@ Dedicated repository workers cover those studies:
 - [Triggered reforecast workflow](.github/workflows/ftmo-trigger-reforecast.yml): eight FX/index assets, real minute triggers, completed-hour context and a remaining-session forecast.
 
 A high closed-basket win rate can coexist with losing positions left open. Reports must include floating P&L, ladder size, duration, costs and drawdown. Optimization on the development period is not evidence of future returns or a prop-firm challenge pass. Kalshi coin workflows are **paper only**; see the [paper-only operating policy](docs/kalshi-coin-paper-only.md).
+
+## Pro subscriptions
+
+[Quantura Pro](https://quantura.studio/pricing) is $200/month or $2,000/year, with authenticated Stripe Checkout and customer-owned billing portal access. Signed webhook events update Pro status; cancellation at period end retains access until the subscription ends. Enterprise requests use the contact popup for custom pricing. Existing free research preview and historical subscriptions are preserved.
 
 ## Architecture and repository map
 
