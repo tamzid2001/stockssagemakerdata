@@ -14,8 +14,8 @@ export type PlanEntitlement = {
   features: string[];
 };
 
-// Historical billing identifiers stay intact. Product access is now free;
-// subscriptions and Stripe invoices are deliberately not rewritten here.
+// Existing free preview access and historical billing identifiers stay intact.
+// New Pro checkout prices come from the server-owned configuration below.
 const allFeatures = config.plans.free.features;
 export const PLAN_ENTITLEMENTS = Object.fromEntries(Object.entries(config.plans).map(([key, plan]) => [key, {
   ...plan, monthlyCents: 0, annualCents: 0, features: allFeatures,
@@ -40,7 +40,7 @@ export function planHasFeature(plan: unknown, feature: string): boolean {
 export function publicPlanEntitlements(): Record<string, unknown> {
   return {
     schemaVersion: PLAN_ENTITLEMENTS_SCHEMA_VERSION,
-    access_model: "free_with_fair_use_limits",
-    plans: { free: { ...PLAN_ENTITLEMENTS.free, label: "Free" } },
+    access_model: "pro_subscription_with_free_preview",
+    plans: { pro: { ...PLAN_ENTITLEMENTS.pro, monthlyCents:config.plans.pro.monthlyCents, annualCents:config.plans.pro.annualCents } },
   };
 }

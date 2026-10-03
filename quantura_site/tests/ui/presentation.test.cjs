@@ -356,7 +356,7 @@ test('advanced help is an accessible modal and dataset frequency only belongs to
   d.window.close();
 });
 
-test('latest quote uses the saved side, labels staleness and does not invent updated trading probabilities', () => {
+test('latest quote uses the saved side and timestamp without stale-age noise or invented trading probabilities', () => {
   const d=dom(page('forecasting.html')),w=d.window;
   w.eval(`const escapeHtml=s=>String(s).replaceAll('<','&lt;'),ensembleQuantileKey=String;
     const ensembleTimeZone=${source('app.js').split('  const ensembleTimeZone =')[1].split('  const describeEnsembleCapability =')[0]}
@@ -364,8 +364,8 @@ test('latest quote uses the saved side, labels staleness and does not invent upd
   const now=Date.parse('2026-09-12T20:00:00Z');
   const job={source:{type:'prediction_market',symbol:'game',outcome:'Michigan Wolverines',side:'short'},history:[{timestamp:'2026-09-12T19:30:00Z',target:.1}],observations:[{timestamp:'2026-09-12T19:59:00Z',target:.4}],quantiles:[.1,.5,.9],predictions:[{timestamp:'2026-09-12T20:30:00Z',quantiles:{'0.1':.2,'0.5':.5,'0.9':.8}}]};
   w.live(job,now);const text=w.document.getElementById('ensemble-live-quote').textContent;
-  assert.match(text,/Michigan Wolverines \(short\)/);assert.match(text,/quote 0.4/);assert.match(text,/1 min old/);assert.match(text,/not an updated conditional forecast/);assert.doesNotMatch(text,/Stale/);
-  w.live(job,now+3600_000);assert.match(w.document.getElementById('ensemble-live-quote').textContent,/Stale.*horizon has ended/s);
+  assert.match(text,/Michigan Wolverines \(short\)/);assert.match(text,/quote 0.4/);assert.doesNotMatch(text,/min old|checked every minute|tick stream/);assert.match(text,/not an updated conditional forecast/);assert.doesNotMatch(text,/Stale/);
+  w.live(job,now+3600_000);assert.match(w.document.getElementById('ensemble-live-quote').textContent,/horizon has ended/s);
   d.window.close();
 });
 

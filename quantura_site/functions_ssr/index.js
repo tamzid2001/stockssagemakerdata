@@ -449,7 +449,7 @@ const ssrHandler = async (req, res) => {
   }
 
   const requestPath = normalizePath(req.path || "/");
-  if (["/pricing", "/purchase", "/autopilot"].includes(requestPath)) { res.redirect(308, "/forecasting"); return; }
+  if (["/purchase", "/autopilot"].includes(requestPath)) { res.redirect(308, "/forecasting"); return; }
   if (["/notifications", "/dashboard/notifications", "/watchlist"].includes(requestPath)) { res.redirect(302, "/screener#saved-alerts"); return; }
   if (["/dashboard", "/dashboard.html", "/account", "/productivity", "/productivity.html", "/collaboration", "/admin", "/admin.html", "/admin/forecasts", "/profile"].includes(requestPath) || requestPath.startsWith("/dashboard/")) {
     res.redirect(302, "/forecasting?panel=profile");

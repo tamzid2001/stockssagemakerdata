@@ -1,11 +1,13 @@
 ---
-title: "Kalshi perpetual trade-close data"
+title: "Kalshi perpetual data and hourly ensembles"
 description: "Search and forecast USD-per-contract history without confusing perpetuals with spot assets or binary markets."
 ---
 
 Select **Kalshi Perpetuals** in market search or Q Screener. The provider's catalog includes active, inactive and closed listings when returned by Kalshi. Search in **Any** mode to include inactive listings.
 
-Q Screener shows Kalshi reference prices on an underlying spot-equivalent scale, with normalized completed minute trade closes as fallback, timestamps, and an on-demand **Forecast** action. It does not invent weekly quantiles, NYSE closing signals or stock market capitalization for perpetuals. Scheduled equity forecasts and daily stock alerts remain unchanged; perpetual daily alerts are not currently supported.
+Screener combines current reference prices with a scheduled five-model hourly ensemble (Prophet, Toto 4m, Granite, Chronos, TimesFM). Each eligible active listing receives 24 forecast hours and P01/P25/P50/P75/P90/P99. Quantile filters compare the latest observed price with real forecast values; min/max/average statistics span the full horizon. The default row is the first forecast hour. **View forecast** opens the complete distribution and genuine input history; signed-in users can save it to My requests.
+
+The hourly GitHub Actions matrix publishes only when all five models complete with at least 32 genuine hourly trade closes. Missing intervals and null closes stay absent. Listings without sufficient current history retain quotes and an on-demand Forecast action, with no invented quantiles. Failed refreshes preserve the last valid snapshot until its horizon expires. One latest document per ticker keeps storage bounded. Perpetual daily closing alerts are not supported.
 
 ## Price basis
 

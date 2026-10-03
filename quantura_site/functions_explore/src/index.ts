@@ -15,6 +15,7 @@ import { registerPlatformApiRoutes } from "./platformApiRoutes";
 import { registerBacktestRoutes } from "./backtestRoutes";
 import { registerSupportChatRoutes } from "./supportChat";
 import { kalshiPerps, registerKalshiPerpsRoutes } from "./kalshiPerps";
+import { perpScreenerDataset } from "./perpScreener";
 import { authenticatePlatformRequest, requireWorkspacePermission, resolveWorkspaceAccess } from "./apiAccess";
 import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
 import { registerMarketResearchWatchdog } from "./marketResearchWatchdog";
@@ -8379,7 +8380,7 @@ ROUTES.get("/screener/data", async (req, res) => {
     const latest = perps ? null : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
     const availableDates = perps ? [] : await listPublishedScreenerDates(GITHUB_REPO_OWNER, GITHUB_REPO_NAME, latest!.scan_date);
     if(selectedDate && !availableDates.includes(selectedDate)) {res.status(404).json({error:"screener_snapshot_not_found"});return;}
-    const dataset = perps ? await kalshiPerps.screener() : selectedDate && selectedDate!==latest!.scan_date ? await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME,selectedDate) : latest!;
+    const dataset = perps ? await perpScreenerDataset(db) : selectedDate && selectedDate!==latest!.scan_date ? await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME,selectedDate) : latest!;
     const archived=Boolean(selectedDate && selectedDate!==latest?.scan_date);
     const current = perps ? {items:dataset.items,warnings:dataset.manifest.warnings} : archived ? screenerMarketService.archived(dataset) : await screenerMarketService.current(dataset);
     const page = filterSortPaginateRows(current.items, parsed.query);
@@ -8400,7 +8401,7 @@ ROUTES.get("/screener/data", async (req, res) => {
       dataSource: perps ? "kalshi_perps" : "validated_github_release",
       warnings: current.warnings,
       schemaVersion: dataset.schema_version,
-      comparisonPolicy: perps ? "Kalshi reference prices are normalized to USD per underlying unit; completed trade closes are the fallback. Forecasts are on demand." : "Stock prices use the latest completed daily close. Forecast quantiles span seven trading sessions; no intraday screener tracking.",
+      comparisonPolicy: perps ? "Kalshi reference prices are normalized to USD per underlying unit; completed trade closes are the fallback. Published five-model hourly forecasts span the next 24 hours; quantile comparisons use the first forecast hour or horizon min/max/average." : "Stock prices use the latest completed daily close. Forecast quantiles span seven trading sessions; no intraday screener tracking.",
     });
   } catch (error: any) {
     const detail = sanitizeText(error?.message || error, 120);
@@ -8424,7 +8425,7 @@ ROUTES.get("/screener/export.csv", async (req, res) => {
     const perps=req.query.source==="kalshi_perps";
     const latest = perps ? null : await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
     if(selectedDate && !(await listPublishedScreenerDates(GITHUB_REPO_OWNER,GITHUB_REPO_NAME,latest!.scan_date)).includes(selectedDate)) {res.status(404).json({error:"screener_snapshot_not_found"});return;}
-    const dataset = perps ? await kalshiPerps.screener() : selectedDate && selectedDate!==latest!.scan_date ? await loadPublishedScreenerDataset(GITHUB_REPO_OWNER,GITHUB_REPO_NAME,selectedDate) : latest!;
+    const dataset = perps ? await perpScreenerDataset(db) : selectedDate && selectedDate!==latest!.scan_date ? await loadPublishedScreenerDataset(GITHUB_REPO_OWNER,GITHUB_REPO_NAME,selectedDate) : latest!;
     const current = perps ? {items:dataset.items} : selectedDate && selectedDate!==latest!.scan_date ? screenerMarketService.archived(dataset) : await screenerMarketService.current(dataset);
     const csv = screenerRowsCsv(filterSortPaginateRows(current.items,{...parsed.query,page:1,pageSize:Math.max(1,current.items.length)}).items);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");

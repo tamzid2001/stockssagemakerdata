@@ -1,6 +1,25 @@
 import { screenerHistory } from "./screenerHistory";
 import type { QuantScreenerDataset } from "./quantScreener";
 import { forecastRows } from "./screenerSignals";
+import { validPerpSnapshot } from "./perpScreener";
+
+export function perpForecastSnapshot(dataset: QuantScreenerDataset, ticker: string, scanId: string) {
+  const row=dataset.items.find(item=>item.ticker===ticker.toUpperCase() && item.scan_id===scanId);
+  if(!row || !validPerpSnapshot(row))throw new Error("screener_forecast_not_found");
+  const config=row.forecast_config as Record<string,any>, provenance=row.forecast_provenance as Record<string,any>;
+  const history=screenerHistory(row.forecast_input_gzip), rows=row.forecast_rows as Record<string,any>[];
+  const request={prediction_length:24,horizon_mode:"frequency_periods",quantiles:config.quantiles,frequency:"1h",calendar:"NONE",context_length:config.context_length,
+    transform:config.transform,failure_policy:"fail",models:config.models,toto_variant:"4m"};
+  const result={...provenance,predictions:rows.map(r=>({timestamp:r.timestamp,quantiles:Object.fromEntries(config.quantiles.map((q:number)=>[String(q),r[`p${String(Math.round(q*100)).padStart(2,"0")}`]]))})),
+    quantiles:config.quantiles,effective_weights_by_quantile:row.effective_weights_by_quantile,models:row.forecast_models,transform:config.transform,dataset_hash:row.dataset_hash};
+  const job={schema_version:"ensemble_forecast_job_v1",status:"completed",source:{type:"kalshi_perp",provider:"kalshi_perps",symbol:row.ticker,frequency:"1h",limit:512,
+    unit:"USD per underlying unit",input_cutoff_at:history.at(-1)!.timestamp},request,input_row_count:history.length,input_cutoff_at:history.at(-1)!.timestamp,input_timezone:"UTC",
+    created_at:row.last_forecast_update,completed_at:row.last_forecast_update,model_checkpoints:config.model_checkpoints,model_revisions:config.model_revisions,
+    requested_weights:Object.fromEntries(Object.keys(config.models).map(id=>[id,.2])),effective_central_weights:Object.fromEntries(Object.keys(config.models).map(id=>[id,.2])),
+    dataset_hash:row.dataset_hash,request_hash:row.forecast_config_hash,registry_version:"screener-perps-v1",warnings:provenance.warnings || [],
+    published_screener:{scan_id:scanId,ticker:row.ticker},runtime_mode:"production"};
+  return {job,result,history};
+}
 
 /** Read only a validated publication; never accept prediction arrays from a client. */
 export function screenerForecastSnapshot(dataset: QuantScreenerDataset, ticker: string, scanId: string) {

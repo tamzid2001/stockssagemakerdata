@@ -171,8 +171,8 @@ export class KalshiPerpsService {
       await Promise.all(markets.slice(index,index+2).map(async m=>{
         let row: Awaited<ReturnType<KalshiPerpsService["history"]>>["rows"][number]|undefined;
         let status="available";
-        try{row=(await this.history({symbol:m.symbol,frequency:"1min",limit:1})).rows.at(-1);}catch{status="unavailable";}
         const referenceAvailable=m.spot_reference_price!==null && m.spot_reference_timestamp!==null;
+        if(!referenceAvailable)try{row=(await this.history({symbol:m.symbol,frequency:"1min",limit:1})).rows.at(-1);}catch{status="unavailable";}
         items.push({ticker:m.symbol,company_name:m.name,asset_class:"perpetual",provider:PERPS_SOURCE,market_status:m.status,
           actual_price:referenceAvailable?m.spot_reference_price:row?.close??null,actual_price_timestamp:referenceAvailable?m.spot_reference_timestamp:row?.timestamp??null,
           quote_source:referenceAvailable?"kalshi_perps_reference_spot":"kalshi_perps_trade_close_spot_equivalent",quote_session:"perpetual",quote_status:referenceAvailable||row?status:"unavailable",

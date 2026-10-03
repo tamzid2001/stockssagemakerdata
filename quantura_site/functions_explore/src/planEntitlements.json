@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2026-09-16-free-product",
+  "schemaVersion": "2026-10-03-pro",
   "plans": {
     "free": {
       "label": "Free",
@@ -15,8 +15,8 @@
     },
     "pro": {
       "label": "Pro",
-      "monthlyCents": 3900,
-      "annualCents": 37400,
+      "monthlyCents": 20000,
+      "annualCents": 200000,
       "apiReadPerMinute": 60,
       "forecastComputePerDay": 50,
       "bulkExportsPerMonth": 5,

@@ -5,7 +5,6 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
-    { "source": "/pricing", "destination": "/forecasting", "permanent": true },
     { "source": "/notifications", "destination": "/screener#saved-alerts", "permanent": false },
     { "source": "/dashboard/notifications", "destination": "/screener#saved-alerts", "permanent": false },
     { "source": "/dashboard/:path*", "destination": "/forecasting?panel=profile", "permanent": false },
