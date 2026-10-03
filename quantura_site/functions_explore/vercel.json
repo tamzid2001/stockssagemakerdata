@@ -1,10 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "express",
+  "ignoreCommand": "bash ../scripts/ignore-unchanged-vercel-build.sh api",
   "functions": {
     "index.ts": {
       "maxDuration": 300,
-      "memory": 2048
+      "memory": 2048,
+      "excludeFiles": "{src/**/*.test.ts,dist/**/*.test.js,tests/**,**/.pytest_cache/**,**/__pycache__/**}"
     }
   }
 }

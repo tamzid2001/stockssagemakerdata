@@ -23,6 +23,10 @@ Validate source, sync templates and commit before running `./deploy.sh`. Its def
 
 Check the live website, `/api/openapi.json`, capabilities, affected history exports and profile/forecast navigation after deployment. Use the [release checklist](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/release-checklist.md).
 
+Function projects skip Git builds when their runtime inputs are unchanged. Explicit CLI/env-only deployments and missing comparison metadata always build. Test files and caches are excluded from function bundles. Current Vercel retention is 1 day for failed/canceled builds, 7 days for previews and 14 days for production, with active aliases protected. Storage cleanup reduces future GB-month usage rather than resetting accrued usage.
+
+Public-page OpenAI Ads and AWS Marketplace/Zift measurement follows the optional analytics choice and Global Privacy Control. Confirmed contact leads share a browser/server event ID; credentials remain sensitive runtime variables. Pinterest verification is in public HTML. [Measurement coverage](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/partner-measurement.md).
+
 ## Jobs and private data
 
 - Ensemble jobs are authorized, claimed, executed and reported through the worker protocol with reproducible configuration/result identity.

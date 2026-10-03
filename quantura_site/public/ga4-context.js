@@ -1,6 +1,12 @@
 /* Existing GA4 web identifiers only. No API secret, queries, uploaded rows or forecast values. */
 (() => {
   'use strict';
+  if (!document.querySelector('script[data-quantura-partner-measurement]')) {
+    const partnerScript = document.createElement('script');
+    partnerScript.src = '/partner-measurement.js'; partnerScript.async = true;
+    partnerScript.fetchPriority = 'low'; partnerScript.dataset.quanturaPartnerMeasurement = 'true';
+    document.head.append(partnerScript);
+  }
   const measurement='G-R9Y1C8WBKS';
   const accepted=()=>{try{return localStorage.getItem('quantura_cookie_consent')==='accepted' && navigator.globalPrivacyControl!==true;}catch{return false;}};
   function sanitizedLocation(){return location.origin+location.pathname;}

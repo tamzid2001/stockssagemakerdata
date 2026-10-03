@@ -10,6 +10,8 @@ Perpetual prices are normalized to underlying units. A market reference quote is
 
 Stock scans run after the latest completed NYSE close. Hourly recovery checks compare that exchange session with the last validated publication, so delayed GitHub runs and UTC midnight do not skip or misdate updates. Every chunk uses that same close; incomplete coverage preserves the previous publication and remains eligible for retry.
 
+Aggregation reads the checked-in model registry directly and is tested without Python site packages, keeping publication independent of inference dependencies. The October 3 recovery republished genuine October 2 inputs: 3,568 valid five-model stock forecasts out of 3,607 stocks (98.92% coverage), with 39 unavailable histories/predictions explicitly retained as unavailable.
+
 ## Today's games
 
 - Filter Kalshi-only or Polymarket US-only cards, or inspect matched game outcomes from both providers.

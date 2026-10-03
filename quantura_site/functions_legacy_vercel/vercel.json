@@ -1,10 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "bash ../scripts/ignore-unchanged-vercel-build.sh legacy",
   "functions": {
     "app.py": {
       "maxDuration": 300,
       "memory": 2048,
-      "excludeFiles": "{sql/**,serviceAccountKey.example.json}"
+      "excludeFiles": "{sql/**,serviceAccountKey.example.json,tests/**,**/test_*.py,**/.pytest_cache/**,**/__pycache__/**}"
     }
   }
 }

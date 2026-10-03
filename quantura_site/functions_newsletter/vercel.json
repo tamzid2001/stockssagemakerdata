@@ -1,9 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "bash ../scripts/ignore-unchanged-vercel-build.sh newsletter",
   "functions": {
     "app.py": {
       "maxDuration": 300,
-      "memory": 2048
+      "memory": 2048,
+      "excludeFiles": "{tests/**,**/test_*.py,**/.pytest_cache/**,**/__pycache__/**}"
     }
   }
 }

@@ -34,6 +34,7 @@ from massive_client import MassiveApiError, MassiveClient
 from massive_capabilities import classify_capability_status
 from options_fallback import should_use_massive_fallback
 import secrets_loader
+from openai_ads import report_contact_lead
 
 
 class _LazyRequestsModule:
@@ -8816,7 +8817,10 @@ def submit_contact(req: https_fn.CallableRequest) -> dict[str, Any]:
     doc_ref = db.collection("contacts").document()
     doc_ref.set(payload)
 
-    return {"contactId": doc_ref.id}
+    raw_request = getattr(req, "raw_request", None)
+    report_contact_lead(doc_ref.id, data.get("adsContext"),
+                        getattr(raw_request, "headers", {}), secrets_loader.get_secret)
+    return {"contactId": doc_ref.id, "adsEventId": "lead_" + doc_ref.id}
 
 
 @https_fn.on_call()

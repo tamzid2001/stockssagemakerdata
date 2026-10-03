@@ -9,6 +9,8 @@ import hashlib
 import json
 import base64
 import gzip
+import os
+from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 QUANTILES = (0.01, 0.10, 0.25, 0.50, 0.75, 0.90, 0.99)
@@ -17,8 +19,11 @@ ENGINE = "quantura_weekly_ensemble_v2"
 
 
 def weekly_configuration() -> dict[str, Any]:
-    from ensemble_forecasting.capabilities import MODEL_REGISTRY
-    models = MODEL_REGISTRY["models"]
+    # Publication only needs the checked-in registry. Importing the worker's
+    # capabilities loads pandas/pydantic and broke the lightweight aggregate job.
+    registry = Path(os.environ.get("QUANTURA_ENSEMBLE_MODEL_REGISTRY") or
+                    Path(__file__).resolve().parents[1] / "quantura_site/functions_explore/src/ensembleModelRegistry.json")
+    models = json.loads(registry.read_text(encoding="utf-8"))["models"]
     toto = next(item for item in models["toto"]["variants"] if item["id"] == "4m")
     return {
         "prediction_length": 7, "horizon_mode": "trading_sessions", "frequency": "1D", "calendar": "NYSE",

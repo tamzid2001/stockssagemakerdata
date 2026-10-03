@@ -1,6 +1,8 @@
 import importlib.util
 import datetime as dt
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -9,6 +11,13 @@ SPEC = importlib.util.spec_from_file_location("quant_screener_pipeline", MODULE_
 assert SPEC and SPEC.loader
 pipeline = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(pipeline)
+
+
+def test_publication_configuration_works_without_worker_dependencies():
+    result = subprocess.run([sys.executable, "-S", "-c",
+        "from scripts.weekly_screener import configuration_hash; print(configuration_hash())"],
+        cwd=MODULE_PATH.parents[1], check=True, capture_output=True, text=True)
+    assert result.stdout.strip() == pipeline.configuration_hash()
 
 
 NASDAQ_FIXTURE = """Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
