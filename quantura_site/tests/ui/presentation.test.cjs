@@ -390,7 +390,7 @@ test('request navigation and opposite-side forecast are explicit actions; Foundr
   assert.equal(document.querySelector('#ensemble-request-next').type,'button');
   assert.equal(document.querySelector('#ensemble-other-side').hidden,true);
   const app=source('app.js');
-  assert.match(app,/marketSelector.hidden = \["autopilot", "foundry", "profile", "screener"\].includes\(next\)/);
+  assert.match(app,/marketSelector.hidden = !marketSelector.classList.contains\("header-market-search"\) && \["autopilot", "foundry", "profile", "screener"\].includes\(next\)/);
   assert.match(app,/candidates.length!==1/);
   assert.match(app,/row.contract\?\.marketId===s.market_id&&row.contract_id!==s.contract_id/);
   assert.match(app,/if\(!ids.length\|\|ids.length>50\)return/);

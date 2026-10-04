@@ -73,8 +73,8 @@ test('forecast source and SSR have calendar controls and real CSV upload, withou
     assert.ok(doc.getElementById('ensemble-csv-help-open').getAttribute('aria-haspopup'));
     assert.equal(doc.querySelector('[data-panel="autopilot"]'),null);
     const profile=dir==='pages' ? new JSDOM(fs.readFileSync(path.join(root,'pages','dashboard.html'),'utf8')) : d;
-    assert.equal(profile.window.document.getElementById('profile-api-docs-links').hidden,true);
-    assert.equal(profile.window.document.getElementById('profile-api-trial').getAttribute('href'),'/pricing#enterprise');
+    assert.equal(profile.window.document.getElementById('profile-api-docs-links'),null);
+    assert.ok(profile.window.document.querySelector('[data-clerk-user-profile]'));
     if(profile!==d) profile.window.close();
     assert.ok(doc.querySelector('#ensemble-save-profile'));
     d.window.close();

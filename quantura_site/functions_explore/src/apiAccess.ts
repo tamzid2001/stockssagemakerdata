@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { Request } from "express";
 import type admin from "firebase-admin";
 import { normalizePlan, PLAN_ENTITLEMENTS, planHasFeature, type PlanKey } from "./planEntitlements";
-import { clerkClient, type QuanturaIdentity } from "./clerkAuth";
+import { clerkClient, getClerkUser, type QuanturaIdentity } from "./clerkAuth";
 import { clerkSubscriptionAccess } from "./clerkBilling";
 import { rapidApiPrincipal } from "./rapidApiAuth";
 import { requireEnterpriseApiAccess } from "./enterpriseAccess";
@@ -219,7 +219,7 @@ export async function authenticatePlatformRequest(
       clerkUserId: decoded.clerk_user_id,
       organizationId: decoded.clerk_organization_id,
       guest: decoded.firebase?.sign_in_provider === "anonymous",
-      platformAdmin: await verifiedPlatformAdmin(options.auth, decoded.uid, options.adminEmails),
+      platformAdmin: await verifiedPlatformAdmin(options.auth, decoded.uid, options.adminEmails, decoded.clerk_user_id),
     };
   }
 
@@ -248,14 +248,21 @@ export async function authenticatePlatformRequest(
     plan: "research",
     clerkUserId,
     authMethod: "api_key",
-    platformAdmin: await verifiedPlatformAdmin(options.auth, userId, options.adminEmails),
+    platformAdmin: await verifiedPlatformAdmin(options.auth, userId, options.adminEmails, clerkUserId),
   };
 }
 
-async function verifiedPlatformAdmin(auth: admin.auth.Auth, userId: string, allowed: readonly string[] = []): Promise<boolean> {
+export async function verifiedPlatformAdmin(auth: admin.auth.Auth, userId: string, allowed: readonly string[] = [], clerkUserId?: string): Promise<boolean> {
   if (!allowed.length) return false;
-  // Authoritative Firebase identity, not editable profile fields, API-key claims,
-  // or stale JWT role claims. This role never bypasses workspace membership.
+  if (clerkUserId) {
+    const user = await getClerkUser(clerkUserId).catch(() => null);
+    if (!user || user.banned || user.locked || (user.externalId || user.id) !== userId) return false;
+    const email = user.emailAddresses.find(address => address.id === user.primaryEmailAddressId);
+    return email?.verification?.status === "verified" && allowed.some(value => value.toLowerCase() === email.emailAddress.toLowerCase());
+  }
+  // Native clients retain their authoritative Firebase identity. Neither path
+  // accepts editable metadata or stale role claims as administrator authority.
+  // This role never bypasses workspace membership.
   const user = await auth.getUser(userId).catch(() => null);
   return Boolean(user?.uid === userId && !user.disabled && user.emailVerified
     && allowed.some(email => email.toLowerCase() === user.email?.toLowerCase()));

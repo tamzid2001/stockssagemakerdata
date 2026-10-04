@@ -16,7 +16,7 @@ globalThis.fetch=async(input:any)=>{
   throw Error("Unexpected network request in auth test");
 };
 const {CLERK_ISSUER,createQuanturaAuth,isClerkToken}:typeof import("./clerkAuth")=require("./clerkAuth");
-const {resolveWorkspaceAccess}:typeof import("./apiAccess")=require("./apiAccess");
+const {resolveWorkspaceAccess,verifiedPlatformAdmin}:typeof import("./apiAccess")=require("./apiAccess");
 const {subscriptionEntitlements}:typeof import("./clerkBilling")=require("./clerkBilling");
 after(()=>{
   if(previous.key===undefined)delete process.env.CLERK_JWT_KEY;else process.env.CLERK_JWT_KEY=previous.key;
@@ -40,6 +40,12 @@ test("wrong origin, absent origin, wrong issuer, expired and tampered Clerk JWTs
   const auth=createQuanturaAuth(legacy);
   for(const bad of [token({azp:"https://attacker.example"}),token({azp:undefined}),token({iss:"https://other.clerk.accounts.dev"}),token({exp:Math.floor(Date.now()/1000)-100}),token().slice(0,-12)+"AAAAAAAAAAAA"]){await assert.rejects(auth.verifyIdToken(bad));}
   assert.equal(legacyCalls,0);
+});
+test("administrator access follows the verified Clerk email and retained UID instead of legacy role metadata",async()=>{
+  const noLegacyLookup={getUser:async()=>{throw Error("A Clerk administrator must not depend on Firebase account fields");}} as any;
+  assert.equal(await verifiedPlatformAdmin(noLegacyLookup,"legacy_uid",["test@example.com"],"user_TestMigration"),true);
+  assert.equal(await verifiedPlatformAdmin(noLegacyLookup,"legacy_uid",["other@example.com"],"user_TestMigration"),false);
+  assert.equal(await verifiedPlatformAdmin(noLegacyLookup,"different_uid",["test@example.com"],"user_TestMigration"),false);
 });
 test("native Firebase credentials keep their verifier and revocation option",async()=>{
   const native=await createQuanturaAuth(legacy).verifyIdToken("native-test-token",true);

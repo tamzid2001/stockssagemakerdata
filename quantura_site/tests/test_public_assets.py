@@ -238,8 +238,9 @@ def test_platform_api_keys_collaboration_and_openapi_are_discoverable():
     client = (PUBLIC / "platform-api.js").read_text()
     backend = (ROOT / "functions_explore" / "src" / "apiAccess.ts").read_text()
     openapi = (ROOT / "functions_explore" / "src" / "openapi.ts").read_text()
-    for marker in ['data-panel="developer"', 'id="api-key-form"', 'id="api-key-scopes"', 'id="api-key-list"']:
-        assert marker in dashboard
+    for marker in ['data-panel="developer"', 'id="api-key-form"', 'id="user-status"']:
+        assert marker not in dashboard
+    assert 'data-clerk-user-profile' in dashboard
     for marker in ["Workspaces &amp; collaborators", "List accessible workspaces", "Read shared forecasts", "Viewer policy", "Dataset catalog"]:
         assert marker in docs
     assert 'Authorization: `Bearer ${token}`' in client
@@ -589,6 +590,8 @@ def test_ssr_templates_mirror_every_public_html_page():
             panel = generated[panel_start:panel_end]
             assert 'data-panel="profile"' in panel
             assert 'id="terminal-profile-auth"' in panel
-            assert 'id="terminal-profile-developer"' in panel
+            assert 'data-clerk-user-profile' in panel
+            assert 'id="terminal-profile-developer"' not in panel
+            assert 'id="user-status"' not in panel
             generated = generated[:panel_start] + "<!-- TERMINAL_PROFILE_PANEL -->" + generated[panel_end:]
         assert generated == source

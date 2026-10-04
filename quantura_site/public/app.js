@@ -1728,7 +1728,7 @@
   const isAnonymousUser = (user = state.user) => Boolean(user?.isAnonymous);
   const hasFullAccount = (user = state.user) => Boolean(user && !user.isAnonymous);
   const isAdminUser = (user = state.user) =>
-    String(user?.email || "").trim().toLowerCase() === String(ADMIN_EMAIL).trim().toLowerCase();
+    String(window.QuanturaAuth?.enabled ? window.QuanturaAuth.verifiedEmail || "" : user?.email || "").trim().toLowerCase() === String(ADMIN_EMAIL).trim().toLowerCase();
   const requestNativeAuthGate = ({ reason = "sign_in_required", message = "Sign in to continue." } = {}) => {
     if (!isNativeApp()) return false;
     state.authGateVisible = true;
@@ -2298,7 +2298,7 @@
           panelsRoot.dataset.activePanel = next;
           window.dispatchEvent(new CustomEvent("quantura:panel-changed", {detail:{panel:next}}));
           const marketSelector = document.querySelector(".market-search-workspace");
-          if (marketSelector) marketSelector.hidden = ["autopilot", "foundry", "profile", "screener"].includes(next);
+          if (marketSelector) marketSelector.hidden = !marketSelector.classList.contains("header-market-search") && ["autopilot", "foundry", "profile", "screener"].includes(next);
 		      if (next === "profile" && /^#terminal-profile-(auth|profile|orders|collaboration|developer)$/.test(window.location.hash)) {
 		        const requestedGroup = document.getElementById(window.location.hash.slice(1));
 		        if (requestedGroup instanceof HTMLDetailsElement && !requestedGroup.hidden) requestedGroup.open = true;
@@ -8887,8 +8887,7 @@
       if (resources instanceof HTMLElement) {
         resources.className = "small";
         resources.innerHTML = `
-          <strong>Developers &amp; company</strong>
-          <div><a href="/forecasting?panel=profile#terminal-profile-developer">API keys</a></div>
+          <strong>Company</strong>
           <div><a href="/contact">Data licensing</a></div>
           <div><a href="/about">About</a></div>
           <div><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/disclaimer">Disclaimer</a></div>

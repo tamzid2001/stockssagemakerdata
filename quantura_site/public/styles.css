@@ -10447,6 +10447,8 @@ html .toast[data-variant="warn"] {
 .clerk-team-switcher {padding:12px;min-height:48px;}
 .clerk-team-settings {display:grid;gap:24px;padding-top:20px;}
 .clerk-web .auth-grid, .clerk-web #collaboration > .container:not(.clerk-team-settings) {display:none!important;}
+.clerk-web #header-user-status, .clerk-web #header-user-email, .clerk-web #header-signout {display:none!important;}
+.clerk-web #auth .auth-brand-banner, .clerk-web #auth .section-title {display:none;}
 .clerk-web [data-clerk-state="signed-in"] #header-auth,
 body[data-clerk-state="signed-in"] #header-auth {display:none!important;}
 body[data-clerk-state="signed-out"] [data-clerk-user-button] {display:none;}
