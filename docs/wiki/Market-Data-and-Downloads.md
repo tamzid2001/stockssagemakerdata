@@ -4,7 +4,10 @@ Search keeps provider identity with the selected instrument, contract and side. 
 
 | Source | Data | Notes |
 | --- | --- | --- |
-| Alpaca / Yahoo | Stocks, ETFs and supported market history | Provider limits and entitlements; effective fallback, adjustment and exchange timezone retained |
+| Alpaca | Stocks, ETFs and supported market history | Provider limits and entitlements; adjustment and exchange timezone retained; no Yahoo fallback |
+| Gemini | Crypto candles and prediction-contract discovery | Exchange data; missing prediction history remains unavailable |
+| World Bank Data360 | Country/indicator time series | Explicit dimensions, native frequency, units and revised-data warning |
+| Treasury Fiscal Data | Debt, exchange rates, interest rates and cash balance | Genuine official observations, native frequency and pagination |
 | Dukascopy | Full published FX, metals, index and other CFD catalog | Bid/ask quotes, instrument-specific decimal scales and provider history bounds |
 | Kalshi / Polymarket US | Exact binary outcomes | Decimal probability; separate quote/trade fields and verified event timing |
 | Kalshi perpetuals | Margin-contract history | Price normalized by full underlying exposure; separate from binary outcomes |
@@ -22,6 +25,6 @@ CFD quotes are not exchange share prices. Provider quote volume is not exchange-
 
 ## Retention and rate limits
 
-Selecting a frequency does not guarantee 500 bars. Providers can return fewer genuine observations, reject unsupported ranges or rate limit requests. Yahoo caching/coalescing and verified fallback retain provenance. Kalshi discovery honors retry instructions and marks partial coverage; missing data is reported rather than invented.
+Selecting a frequency does not guarantee 500 bars. Providers can return fewer genuine observations, reject unsupported ranges or rate limit requests. Bounded memory caches coalesce requests while retaining source provenance; public stock downloads use Alpaca. Kalshi discovery honors retry instructions and marks partial coverage; missing data is reported rather than invented.
 
-[Download guide](https://quantura.mintlify.app/docs/q-download) · [Data provenance](https://quantura.mintlify.app/docs/data-provenance) · [Forecast intervals](Forecasting)
+[Download guide](https://quantura.studio/developers/api#q-download) · [Data provenance](https://quantura.studio/developers/api#data-provenance) · [Forecast intervals](Forecasting)

@@ -32,7 +32,7 @@ Historical overlays distinguish the original input series from subsequently obse
 
 Select latest observations or a calendar/relative cutoff. For 120/180 days use 172800/259200 top-level `history_lag_minutes`; there is no fixed 90-day cutoff-age cap. Available observations still depend on provider retention. The cutoff is applied before the N-bar limit, and replays are generated now. Optional consented website telemetry is separated from model configuration so it cannot block latest or historical requests.
 
-[Historical forecast guide](https://quantura.mintlify.app/docs/historical-forecasts).
+[Historical forecast guide](https://quantura.studio/developers/api#historical-forecasts).
 
 Stock-price overlays can use retained history beyond 90 days. Recent minute quotes remain bounded to seven days; prediction-market/perpetual live overlays have a separate 90-day availability window. Saved predictions are never revised by overlay retrieval.
 
@@ -43,4 +43,4 @@ Stock-price overlays can use retained history beyond 90 days. Recent minute quot
 3. Poll the job until completed or failed; keep the result hash and configuration.
 4. Inspect or export the quantile series. Do not treat a backdated cutoff as a live publication time.
 
-[Interval guide](https://quantura.mintlify.app/docs/forecast-frequencies) · [API guide](https://quantura.mintlify.app/docs/ensemble-api) · [Strategy research](Research-and-Backtesting)
+[Interval guide](https://quantura.studio/developers/api#forecast-frequencies) · [API guide](https://quantura.studio/developers/api#ensemble-api) · [Strategy research](Research-and-Backtesting)

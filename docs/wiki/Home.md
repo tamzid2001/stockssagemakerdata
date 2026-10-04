@@ -1,6 +1,6 @@
 # Quantura documentation
 
-Quantura connects market observations, probabilistic forecasts and reproducible strategy research. Start with the [website](https://quantura.studio) or the [API documentation](https://quantura.mintlify.app).
+Quantura connects market observations, probabilistic forecasts and reproducible strategy research. Start with the [website](https://quantura.studio) or the [API documentation](https://quantura.studio/developers/api).
 
 ## Choose a guide
 
@@ -14,7 +14,11 @@ Quantura connects market observations, probabilistic forecasts and reproducible 
 | [Architecture and operations](Architecture-and-Operations) | Locate code, deploy and operate private workers |
 | [Release history](Release-History) | Review versioned changes and compatibility |
 
-## v2.1.0
+## v2.2.0
+
+Clerk accounts, enterprise API permissions, Gemini/World Bank/Treasury data, CSV previews and named uploads, concise Research/About pages, three blog navigation controls, distinct post images and domain-verification assets are included. [Read the release](https://github.com/tamzid2001/stockssagemakerdata/releases/tag/v2.2.0).
+
+## Earlier v2.1.0
 
 Forecast now supports **1, 5, 15 and 30 minutes; 1 and 4 hours; daily, weekly and monthly** observations. API schemas, interval capabilities, worker calendars, downloads and saved configurations use the same frequencies. Weekly periods begin Monday UTC; monthly periods follow real calendar boundaries.
 

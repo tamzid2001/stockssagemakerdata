@@ -5,9 +5,9 @@ description: "Search and forecast USD-per-contract history without confusing per
 
 Select **Kalshi Perpetuals** in market search or Q Screener. The provider's catalog includes active, inactive and closed listings when returned by Kalshi. Search in **Any** mode to include inactive listings.
 
-Screener combines current reference prices with a scheduled five-model hourly ensemble (Prophet, Toto 4m, Granite, Chronos, TimesFM). Each eligible active listing receives 24 forecast hours and P01/P25/P50/P75/P90/P99. Quantile filters compare the latest observed price with real forecast values; min/max/average statistics span the full horizon. The default row is the first forecast hour. **View forecast** opens the complete distribution and genuine input history; signed-in users can save it to My requests.
+Screener combines current reference prices with a scheduled five-model daily ensemble (Prophet, Toto 4m, Granite, Chronos, TimesFM). Each eligible active listing receives seven forecast days and P01/P25/P50/P75/P90/P99. Quantile filters compare the latest observed price with real forecast values; min/max/average statistics span the full horizon. The default row is the first forecast day. **View forecast** opens the complete distribution and genuine input history; signed-in users can save it to My requests.
 
-The hourly GitHub Actions matrix publishes only when all five models complete with at least 32 genuine hourly trade closes. Missing intervals and null closes stay absent. Listings without sufficient current history retain quotes and an on-demand Forecast action, with no invented quantiles. Failed refreshes preserve the last valid snapshot until its horizon expires. One latest document per ticker keeps storage bounded. Perpetual daily closing alerts are not supported.
+The GitHub Actions matrix refreshes hourly and publishes daily forecasts only when all five models complete with at least 32 genuine completed daily trade closes. Missing intervals and null closes stay absent. Listings without sufficient current history retain quotes and an on-demand Forecast action, with no invented quantiles. Failed refreshes preserve the last valid snapshot until its horizon expires. One latest document per ticker keeps storage bounded. Perpetual daily closing alerts are not supported.
 
 ## Price basis
 
