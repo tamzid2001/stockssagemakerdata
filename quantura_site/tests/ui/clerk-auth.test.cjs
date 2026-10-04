@@ -1,18 +1,18 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{JSDOM}=require('jsdom');
 const script=fs.readFileSync(path.join(__dirname,'../../public/quantura-auth.js'),'utf8');
 const tick=()=>new Promise(resolve=>setTimeout(resolve,5));
-function setup({signedIn=true,restored=false,native=false}={}) {
+function setup({signedIn=true,restored=false,native=false,apiKeys=false,accessFails=false}={}) {
  const d=new JSDOM('<body><div class="nav-actions"><span id="header-user-status">Guest Session</span><button id="header-auth">Sign in</button></div><section id="auth"><div class="container"><div class="auth-grid">Old auth</div></div></section><div data-clerk-user-profile></div><div data-trial-days="14"><button data-action="purchase">Start trial</button></div><div data-clerk-pricing hidden></div><div id="toast"></div></body>',{url:'https://quantura.studio/',runScripts:'outside-only'}),w=d.window;
- const calls={bridge:0,signOut:0,legacyClick:0,signIn:0,tokens:[],pricing:[],signInOptions:[]};
+ const calls={bridge:0,signOut:0,legacyClick:0,signIn:0,tokens:[],pricing:[],signInOptions:[],profiles:[],userButtons:[],access:0};
  w.HTMLElement.prototype.scrollIntoView=()=>{};
  const session={id:'sess_Unit',getToken:async()=> 'clerk-session-unit'};
  const user={id:'user_Unit',primaryEmailAddress:{emailAddress:'tamzid257@gmail.com',verification:{status:'verified'}}};
  const auth={currentUser:{uid:'old_uid',isAnonymous:false,getIdToken:async()=> 'firebase-sdk-unit',getIdTokenResult:async()=>({claims:restored?{clerk_user_id:'user_Unit',clerk_session_id:'sess_Unit'}:{}})},signOut:async()=>{calls.signOut++;auth.currentUser=null;},signInWithCustomToken:async token=>{calls.tokens.push(token);auth.currentUser={uid:'legacy_uid',isAnonymous:false};}};
  w.firebase={auth:()=>auth};w.__QUANTURA_NATIVE_APP__=native;
- w.Clerk={user:signedIn?user:null,session:signedIn?session:null,organization:null,load:async()=>{},addListener:fn=>{w.updateClerk=fn;},mountSignIn:()=>{},mountUserButton:()=>{},mountUserProfile:()=>{},mountPricingTable:(_host,options)=>calls.pricing.push(options),openSignIn:options=>{calls.signIn++;calls.signInOptions.push(options);},signOut:async()=>{w.updateClerk({user:null,session:null,organization:null});}};
+ w.Clerk={user:signedIn?user:null,session:signedIn?session:null,organization:null,load:async()=>{},addListener:fn=>{w.updateClerk=fn;},mountSignIn:()=>{},mountUserButton:(_h,p)=>calls.userButtons.push(p),mountUserProfile:(_h,p)=>calls.profiles.push(p),mountPricingTable:(_host,options)=>calls.pricing.push(options),openSignIn:options=>{calls.signIn++;calls.signInOptions.push(options);},signOut:async()=>{w.updateClerk({user:null,session:null,organization:null});}};
  const append=w.document.head.append.bind(w.document.head);
  w.document.head.append=(node)=>{append(node);if(node.tagName==='SCRIPT')queueMicrotask(()=>node.onload());};
- w.fetch=async()=>{calls.bridge++;return {ok:true,json:async()=>({data:{uid:'legacy_uid',custom_token:'firebase-custom-unit'}})};};
+ w.fetch=async url=>{if(url.includes("subscription-access")){calls.access++;return {ok:!accessFails,json:async()=>({data:{api_keys_available:apiKeys}})};}calls.bridge++;return {ok:true,json:async()=>({data:{uid:'legacy_uid',custom_token:'firebase-custom-unit'}})};};
  w.document.getElementById('header-auth').addEventListener('click',()=>{calls.legacyClick++;});
  w.eval(script);return {d,w,calls,auth};
 }
@@ -54,4 +54,13 @@ test('both Pro cycles use one Clerk pricing component for the signed-in account'
  assert.equal(calls.signIn,0);assert.equal(calls.pricing.length,1);assert.equal(calls.pricing[0].for,'user');
  assert.equal(calls.pricing[0].newSubscriptionRedirectUrl,'/forecasting?panel=profile');
  assert.equal(w.document.querySelector('[data-clerk-pricing]').hidden,false);d.window.close();
+});
+
+test('API keys use server eligibility, stay hidden for free/trial and on access errors, and appear for paid/admin accounts',async()=>{
+ for(const options of [{apiKeys:false},{apiKeys:true},{apiKeys:true,accessFails:true}]){
+  const {d,w,calls}=setup(options);await w.QuanturaAuth.ready;
+  assert.equal(calls.profiles[0].apiKeysProps.hide,!options.apiKeys||options.accessFails===true);
+  assert.equal(calls.userButtons[0].userProfileProps.apiKeysProps.hide,calls.profiles[0].apiKeysProps.hide);
+  assert.equal(calls.access,1);d.window.close();
+ }
 });

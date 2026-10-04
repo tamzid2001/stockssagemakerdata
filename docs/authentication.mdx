@@ -64,3 +64,15 @@ headers = {"Authorization": f"Bearer {api_key}"}
 ```
 
 Do not commit a real key to Git, paste it into Codex prompts, or place it in public examples. Use a placeholder such as `qnt_live_REPLACE_ME` in documentation and tests.
+
+## Clerk account API keys
+
+Sign in and open Profile → Account settings → API keys. This tab is available to
+paid Pro and enterprise accounts and verified Quantura administrators. Trial-only
+and free accounts cannot use API keys. Paid cancellation periods retain access
+until the entitlement ends. Clerk owns key creation, expiration and revocation.
+Personal `ak_` keys authenticate with `Authorization: Bearer <key>`; the
+backend resolves the original migrated UID and checks current paid access and
+workspace permissions. Organization keys are not supported by this personal-key
+flow. Legacy `qnt_live_` keys remain supported with the same paid-access check.
+Keys cannot grant administrator status through editable claims or metadata.

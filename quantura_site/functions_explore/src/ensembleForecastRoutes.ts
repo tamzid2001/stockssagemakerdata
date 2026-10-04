@@ -1,4 +1,5 @@
-import {economicClient} from "./economicData";
+import {economicClient, EconomicDataError} from "./economicData";
+import {BigQueryPublicError} from "./bigqueryPublic";
 import {geminiMarketClient} from "./geminiMarketData";
 import crypto from "node:crypto";
 import {reserveForecast,releaseForecast} from "./forecastAdmission";
@@ -80,11 +81,11 @@ function runtimeMode(): "production" | "development" | "test" {
 function envTrue(name: string): boolean { return /^(1|true|yes|on)$/i.test(text(process.env[name], 20)); }
 
 export function apiError(error: unknown): { status: number; code: string; message: string } {
-  if (error instanceof AlpacaError || error instanceof PredictionMarketDataError) return { status: error.status, code: error.code.toUpperCase(), message: error.message };
+  if (error instanceof AlpacaError || error instanceof PredictionMarketDataError || error instanceof EconomicDataError || error instanceof BigQueryPublicError) return { status: error.status, code: error.code.toUpperCase(), message: error.message };
   const raw = text((error as any)?.message || error, 300).toLowerCase();
   const code = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "INVALID_REQUEST";
   if (/api_key_(missing|invalid|revoked|expired)|worker_token_invalid/.test(raw)) return { status: 401, code, message: "Authentication failed." };
-  if (/insufficient_scope|workspace_(forbidden|read_only|permission_denied|resource_forbidden|owner_required)|(?:plan|enterprise)_upgrade|required_entitlement|commercial_license/.test(raw)) return { status: 403, code, message: "This identity is not authorized for the requested operation." };
+  if (/insufficient_scope|workspace_(forbidden|read_only|permission_denied|resource_forbidden|owner_required)|(?:plan|enterprise)_upgrade|paid_api_required|required_entitlement|commercial_license/.test(raw)) return { status: 403, code, message: "This identity is not authorized for the requested operation." };
   if (/not_found/.test(raw)) return { status: 404, code, message: "The requested forecast resource was not found." };
   if (/already|idempotency_conflict|claim_conflict/.test(raw)) return { status: 409, code, message: "The request conflicts with the current forecast state." };
   if (/rate_limit|quota|concurrent/.test(raw)) return { status: 429, code, message: "The forecast compute limit has been reached." };
@@ -525,7 +526,8 @@ async function materializeSource(
   const source = plain(sourceValue);
   const type = text(source.type || "ticker", 40);
   if (type === "economic_series") {
-    const history=await economicClient.history(source,cutoff);
+    if(source.provider==="bigquery" && principal.guest)throw new Error("authentication_required");
+    const history=await economicClient.history(source,cutoff,principal.userId);
     return {rows:normalizeSeriesRows(history.rows,"timestamp","target",2,50000),frequency:history.frequency,timezone:"UTC",
       source:{...history.source,name:history.metadata.name,units:history.metadata.units,provenance:history.metadata,warnings:history.warnings}};
   }

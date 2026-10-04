@@ -1,0 +1,68 @@
+---
+title: "BigQuery public time series"
+description: "Search public tables, preview an explicit series and forecast observed values."
+---
+
+## Find a table
+
+In Quantura Search, enter **bigquery weather**, **bigquery google trends**, or an exact
+identifier such as **bigquery noaa_gsod.gsod2025**. You can also choose BigQuery in
+Research → Economic data. Catalog discovery reads metadata; it does not run SQL.
+Search returns a bounded set of tables, with schema-verified forecast availability.
+Use an exact `dataset.table` identifier when a broad catalog search omits your table.
+
+## Select and preview
+
+Choose a date/time column, a numeric value, and exact filters that identify one
+series. For NOAA GSOD, the supported `year`/`mo`/`da` combination can supply a UTC
+date. For example, select `temp`, `stn = 725030`, and `wban = 14732` in `gsod2025`.
+Preview the values, units, missing-value codes and coverage before forecasting.
+The source's interval must match your intended series; choosing an interval alone
+does not resample it. Select an aggregation explicitly to produce completed UTC
+hourly, daily, Monday-weekly or monthly buckets. Missing intervals are not filled.
+
+A table without supported date and numeric columns cannot be forecast. Duplicate
+timestamps require additional exact filters or an explicit aggregation.
+
+## Cost and access
+
+History queries require sign-in. Credentials and billing stay on the backend.
+Only `bigquery-public-data` tables are accepted; arbitrary SQL and private projects
+are not accepted. Column identifiers are checked against the schema, and filter
+values use query parameters.
+
+Each uncached query is dry-run first, then limited to **100 MiB billed bytes**.
+A row limit does not reduce scanned bytes. The service also reserves a daily
+project budget of 10 GiB and allows 10 uncached queries per user per UTC day.
+Repeated identical queries share a one-hour process cache. Catalog/schema metadata
+is cached for 24 hours. A latest query uses the last completed UTC hour; explicit
+historical cutoffs remain exact. Location comes from the dataset, including EU.
+
+Public histories can be revised. A date cutoff excludes later observations but
+cannot reconstruct the data available at the original publication time.
+
+## API example
+
+Paid Pro, enterprise and administrator accounts can use personal API keys.
+Trials do not include API keys. The website's signed-in preview is separate.
+
+```bash
+curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  'https://quantura.studio/api/v1/economic-data/search?provider=bigquery&q=noaa_gsod.gsod2025'
+
+curl -X POST -H "Authorization: Bearer $QUANTURA_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"type":"economic_series","provider":"bigquery","dataset_id":"noaa_gsod","table_id":"gsod2025","time_field":"__year_month_day","value_field":"temp","dimensions":{"stn":"725030","wban":"14732"},"frequency":"1D","aggregation":"none","limit":500}' \
+  https://quantura.studio/api/v1/economic-data/history
+```
+
+Use the same `source` object with [ensemble forecasting](/docs/ensemble-api).
+The worker receives the normalized immutable input snapshot, not Google credentials.
+
+## Backend configuration
+
+Enable BigQuery API on the backend billing project. The runtime service account
+needs BigQuery Job User there and read access to the selected public tables.
+Quantura reuses its existing server service-account credentials or Application
+Default Credentials. `BIGQUERY_BILLING_PROJECT` can override the billing project;
+no Google credential is exposed to the browser.

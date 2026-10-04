@@ -8820,6 +8820,7 @@
       href: "https://www.linkedin.com/company/quanturaai/?viewAsMember=true",
       icon: "/assets/social/linkedin-in.svg",
     },
+    {key:"bluesky",label:"Bluesky",href:"https://bsky.app/profile/quantura.bsky.social",icon:"/assets/social/bluesky.svg"},
   ];
 
   const normalizeTopNavigation = () => {

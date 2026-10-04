@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { Request, Response, Router } from "express";
 import type admin from "firebase-admin";
-import { requireEnterpriseApiAccess } from "./enterpriseAccess";
+import { requirePaidApiAccess } from "./enterpriseAccess";
 import {
   PLATFORM_API_SCOPES,
   authenticatePlatformRequest,
@@ -196,7 +196,7 @@ function recordTime(value: Record<string, any>): number {
 
 export function registerPlatformApiRoutes(router: Router, options: Options): void {
   router.get("/openapi.json", wrap(options, async (_req, res, principal) => {
-    await requireEnterpriseApiAccess(options.db, principal.userId, principal.clerkUserId);
+    await requirePaidApiAccess(options.db, principal.userId, principal.clerkUserId);
     res.setHeader("Cache-Control", "private, no-store");
     res.json(buildOpenApiDocument(options.publicOrigin));
   }));

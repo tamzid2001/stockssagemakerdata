@@ -45,3 +45,5 @@ Real checkpoints require the locked inference dependencies, model access and app
 - Webhook: `https://quantura.studio/api/integrations/tiktok/webhook`
 
 An authenticated Quantura administrator starts Login Kit through `POST /api/integrations/tiktok/connect`. The callback validates browser-bound, single-use state and encrypts tokens in server-only storage. Webhooks verify TikTok signatures over raw bytes and deduplicate deliveries. Receipts have a 30-day `expires_at` field; enable Firestore TTL on that collection to enforce retention. Rotating the client secret requires reconnecting existing TikTok accounts. The current connection requests only `user.info.basic`; Display/Content Posting scopes and a sandbox review video need separate product approval.
+
+Paid Pro and enterprise users can create personal keys under Clerk Account → API keys. The verified administrator receives complimentary Pro/API access. Free trials include website research, with API keys enabled once the plan is paid. Search `bigquery dataset.table` to configure a public time series before forecasting.

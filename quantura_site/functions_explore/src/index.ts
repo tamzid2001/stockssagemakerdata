@@ -6,13 +6,14 @@ import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import { registerEconomicDataRoutes } from "./economicData";
+import { configureBigQueryPublic } from "./bigqueryPublic";
 import { registerGeminiMarketRoutes } from "./geminiMarketData";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { registerMarketDataRoutes } from "./marketDataRoutes";
 import { registerMarketSearchRoutes } from "./marketSearch";
 import { registerTikTokRoutes, tiktokRawBodyMiddleware } from "./tiktokIntegration";
 import { requireScope } from "./apiAccess";
-import { requireEnterpriseApiAccess } from "./enterpriseAccess";
+import { requirePaidApiAccess } from "./enterpriseAccess";
 import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
@@ -157,6 +158,7 @@ const db = admin.firestore();
 const screenerMarketService = new ScreenerMarketService(new AlpacaClient(), new ScreenerSignalStore(db), process.env.SCREENER_ALPACA_FEED || "iex");
 const legacyAuth = admin.auth();
 const auth = createQuanturaAuth(legacyAuth);
+configureBigQueryPublic(db);
 const messaging = admin.messaging();
 
 const app = express();
@@ -676,27 +678,27 @@ const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 registerFiscalDataRoutes(ROUTES, { db });
 registerClerkAuthRoutes(ROUTES, db, legacyAuth);
 registerTikTokRoutes(ROUTES,{db,authenticate:req=>authenticatePlatformRequest(req,{db,auth,adminEmails:["tamzid257@gmail.com"]})});
-registerEconomicDataRoutes(ROUTES);
+registerEconomicDataRoutes(ROUTES,undefined,{authenticate:req=>authenticatePlatformRequest(req,{db,auth,adminEmails:[ADMIN_EMAIL]})});
 registerGeminiMarketRoutes(ROUTES);
 registerMarketDataRoutes(ROUTES);
 registerMarketSearchRoutes(ROUTES, { db });
 // Versioned SDK/gateway routes match the OpenAPI server URL. The website uses
-// the unversioned discovery routes; enterprise credentials protect API clients.
+// the unversioned discovery routes; paid credentials protect API clients.
 const enterpriseDataRoutes = express.Router();
 enterpriseDataRoutes.use(["/market-search", "/market-data", "/economic-data"], async (req, res, next) => {
   try {
     const principal = await authenticatePlatformRequest(req, { db, auth });
-    if (!["api_key", "rapidapi"].includes(principal.authMethod)) await requireEnterpriseApiAccess(db, principal.userId, principal.clerkUserId);
+    if (!["api_key", "rapidapi"].includes(principal.authMethod)) await requirePaidApiAccess(db, principal.userId, principal.clerkUserId);
     requireScope(principal, "market_data:read");
     next();
   } catch {
     res.set("Cache-Control", "private, no-store");
-    res.status(403).json({ error: "enterprise_required", message: "Use an authorized enterprise API credential." });
+    res.status(403).json({ error: "paid_api_required", message: "Use a paid Pro or enterprise API credential." });
   }
 });
 registerMarketDataRoutes(enterpriseDataRoutes);
 registerMarketSearchRoutes(enterpriseDataRoutes, { db });
-registerEconomicDataRoutes(enterpriseDataRoutes);
+registerEconomicDataRoutes(enterpriseDataRoutes,undefined,{authenticate:req=>authenticatePlatformRequest(req,{db,auth,adminEmails:[ADMIN_EMAIL]})});
 registerGeminiMarketRoutes(enterpriseDataRoutes);
 registerKalshiPerpsRoutes(enterpriseDataRoutes);
 ROUTES.use("/v1", enterpriseDataRoutes);

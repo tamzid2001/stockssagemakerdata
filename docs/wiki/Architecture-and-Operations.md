@@ -54,3 +54,11 @@ Public-page OpenAI Ads and AWS Marketplace/Zift measurement follows the optional
 Secrets belong in encrypted runtime/CI stores, never browser assets, git, logs or wiki pages. Device-scoped Support history retains up to 20 conversations for 30 days and is not cross-device account storage. GA4 server measurement is consented and keeps credentials private.
 
 [Secrets](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/secrets.md) · [Repository maintenance](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/repository-size-maintenance.md) · [Security policy](https://github.com/tamzid2001/stockssagemakerdata/blob/main/SECURITY.md)
+
+## BigQuery and write reductions
+
+BigQuery public tables are searchable in Jev/Search and Research. The authenticated history service validates schema columns and exact parameterized filters, dry-runs scans, enforces a 100 MiB query cap and daily budgets, and provides normalized snapshots for preview/download/forecasts. Metadata and repeated queries use bounded caches without Firestore writes. Current revised histories are not publication-time vintages.
+
+Successful API polling reads now use structured platform logs; mutations and failures retain durable audit documents. Key last-used updates coalesce across concurrent requests and persist at five-minute intervals. Identical Stripe subscription events avoid unchanged ledger/profile writes. Billing savings have not yet been measured on an invoice.
+
+Clerk personal API keys are available to paid Pro and enterprise accounts and the verified Quantura administrator. Trials/free accounts do not have programmatic credentials. Native Clerk keys resolve migrated IDs and preserve resource ownership checks.

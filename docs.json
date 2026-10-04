@@ -50,6 +50,7 @@
               "docs/workspace-collaboration",
               "docs/q-search",
               "docs/q-download",
+              "docs/bigquery-public-data",
               "docs/ensemble-api",
               "docs/forecast-frequencies",
               "docs/historical-forecasts",

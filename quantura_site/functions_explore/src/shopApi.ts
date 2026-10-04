@@ -6,7 +6,7 @@ import Stripe from "stripe";
 import { createQuanturaAuth, type QuanturaIdentity } from "./clerkAuth";
 import { clerkSubscriptionAccess } from "./clerkBilling";
 import { randomUUID } from "node:crypto";
-import { hasEnterpriseApiAccess } from "./enterpriseAccess";
+import { hasApiAccess } from "./enterpriseAccess";
 import documentation from "./apiDocumentation.json";
 import { proSubscriptionPlan, proCheckoutOptions, subscriptionAccess, billingAccess, BILLING_ACCOUNTS } from "./subscriptionBilling";
 import {
@@ -77,14 +77,16 @@ async function syncProSubscription(subscription:Stripe.Subscription) {
   const access=subscriptionAccess(subscription);if(!access)return;
   const ref=db.collection(BILLING_ACCOUNTS).doc(access.uid);
   await db.runTransaction(async tx=>{
-    const current=await tx.get(ref),data=current.data()||{};
+    const profile=db.collection("users").doc(access.uid);
+    const [current,profileSnapshot]=await Promise.all([tx.get(ref),tx.get(profile)]),data=current.data()||{};
     if(access.plan==='free' && data.stripeSubscriptionId && data.stripeSubscriptionId!==access.subscriptionId)return;
     if(data.stripeSubscriptionId!==access.subscriptionId && Number(data.stripeSubscriptionCreatedAt)>access.createdAt)return;
     const update={plan:access.plan,subscriptionTier:access.plan,stripeCustomerId:access.customerId,stripeSubscriptionId:access.subscriptionId,
       subscriptionStatus:access.status,cancelAtPeriodEnd:access.cancelAtPeriodEnd,stripeSubscriptionCreatedAt:access.createdAt,
-      pendingCheckout:null,trialEnd:access.trialEnd,hasUsedTrial:access.hasUsedTrial || data.hasUsedTrial===true,updatedAt:admin.firestore.FieldValue.serverTimestamp()};
-    tx.set(ref,update,{merge:true});
-    tx.set(db.collection('users').doc(access.uid),update,{merge:true});
+      pendingCheckout:null,trialEnd:access.trialEnd,hasUsedTrial:access.hasUsedTrial || data.hasUsedTrial===true};
+    const changed=(existing:Record<string,any>)=>Object.entries(update).some(([key,value])=>JSON.stringify(existing[key])!==JSON.stringify(value));
+    if(changed(data))tx.set(ref,{...update,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
+    if(changed(profileSnapshot.data()||{}))tx.set(profile,{...update,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
   });
 }
 
@@ -315,7 +317,10 @@ app.get("/api/shop/subscription-access",async (req,res)=>{
   const legacy=billingAccess(value);
   const current=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
   const access=legacy.docs_available?{...legacy,billing_provider:"stripe"}:current?{...current,can_trial:current.can_trial && legacy.can_trial}:legacy;
-  res.json({data:{...access,pro_available:access.docs_available,docs_available:await hasEnterpriseApiAccess(db,principal.uid,principal.clerk_user_id)}});
+  const apiAccess=await hasApiAccess(db,principal.uid,principal.clerk_user_id);
+  const admin=current?.subscription_status==="admin";
+  const effective=admin?current!:access;
+  res.json({data:{...effective,admin,pro_available:effective.docs_available,api_keys_available:admin||apiAccess||(effective.docs_available&&["active","canceled"].includes(effective.subscription_status)&&!effective.trial_ends_at),docs_available:apiAccess}});
 });
 
 app.get("/api/shop/api-docs",async (req,res)=>{
@@ -324,7 +329,7 @@ app.get("/api/shop/api-docs",async (req,res)=>{
   const principal=await billingIdentity(req,res);if(!principal)return;
   const value=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
   const current=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
-  if(!await hasEnterpriseApiAccess(db,principal.uid,principal.clerk_user_id)){res.status(403).json({error:"enterprise_required",message:"API documentation requires an enterprise agreement."});return;}
+  if(!await hasApiAccess(db,principal.uid,principal.clerk_user_id)){res.status(403).json({error:"paid_api_required",message:"API documentation requires a paid Pro plan or enterprise agreement."});return;}
   res.json({data:documentation});
 });
 
