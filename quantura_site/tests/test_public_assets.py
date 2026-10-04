@@ -221,8 +221,8 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
 def test_single_pro_plan_preserves_free_preview_and_server_owned_prices():
     pricing = (PAGES / "pricing.html").read_text().lower()
     assert 'url=/forecasting' not in pricing
-    assert 'data-monthly-price="200"' in pricing
-    assert 'data-yearly-price="2000"' in pricing
+    assert 'data-monthly-price="199.99"' in pricing
+    assert 'data-yearly-price="1999.92"' in pricing
     assert pricing.count('data-pricing-plan-card') == 1
     home = (PAGES / "index.html").read_text().lower()
     assert "free to explore" in home

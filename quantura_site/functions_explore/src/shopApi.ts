@@ -334,6 +334,8 @@ app.post("/api/shop/subscription-checkout", async (req, res) => {
     return;
   }
 
+  const principal=await billingIdentity(req,res);if(!principal)return;
+
   const stripe = await getStripeClient();
   if (!stripe) {
     res.status(503).json({
@@ -349,7 +351,6 @@ app.post("/api/shop/subscription-checkout", async (req, res) => {
     return;
   }
 
-  const principal=await billingIdentity(req,res);if(!principal)return;
   const payload = asRecord(req.body);
   const email = normalizeEmail(principal.email);
   const uid = principal.uid;

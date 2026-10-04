@@ -104,7 +104,7 @@ A high closed-basket win rate can coexist with losing positions left open. Repor
 
 ## Pro subscriptions
 
-[Quantura Pro](https://quantura.studio/pricing) is $200/month or $2,000/year, with a 14-day free trial, unlimited daily forecasts, authenticated Stripe Checkout and customer-owned billing portal access. Signed webhook events maintain a private billing ledger and update Pro status; trials are limited to one per account. Pro admission uses three concurrent jobs and a three-start/minute token bucket per workspace, with job-specific release across midnight and expiring abandoned leases. cancellation at period end retains access until the subscription ends. Enterprise requests use the contact popup for custom pricing. Existing free research preview and historical subscriptions are preserved.
+[Quantura Pro](https://quantura.studio/pricing) is $199.99/month or $1,999.92/year, with a 14-day free trial, unlimited daily forecasts, Clerk checkout after sign-in and customer-owned billing management. Clerk subscription checks and signed billing webhooks maintain Pro status; trials are limited to one per account. Pro admission uses three concurrent jobs and a three-start/minute token bucket per workspace, with job-specific release across midnight and expiring abandoned leases. cancellation at period end retains access until the subscription ends. Enterprise requests use the contact popup for custom pricing. Existing free research preview and historical subscriptions are preserved.
 
 ## Architecture and repository map
 
@@ -226,6 +226,6 @@ Search is compact in the shared header; Screener is available in Terminal. Profi
 - Clerk web sign-in with Google and email/password, account management and optional organization components. Imported legacy user IDs preserve private data ownership. Firebase SDK compatibility credentials authorize existing data rules; they do not replace Clerk API sessions.
 - Gemini exchange spot history and verified prediction-contract discovery; World Bank Data360 and Treasury Fiscal Data indicator search, dimension selection, previews and native reporting periods. Missing history is never synthesized.
 - Yahoo Finance removed from public search, provider choices and stock/options history fallback. Stocks use Alpaca; supported FX, metals and indices use Dukascopy.
-- TikTok domain verification file served at its exact root filename; Pinterest verification in public HTML. These verify domain ownership, not approval of social API products.
+- TikTok domain verification file served at its exact root filename; Pinterest verification in public HTML. TikTok OAuth callback and signed, deduplicated webhook endpoints are implemented; social API product approval remains separate.
 - Previous blog, Next blog and Copy shareable link on all 78 posts. CSV preview and custom dataset names before forecast submission.
 - Public data caches and bounded visible-page queries reduce repeated Firestore traffic. Kalshi coin traders and their watchdog workflows remain disabled.

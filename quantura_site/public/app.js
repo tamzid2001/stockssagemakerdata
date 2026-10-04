@@ -24090,13 +24090,13 @@
         const savings = Math.max(0, annualList - yearlyPrice);
         if (normalizedCycle === "yearly") {
           if (savings > 0) {
-            copyNode.innerHTML = `You save <strong>$${savings.toFixed(0)}/yr</strong> vs monthly billing.`;
+            copyNode.innerHTML = `You save <strong>$${savings.toFixed(2)}/yr</strong> vs monthly billing.`;
           } else {
             copyNode.innerHTML = "Annual display shown. Native yearly SKU may map to monthly where unavailable.";
           }
         } else {
           if (savings > 0) {
-            copyNode.innerHTML = `Pay yearly to lock in <strong>$${yearlyPrice.toFixed(0)}/yr</strong>.`;
+            copyNode.innerHTML = `Pay yearly to lock in <strong>$${yearlyPrice.toFixed(2)}/yr</strong>.`;
           } else {
             copyNode.innerHTML = "Monthly billing shown.";
           }
@@ -24493,19 +24493,7 @@
       }
       return;
     }
-    if (!hasFullAccount() && panel.dataset.webOnly === "true") {requireFullAccount("Sign in to link Pro to your account.");return;}
-    if (!hasSessionUser()) {
-      try {
-        await ensureSessionUser({
-          reason: "web_checkout",
-          message: "Preparing secure checkout...",
-        });
-      } catch (error) {
-        showToast(error?.message || "Unable to initialize checkout session.", "warn");
-        return;
-      }
-    }
-    if (!hasSessionUser()) return;
+    if (!hasFullAccount()) {requireFullAccount("Sign in before purchasing.");return;}
     const stripeBtn = panel.querySelector('[data-action="purchase"]');
     const note = panel.querySelector(".purchase-note");
     const cycle = String(safeLocalStorageGet("quantura_pricing_cycle") || "monthly").trim().toLowerCase() === "yearly"

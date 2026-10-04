@@ -8,6 +8,18 @@ const source = file => fs.readFileSync(path.join(root, 'public', file), 'utf8');
 const page = file => fs.readFileSync(path.join(root, 'pages', file), 'utf8');
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
+test('pricing cycle labels preserve Clerk cents and the exact annual savings',()=>{
+  const d=new JSDOM(page('pricing.html'),{url:'https://quantura.studio/pricing',runScripts:'outside-only'}),w=d.window;
+  const script=source('app.js'),start=script.indexOf('  const formatUsdPriceLabel ='),end=script.indexOf('  const initPricingBillingToggle =');
+  w.ui={purchasePanels:[...w.document.querySelectorAll('[data-purchase-panel]')]};
+  w.eval(script.slice(start,end)+'\nwindow.changeCycle=applyPricingBillingCycle;');
+  w.changeCycle('monthly');assert.equal(w.document.querySelector('[data-pricing-price]').textContent,'$199.99/mo');
+  assert.match(w.document.querySelector('[data-pricing-cycle-copy]').textContent,/1999\.92/);
+  w.changeCycle('yearly');assert.equal(w.document.querySelector('[data-pricing-price]').textContent,'$1999.92/yr');
+  assert.match(w.document.querySelector('[data-pricing-cycle-copy]').textContent,/399\.96/);
+  assert.equal(w.document.querySelector('[data-purchase-panel]').dataset.price,'1999.92');d.window.close();
+});
+
 test('Normalize weights emits editable two-decimal values that total exactly 1.00', () => {
   const {normalizeWeightsTwoDecimals} = require('../../public/forecast-controls.js');
   const weights = normalizeWeightsTwoDecimals({

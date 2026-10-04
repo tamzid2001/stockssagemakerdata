@@ -15,8 +15,8 @@
     },
     "pro": {
       "label": "Pro",
-      "monthlyCents": 20000,
-      "annualCents": 200000,
+      "monthlyCents": 19999,
+      "annualCents": 199992,
       "apiReadPerMinute": 60,
       "forecastComputePerDay": -1,
       "bulkExportsPerMonth": 5,

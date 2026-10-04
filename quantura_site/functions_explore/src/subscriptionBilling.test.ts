@@ -4,7 +4,7 @@ import { proSubscriptionPlan, proCheckoutOptions, subscriptionAccess,billingAcce
 import { publicPlanEntitlements } from "./planEntitlements";
 
 test("Pro checkout uses authenticated identity and server prices for both cycles",()=>{
-  for(const [cycle,amount,interval] of [["monthly",20000,"month"],["yearly",200000,"year"]] as const){
+  for(const [cycle,amount,interval] of [["monthly",19999,"month"],["yearly",199992,"year"]] as const){
     const plan=proSubscriptionPlan({tier:"pro",cycle,price:1,uid:"attacker"})!;
     const checkout=proCheckoutOptions(plan,"verified-uid","owner@example.com","https://quantura.studio");
     assert.equal(checkout.line_items![0].price_data!.unit_amount,amount);
