@@ -334,8 +334,9 @@ def test_cross_asset_search_and_optional_search_grounded_analysis_are_explicit()
     prompt = (ROOT / "functions_explore" / "src" / "forecastAnalysis.ts").read_text()
     for marker in ['id="market-search-query"', 'id="market-search-source"', 'id="market-search-results"', 'id="ensemble-provider"']:
         assert marker in forecasting
-    for source in ["alpaca", "yahoo", "polymarket_us", "kalshi"]:
+    for source in ["alpaca", "dukascopy", "gemini", "polymarket_us", "kalshi"]:
         assert source in backend
+    assert "yahoo" not in backend.lower()
     assert "/api/market-search" in client
     assert "data-forecast-market-context" in analysis_client
     assert 'analysisMode: "live"' in analysis_client
