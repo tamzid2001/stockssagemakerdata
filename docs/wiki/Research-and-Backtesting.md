@@ -2,7 +2,7 @@
 
 A forecast provides a distribution; a strategy supplies entry, sizing, fill, exit and risk rules. Keep publication/inference time separate from the data cutoff to avoid backdated decisions.
 
-## Enterprise backtest API
+## Paid backtest API
 
 `POST /api/v1/backtests` implements bounded, long-only, one-position quantile rules. Completed-bar signals fill at the next observed open. Exported rules remain `live_eligible: false`.
 

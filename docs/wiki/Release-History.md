@@ -2,7 +2,7 @@
 
 ## v2.2.0
 
-Clerk sessions across the web and retained APIs; server-owned enterprise API access; Alpaca-only stock discovery/downloads; Gemini, World Bank Data360 and Treasury Fiscal Data; CSV previews/names; blog navigation; domain verification; caching and function bundle reductions.
+Clerk sessions across the web and retained APIs; paid Pro/enterprise/admin personal API keys; Alpaca stock discovery/downloads; Gemini, World Bank Data360, Treasury Fiscal Data and BigQuery public tables; CSV previews/names; blog navigation; domain verification; Bluesky media posts; caching and Firestore write reductions.
 
 [Release notes](https://github.com/tamzid2001/stockssagemakerdata/releases/tag/v2.2.0) · [Tracked notes](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/releases/v2.2.0.md)
 

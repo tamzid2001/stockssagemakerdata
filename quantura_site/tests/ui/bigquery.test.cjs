@@ -1,6 +1,32 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{JSDOM}=require('jsdom');
 const code=fs.readFileSync(path.join(__dirname,'../../public/economic-data.js'),'utf8');
 const tick=()=>new Promise(r=>setTimeout(r,10));
+const app=fs.readFileSync(path.join(__dirname,'../../public/app.js'),'utf8');
+const selectionStart=app.indexOf('    window.addEventListener("quantura:market-selected", (event) => {',app.indexOf('    const resumeQuoteOverlay ='));
+const selectionHandler=app.slice(selectionStart,app.indexOf('    refreshPrimaryForecast();',selectionStart));
+const sourceSync=app.slice(app.indexOf('  const syncEnsembleSourceFields ='),app.indexOf('  const buildEnsembleRequest ='));
+test('forecast selection retains database and Gemini types when the main app listener runs',async()=>{
+ const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../../pages/forecasting.html'),'utf8'),{url:'https://quantura.studio/forecasting',runScripts:'outside-only'}),w=dom.window;
+ w.QuanturaForecastControls=require('../../public/forecast-controls.js');
+ w.ui={ensembleSourceType:w.document.getElementById('ensemble-source-type'),ensembleTicker:w.document.getElementById('ensemble-ticker')};
+ w.setEnsembleStatus=()=>{};
+ w.fetch=async()=>({ok:true,json:async()=>({name:'Daily data',forecastable:true,time_fields:[{field:'date',label:'Date'}],values:[{field:'value',label:'Value'}],filter_fields:[],dimensions:[],frequency:'1D',url:'https://example.com'})});
+ w.eval(code);w.eval(sourceSync+selectionHandler);
+ for(const provider of ['bigquery','fiscaldata','worldbank_data360']){
+  w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:{resource_type:'economic_series',source:provider,symbol:'daily',economic_source:{type:'economic_series',provider}},intent:'forecast'}}));await tick();
+  assert.equal(w.ui.ensembleSourceType.value,'economic_series');
+  assert.equal(w.document.getElementById('economic-forecast-controls').hidden,false);
+  assert.equal(w.QuanturaEconomics.source().provider,provider);
+  assert.equal(w.document.getElementById('ensemble-ticker-session').closest('.field').hidden,true);
+ }
+ w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:{source:'gemini',symbol:'BTCUSD'},intent:'forecast'}}));
+ assert.equal(w.ui.ensembleSourceType.value,'gemini_spot');
+ assert.equal(w.document.getElementById('economic-forecast-controls').hidden,true);
+ w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:{source:'alpaca',symbol:'AAPL'},intent:'forecast'}}));
+ assert.equal(w.ui.ensembleSourceType.value,'ticker');
+ assert.equal(w.document.getElementById('ensemble-ticker-session').closest('.field').hidden,false);
+ dom.window.close();
+});
 test('BigQuery selection sends authenticated exact columns/filters, previews returned timestamps, and follows the Download panel',async()=>{
  const dom=new JSDOM('<body><select id="ensemble-source-type"></select><form id="forecast"><div id="economic-forecast-controls"><div data-economic-fields></div><p data-economic-status></p><div data-economic-table></div><button data-economic-preview></button><button data-economic-download></button><a data-economic-link></a></div></form><section id="download"><div data-economic-download-settings></div></section></body>',{url:'https://quantura.studio/forecasting',runScripts:'outside-only'}),w=dom.window,calls=[];
  w.QuanturaAuth={signedIn:true,getToken:async()=> 'test-session'};w.QuanturaQMarket={snapshot:d=>d,csv:()=>''};

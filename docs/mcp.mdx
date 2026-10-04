@@ -10,8 +10,13 @@ Alternate host: `https://quantura.mintlify.app/mcp`.
 {"mcpServers":{"quantura":{"type":"http","url":"https://quantura.mintlifysite.com/mcp"}}}
 ```
 
-Mintlify supplies documentation search. Quantura's OpenAPI allowlists these
-read-only API tools:
+The connected server currently supplies documentation tools:
+`search_quantura_developer`, `query_docs_filesystem_quantura_developer`, and
+`submit_feedback`. Initialization, tool discovery and documentation search were
+verified with Codex. It does not currently expose live forecast or data calls.
+
+Quantura's OpenAPI allowlists these read-only API tools for a host that enables
+Mintlify API tools:
 
 - `quantura_search_markets`
 - `quantura_resolve_market_link`

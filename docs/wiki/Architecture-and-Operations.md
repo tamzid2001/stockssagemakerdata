@@ -23,20 +23,20 @@ The forecast-capability endpoint and OpenAPI share the supported intervals. MCP 
 flowchart LR
     Web[Website and PWA] --> Clerk[Clerk sign-in]
     Clerk --> API[Verified Node and Python APIs]
-    API --> Grant[Server-owned enterprise API grant]
+    API --> Grant[Paid Pro / enterprise grant / verified admin]
     API --> Bridge[Data SDK compatibility credential]
     Bridge --> Data[Private Firestore and Storage]
     API --> Jobs[GitHub Actions workers]
     Jobs --> API
 ```
 
-Clerk private metadata or backend-only enterprise account records control API access. User metadata is not an authorization source. Public data caches use bounded memory; API-key activity writes are throttled and browser refreshes pause while hidden. Measure actual production usage before reporting savings.
+Verified paid Clerk/Stripe subscriptions, Clerk private enterprise metadata, backend-only enterprise account records, or the verified administrator identity control API access. Trial-only subscriptions and user-editable metadata cannot grant API access. Public data caches use bounded memory; API-key activity writes are throttled and browser refreshes pause while hidden. Measure actual production usage before reporting savings.
 
 ## Deployment
 
 Validate source, sync templates and commit before running `./deploy.sh`. Its default Vercel path uses `git archive HEAD`, deploying the API, compatibility API, newsletter, SSR and website in order. Local uncommitted files are excluded. `DEPLOY_DRY_RUN=true ./deploy.sh` prints the plan. The Google legacy option is not the primary public runtime.
 
-Check the live website, authenticated enterprise OpenAPI access, provider capabilities, affected history exports and Clerk/profile/forecast navigation after deployment. Verify the TikTok root file and Pinterest HTML meta tag; these are domain-ownership assets, not approval of TikTok OAuth or posting capabilities. Use the [release checklist](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/release-checklist.md).
+Check the live website, authenticated paid/admin OpenAPI access, provider capabilities, affected history exports and Clerk/profile/forecast navigation after deployment. Verify the TikTok root file and Pinterest HTML meta tag; these are domain-ownership assets, not approval of TikTok OAuth or posting capabilities. Use the [release checklist](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/release-checklist.md).
 
 Function projects skip Git builds when their runtime inputs are unchanged. Explicit CLI/env-only deployments and missing comparison metadata always build. Test files and caches are excluded from function bundles. Current Vercel retention is 1 day for failed/canceled builds, 7 days for previews and 14 days for production, with active aliases protected. Storage cleanup reduces future GB-month usage rather than resetting accrued usage.
 
