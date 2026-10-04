@@ -195,7 +195,7 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
   try {
     const unentitled = await call(`/v1/forecast/models?workspace_id=${workspace}`);
     assert.equal(unentitled.status, 403, "an existing API key cannot bypass enterprise access");
-    assert.equal((await unentitled.json()).error.code, "ENTERPRISE_UPGRADE_REQUIRED");
+    assert.equal((await unentitled.json()).error.code, "PAID_API_REQUIRED");
     for (const user of [owner, viewer]) {
       await db.collection("enterprise_api_accounts").doc(user).set({tier: "enterprise", status: "active"});
     }
