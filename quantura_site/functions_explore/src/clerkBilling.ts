@@ -1,5 +1,5 @@
 import type { BillingSubscription } from "@clerk/backend";
-import { clerkClient } from "./clerkAuth";
+import { clerkClient, getClerkUser, verifiedQuanturaAdmin } from "./clerkAuth";
 
 export function subscriptionEntitlements(subscription: Pick<BillingSubscription, "subscriptionItems" | "eligibleForFreeTrial"> | null, now = Date.now()) {
   const item = subscription?.subscriptionItems.find(item =>
@@ -15,6 +15,7 @@ export function subscriptionEntitlements(subscription: Pick<BillingSubscription,
 
 const cache = new Map<string, { expires: number; value: Promise<ReturnType<typeof subscriptionEntitlements>> }>();
 export async function clerkSubscriptionAccess(userId: string, organizationId?: string) {
+  if(!organizationId&&verifiedQuanturaAdmin(await getClerkUser(userId)))return {...subscriptionEntitlements(null),plan:"pro",docs_available:true,can_trial:false,subscription_status:"admin",billing_provider:"admin"};
   const key = organizationId || userId;
   const found = cache.get(key);
   if (found && found.expires > Date.now()) {

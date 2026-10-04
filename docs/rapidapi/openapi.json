@@ -2940,7 +2940,7 @@
     "/v1/economic-data/search": {
       "get": {
         "operationId": "searchEconomicSeries",
-        "summary": "Search Treasury Fiscal Data or World Bank Data360 indicators",
+        "summary": "Search BigQuery public tables, Treasury Fiscal Data or World Bank Data360 indicators",
         "tags": [
           "Economic data"
         ],
@@ -2957,7 +2957,8 @@
               "type": "string",
               "enum": [
                 "fiscaldata",
-                "worldbank_data360"
+                "worldbank_data360",
+                "bigquery"
               ],
               "default": "fiscaldata"
             }
@@ -3263,7 +3264,7 @@
     "/v1/market-data/gemini/prediction-contract": {
       "post": {
         "operationId": "getGeminiPredictionContract",
-        "summary": "Get verified Gemini prediction-contract history availability",
+        "summary": "Get Verified Gemini Prediction Contract Observations and History Availability",
         "tags": [
           "Gemini exchange"
         ],
@@ -4177,7 +4178,8 @@
             "type": "string",
             "enum": [
               "fiscaldata",
-              "worldbank_data360"
+              "worldbank_data360",
+              "bigquery"
             ]
           },
           "series_id": {
@@ -4187,6 +4189,31 @@
               "rates_of_exchange",
               "avg_interest_rates",
               "operating_cash_balance"
+            ]
+          },
+          "table_id": {
+            "type": "string"
+          },
+          "time_field": {
+            "type": "string"
+          },
+          "aggregation": {
+            "type": "string",
+            "enum": [
+              "none",
+              "avg",
+              "sum",
+              "min",
+              "max"
+            ]
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "1h",
+              "1D",
+              "1W-MON",
+              "1MS"
             ]
           },
           "value_field": {
@@ -4245,9 +4272,22 @@
               "dataset_id",
               "indicator_id"
             ]
+          },
+          {
+            "properties": {
+              "provider": {
+                "enum": [
+                  "bigquery"
+                ]
+              }
+            },
+            "required": [
+              "dataset_id",
+              "table_id"
+            ]
           }
         ],
-        "description": "Select one series and one value for every required dimension. Reporting periods are daily, month-end, quarter-end, or year-end. Current revised data is not a point-in-time vintage."
+        "description": "Select one series and one value for every required dimension. Reporting periods are daily, month-end, quarter-end, or year-end. Current revised data is not a point-in-time vintage. BigQuery history additionally requires time_field and value_field, uses only bigquery-public-data, exact parameterized filters, a dry run and a 100 MiB billed-byte cap."
       },
       "GeminiSpotSource": {
         "type": "object",

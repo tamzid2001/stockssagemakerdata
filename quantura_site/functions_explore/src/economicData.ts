@@ -1,10 +1,12 @@
 import type { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { fiscalEndpointRegistry, fetchFiscalPayload, buildFiscalQuery } from "./fiscaldata/core";
+import { bigqueryPublic, BigQueryPublicError, validateBigQuerySource } from "./bigqueryPublic";
 
 type RecordData = Record<string, any>;
 export type EconomicSource = {
-  type: "economic_series"; provider: "fiscaldata" | "worldbank_data360";
+  type: "economic_series"; provider: "fiscaldata" | "worldbank_data360" | "bigquery";
+  table_id?: string; time_field?: string; aggregation?: "none"|"avg"|"sum"|"min"|"max"; frequency?: string;
   series_id?: string; value_field?: string; dataset_id?: string; indicator_id?: string;
   ref_area?: string; dimensions?: Record<string,string>; limit?: number; start?: string; end?: string;
 };
@@ -74,6 +76,7 @@ export function createEconomicClient(request: typeof fetch = fetch) {
     return cached(entry.endpoint+"?"+query,()=>fetchFiscalPayload(entry.endpoint,query,{fetchImpl:request}));
   }
   async function search(provider:string,q:string,limit=10,skip=0) {
+    if(provider==="bigquery")return bigqueryPublic.search(q,limit);
     if(provider==="fiscaldata")return {count:fiscalEndpointRegistry.length,results:fiscalEndpointRegistry.filter(e=>[e.id,e.title,e.category].join(" ").toLowerCase().includes(q.toLowerCase())).map(e=>({id:e.id,name:e.title,provider,...FISCAL_SERIES[e.id]}))};
     if(provider!=="worldbank_data360")throw invalid("Choose Treasury Fiscal Data or World Bank Data360.");
     const payload=await wb("searchv2",{count:true,filter:"type eq 'indicator'",search:q,select:"series_description/idno,series_description/name,series_description/database_id",top:limit,skip});
@@ -86,6 +89,7 @@ export function createEconomicClient(request: typeof fetch = fetch) {
   }
   async function describe(sourceValue:unknown) {
     const source=validateEconomicSource(sourceValue);
+    if(source.provider==="bigquery")return bigqueryPublic.describe(source);
     if(source.provider==="fiscaldata") {
       const spec=FISCAL_SERIES[source.series_id!];
       const payload=await fiscal(source.series_id!,1,"",1000);
@@ -101,8 +105,10 @@ export function createEconomicClient(request: typeof fetch = fetch) {
     return {name:match.series_description.name,units:match.series_description.measurement_unit,frequency:match.series_description.periodicity,url:"https://data360.worldbank.org/en/indicator/"+source.indicator_id,metadata:match,
       dimensions:dimensions.filter((r:RecordData)=>[...WB_DIMENSIONS,"REF_AREA"].includes(r.field_name)).map((r:RecordData)=>({field:r.field_name,label:r.label_name||r.field_name,values:(r.field_value||[]).map(String)})),values:[{field:"OBS_VALUE",label:"Observation value"}]};
   }
-  async function history(sourceValue:unknown, cutoff=Date.now()):Promise<EconomicHistory> {
+  async function history(sourceValue:unknown, cutoff?:number, userId=""):Promise<EconomicHistory> {
     const source=validateEconomicSource(sourceValue),limit=source.limit??500;
+    if(source.provider==="bigquery")return bigqueryPublic.history(source,cutoff,userId);
+    cutoff ??= Date.now();
     const end=Math.min(cutoff,source.end?dateInstant(source.end,true):cutoff);
     const start=source.start?dateInstant(source.start):null;
     if(start!==null && start>end)throw invalid("The start must be before the data cutoff.");
@@ -162,6 +168,7 @@ export function dateInstant(value:string,end=false):number {
 export function validateEconomicSource(value:unknown):EconomicSource {
   if(!value || typeof value!=="object" || Array.isArray(value))throw invalid("Choose an economic data source.");
   const s=value as RecordData;
+  if(s.provider==="bigquery")return validateBigQuerySource(value);
   const allowed=["type","provider","series_id","value_field","dataset_id","indicator_id","ref_area","dimensions","limit","start","end"];
   if(Object.keys(s).some(k=>!allowed.includes(k)) || !["fiscaldata","worldbank_data360"].includes(s.provider) || s.type && s.type!=="economic_series")throw invalid("Choose a supported economic series configuration.");
   const limit=s.limit===undefined?500:Number(s.limit);
@@ -225,7 +232,7 @@ function uniqueRows(rows:RecordData[]) {
   return [...seen.values()].sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp));
 }
 export const economicClient=createEconomicClient();
-export function registerEconomicDataRoutes(router:Router,client=economicClient) {
+export function registerEconomicDataRoutes(router:Router,client=economicClient, options:{authenticate?:(req:any)=>Promise<{userId:string;guest?:boolean}>}={}) {
   router.use("/economic-data",rateLimit({windowMs:60_000,limit:30,standardHeaders:true,legacyHeaders:false}));
   router.get("/economic-data/search",async(req,res)=>{
     try{
@@ -239,10 +246,10 @@ export function registerEconomicDataRoutes(router:Router,client=economicClient) 
     try{res.setHeader("Cache-Control","no-store");res.json({ok:true,...await client.describe(req.body)});}catch(error){respond(error,res);}
   });
   router.post("/economic-data/history",async(req,res)=>{
-    try{res.setHeader("Cache-Control","no-store");const result=await client.history(req.body);res.json({ok:true,...result,count:result.rows.length});}catch(error){respond(error,res);}
+    try{res.setHeader("Cache-Control","no-store");let userId="";if(req.body?.provider==="bigquery"){const identity=await options.authenticate?.(req).catch(()=>null);if(!identity||identity.guest)throw new BigQueryPublicError("bigquery_sign_in_required","Sign in before querying BigQuery.",401);userId=identity.userId;}const result=await client.history(req.body,undefined,userId);res.json({ok:true,...result,count:result.rows.length});}catch(error){respond(error,res);}
   });
 }
 function respond(error:unknown,res:any) {
-  const safe=error instanceof EconomicDataError?error:new EconomicDataError("economic_provider_unavailable","The provider could not return this series. Retry shortly.",502);
+  const safe=error instanceof EconomicDataError||error instanceof BigQueryPublicError?error:new EconomicDataError("economic_provider_unavailable","The provider could not return this series. Retry shortly.",502);
   res.status(safe.status).json({ok:false,error:safe.code,message:safe.message});
 }

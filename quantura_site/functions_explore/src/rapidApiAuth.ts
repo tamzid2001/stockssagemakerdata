@@ -23,7 +23,7 @@ export function rapidApiPrincipal(req: Request): ApiPrincipal | null {
   const username = req.headers["x-rapidapi-user"];
   const subscription = req.headers["x-rapidapi-subscription"];
   if (typeof username !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(username)) throw Error("api_key_invalid");
-  if (subscription !== "CUSTOM" && username !== process.env.RAPIDAPI_PROVIDER_USER) throw Error("enterprise_upgrade_required");
+  if (subscription !== "CUSTOM" && username !== process.env.RAPIDAPI_PROVIDER_USER) throw Error("paid_api_required");
   const path = req.path.replace(/^\/api(?=\/)/, "");
   if (!["GET", "POST"].includes(req.method) || !PATHS.some(pattern => pattern.test(path))) throw Error("insufficient_scope");
   const apiId = process.env.RAPIDAPI_API_ID;

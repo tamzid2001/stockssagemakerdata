@@ -5,7 +5,7 @@
   const native=Boolean(window.__QUANTURA_NATIVE_APP__ || window.Capacitor?.isNativePlatform?.());
   const publishableKey="pk_live_Y2xlcmsucXVhbnR1cmEuc3R1ZGlvJA";
   const domain="https://clerk.quantura.studio";
-  let clerk,bridgeKey=null,bridgePromise=Promise.resolve(),workspaceId=null;
+  let clerk,bridgeKey=null,bridgePromise=Promise.resolve(),workspaceId=null,accessKey="",apiKeysAvailable=false;
   const appearance={variables:{colorPrimary:"#18b6a4",borderRadius:"0.65rem",fontFamily:"Inter, system-ui, sans-serif"},elements:{rootBox:{width:"100%"},cardBox:{boxShadow:"none"}}};
   const api={enabled:!native,ready:null,get organizationId(){return clerk?.organization?.id||null;},get workspaceId(){return workspaceId;},get signedIn(){return Boolean(clerk?.user);},
     get verifiedEmail(){const email=clerk?.user?.primaryEmailAddress;return email?.verification?.status==="verified"?email.emailAddress:null;},
@@ -33,6 +33,11 @@
       }else {if(auth.currentUser && !auth.currentUser.isAnonymous)await auth.signOut();bridgeKey="";}
     }
     workspaceId=resources.organization?.id||null;
+    const accessIdentity=resources.session?.id||"";
+    if(accessKey!==accessIdentity){
+      apiKeysAvailable=false;accessKey=accessIdentity;
+      if(resources.session)try{const token=await resources.session.getToken();const response=await fetch("/api/shop/subscription-access",{headers:{Authorization:`Bearer ${token}`},credentials:"same-origin"});if(response.ok){const result=await response.json();apiKeysAvailable=result.data?.api_keys_available===true;}}catch{}
+    }
     document.body.dataset.clerkState=resources.user?"signed-in":"signed-out";
     document.dispatchEvent(new CustomEvent("quantura:organization",{detail:{id:workspaceId}}));
     mount(resources);
@@ -67,9 +72,9 @@
       const host=document.createElement("div");host.dataset.clerkUserButton="";header.append(host);
     }
     if(resources.user) {
-      component("[data-clerk-user-button]","UserButton",{userProfileUrl:"/forecasting?panel=profile",userProfileMode:"navigation",userProfileProps:{apiKeysProps:{hide:true}}});
+      component("[data-clerk-user-button]","UserButton",{userProfileUrl:"/forecasting?panel=profile",userProfileMode:"navigation",userProfileProps:{apiKeysProps:{hide:!apiKeysAvailable}}});
       component("[data-clerk-organization-switcher]","OrganizationSwitcher",{hidePersonal:false,afterSelectOrganizationUrl:location.pathname+location.search,afterSelectPersonalUrl:location.pathname+location.search});
-      component("[data-clerk-user-profile]","UserProfile",{routing:"hash",apiKeysProps:{hide:true}});
+      component("[data-clerk-user-profile]","UserProfile",{routing:"hash",apiKeysProps:{hide:!apiKeysAvailable}});
       if(resources.organization)component("[data-clerk-organization-profile]","OrganizationProfile",{routing:"hash",apiKeysProps:{hide:true}});
     }
   }

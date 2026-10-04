@@ -4,12 +4,12 @@
 
 Quantura connects stocks, FX, metals, indices, perpetual contracts and prediction markets in one research workspace. Search an instrument, inspect genuine observations, forecast a range of outcomes, and retain the evidence behind a decision.
 
-[Website](https://quantura.studio) · [Enterprise API docs](https://quantura.studio/developers/api) · [Wiki](https://github.com/tamzid2001/stockssagemakerdata/wiki) · [Releases](https://github.com/tamzid2001/stockssagemakerdata/releases)
+[Website](https://quantura.studio) · [API docs](https://quantura.studio/developers/api) · [Wiki](https://github.com/tamzid2001/stockssagemakerdata/wiki) · [Releases](https://github.com/tamzid2001/stockssagemakerdata/releases)
 
 ## What's new in v2.2.0
 
 - **Clerk accounts:** Google and email/password sign-in, account and organization components, verified sessions across the Node and retained Python APIs, and a compatibility bridge for existing private data.
-- **Enterprise API access:** server-owned enterprise grants protect API keys and the authenticated OpenAPI reference. Pro's 14-day trial remains for website features.
+- **Paid API access:** active paid Pro subscriptions, enterprise grants and the verified administrator can use Clerk API keys and the authenticated OpenAPI reference. Trials cover website features.
 - **Verified data sources:** Alpaca replaces Yahoo in public search and downloads; Gemini crypto and prediction-market discovery, World Bank Data360 and Treasury Fiscal Data add real observations with explicit coverage limits.
 - **Website updates:** shorter Research copy, a founder letter, company logos, and Previous blog, Next blog and Copy shareable link controls on all 78 posts, with distinct Unsplash images.
 - **CSV preview:** inspect rows and name an uploaded series before submitting a forecast.
@@ -74,7 +74,7 @@ The checked-in Dukascopy snapshot contains 1,504 instruments; the service refres
 
 ## API and MCP
 
-Programmatic API access is enterprise only. Pro and its 14-day trial cover the website research workflow. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
+Programmatic API access is paid Pro and enterprise only. Pro and its 14-day trial cover the website research workflow. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
 
 - [Developer overview](https://quantura.studio/developers/api)
 - [Live OpenAPI](https://quantura.studio/api/openapi.json)
@@ -116,16 +116,17 @@ flowchart LR
     API --> Identity[Clerk verified sessions]
     Identity --> Bridge[Compatibility credential for data SDKs]
     Bridge --> State
-    API --> Enterprise[Server-owned enterprise API grants]
+    API --> Entitlement[Paid Pro subscription / enterprise grant / verified admin]
     API <--> State[Firestore and private storage]
     API --> Data[Provider history and verified identities]
+    Data --> BigQuery[Public BigQuery tables with dry-run byte caps]
     API --> Workers[GitHub Actions forecast/research workers]
     Workers --> Models[Approved time-series models]
     Workers -->|Claim, progress and result callbacks| API
     Workers -->|Research source downloads| Data
     Workers --> Artifacts[Encrypted research artifacts with retention]
     API --> Legacy[AWS SageMaker and S3 workflows]
-    MCP[MCP clients] --> Docs[Mintlify docs and read-only allowlist]
+    MCP[MCP clients] --> Docs[Mintlify documentation server]
     Docs -->|API tools when enabled by the host| API
 ```
 
@@ -219,7 +220,7 @@ Provider data and model checkpoints can have separate licensing and redistributi
 
 ### October 3 account and navigation updates
 
-Search is compact in the shared header; Screener is available in Terminal. Profile uses Clerk account and billing components alongside saved forecast, download, CSV and Jev requests. API documentation, OpenAPI downloads and personal API keys require a server-owned enterprise grant, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
+Search is compact in the shared header; Screener is available in Terminal. Profile uses Clerk account and billing components alongside saved forecast, download, CSV and Jev requests. API documentation, OpenAPI downloads and personal API keys require a paid Pro entitlement, a server-owned enterprise grant, or verified administrator access, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
 
 ### October 3 website and data release
 
@@ -229,3 +230,11 @@ Search is compact in the shared header; Screener is available in Terminal. Profi
 - TikTok domain verification file served at its exact root filename; Pinterest verification in public HTML. TikTok OAuth callback and signed, deduplicated webhook endpoints are implemented; social API product approval remains separate.
 - Previous blog, Next blog and Copy shareable link on all 78 posts. CSV preview and custom dataset names before forecast submission.
 - Public data caches and bounded visible-page queries reduce repeated Firestore traffic. Kalshi coin traders and their watchdog workflows remain disabled.
+
+### October 4 account and data updates
+
+- Clerk Account API keys are available to paid Pro/enterprise users and the verified administrator; native Clerk personal keys are verified by the API and mapped to migrated UIDs. Free trials retain website access without API keys.
+- [BigQuery public-data guide](docs/bigquery-public-data.mdx): discover tables in Jev/Search, choose date/numeric columns and exact filters, preview or download history, and forecast the same normalized snapshot. Dry runs, a 100 MiB query cap, daily budgets and request coalescing bound costs.
+- Successful API reads use structured platform logs instead of Firestore audit documents. Mutations/errors remain durable; key usage timestamps and unchanged subscription writes are coalesced. This reduces write counts; it is not a measured invoice reduction.
+- Quantura's [documentation MCP](https://quantura.mintlifysite.com/mcp) is installed in local Codex. Live API tools are not exposed by that documentation server.
+- Bluesky appears at the end of footer social links. [Media publishing CLI](scripts/publish_bluesky_media.py) previews by default and requires `--publish`; credentials come from environment/Secret Manager, and a public ledger prevents duplicate publication.

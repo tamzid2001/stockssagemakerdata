@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2026-10-03-pro-trial-unlimited",
+  "schemaVersion": "2026-10-04-paid-pro-api",
   "plans": {
     "free": {
       "label": "Free",
@@ -11,7 +11,34 @@
       "backtestsPerMonth": 5,
       "workspaceLimit": 3,
       "collaboratorSeats": 3,
-      "features": ["meta_prophet", "chronos_2", "forecast_ensemble", "walk_forward", "backtesting", "quantiles", "indicators", "prediction_csv", "anomaly_analysis", "forecast_bias", "alerts", "historical_data", "options", "screener", "bulk_scanning", "prediction_markets", "bulk_exports", "api", "scheduled_jobs", "sagemaker_exports", "gpt_analysis", "workspaces", "auditability", "priority_processing", "team_controls", "priority_support"]
+      "features": [
+        "meta_prophet",
+        "chronos_2",
+        "forecast_ensemble",
+        "walk_forward",
+        "backtesting",
+        "quantiles",
+        "indicators",
+        "prediction_csv",
+        "anomaly_analysis",
+        "forecast_bias",
+        "alerts",
+        "historical_data",
+        "options",
+        "screener",
+        "bulk_scanning",
+        "prediction_markets",
+        "bulk_exports",
+        "api",
+        "scheduled_jobs",
+        "sagemaker_exports",
+        "gpt_analysis",
+        "workspaces",
+        "auditability",
+        "priority_processing",
+        "team_controls",
+        "priority_support"
+      ]
     },
     "pro": {
       "label": "Pro",
@@ -23,7 +50,24 @@
       "backtestsPerMonth": 0,
       "workspaceLimit": 4,
       "collaboratorSeats": 0,
-      "features": ["meta_prophet", "quantiles", "indicators", "prediction_csv", "anomaly_analysis", "forecast_bias", "alerts", "historical_data", "options", "screener", "prediction_markets", "sagemaker_exports", "gpt_analysis"]
+      "features": [
+        "meta_prophet",
+        "quantiles",
+        "indicators",
+        "prediction_csv",
+        "anomaly_analysis",
+        "forecast_bias",
+        "alerts",
+        "historical_data",
+        "options",
+        "screener",
+        "prediction_markets",
+        "sagemaker_exports",
+        "gpt_analysis",
+        "api",
+        "chronos_2",
+        "forecast_ensemble"
+      ]
     },
     "quant": {
       "label": "Quant",
@@ -35,7 +79,29 @@
       "backtestsPerMonth": 30,
       "workspaceLimit": 10,
       "collaboratorSeats": 0,
-      "features": ["meta_prophet", "chronos_2", "forecast_ensemble", "walk_forward", "backtesting", "quantiles", "indicators", "prediction_csv", "anomaly_analysis", "forecast_bias", "alerts", "historical_data", "options", "screener", "bulk_scanning", "prediction_markets", "bulk_exports", "api", "scheduled_jobs", "sagemaker_exports", "gpt_analysis"]
+      "features": [
+        "meta_prophet",
+        "chronos_2",
+        "forecast_ensemble",
+        "walk_forward",
+        "backtesting",
+        "quantiles",
+        "indicators",
+        "prediction_csv",
+        "anomaly_analysis",
+        "forecast_bias",
+        "alerts",
+        "historical_data",
+        "options",
+        "screener",
+        "bulk_scanning",
+        "prediction_markets",
+        "bulk_exports",
+        "api",
+        "scheduled_jobs",
+        "sagemaker_exports",
+        "gpt_analysis"
+      ]
     },
     "research": {
       "label": "Research",
@@ -47,7 +113,34 @@
       "backtestsPerMonth": 150,
       "workspaceLimit": 30,
       "collaboratorSeats": 10,
-      "features": ["meta_prophet", "chronos_2", "forecast_ensemble", "walk_forward", "backtesting", "quantiles", "indicators", "prediction_csv", "anomaly_analysis", "forecast_bias", "alerts", "historical_data", "options", "screener", "bulk_scanning", "prediction_markets", "bulk_exports", "api", "scheduled_jobs", "sagemaker_exports", "gpt_analysis", "workspaces", "auditability", "priority_processing", "team_controls", "priority_support"]
+      "features": [
+        "meta_prophet",
+        "chronos_2",
+        "forecast_ensemble",
+        "walk_forward",
+        "backtesting",
+        "quantiles",
+        "indicators",
+        "prediction_csv",
+        "anomaly_analysis",
+        "forecast_bias",
+        "alerts",
+        "historical_data",
+        "options",
+        "screener",
+        "bulk_scanning",
+        "prediction_markets",
+        "bulk_exports",
+        "api",
+        "scheduled_jobs",
+        "sagemaker_exports",
+        "gpt_analysis",
+        "workspaces",
+        "auditability",
+        "priority_processing",
+        "team_controls",
+        "priority_support"
+      ]
     }
   },
   "legacyAliases": {

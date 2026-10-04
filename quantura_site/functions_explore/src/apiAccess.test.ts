@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   authenticatePlatformRequest,
+  writeApiAudit,
   authorizeWorkspaceAction,
   generatePlatformApiKey,
   hashPlatformApiKey,
@@ -193,4 +194,26 @@ test("admin API key checks current identity without encoding admin privileges in
     if (oldPepper === undefined) delete process.env.QUANTURA_API_KEY_PEPPER;
     else process.env.QUANTURA_API_KEY_PEPPER = oldPepper;
   }
+});
+
+test("polling reads use platform logs; mutations and failures retain durable audits",async()=>{
+ const records:any[]=[];const db={collection:()=>({doc:()=>({set:async(v:any)=>{records.push(v);}})})} as any;
+ const input={endpoint:"/forecasts",requestId:"unit-audit",latencyMs:4,method:"GET",status:200};
+ await writeApiAudit(db,input);assert.equal(records.length,0);
+ await writeApiAudit(db,{...input,method:"POST",status:201});
+ await writeApiAudit(db,{...input,status:403});assert.equal(records.length,2);
+});
+
+test('concurrent key polling coalesces last-used writes without caching revocation',async()=>{
+ const prior=process.env.QUANTURA_API_KEY_PEPPER;process.env.QUANTURA_API_KEY_PEPPER='coalescing-test-only-pepper-with-thirty-two-characters';
+ try{
+  const raw=generatePlatformApiKey().rawKey,id=hashPlatformApiKey(raw);
+  const records=new Map<string,RecordValue>([[`quantura_api_keys/${id}`,{user_id:'usage-user',scopes:['account:read'],last_used_at:null}],["enterprise_api_accounts/usage-user",{status:'active',tier:'enterprise'}]]);
+  const base=new FakeDb(records);let writes=0;
+  const db={collection:(name:string)=>({doc:(key:string)=>{const doc=base.collection(name).doc(key),set=doc.set.bind(doc);doc.set=async(...args:Parameters<typeof set>)=>{if(name==='quantura_api_keys')writes++;return set(...args);};return doc;}})} as any;
+  const request={headers:{authorization:`Bearer ${raw}`}} as any,auth={} as any;
+  await Promise.all(Array.from({length:8},()=>authenticatePlatformRequest(request,{db,auth})));assert.equal(writes,1);
+  records.set(`quantura_api_keys/${id}`,{...records.get(`quantura_api_keys/${id}`),revoked_at:new Date().toISOString()});
+  await assert.rejects(authenticatePlatformRequest(request,{db,auth}),/revoked/);
+ }finally{if(prior===undefined)delete process.env.QUANTURA_API_KEY_PEPPER;else process.env.QUANTURA_API_KEY_PEPPER=prior;}
 });

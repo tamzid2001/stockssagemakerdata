@@ -2,6 +2,13 @@ import { createClerkClient, verifyToken } from "@clerk/backend";
 import type admin from "firebase-admin";
 import type { Router } from "express";
 
+export function verifiedQuanturaAdmin(user:any,userId?:string):boolean {
+  if(!user||user.banned||user.locked||userId&&(user.externalId||user.id)!==userId)return false;
+  const email=user.emailAddresses?.find((address:any)=>address.id===user.primaryEmailAddressId);
+  return email?.verification?.status==="verified"&&email.emailAddress.toLowerCase()==="tamzid257@gmail.com";
+}
+
+
 export const CLERK_ISSUER = "https://clerk.quantura.studio";
 export type QuanturaIdentity = admin.auth.DecodedIdToken & {
   clerk_user_id?: string;

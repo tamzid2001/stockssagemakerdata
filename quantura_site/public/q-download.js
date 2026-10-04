@@ -19,7 +19,8 @@
   }
   function settings(){return Object.fromEntries(["kind","range","frequency","limit","start","end","session","adjustment","phase","layout","target","missing","price-side","columns"].map(k=>[k==="price-side"?"price_side":k,value(k)]).concat([["optionSymbol",optionSymbol]]));}
   async function json(url,options={}){
-    const response=await fetch(url,{...options,headers:{Accept:"application/json",...(options.body?{"Content-Type":"application/json"}:{})}});
+    const token=window.QuanturaAuth?.signedIn?await window.QuanturaAuth.getToken():"";
+    const response=await fetch(url,{...options,headers:{Accept:"application/json",...(token?{Authorization:`Bearer ${token}`}:{ }),...(options.body?{"Content-Type":"application/json"}:{})}});
     const data=await response.json();if(!response.ok||data.ok===false)throw Error(data.message||data.error?.message||"The provider could not return these observations.");return data;
   }
   function renderBasket(){
@@ -42,7 +43,7 @@
     const interval=byId("qd-frequency"),old=interval.value;
     interval.innerHTML=[...[['1Min','Minute'],['1Hour','Hourly'],['1Day','Daily']],...(prediction?[['raw','Raw observations / trades'],['5m','5 minutes'],['15m','15 minutes'],['30m','30 minutes'],['4h','4 hours'],['1w','Weekly'],['1month','Monthly'],['final','Final observation']]:value('kind')!=='options'&&(stock||dukascopy||selected?.source==='kalshi_perps')?[['5m','5 minutes'],['15m','15 minutes'],['30m','30 minutes'],['4h','4 hours'],['1Week','Weekly'],['1Month','Monthly']]:[])].map(([v,label])=>`<option value="${v}">${label}</option>`).join("");
     if(selected?.resource_type==="economic_series")interval.innerHTML=`<option value="${html(selected.frequency||'native')}">Native reporting frequency</option>`;
-    interval.value=[...interval.options].some(o=>o.value===old)?old:"1Day";
+    interval.value=[...interval.options].some(o=>o.value===old)?old:interval.options[0]?.value||"1Day";
   }
   async function loadChain(){
     optionController?.abort();optionController=new AbortController();const run=++optionSequence;
@@ -116,6 +117,7 @@
   form.addEventListener("submit",async event=>{
     event.preventDefault();const requestId=restoredRequestId;invalidate();restoredRequestId=requestId;const run=sequence;
     try{
+      if(selected?.resource_type==="economic_series"){selected.economic_source=window.QuanturaEconomics.source();selected.frequency=window.QuanturaEconomics.frequency();}
       const config=settings(),request=api.requestFor(selected,config,[...basket.values()].map(r=>r.contract));
       controller=new AbortController();byId("qd-preview").disabled=true;byId("qd-preview").setAttribute("aria-busy","true");byId("qd-cancel").hidden=false;status("Downloading real provider observations…");
       let payload=await json(request.url,{method:"POST",body:JSON.stringify(request.body),signal:controller.signal});

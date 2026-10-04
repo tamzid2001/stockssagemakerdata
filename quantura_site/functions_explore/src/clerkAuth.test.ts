@@ -6,17 +6,19 @@ const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const previous={key:process.env.CLERK_JWT_KEY,secret:process.env.CLERK_SECRET_KEY,fetch:globalThis.fetch};
 process.env.CLERK_JWT_KEY=publicKey.export({type:"spki",format:"pem"}).toString();
 process.env.CLERK_SECRET_KEY="sk_test_unit_test_only";
-let member=true,legacyCalls=0;
+let member=true,legacyCalls=0,keyRevoked=false,keySubject="user_KeyAdmin";
 globalThis.fetch=async(input:any)=>{
   const url=String(input.url||input);
-  assert.match(url,/^https:\/\/api\.clerk\.com\/v1\//);
+  assert.match(url,/^https:\/\/api\.clerk\.com\/(?:v1\/|api_keys\/)/);
+  if(url.includes("/api_keys/verify"))return Response.json({object:"api_key",id:"ak_Test",type:"api_key",name:"Account key",subject:keySubject,scopes:["forecasts:read"],revoked:keyRevoked,expired:false,expiration:null,created_by:"user_KeyAdmin",created_at:Date.now(),updated_at:Date.now()});
+  if(url.includes("/users/user_KeyAdmin"))return Response.json({object:"user",id:"user_KeyAdmin",external_id:"legacy_admin",primary_email_address_id:"email_admin",email_addresses:[{object:"email_address",id:"email_admin",email_address:"tamzid257@gmail.com",linked_to:[],verification:{status:"verified"}}],phone_numbers:[],web3_wallets:[],external_accounts:[],public_metadata:{},private_metadata:{},unsafe_metadata:{},banned:false,locked:false});
   if(url.includes("/users/user_TestMigration"))return Response.json({object:"user",id:"user_TestMigration",external_id:"legacy_uid",first_name:"Test",last_name:null,primary_email_address_id:"email_test",email_addresses:[{object:"email_address",id:"email_test",email_address:"test@example.com",linked_to:[],verification:{status:"verified"}}],phone_numbers:[],web3_wallets:[],external_accounts:[],public_metadata:{admin:true},private_metadata:{},unsafe_metadata:{uid:"victim"},banned:false,locked:false});
   if(url.includes("/organizations/org_TestTeam/memberships"))return Response.json({data:member?[{object:"organization_membership",id:"orgmem_test",role:"org:member",organization:{object:"organization",id:"org_TestTeam",name:"Team",slug:"team",created_by:"user_Other",public_metadata:{},private_metadata:{}},public_user_data:{user_id:"user_TestMigration",identifier:"test@example.com"},public_metadata:{},private_metadata:{}}]:[],total_count:member?1:0});
   if(url.includes("/billing/subscription"))return Response.json({errors:[]},{status:404});
   throw Error("Unexpected network request in auth test");
 };
 const {CLERK_ISSUER,createQuanturaAuth,isClerkToken}:typeof import("./clerkAuth")=require("./clerkAuth");
-const {resolveWorkspaceAccess,verifiedPlatformAdmin}:typeof import("./apiAccess")=require("./apiAccess");
+const {resolveWorkspaceAccess,verifiedPlatformAdmin,authenticatePlatformRequest}:typeof import("./apiAccess")=require("./apiAccess");
 const {subscriptionEntitlements}:typeof import("./clerkBilling")=require("./clerkBilling");
 after(()=>{
   if(previous.key===undefined)delete process.env.CLERK_JWT_KEY;else process.env.CLERK_JWT_KEY=previous.key;
@@ -65,4 +67,12 @@ test("billing permits active or cancelling paid periods and trials, while expire
   assert.equal(access().docs_available,true);assert.equal(access({status:"canceled"}).docs_available,true);
   assert.equal(access({isFreeTrial:true}).subscription_status,"trialing");
   for(const extra of [{status:"past_due"},{status:"ended"},{periodEnd:now},{periodStart:now+1},{plan:{slug:"free_user"}}])assert.equal(access(extra).docs_available,false);
+});
+
+test("native Clerk personal keys resolve the migrated administrator, enforce scopes and check revocation on every call",async()=>{
+ const options={db:{collection:()=>{throw Error("Native admin keys must not write or read legacy key documents");}} as any,auth:{} as any,adminEmails:["tamzid257@gmail.com"]};
+ const req={headers:{authorization:"Bearer ak_unit_test_secret"}} as any;
+ const key=await authenticatePlatformRequest(req,options);assert.equal(key.userId,"legacy_admin");assert.equal(key.platformAdmin,true);assert.equal(key.plan,"pro");assert.deepEqual(key.tokenScopes,["forecasts:read"]);
+ keyRevoked=true;await assert.rejects(authenticatePlatformRequest(req,options),/revoked/);keyRevoked=false;
+ keySubject="org_Organization";await assert.rejects(authenticatePlatformRequest(req,options),/api_key_invalid/);keySubject="user_KeyAdmin";
 });

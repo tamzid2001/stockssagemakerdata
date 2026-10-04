@@ -5,7 +5,7 @@ import { normalizePlan, PLAN_ENTITLEMENTS, planHasFeature, type PlanKey } from "
 import { clerkClient, getClerkUser, type QuanturaIdentity } from "./clerkAuth";
 import { clerkSubscriptionAccess } from "./clerkBilling";
 import { rapidApiPrincipal } from "./rapidApiAuth";
-import { requireEnterpriseApiAccess } from "./enterpriseAccess";
+import { requirePaidApiAccess } from "./enterpriseAccess";
 
 export const PLATFORM_API_SCOPES = [
   "account:read", "workspaces:read", "workspaces:write", "forecasts:read", "forecasts:write",
@@ -206,6 +206,21 @@ export async function authenticatePlatformRequest(
   const bearer = extractBearer(req);
   if (!bearer) throw new Error("api_key_missing");
 
+  if(bearer.startsWith("ak_")) {
+    const key=await clerkClient().apiKeys.verify(bearer).catch(()=>null);
+    if(!key)throw new Error("api_key_invalid");
+    if(key.revoked)throw new Error("api_key_revoked");
+    if(key.expired||key.expiration!==null&&key.expiration<=Date.now())throw new Error("api_key_expired");
+    // Personal keys cannot impersonate the creator of an organization key.
+    if(!key.subject.startsWith("user_"))throw new Error("api_key_invalid");
+    const user=await getClerkUser(key.subject);
+    if(user.banned||user.locked)throw new Error("api_key_invalid");
+    const userId=user.externalId||user.id;
+    await requirePaidApiAccess(options.db,userId,user.id);
+    const scopes=key.scopes.length?validatePlatformScopes(key.scopes):[...PLATFORM_API_SCOPES];
+    return {userId,clerkUserId:user.id,tokenId:key.id,tokenName:key.name,tokenScopes:scopes,plan:(await userPlan(options.db,userId,user.id))==="pro"?"pro":"research",authMethod:"api_key",platformAdmin:await verifiedPlatformAdmin(options.auth,userId,options.adminEmails,user.id)};
+  }
+
   if (!bearer.startsWith(KEY_PREFIX)) {
     const decoded = await options.auth.verifyIdToken(bearer).catch(() => null) as QuanturaIdentity | null;
     if (!decoded?.uid) throw new Error("api_key_invalid");
@@ -234,22 +249,29 @@ export async function authenticatePlatformRequest(
   const scopes = validatePlatformScopes(value.scopes);
   let clerkUserId=clean(value.clerk_user_id,128) || undefined;
   if(!clerkUserId && process.env.CLERK_SECRET_KEY)clerkUserId=(await options.db.collection("auth_accounts").doc(userId).get()).data()?.clerk_user_id;
-  await requireEnterpriseApiAccess(options.db, userId, clerkUserId);
-  // Authentication and revocation are still read every time. Last-used metadata
-  // needs minute precision, rather than a billed write for every polling call.
-  if (!Number.isFinite(Date.parse(String(value.last_used_at))) || Date.now()-Date.parse(String(value.last_used_at))>=60000) {
-    void snapshot.ref.set({ last_used_at: new Date().toISOString() }, { merge: true }).catch(() => undefined);
-  }
+  await requirePaidApiAccess(options.db, userId, clerkUserId);
+  // Revocation is checked on every request. Coalesce concurrent metadata
+  // updates and persist at most one last-used timestamp per five minutes.
+  touchApiKey(tokenId,snapshot.ref,value.last_used_at);
   return {
     userId,
     tokenId,
     tokenName: clean(value.name, 120),
     tokenScopes: scopes,
-    plan: "research",
+    plan: (await userPlan(options.db,userId,clerkUserId))==="pro"?"pro":"research",
     clerkUserId,
     authMethod: "api_key",
     platformAdmin: await verifiedPlatformAdmin(options.auth, userId, options.adminEmails, clerkUserId),
   };
+}
+
+const keyTouches=new Map<string,number>();
+function touchApiKey(id:string,ref:FirebaseFirestore.DocumentReference,last:unknown){
+  const now=Date.now(),persisted=Date.parse(String(last));
+  if(Number.isFinite(persisted)&&now-persisted<300000||now-(keyTouches.get(id)||0)<300000)return;
+  if(keyTouches.size>=2000)keyTouches.delete(keyTouches.keys().next().value!);
+  keyTouches.set(id,now);
+  void ref.set({last_used_at:new Date(now).toISOString()},{merge:true}).catch(()=>{if(keyTouches.get(id)===now)keyTouches.delete(id);});
 }
 
 export async function verifiedPlatformAdmin(auth: admin.auth.Auth, userId: string, allowed: readonly string[] = [], clerkUserId?: string): Promise<boolean> {
@@ -407,7 +429,7 @@ export async function createPersonalApiKey(
   principal: ApiPrincipal,
   input: { name: unknown; scopes: unknown; expiresAt?: unknown }
 ): Promise<{ id: string; key: string; prefix: string; name: string; scopes: PlatformApiScope[]; createdAt: string; expiresAt: string | null }> {
-  await requireEnterpriseApiAccess(db, principal.userId, principal.clerkUserId);
+  await requirePaidApiAccess(db, principal.userId, principal.clerkUserId);
   const name = clean(input.name, 120);
   if (!name) throw new Error("api_key_name_required");
   const scopes = validatePlatformScopes(input.scopes);
@@ -435,7 +457,7 @@ export async function writeApiAudit(
   db: FirebaseFirestore.Firestore,
   input: { principal?: ApiPrincipal; workspaceId?: string | null; endpoint: string; method: string; status: number; resource?: string | null; requestId: string; latencyMs: number }
 ): Promise<void> {
-  await db.collection(API_AUDIT).doc(input.requestId).set({
+  const record={
     request_id: input.requestId,
     token_id: input.principal?.tokenId || null,
     user_id: input.principal?.userId || null,
@@ -447,5 +469,9 @@ export async function writeApiAudit(
     response_status: input.status,
     success: input.status < 400,
     latency_ms: input.latencyMs,
-  });
+  };
+  // Successful polling reads are observable in platform logs without a billed
+  // document write. Keep durable mutation and failure audit records.
+  if(["GET","HEAD","OPTIONS"].includes(input.method.toUpperCase())&&input.status<400){console.info(JSON.stringify({event:"quantura_api_read",...record}));return;}
+  await db.collection(API_AUDIT).doc(input.requestId).set(record);
 }

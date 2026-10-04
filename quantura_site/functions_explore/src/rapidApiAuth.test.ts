@@ -11,7 +11,7 @@ test('RapidAPI authentication requires the private API-specific secret and a sup
   assert.equal(rapidApiPrincipal(req({'x-rapidapi-key':'consumer_app_key','x-rapidapi-user':'customer'})),null);
   const headers={'x-rapidapi-proxy-secret':'a'.repeat(48),'x-rapidapi-user':'customer','x-rapidapi-subscription':'CUSTOM'};
   for(const bad of ['wrong',''])assert.throws(()=>rapidApiPrincipal(req({...headers,'x-rapidapi-proxy-secret':bad})),/api_key_invalid/);
-  assert.throws(()=>rapidApiPrincipal(req({...headers,'x-rapidapi-subscription':'BASIC'})),/enterprise_upgrade_required/);
+  assert.throws(()=>rapidApiPrincipal(req({...headers,'x-rapidapi-subscription':'BASIC'})),/paid_api_required/);
   assert.throws(()=>rapidApiPrincipal(req({...headers,'x-rapidapi-user':'../customer'})),/api_key_invalid/);
   assert.throws(()=>rapidApiPrincipal(req(headers,'/v1/workspaces','POST')),/insufficient_scope/);
   assert.throws(()=>rapidApiPrincipal(req(headers,'/v1/ensemble-forecasts/test','DELETE')),/insufficient_scope/);
