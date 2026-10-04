@@ -74,7 +74,7 @@ The checked-in Dukascopy snapshot contains 1,504 instruments; the service refres
 
 ## API and MCP
 
-Programmatic API access is paid Pro and enterprise only. Pro and its 14-day trial cover the website research workflow. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
+Programmatic API access is available to paid Pro, enterprise and verified administrator accounts. The 14-day Pro trial covers the website research workflow; API access begins when the subscription is paid. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
 
 - [Developer overview](https://quantura.studio/developers/api)
 - [Live OpenAPI](https://quantura.studio/api/openapi.json)
