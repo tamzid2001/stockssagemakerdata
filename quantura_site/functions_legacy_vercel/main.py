@@ -6675,6 +6675,11 @@ def create_order(req: https_fn.CallableRequest) -> dict[str, Any]:
 @https_fn.on_call()
 def create_stripe_checkout_session(req: https_fn.CallableRequest) -> dict[str, Any]:
     token = _require_auth(req)
+    if (token.get("firebase") or {}).get("sign_in_provider") == "anonymous":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            "Sign in before purchasing.",
+        )
     data = req.data or {}
     order_id = str(data.get("orderId") or "").strip()
     meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}

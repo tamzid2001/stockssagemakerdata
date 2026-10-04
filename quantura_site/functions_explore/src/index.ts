@@ -10,6 +10,7 @@ import { registerGeminiMarketRoutes } from "./geminiMarketData";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { registerMarketDataRoutes } from "./marketDataRoutes";
 import { registerMarketSearchRoutes } from "./marketSearch";
+import { registerTikTokRoutes, tiktokRawBodyMiddleware } from "./tiktokIntegration";
 import { requireScope } from "./apiAccess";
 import { requireEnterpriseApiAccess } from "./enterpriseAccess";
 import { registerPolymarketMlbRoutes } from "./polymarketMlb";
@@ -162,6 +163,7 @@ const app = express();
 app.disable("x-powered-by");
 app.use(helmet());
 app.use(cors({ origin: true }));
+app.use(["/api/integrations/tiktok/webhook", "/integrations/tiktok/webhook"], tiktokRawBodyMiddleware());
 app.use(express.json({ limit: "25mb" }));
 
 type PostType = "forecast" | "backtest" | "agent" | "screener";
@@ -673,6 +675,7 @@ const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
 registerClerkAuthRoutes(ROUTES, db, legacyAuth);
+registerTikTokRoutes(ROUTES,{db,authenticate:req=>authenticatePlatformRequest(req,{db,auth,adminEmails:["tamzid257@gmail.com"]})});
 registerEconomicDataRoutes(ROUTES);
 registerGeminiMarketRoutes(ROUTES);
 registerMarketDataRoutes(ROUTES);

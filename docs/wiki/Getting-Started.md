@@ -9,7 +9,7 @@
    Profile uses Clerk account and billing components; Requests includes forecasts, downloads, uploaded CSVs and Jev responses.
 5. Compare opportunities in [Screener](https://quantura.studio/screener).
 
-Secure guest forecasts have fair-use limits. Sign-in uses Clerk with Google or email/password. Pro includes a 14-day website trial. Programmatic API access, personal keys and the OpenAPI reference require an active server-owned enterprise grant; browser-editable plans cannot grant access.
+Secure guest forecasts have fair-use limits. Sign-in uses Clerk with Google or email/password. Pro is $199.99/month or $1,999.92/year through Clerk, with a 14-day website trial and sign-in required before checkout. Programmatic API access, personal keys and the OpenAPI reference require an active server-owned enterprise grant; browser-editable plans cannot grant access.
 
 ## Develop locally
 
@@ -38,3 +38,10 @@ python3.12 -m venv .venv
 Real checkpoints require the locked inference dependencies, model access and applicable licensing. Operator credentials remain in private runtime/CI stores. Routine tests use mock fixtures; no broker orders are involved.
 
 [Contribution guide](https://github.com/tamzid2001/stockssagemakerdata/blob/main/CONTRIBUTING.md) · [Architecture](Architecture-and-Operations) · [Troubleshooting](https://github.com/tamzid2001/stockssagemakerdata/blob/main/TROUBLESHOOTING.md)
+
+## TikTok developer URLs
+
+- OAuth redirect: `https://quantura.studio/api/integrations/tiktok/callback`
+- Webhook: `https://quantura.studio/api/integrations/tiktok/webhook`
+
+An authenticated Quantura administrator starts Login Kit through `POST /api/integrations/tiktok/connect`. The callback validates browser-bound, single-use state and encrypts tokens in server-only storage. Webhooks verify TikTok signatures over raw bytes and deduplicate deliveries. Receipts have a 30-day `expires_at` field; enable Firestore TTL on that collection to enforce retention. Rotating the client secret requires reconnecting existing TikTok accounts. The current connection requests only `user.info.basic`; Display/Content Posting scopes and a sandbox review video need separate product approval.

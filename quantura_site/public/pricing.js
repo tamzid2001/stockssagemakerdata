@@ -20,7 +20,7 @@
   if(window.firebase?.auth)firebase.auth().onAuthStateChanged(async user=>{
     const run=++authSequence;if(!panel || !button)return;
     panel.dataset.trialDays="14";panel.dataset.subscriptionActive="false";button.dataset.labelAuth=button.dataset.labelGuest="Start 14-day free trial";
-    if(billingCopy)billingCopy.textContent="14 days free, then $200/month or $2,000/year. Cancel before the trial ends to avoid a charge.";
+    if(billingCopy)billingCopy.textContent="14 days free, then $199.99/month or $1,999.92/year. Cancel before the trial ends to avoid a charge.";
     if(!user || user.isAnonymous)return;
     try{
       const token=await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
@@ -31,7 +31,7 @@
         panel.dataset.subscriptionActive=String(data.pro_available);panel.dataset.trialDays="0";button.dataset.labelAuth="Get Pro";
         if(!button.disabled)button.textContent=data.pro_available?"Pro is active":"Get Pro";
         button.disabled=data.pro_available;
-        if(billingCopy)billingCopy.textContent=data.pro_available?"Your Pro access is active. Manage your trial or subscription below.":"$200/month or $2,000/year. Billed at checkout. Cancel renewal in Manage subscription.";
+        if(billingCopy)billingCopy.textContent=data.pro_available?"Your Pro access is active. Manage your trial or subscription below.":"$199.99/month or $1,999.92/year. Billed at checkout. Cancel renewal in Manage subscription.";
       }
     }catch{} // Checkout independently rechecks eligibility server-side.
   });

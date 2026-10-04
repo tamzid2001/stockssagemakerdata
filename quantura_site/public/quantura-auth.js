@@ -10,9 +10,9 @@
   const api={enabled:!native,ready:null,get organizationId(){return clerk?.organization?.id||null;},get workspaceId(){return workspaceId;},get signedIn(){return Boolean(clerk?.user);},
     get verifiedEmail(){const email=clerk?.user?.primaryEmailAddress;return email?.verification?.status==="verified"?email.emailAddress:null;},
     async getToken(fallbackUser){if(native || (fallbackUser?.isAnonymous && !clerk?.session))return fallbackUser?.getIdToken() || "";await api.ready;if(clerk?.session)return clerk.session.getToken();return fallbackUser?.isAnonymous ? fallbackUser.getIdToken() : "";},
-    async signIn(){await api.ready;clerk.openSignIn({afterSignInUrl:"/forecasting?panel=profile",afterSignUpUrl:"/forecasting?panel=profile"});},
+    async signIn(redirectUrl="/forecasting?panel=profile"){await api.ready;clerk.openSignIn({afterSignInUrl:redirectUrl,afterSignUpUrl:redirectUrl});},
     async signOut(){await api.ready;await clerk.signOut();},
-    async showPricing(){await api.ready;const host=document.querySelector("[data-clerk-pricing]");if(host){host.hidden=false;clerk.mountPricingTable(host,{for:"user",appearance});host.scrollIntoView({behavior:"smooth",block:"center"});}else location.assign("/forecasting?panel=profile");},
+    async showPricing(){await api.ready;if(!clerk?.user){await api.signIn("/pricing");return;}const host=document.querySelector("[data-clerk-pricing]");if(host){host.hidden=false;component("[data-clerk-pricing]","PricingTable",{for:"user",newSubscriptionRedirectUrl:"/forecasting?panel=profile",checkoutProps:{appearance}});host.scrollIntoView({behavior:"smooth",block:"center"});}else location.assign("/forecasting?panel=profile");},
   };
   window.QuanturaAuth=api;
   function script(path) {return new Promise((resolve,reject)=>{const node=document.createElement("script");node.src=domain+path;node.crossOrigin="anonymous";node.async=true;const timeout=setTimeout(()=>reject(Error("Account sign-in could not load. Please retry.")),15000);node.onload=()=>{clearTimeout(timeout);resolve();};node.onerror=()=>{clearTimeout(timeout);reject(Error("Account sign-in could not load. Please retry."));};document.head.append(node);});}
@@ -80,9 +80,8 @@
     const signout=event.target.closest("#header-signout");
     const purchase=event.target.closest('[data-trial-days] [data-action="purchase"]');
     if(purchase) {
-      // The exact $2,000 yearly price continues through the Stripe checkout.
-      const cycle=document.querySelector('[data-billing-cycle][aria-pressed="true"]')?.dataset.billingCycle || "monthly";
-      if(cycle!=="yearly"){event.preventDefault();event.stopImmediatePropagation();(clerk?.user?api.showPricing():api.signIn()).catch(showError);return;}
+      event.preventDefault();event.stopImmediatePropagation();
+      api.showPricing().catch(showError);return;
     }
     if(signin){event.preventDefault();event.stopImmediatePropagation();if(clerk?.user)location.assign("/forecasting?panel=profile");else api.signIn().catch(showError);}
     else if(signout){event.preventDefault();event.stopImmediatePropagation();api.signOut().catch(showError);}
