@@ -9,7 +9,7 @@
    Profile uses Clerk account and billing components; Requests includes forecasts, downloads, uploaded CSVs and Jev responses.
 5. Compare opportunities in [Screener](https://quantura.studio/screener).
 
-Secure guest forecasts have fair-use limits. Sign-in uses Clerk with Google or email/password. Pro is $199.99/month or $1,999.92/year through Clerk, with a 14-day website trial and sign-in required before checkout. Programmatic API access, personal keys and the OpenAPI reference require an active server-owned enterprise grant; browser-editable plans cannot grant access.
+Secure guest forecasts have fair-use limits. Sign-in uses Clerk with Google or email/password. Pro is $199.99/month or $1,999.92/year through Clerk, with a 14-day website trial and sign-in required before checkout. Programmatic API access, personal keys and the OpenAPI reference require paid Pro, a server-owned enterprise grant, or verified administrator access. Trial-only subscriptions and browser-editable plan fields cannot grant API access.
 
 ## Develop locally
 
