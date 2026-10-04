@@ -14691,7 +14691,9 @@
       window.QuanturaMarketSelection = row;
       if (!row?.contract_id) {
         if (row?.symbol) {
-          ui.ensembleSourceType.value = row.source === "kalshi_perps" ? "kalshi_perp" : "ticker";
+          ui.ensembleSourceType.value = row.resource_type === "economic_series" ? "economic_series"
+            : row.source === "gemini" ? "gemini_spot"
+            : row.source === "kalshi_perps" ? "kalshi_perp" : "ticker";
           ui.ensembleTicker.value = row.symbol;
           const provider = document.getElementById("ensemble-provider");
           if (provider) provider.value = row.source === "dukascopy" ? "dukascopy" : "auto";
