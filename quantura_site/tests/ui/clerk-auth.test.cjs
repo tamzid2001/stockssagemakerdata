@@ -2,10 +2,10 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const script=fs.readFileSync(path.join(__dirname,'../../public/quantura-auth.js'),'utf8');
 const tick=()=>new Promise(resolve=>setTimeout(resolve,5));
 function setup({signedIn=true,restored=false,native=false}={}) {
- const d=new JSDOM('<body><div class="nav-actions"><button id="header-auth">Sign in</button></div><section id="auth"><div class="container"><div class="auth-grid">Old auth</div></div></section><div data-clerk-user-profile></div><div id="toast"></div></body>',{url:'https://quantura.studio/',runScripts:'outside-only'}),w=d.window;
+ const d=new JSDOM('<body><div class="nav-actions"><span id="header-user-status">Guest Session</span><button id="header-auth">Sign in</button></div><section id="auth"><div class="container"><div class="auth-grid">Old auth</div></div></section><div data-clerk-user-profile></div><div id="toast"></div></body>',{url:'https://quantura.studio/',runScripts:'outside-only'}),w=d.window;
  const calls={bridge:0,signOut:0,legacyClick:0,signIn:0,tokens:[]};
  const session={id:'sess_Unit',getToken:async()=> 'clerk-session-unit'};
- const user={id:'user_Unit'};
+ const user={id:'user_Unit',primaryEmailAddress:{emailAddress:'tamzid257@gmail.com',verification:{status:'verified'}}};
  const auth={currentUser:{uid:'old_uid',isAnonymous:false,getIdToken:async()=> 'firebase-sdk-unit',getIdTokenResult:async()=>({claims:restored?{clerk_user_id:'user_Unit',clerk_session_id:'sess_Unit'}:{}})},signOut:async()=>{calls.signOut++;auth.currentUser=null;},signInWithCustomToken:async token=>{calls.tokens.push(token);auth.currentUser={uid:'legacy_uid',isAnonymous:false};}};
  w.firebase={auth:()=>auth};w.__QUANTURA_NATIVE_APP__=native;
  w.Clerk={user:signedIn?user:null,session:signedIn?session:null,organization:null,load:async()=>{},addListener:fn=>{w.updateClerk=fn;},mountSignIn:()=>{},mountUserButton:()=>{},mountUserProfile:()=>{},openSignIn:()=>{calls.signIn++;},signOut:async()=>{w.updateClerk({user:null,session:null,organization:null});}};
@@ -19,6 +19,9 @@ test('Clerk identity restores the imported UID but every API token stays a Clerk
  const {d,w,calls,auth}=setup();await w.QuanturaAuth.ready;
  assert.equal(calls.bridge,1);assert.deepEqual(calls.tokens,['firebase-custom-unit']);assert.equal(auth.currentUser.uid,'legacy_uid');
  assert.equal(await w.QuanturaAuth.getToken(auth.currentUser),'clerk-session-unit');
+ assert.equal(w.QuanturaAuth.verifiedEmail,'tamzid257@gmail.com');
+ assert.equal(w.document.getElementById('header-user-status'),null);
+ assert.equal(w.document.getElementById('header-auth').hidden,true);
  w.updateClerk({user:w.Clerk.user,session:w.Clerk.session,organization:{id:'org_Unit'}});await tick();
  assert.equal(calls.bridge,1);assert.equal(w.QuanturaAuth.workspaceId,'org_Unit');d.window.close();
 });

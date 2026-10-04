@@ -32,7 +32,6 @@ const buildTerminalProfilePanel = (dashboardHtml) => {
     { name: "profile", label: "Account settings", open: true },
     { name: "orders", label: "Orders and Requests" },
     { name: "collaboration", label: "Team settings" },
-    { name: "developer", label: "API keys and developer access" },
   ];
   const sections = groups.map(({ name, label, guest, open }) => `
     <details class="terminal-profile-group" id="terminal-profile-${name}"${guest ? " data-profile-guest" : " data-profile-account hidden"}${open ? " open" : ""}>
@@ -41,7 +40,7 @@ const buildTerminalProfilePanel = (dashboardHtml) => {
     </details>`).join("");
   return `<!-- BEGIN_TERMINAL_PROFILE_PANEL -->
   <section class="panel hidden terminal-profile-panel" data-panel="profile" aria-labelledby="terminal-profile-title">
-    <div class="terminal-profile-heading"><div class="eyebrow">Your account</div><h2 id="terminal-profile-title">Profile</h2><p class="small muted">Manage your account, saved requests, team, and API access.</p></div>
+    <div class="terminal-profile-heading"><h2 id="terminal-profile-title">Profile</h2><p class="small muted">Account settings, requests, and orders.</p></div>
     ${sections}
     <div class="terminal-profile-alerts hidden" data-profile-account><a href="/screener#saved-alerts"><i class="iconoir-bell-notification" aria-hidden="true"></i><span>Saved alerts and notifications</span></a></div>
   </section>

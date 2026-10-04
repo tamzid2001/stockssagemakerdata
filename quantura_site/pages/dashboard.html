@@ -97,10 +97,10 @@
 			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
 			            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
 		            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
-		            <a class="sidebar-link" href="/forecasting?panel=profile#terminal-profile-developer" data-panel-target="developer"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>Developer</span></a>
+
 		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Team settings</span></a>
 
-		            <a class="sidebar-link" href="/account" data-panel-target="auth" id="dashboard-auth-link"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></a>
+
 		          </nav>
 	        </aside>
 
@@ -117,7 +117,7 @@
           </div>
 	          <div class="section-title">
 	            <h2>Sign in to unlock your dashboard</h2>
-	            <p class="small">Email/password plus Google, GitHub, and X sign-in, secured to your account.</p>
+	            <p class="small">Sign in with Google or your email and password.</p>
 	          </div>
           <div class="auth-grid">
             <div class="card">
@@ -218,49 +218,10 @@
           </div>
           <div class="clerk-account-card" data-clerk-user-profile></div>
           <div data-clerk-pricing hidden></div>
-          <div class="content-grid">
-            <div class="card">
-              <h3>Account</h3>
-              <div class="profile-item"><span class="label">Signed in as</span><span id="user-email" class="value">Not signed in</span></div>
-              <div class="profile-item"><span class="label">Provider</span><span id="user-provider" class="value">—</span></div>
-              <div class="profile-item"><span class="label">Status</span><span id="user-status" class="pill">Logged Out</span></div>
-              <div class="billing-panel"><span class="label">Billing</span><a id="billing-portal-link" class="cta secondary small" href="/account">Sign in to manage billing</a><span class="small muted">Manage your existing Stripe subscription here. Clerk subscriptions are managed in Account settings above.</span></div>
-              <div class="notice small">This settings area is authenticated and private. Public profiles and user discovery have been removed.</div>
-            </div>
-
-          </div>
-
-
         </div>
       </section>
 
-      <section class="section panel hidden" data-panel="developer" id="developer">
-        <div class="container">
-          <div class="section-title">
-            <div><div class="eyebrow">Account / Developer</div><h2>API Keys</h2><p class="small">Create personal credentials for Quantura's versioned API. Workspace roles and plan access are evaluated dynamically on every request.</p></div>
-            <div class="hero-actions" id="profile-api-docs-links" hidden><a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>Interactive API docs</span></a><a class="cta secondary" href="/api/openapi.json"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>OpenAPI</span></a></div>
-          </div>
-          <p id="profile-api-docs-status" class="small" role="status">API and MCP access are available with an enterprise agreement.</p>
-          <a class="cta secondary" id="profile-api-trial" href="/pricing#enterprise">Explore Pro</a>
-          <div class="content-grid developer-key-grid">
-            <form id="api-key-form" class="card" autocomplete="off">
-              <h3>Create API key</h3>
-              <div class="field"><label class="label" for="api-key-name">Name</label><input id="api-key-name" maxlength="120" placeholder="Research notebook" required /></div>
-              <div class="field"><label class="label" for="api-key-expiration">Expiration (optional)</label><input id="api-key-expiration" type="date" /></div>
-              <fieldset class="api-scope-fieldset"><legend>Scopes</legend><div id="api-key-scopes" class="api-scope-grid"><span class="small muted">Sign in to load available scopes.</span></div></fieldset>
-              <button class="cta" type="submit">Create API Key</button>
-              <p id="api-key-status" class="small muted" role="status" aria-live="polite">The full secret is shown once and is never stored in plaintext.</p>
-            </form>
-            <section class="card" aria-labelledby="api-key-list-title">
-              <div class="card-head"><div><h3 id="api-key-list-title">Your keys</h3><p class="small muted">Revoke or replace credentials immediately.</p></div><button class="cta secondary small" id="api-key-refresh" type="button">Refresh</button></div>
-              <div id="api-key-secret" class="api-key-secret hidden" role="status" aria-live="polite"></div>
-              <div id="api-key-list" class="order-list"><div class="empty-state">Sign in to manage API keys.</div></div>
-            </section>
-          </div>
-          <div class="notice small">Viewer collaborators may use their own key for read-only resources in a shared workspace even when their personal plan does not grant unrestricted API access. Removing the membership revokes that workspace access immediately.</div>
-          <div class="notice small"><strong>AI clients:</strong> connect to <a href="https://quantura.mintlifysite.com/mcp"><code>https://quantura.mintlifysite.com/mcp</code></a>. Only approved read-only workspace and CSV metadata operations are exposed as tools.</div>
-        </div>
-      </section>
+
 
 
 

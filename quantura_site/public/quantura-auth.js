@@ -8,6 +8,7 @@
   let clerk,bridgeKey=null,bridgePromise=Promise.resolve(),workspaceId=null;
   const appearance={variables:{colorPrimary:"#18b6a4",borderRadius:"0.65rem",fontFamily:"Inter, system-ui, sans-serif"},elements:{rootBox:{width:"100%"},cardBox:{boxShadow:"none"}}};
   const api={enabled:!native,ready:null,get organizationId(){return clerk?.organization?.id||null;},get workspaceId(){return workspaceId;},get signedIn(){return Boolean(clerk?.user);},
+    get verifiedEmail(){const email=clerk?.user?.primaryEmailAddress;return email?.verification?.status==="verified"?email.emailAddress:null;},
     async getToken(fallbackUser){if(native || (fallbackUser?.isAnonymous && !clerk?.session))return fallbackUser?.getIdToken() || "";await api.ready;if(clerk?.session)return clerk.session.getToken();return fallbackUser?.isAnonymous ? fallbackUser.getIdToken() : "";},
     async signIn(){await api.ready;clerk.openSignIn({afterSignInUrl:"/forecasting?panel=profile",afterSignUpUrl:"/forecasting?panel=profile"});},
     async signOut(){await api.ready;await clerk.signOut();},
@@ -48,8 +49,20 @@
     if(authSection && !authSection.querySelector("[data-clerk-sign-in]")) {
       const host=document.createElement("div");host.dataset.clerkSignIn="";host.className="clerk-account-card";authSection.querySelector(".container")?.append(host);
     }
-    if(!resources.user)component("[data-clerk-sign-in]","SignIn",{routing:"hash",signUpUrl:"/account"});
+    if(!resources.user) {
+      if(new URLSearchParams(location.search).get("auth")==="sign-up")component("[data-clerk-sign-in]","SignUp",{routing:"hash",signInUrl:"/forecasting?panel=profile",forceRedirectUrl:"/forecasting?panel=profile"});
+      else component("[data-clerk-sign-in]","SignIn",{routing:"hash",signUpUrl:"/forecasting?panel=profile&auth=sign-up",forceRedirectUrl:"/forecasting?panel=profile"});
+    }
     const header=document.querySelector(".nav-actions");
+    // Clerk's account menu is the web identity display; old session badges
+    // must not reappear when the data SDK restores its anonymous credential.
+    document.querySelectorAll("#header-user-status, #header-user-email, #header-signout").forEach(host=>host.remove());
+    document.querySelectorAll('#dashboard-auth-link, [data-auth-nav="true"]').forEach(host=>host.remove());
+    if(header && !header.querySelector("#header-auth")) {
+      const signin=document.createElement("button");signin.id="header-auth";signin.type="button";signin.className="cta secondary";signin.textContent="Sign in";header.append(signin);
+    }
+    const signin=header?.querySelector("#header-auth");
+    if(signin)signin.hidden=Boolean(resources.user);
     if(header && !header.querySelector("[data-clerk-user-button]")) {
       const host=document.createElement("div");host.dataset.clerkUserButton="";header.append(host);
     }

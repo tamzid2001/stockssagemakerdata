@@ -8,7 +8,7 @@ const { buildTerminalProfilePanel, extractDashboardPanel } = require('../../func
 const root = path.resolve(__dirname, '../..');
 const read = (name) => fs.readFileSync(path.join(root, name), 'utf8');
 
-test('archived dashboard account controls render once inside Terminal Profile', () => {
+test('Clerk account settings and saved research render once inside Terminal Profile', () => {
   const source = read('pages/forecasting.html');
   const output = read('functions_ssr/templates/forecasting.html');
   const dashboard = read('pages/dashboard.html');
@@ -20,9 +20,11 @@ test('archived dashboard account controls render once inside Terminal Profile', 
   const { document } = new JSDOM(output).window;
   const profile = document.querySelector('[data-panel-router="terminal"] [data-panel="profile"]');
   assert.ok(profile);
-  for (const id of ['email-auth-form', 'user-email', 'profile-requests', 'workspace-select', 'api-key-form']) {
+  for (const id of ['profile-requests', 'workspace-select']) {
     assert.ok(profile.querySelector(`#${id}`), id);
   }
+  assert.ok(profile.querySelector('[data-clerk-user-profile]'));
+  for(const id of ['user-email','user-status','billing-portal-link','api-key-form','terminal-profile-developer'])assert.equal(profile.querySelector(`#${id}`),null,id);
   const ids = [...document.querySelectorAll('[id]')].map((el) => el.id);
   assert.equal(new Set(ids).size, ids.length, 'source and imported controls must not duplicate IDs');
   assert.equal(profile.querySelector('[id="productivity"]'), null);
@@ -30,11 +32,11 @@ test('archived dashboard account controls render once inside Terminal Profile', 
   assert.equal(profile.querySelector('[id="tasks-calendar"]'), null);
 });
 
-test('Terminal navigation owns Profile and sign-in/out; mobile navigation mirrors them', () => {
+test('Terminal navigation keeps Profile while Clerk owns account sign-in and sign-out', () => {
   const { document } = new JSDOM(read('pages/forecasting.html')).window;
   const labels = [...document.querySelectorAll('.sidebar-nav .sidebar-link')].map((link) => link.textContent.trim());
-  assert.deepEqual(labels, ['Forecast', 'Download', 'Screener', 'Profile', 'Sign in']);
-  assert.equal(document.querySelector('#dashboard-auth-link')?.textContent.trim(), 'Sign in');
+  assert.deepEqual(labels, ['Forecast', 'Download', 'Screener', 'Profile']);
+  assert.equal(document.querySelector('#dashboard-auth-link'), null);
   assert.equal(document.querySelector('#header-auth'), null);
   const app = read('public/app.js');
   assert.match(app, /terminal: \["forecast", "download", "screener", "profile"\]/);
