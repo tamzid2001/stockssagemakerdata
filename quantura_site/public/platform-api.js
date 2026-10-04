@@ -15,11 +15,21 @@
     try{
       const access=await sessionRequest("/api/shop/subscription-access");if(run!==accessSequence)return;
       if(docsLinks)docsLinks.hidden=!access.docs_available;
+      form.hidden=!access.docs_available;
       if(trialLink)trialLink.hidden=access.docs_available;
-      if(docsStatus)docsStatus.textContent=access.docs_available?access.subscription_status==="trialing"?`Pro trial · ends ${formatDate(access.trial_ends_at)}.`:"Pro API documentation is ready.":"API documentation is included with an active 14-day Pro trial or subscription.";
+      if(docsStatus)docsStatus.textContent=access.docs_available?"Enterprise API documentation is ready.":"API and MCP access require an enterprise agreement.";
     }catch{if(run===accessSequence && docsStatus)docsStatus.textContent="Sign in to check your API documentation access.";}
   }
   const readDefaults = new Set(["account:read", "workspaces:read", "forecasts:read", "predictions:read", "screener:read", "market_data:read", "options:read", "sports:read", "datasets:read", "backtests:read", "api_usage:read", "sagemaker:read"]);
+  docsLinks?.querySelector('a[href="/api/openapi.json"]')?.addEventListener("click", async event => {
+    event.preventDefault();
+    try {
+      const specification=await sessionRequest("/api/openapi.json");
+      const url=URL.createObjectURL(new Blob([JSON.stringify(specification,null,2)],{type:"application/json"}));
+      const link=document.createElement("a");link.href=url;link.download="quantura-openapi.json";link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    } catch(error) { docsStatus.textContent=error.message; }
+  });
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
   const setStatus = (message, tone = "") => { statusHost.textContent = message; statusHost.dataset.tone = tone; };
@@ -27,7 +37,7 @@
   async function sessionRequest(path, options = {}) {
     const user = window.firebase?.auth?.().currentUser;
     if (!user || user.isAnonymous) throw new Error("Sign in with a full account to manage API keys.");
-    const token = await user.getIdToken();
+    const token = await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
     const response = await fetch(path, {
       ...options,
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}), ...(options.headers || {}) },

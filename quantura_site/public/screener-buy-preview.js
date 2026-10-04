@@ -18,7 +18,13 @@
         const link=document.createElement("a");
         // Never trust a provider URL as a website action.
         link.href="/forecasting?panel=forecast&screenerTicker="+encodeURIComponent(row.ticker)+"&screenerScan="+encodeURIComponent(data.scanId);
-        link.textContent=row.ticker;link.className="home-buy-symbol";
+        link.className="home-buy-symbol";
+        if(window.QuanturaLogos) {
+          const logo=document.createElement("span");
+          logo.innerHTML=window.QuanturaLogos.markup({ticker:row.ticker,source:"stocks"});
+          link.append(logo);
+        }
+        const symbol=document.createElement("span");symbol.textContent=row.ticker;link.append(symbol);
         const title=document.createElement("p");title.textContent=row.company_name || row.ticker;
         const details=document.createElement("dl");
         for (const [name,value] of [["Daily close",row.actual_price],["First P50",row.p50],["First P99",row.p99]]) {

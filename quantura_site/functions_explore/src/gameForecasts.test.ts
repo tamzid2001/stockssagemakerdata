@@ -30,17 +30,18 @@ test("public contract metadata pairs actual binary sides without leaking worker 
  assert.equal(row.side,"no");assert.equal(row.symbol,"KXMLBGAME-26SEP261915CHCBOS-CHC");assert.equal(row.worker_token,undefined);
 });
 test("paged game catalog reaches outcomes beyond 1,000 and rejects malformed cursors",async t=>{
- t.mock.method(Date,"now",()=>now);
+ let clock=now;t.mock.method(Date,"now",()=>clock);
  const routes=new Map<string,Function>(),rows=Array.from({length:1002},(_,n)=>({id:n.toString(16).padStart(32,"0"),data:()=>({...fixture(),id:n.toString(16).padStart(32,"0"),side:"yes"})}));
  let after="",limit=0,queries=0;
  const query:any={where:()=>query,orderBy:()=>query,startAfter:(cursor:string)=>{after=cursor;return query;},limit:(n:number)=>{limit=n;return query;},get:async()=>{queries++;const docs=rows.filter(row=>!after||row.id>after).slice(0,limit);return {docs,size:docs.length};}};
  const db:any={collection:(name:string)=>name==="game_forecast_catalog"?query:{get:async()=>({docs:[]})}};
  registerGameForecastRoutes({get:(path:string,handler:Function)=>routes.set(path,handler),post:()=>{}}as any,db);
  const fetchPage=async(cursor="")=>{let value:any;const res:any={setHeader:()=>{},status:(code:number)=>{res.statusCode=code;return res;},json:(payload:any)=>{value=payload;}};await routes.get("/screener/games")!({query:{cursor}},res);return {value,status:res.statusCode||200};};
- const first=await fetchPage();assert.equal(first.value.items.length,500);
+ const [first,concurrent]=await Promise.all([fetchPage(),fetchPage()]);assert.equal(first.value.items.length,500);assert.equal(concurrent.value.items.length,500);
  const second=await fetchPage(first.value.next_cursor);assert.equal(second.value.items.length,500);
  const third=await fetchPage(second.value.next_cursor);assert.equal(third.value.items.length,2);assert.equal(third.value.next_cursor,null);assert.equal(third.value.bounded,false);
- const invalid=await fetchPage("../../private");assert.equal(invalid.status,400);assert.equal(queries,3);
+ const invalid=await fetchPage("../../private");assert.equal(invalid.status,400);assert.equal(queries,1,"concurrent requests and all pages share one public catalog read");
+ clock+=5*60000;await fetchPage();assert.equal(queries,2,"a new publication is read after five minutes");
 });
 
 test("detail exposes genuine observations and safe market links while the paged catalog omits history",()=>{

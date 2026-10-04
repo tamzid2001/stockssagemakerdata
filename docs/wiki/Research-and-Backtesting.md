@@ -2,11 +2,11 @@
 
 A forecast provides a distribution; a strategy supplies entry, sizing, fill, exit and risk rules. Keep publication/inference time separate from the data cutoff to avoid backdated decisions.
 
-## Public backtest API
+## Enterprise backtest API
 
 `POST /api/v1/backtests` implements bounded, long-only, one-position quantile rules. Completed-bar signals fill at the next observed open. Exported rules remain `live_eligible: false`.
 
-The API does not implement short averaging ladders, broker lots, basket-average targets, swap accounting or median-direction filters. Inspect `GET /api/v1/backtests/strategy-schema` before creating rules. The [algorithmic strategy guide](https://quantura.mintlify.app/docs/algorithmic-strategy) includes a valid P01-entry/P50-target API example.
+The API does not implement short averaging ladders, broker lots, basket-average targets, swap accounting or median-direction filters. Inspect `GET /api/v1/backtests/strategy-schema` before creating rules. The [algorithmic strategy guide](https://quantura.studio/developers/api#algorithmic-strategy) includes a valid P01-entry/P50-target API example.
 
 ## Dedicated averaged-basket studies
 
@@ -34,4 +34,4 @@ The $100,000 2-Step comparison uses the static $90,000 equity floor and a $5,000
 
 Kalshi coin automation is paper only. Research workflows do not carry broker credentials or order endpoints.
 
-[FTMO methodology](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/ftmo-dukas-hourly-study.md) · [SPY methodology](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/spy-hourly-research.md) · [Backtest API](https://quantura.mintlify.app/docs/backtesting)
+[FTMO methodology](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/ftmo-dukas-hourly-study.md) · [SPY methodology](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/spy-hourly-research.md) · [Backtest API](https://quantura.studio/developers/api#backtesting)

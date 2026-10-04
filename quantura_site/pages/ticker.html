@@ -5,12 +5,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Ticker Details</title>
-        <meta name="description" content="Normalized ticker profile, valuation, fundamentals, and full yfinance fields." />
+        <meta name="description" content="Normalized ticker profile, valuation, fundamentals, and available provider fields." />
         <meta name="robots" content="index, follow" />
-    <meta name="keywords" content="ticker intelligence, company fundamentals, valuation metrics, yfinance ticker profile" />
+    <meta name="keywords" content="ticker intelligence, company fundamentals, valuation metrics, ticker profile" />
         <link rel="canonical" href="https://quantura.studio/ticker" />
         <meta property="og:title" content="Quantura Ticker Details" />
-        <meta property="og:description" content="Normalized ticker profile, valuation, fundamentals, and full yfinance fields." />
+        <meta property="og:description" content="Normalized ticker profile, valuation, fundamentals, and available provider fields." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/ticker" />
         <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
@@ -18,7 +18,7 @@
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Quantura Ticker Details" />
-    <meta name="twitter:description" content="Normalized ticker profile, valuation, fundamentals, and full yfinance fields." />
+    <meta name="twitter:description" content="Normalized ticker profile, valuation, fundamentals, and available provider fields." />
     <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/ticker" />
     <meta name="author" content="Quantura" />
@@ -50,6 +50,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
     <script defer src="/app.js?v=20261003-header-trial"></script>
     <script defer src="/analysis-service.js"></script>
     <script defer src="/ticker-details.js"></script>
@@ -78,7 +79,7 @@
         <div class="container" style="max-width: 1120px;">
           <div class="section-title">
             <h1>Ticker Details</h1>
-            <p class="small">Fast path first, full info on demand. All fields tab renders the complete `yfinance.info` payload safely.</p>
+            <p class="small">Company information and available source fields.</p>
           </div>
 
           <div class="card">

@@ -5,12 +5,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Quantura Pro Pricing | Forecasting & Research</title>
-        <meta name="description" content="Quantura Pro: $200 monthly or $2,000 yearly. Forecasts, market screening, historical data, API access, and custom enterprise pricing." />
+        <meta name="description" content="Quantura Pro: $200 monthly or $2,000 yearly. Forecasts, market screening, historical data, and custom enterprise API access." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="Quantura Pro pricing, forecast subscription, enterprise market research" />
         <link rel="canonical" href="https://quantura.studio/pricing" />
         <meta property="og:title" content="Quantura Pro Pricing" />
-        <meta property="og:description" content="One Pro plan: $200 monthly or $2,000 annually. Forecasts, market screening, historical data, and API research tools." />
+        <meta property="og:description" content="One Pro plan: $200 monthly or $2,000 annually. Forecasts, market screening, historical data, and saved research." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/pricing" />
         <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
@@ -18,7 +18,7 @@
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Quantura Pro Pricing" />
-    <meta name="twitter:description" content="One Pro plan: $200 monthly or $2,000 annually. Forecasts, market screening, historical data, and API research tools." />
+    <meta name="twitter:description" content="One Pro plan: $200 monthly or $2,000 annually. Forecasts, market screening, historical data, and saved research." />
     <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/pricing" />
     <meta name="author" content="Quantura" />
@@ -52,6 +52,7 @@
 	    <script defer src="/ga4-context.js?v=20260927a"></script>
     <script defer src="/pricing.js?v=20261003-pro"></script>
     <link rel="stylesheet" href="/pricing.css?v=20261003-pro" />
+    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
     <script defer src="/app.js?v=20261003-header-trial"></script>
   <script defer src="/q-market.js?v=20261003-header"></script>
 <script defer src="/market-search.js?v=20261003-header"></script>
@@ -105,19 +106,20 @@
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Unlimited daily forecasts</strong><span>Run multi-model forecasts and inspect the observations behind each range.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Market discovery & screening</strong><span>Stocks, perpetuals, and today's prediction-market games.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Historical data & exports</strong><span>Download supported sources and keep your research portable.</span></div></li>
-            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>API & MCP access</strong><span>Connect forecasts and datasets to your own research tools.</span></div></li>
+            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Forecast review</strong><span>Compare scenarios and revisit saved results.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Saved requests & workspaces</strong><span>Revisit results, share research, and manage your account.</span></div></li>
           </ul>
 
         </div>
       </div>
     </article>
-    <aside class="enterprise-contact"><div><p class="eyebrow">FOR TEAMS</p><h2>Need a custom fit?</h2><p>Tell us about your data, volume, and integration needs. We'll scope a tailored enterprise proposal.</p></div><button type="button" class="cta secondary" id="enterprise-open" aria-haspopup="dialog" aria-controls="enterprise-dialog">Contact enterprise <i class="iconoir-arrow-up-right" aria-hidden="true"></i></button></aside>
+    <aside class="enterprise-contact" id="enterprise"><div><p class="eyebrow">FOR TEAMS</p><h2>Need a custom fit?</h2><p>Tell us about your data, volume, and integration needs. We'll scope a tailored enterprise proposal.</p></div><button type="button" class="cta secondary" id="enterprise-open" aria-haspopup="dialog" aria-controls="enterprise-dialog">Contact enterprise <i class="iconoir-arrow-up-right" aria-hidden="true"></i></button></aside>
   </section>
   <section class="container pricing-faq" aria-labelledby="pricing-faq-title"><h2 id="pricing-faq-title">A few things to know</h2>
-    <details><summary>How does the 14-day free trial work?</summary><p>New Pro accounts get 14 days of the full Pro plan, including API access. A payment method is required. Your selected monthly or annual plan starts billing when the trial ends. Cancel in Manage subscription before then to avoid a charge. One trial per account.</p></details>
+    <div data-clerk-pricing hidden></div>
+    <details><summary>How does the 14-day free trial work?</summary><p>New Pro accounts get 14 days of the full Pro plan, with API and MCP available separately for enterprise accounts. A payment method is required. Your selected monthly or annual plan starts billing when the trial ends. Cancel in Manage subscription before then to avoid a charge. One trial per account.</p></details>
     <details><summary>How does annual billing work?</summary><p>You pay $2,000 once per year. Monthly billing is $200 each month, or $2,400 over a year. Annual billing saves $400. Both include the same Pro features.</p></details>
-    <details><summary>Can I cancel?</summary><p>Yes. Use Manage subscription to open Stripe's billing portal and cancel renewal. Your access continues through the paid period.</p></details>
+    <details><summary>Can I cancel?</summary><p>Yes. Open Manage subscription to cancel renewal. Your access continues through the paid period.</p></details>
     <details><summary>What can I forecast?</summary><p>Supported stocks, crypto and perpetuals, prediction markets, and uploaded time series. Availability depends on the provider and the genuine history each selected model requires.</p></details>
   </section>
   <dialog id="enterprise-dialog" class="enterprise-dialog" aria-labelledby="enterprise-title">

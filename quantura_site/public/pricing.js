@@ -23,15 +23,15 @@
     if(billingCopy)billingCopy.textContent="14 days free, then $200/month or $2,000/year. Cancel before the trial ends to avoid a charge.";
     if(!user || user.isAnonymous)return;
     try{
-      const token=await user.getIdToken();
+      const token=await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
       const response=await fetch("/api/shop/subscription-access",{headers:{Authorization:`Bearer ${token}`,Accept:"application/json"},cache:"no-store"});
       if(!response.ok)return;
       const {data}=await response.json();if(run!==authSequence)return;
-      if(!data.can_trial || data.docs_available){
-        panel.dataset.subscriptionActive=String(data.docs_available);panel.dataset.trialDays="0";button.dataset.labelAuth="Get Pro";
-        if(!button.disabled)button.textContent=data.docs_available?"Pro is active":"Get Pro";
-        button.disabled=data.docs_available;
-        if(billingCopy)billingCopy.textContent=data.docs_available?"Your Pro access is active. Manage your trial or subscription below.":"$200/month or $2,000/year. Billed at checkout. Cancel renewal in Manage subscription.";
+      if(!data.can_trial || data.pro_available){
+        panel.dataset.subscriptionActive=String(data.pro_available);panel.dataset.trialDays="0";button.dataset.labelAuth="Get Pro";
+        if(!button.disabled)button.textContent=data.pro_available?"Pro is active":"Get Pro";
+        button.disabled=data.pro_available;
+        if(billingCopy)billingCopy.textContent=data.pro_available?"Your Pro access is active. Manage your trial or subscription below.":"$200/month or $2,000/year. Billed at checkout. Cancel renewal in Manage subscription.";
       }
     }catch{} // Checkout independently rechecks eligibility server-side.
   });

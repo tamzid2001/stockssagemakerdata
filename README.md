@@ -4,13 +4,24 @@
 
 Quantura connects stocks, FX, metals, indices, perpetual contracts and prediction markets in one research workspace. Search an instrument, inspect genuine observations, forecast a range of outcomes, and retain the evidence behind a decision.
 
-[Website](https://quantura.studio) · [API docs](https://quantura.mintlify.app) · [Wiki](https://github.com/tamzid2001/stockssagemakerdata/wiki) · [Releases](https://github.com/tamzid2001/stockssagemakerdata/releases)
+[Website](https://quantura.studio) · [Enterprise API docs](https://quantura.studio/developers/api) · [Wiki](https://github.com/tamzid2001/stockssagemakerdata/wiki) · [Releases](https://github.com/tamzid2001/stockssagemakerdata/releases)
 
-## What's new in v2.1.0
+## What's new in v2.2.0
+
+- **Clerk accounts:** Google and email/password sign-in, account and organization components, verified sessions across the Node and retained Python APIs, and a compatibility bridge for existing private data.
+- **Enterprise API access:** server-owned enterprise grants protect API keys and the authenticated OpenAPI reference. Pro's 14-day trial remains for website features.
+- **Verified data sources:** Alpaca replaces Yahoo in public search and downloads; Gemini crypto and prediction-market discovery, World Bank Data360 and Treasury Fiscal Data add real observations with explicit coverage limits.
+- **Website updates:** shorter Research copy, a founder letter, company logos, and Previous blog, Next blog and Copy shareable link controls on all 78 posts, with distinct Unsplash images.
+- **CSV preview:** inspect rows and name an uploaded series before submitting a forecast.
+- **Operations:** shared bounded caches and reduced repeated writes, trimmed function bundles, disabled Kalshi coin traders/watchdogs, and deployed Pinterest/TikTok domain-verification assets.
+
+See the [v2.2.0 release notes](docs/releases/v2.2.0.md) for scope and remaining integration steps.
+
+### Earlier v2.1.0 updates
 
 - **Nine forecast intervals:** 1, 5, 15 and 30 minutes; 1 and 4 hours; daily, weekly and monthly. Weekly/monthly observations use real calendar boundaries, with matching website, API, worker and download support.
 - **Latest and historical forecasts:** fix optional telemetry blocking request validation; support deep 120/180-day cutoffs and retained stock-price overlays when genuine provider history exists.
-- **More data sources:** Dukascopy's full published instrument catalog, bid/ask downloads and efficient native candle archives; verified stock-provider fallback and rate-limit handling.
+- **More data sources:** Dukascopy's full published instrument catalog, bid/ask downloads and efficient native candle archives; explicit stock-provider selection without a silent fallback.
 - **Today's games in Screener:** Kalshi/Polymarket US provider and outcome controls, actual market links, historical overlays and saved forecast navigation. Pregame runs use four or five available real models and six quantiles.
 - **Reproducible backtesting:** SPY and mega-cap studies, separate long/short FTMO-style ladders, costs/open-liability reporting and causal triggered reforecasts.
 - **A clearer product:** refreshed homepage and blog imagery, product-tour video, PWA presentation, mobile navigation and Support conversation history.
@@ -50,15 +61,20 @@ The ensemble registry includes Prophet, Toto, IBM Granite, Chronos and TimesFM. 
 
 | Source | Supported research surface | Important distinction |
 | --- | --- | --- |
-| Alpaca / Yahoo Finance | Stocks, ETFs and supported market history | Effective provider, adjustment and exchange timezone are retained; provider history limits apply |
+| Alpaca | Stocks, ETFs and supported market history | Effective provider, adjustment and exchange timezone are retained; provider history limits apply |
 | Dukascopy | Full published catalog: FX, metals, indices and other provider CFDs | Bid/ask quotes and instrument-specific scales; equity CFDs are not exchange shares |
 | Kalshi / Polymarket US | Exact binary outcomes and game forecasts | Outcome IDs, quote targets and verified game starts; probability units |
-| Kalshi perpetuals | Discovery, downloads and hourly five-model screener ensembles | Underlying units; 24-hour horizon; six quantiles, immutable input overlay and saved requests |
+| Kalshi perpetuals | Discovery, downloads and daily five-model screener ensembles | Underlying units; seven-day horizon; six quantiles, immutable input overlay and saved requests |
+| Gemini | Crypto candles and prediction-market discovery | Exchange data, separate from Google Gemini AI; prediction history is forecastable only when real observations are available |
+| World Bank Data360 | Selected economic time series | Explicit country, indicator, units and native frequency; revised values are not point-in-time releases |
+| Treasury Fiscal Data | Debt, exchange rates, interest rates and cash balance | Official observations and pagination, with original units and frequency |
 | Workspace / CSV | User-supplied time series | Validated timestamps, numeric target and explicit frequency |
 
 The checked-in Dukascopy snapshot contains 1,504 instruments; the service refreshes the provider catalog and identifies stale snapshots. Candle archives avoid the multi-year hourly tick-download loop. Available history, request bounds, rate limits and redistribution rights still depend on the provider.
 
 ## API and MCP
+
+Programmatic API access is enterprise only. Pro and its 14-day trial cover the website research workflow. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
 
 - [Developer overview](https://quantura.studio/developers/api)
 - [Live OpenAPI](https://quantura.studio/api/openapi.json)
@@ -92,12 +108,15 @@ A high closed-basket win rate can coexist with losing positions left open. Repor
 
 ## Architecture and repository map
 
-The public site, SSR and request APIs run on Vercel. Firebase provides identity and persistence; GitHub Actions runs forecast/research jobs. AWS supports the retained SageMaker workflows. A limited set of Google event jobs remains alongside the Vercel runtime.
+The public site, SSR and request APIs run on Vercel. Clerk provides web sign-in, account and organization components; Firestore and Storage retain existing data; GitHub Actions runs forecast/research jobs. AWS supports the retained SageMaker workflows. A limited set of Google event jobs remains alongside the Vercel runtime.
 
 ```mermaid
 flowchart LR
     Clients[Website/PWA and scoped API clients] --> API[Vercel web, SSR and request API]
-    API --> Identity[Firebase Authentication]
+    API --> Identity[Clerk verified sessions]
+    Identity --> Bridge[Compatibility credential for data SDKs]
+    Bridge --> State
+    API --> Enterprise[Server-owned enterprise API grants]
     API <--> State[Firestore and private storage]
     API --> Data[Provider history and verified identities]
     API --> Workers[GitHub Actions forecast/research workers]
@@ -200,4 +219,13 @@ Provider data and model checkpoints can have separate licensing and redistributi
 
 ### October 3 account and navigation updates
 
-Search is compact in the shared header; Screener and API Docs are available from the workspace/Profile. API documentation markup is served only to verified accounts with an active Stripe Pro trial or subscription, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
+Search is compact in the shared header; Screener and API Docs are available from Terminal/Profile. API documentation, OpenAPI downloads and personal API keys require a server-owned enterprise grant, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
+
+### October 3 website and data release
+
+- Clerk web sign-in with Google and email/password, account management and optional organization components. Imported legacy user IDs preserve private data ownership. Firebase SDK compatibility credentials authorize existing data rules; they do not replace Clerk API sessions.
+- Gemini exchange spot history and verified prediction-contract discovery; World Bank Data360 and Treasury Fiscal Data indicator search, dimension selection, previews and native reporting periods. Missing history is never synthesized.
+- Yahoo Finance removed from public search, provider choices and stock/options history fallback. Stocks use Alpaca; supported FX, metals and indices use Dukascopy.
+- TikTok domain verification file served at its exact root filename; Pinterest verification in public HTML. These verify domain ownership, not approval of social API products.
+- Previous blog, Next blog and Copy shareable link on all 78 posts. CSV preview and custom dataset names before forecast submission.
+- Public data caches and bounded visible-page queries reduce repeated Firestore traffic. Kalshi coin traders and their watchdog workflows remain disabled.

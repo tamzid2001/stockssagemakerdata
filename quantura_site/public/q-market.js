@@ -9,7 +9,7 @@
     const source=root.document.getElementById("ensemble-source-type"),ticker=root.document.getElementById("ensemble-ticker"),provider=root.document.getElementById("ensemble-provider");
     if(ticker)ticker.value=row.symbol;
     if(provider)provider.value=row.source==="dukascopy"?"dukascopy":"auto";
-    if(source){source.value=row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new root.Event("change",{bubbles:true}));}
+    if(source){source.value=row.resource_type==="economic_series"?"economic_series":row.source==="gemini"?"gemini_spot":row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new root.Event("change",{bubbles:true}));}
     const chip=root.document.getElementById("q-selected-market");
     if(chip) { chip.replaceChildren(); const label=root.document.createElement("strong"); label.textContent=api.label(row); chip.append(label);
       if(root.QuanturaLogos)chip.insertAdjacentHTML("afterbegin",root.QuanturaLogos.markup(row));
@@ -48,7 +48,7 @@
   }
 })(typeof window!=="undefined"?window:null,function(){
   "use strict";
-  const sources=["alpaca","yahoo","dukascopy","kalshi","polymarket_us","kalshi_perps"];
+  const sources=["alpaca","dukascopy","kalshi","polymarket_us","kalshi_perps","gemini","fiscaldata","worldbank_data360"];
   const validResource=row=>!!row && sources.includes(row.source) && typeof row.resource_id==="string" && row.resource_id.length<=500 && typeof row.symbol==="string" && row.symbol.length<=220;
   const label=row=>[row.outcome || row.symbol,row.market_title || row.name,row.source,row.exchange].filter(Boolean).join(" · ");
   function isoLocal(value){
@@ -62,6 +62,9 @@
     if(!validResource(row))throw Error("Select a market with Search first.");
     const end=isoLocal(settings.end)||new Date().toISOString();
     if(Date.parse(end)>Date.now()+60000)throw Error("The end time must not be in the future.");
+    if(row.resource_type==="economic_series")return {url:"/api/economic-data/history",body:{...row.economic_source,limit:Number(settings.limit),...(settings.range==="dates"?{start:isoLocal(settings.start)}:{}),end}};
+    if(row.resource_type==="gemini_prediction_contract")return {url:"/api/market-data/gemini/prediction-contract",body:{symbol:row.symbol,event_id:row.event_id,contract_id:row.contract_id}};
+    if(row.source==="gemini")return {url:"/api/market-data/gemini/history",body:{symbol:row.symbol,frequency:settings.frequency,limit:Number(settings.limit),...(settings.range==="dates"?{start:isoLocal(settings.start)}:{}),end}};
     const dukascopy=row.source==="dukascopy";
     const prediction=row.resource_type==="prediction_market_contract";
     const frequency=settings.frequency;

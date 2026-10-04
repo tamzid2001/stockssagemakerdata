@@ -44,10 +44,12 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
     <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "Check the Data Behind Your Forecast", "description": "A practical checklist for source identity, observation cutoffs, missing data, and model coverage.", "datePublished": "2025-10-02", "dateModified": "2026-09-26", "author": {"@type": "Organization", "name": "Quantura"}, "publisher": {"@type": "Organization", "name": "Quantura"}, "mainEntityOfPage": "https://quantura.studio/blog/posts/2025-10-02-data-freshness-slas-for-forecast-credibility", "image": {"@type": "ImageObject", "url": "https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&fit=crop&fm=jpg&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&ixlib=rb-4.1.0&q=78&w=1280&h=720", "creditText": "Photo by imgix on Unsplash", "creator": {"@type": "Person", "name": "imgix", "url": "https://unsplash.com/@imgix"}}}</script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
     <script defer src="/app.js?v=20261003-header-trial"></script>
   <script defer src="/q-market.js?v=20261003-header"></script>
 <script defer src="/market-search.js?v=20261003-header"></script>
-</head>
+    <script defer src="/blog-navigation.js?v=20261003"></script>
+  </head>
   <body>
 
     <header class="header">
@@ -95,6 +97,10 @@
 <h2>Keep missing observations visible</h2><p>Check observation counts and gaps. Weekends, market closures, and periods without genuine observations are not interchangeable with feed failures. Filling a gap introduces an assumption; silently filling it makes the output harder to interpret.</p>
 <h2>Separate a forecast from evidence of accuracy</h2><p>Record the models, quantiles, and horizon. Then compare saved estimates with later observations or a chronological holdout. Repeatedly choosing a rule after seeing the same outcomes can make a result look stronger than it is.</p><p>For a game, verify kickoff with the provider. A market's listing date or settlement deadline should not be treated as the start of play.</p><p><a class="cta" href="/forecasting">Review a forecast's context</a></p>
 <p class="small muted">Updated September 26, 2026.</p>
+
+<!-- BLOG_NAVIGATION_START -->
+<nav class="blog-post-navigation" aria-label="More blog posts"><a class="cta secondary" rel="prev" href="/blog/posts/2025-09-25-ssr-hosting-route-checks-for-production-reliability" aria-label="Previous blog: SSR + Hosting Route Checks for Production Reliability">Previous blog</a><a class="cta secondary" rel="next" href="/blog/posts/2025-10-09-drawdown-aware-position-sizing-for-multi-asset-books" aria-label="Next blog: Drawdown-Aware Position Sizing for Multi-Asset Books">Next blog</a><button class="cta secondary" type="button" data-copy-blog-link>Copy shareable link</button><span class="small" role="status" data-blog-share-status></span></nav>
+<!-- BLOG_NAVIGATION_END -->
 </article>
         </div>
       </section>

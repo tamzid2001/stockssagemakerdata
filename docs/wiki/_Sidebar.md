@@ -9,4 +9,4 @@
 - [Architecture and operations](Architecture-and-Operations)
 - [Release history](Release-History)
 
-[Website](https://quantura.studio) · [API docs](https://quantura.mintlify.app) · [Repository](https://github.com/tamzid2001/stockssagemakerdata)
+[Website](https://quantura.studio) · [API docs](https://quantura.studio/developers/api) · [Repository](https://github.com/tamzid2001/stockssagemakerdata)

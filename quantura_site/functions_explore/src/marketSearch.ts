@@ -1,4 +1,5 @@
-import { yahooJson } from "./yahooRequests";
+import {economicClient} from "./economicData";
+import {geminiMarketClient} from "./geminiMarketData";
 import type { Request, Router } from "express";
 import { isIP } from "node:net";
 import { searchPredictionMarkets, discoverForecastMarkets, resolveMarketLink, gameTiming, PredictionMarketDataError, type PredictionMarketSource } from "./predictionMarketData";
@@ -22,24 +23,17 @@ export function searchClientAddress(req: Pick<Request,"headers"|"ip"|"socket">, 
 }
 
 export const PROVIDER_CAPABILITIES = {
+  worldbank_data360: {label:"World Bank Data360",assetClasses:["economic_series"],search:true,history:true,forecasting:["economic_series"],granularities:["1D","1ME","1QE-DEC","1YE-DEC"],redistributionStatus:"indicator_license"},
+  fiscaldata: {label:"Treasury Fiscal Data",assetClasses:["economic_series"],search:true,history:true,forecasting:["economic_series"],granularities:["1D","1ME","1QE-DEC"],redistributionStatus:"open_data"},
+  gemini: {label:"Gemini",assetClasses:["crypto","prediction_market"],search:true,history:true,forecasting:["crypto"],granularities:FORECAST_FREQUENCIES,redistributionStatus:"review_required"},
   dukascopy: { label:"Dukascopy",assetClasses:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],search:true,history:true,forecasting:["fx","metal","commodity","index","equity_cfd","etf_cfd","bond_cfd","futures_cfd","fund_cfd","crypto_cfd","cfd"],granularities:["1min","5min","15min","30min","1h","4h","1D","1W-MON","1MS"],redistributionStatus:"review_required" },
   kalshi_perps: { label: "Kalshi Perpetuals", assetClasses: ["perpetual"], search: true, history: true, forecasting: ["perpetual"], granularities: ["1min","5min","15min","30min","1h","4h","1D","1W-MON","1MS"], redistributionStatus: "review_required" },
   alpaca: {
     label: "Alpaca",
     assetClasses: ["equity", "etf", "option"],
-    search: false,
-    history: true,
-    forecasting: ["equity", "etf"],
-    granularities: FORECAST_FREQUENCIES,
-    optionGranularities: ["1min", "1h", "1D"],
-    redistributionStatus: "review_required",
-  },
-  yahoo: {
-    label: "Yahoo Finance",
-    assetClasses: ["equity", "etf", "fx", "commodity_proxy", "rate_proxy", "crypto", "option"],
     search: true,
     history: true,
-    forecasting: ["equity", "etf", "fx", "commodity_proxy", "rate_proxy", "crypto"],
+    forecasting: ["equity", "etf"],
     granularities: FORECAST_FREQUENCIES,
     optionGranularities: ["1min", "1h", "1D"],
     redistributionStatus: "review_required",
@@ -68,69 +62,21 @@ function text(value: unknown, max = 160): string {
   return String(value ?? "").trim().slice(0, max);
 }
 
-function yahooAssetClass(quoteType: unknown, symbol: string): string {
-  const type = text(quoteType, 40).toUpperCase();
-  if (type === "ETF") return "etf";
-  if (type === "CURRENCY") return "fx";
-  if (type === "FUTURE") return "commodity_proxy";
-  if (type === "CRYPTOCURRENCY") return "crypto";
-  if (type === "INDEX" && /^\^(TNX|TYX|FVX|IRX)/.test(symbol)) return "rate_proxy";
-  if (type === "INDEX") return "index";
-  return "equity";
-}
-
-const yahooSearchCache = new Map<string, { at: number; rows: JsonRecord[] }>();
-const yahooSearchInflight = new Map<string, Promise<JsonRecord[]>>();
 const alpacaAssetCache = new Map<string, { at: number; rows: JsonRecord[] }>();
-
-
-async function searchYahoo(query: string, limit: number): Promise<JsonRecord[]> {
-  const key = `${query.trim().toLowerCase()}:${limit}`;
-  const cached = yahooSearchCache.get(key);
-  if (cached && Date.now() - cached.at < 15 * 60_000) return cached.rows;
-  if (yahooSearchInflight.has(key)) return yahooSearchInflight.get(key)!;
-  const request = fetchYahoo().then(rows => {
-    yahooSearchCache.delete(key);
-    yahooSearchCache.set(key, { at: Date.now(), rows });
-    if (yahooSearchCache.size > 256) yahooSearchCache.delete(yahooSearchCache.keys().next().value!);
-    return rows;
-  }).catch(error => {
-    // Company metadata can be served briefly while the upstream rate-limits.
-    if (cached && Date.now() - cached.at < 24 * 3600_000) return cached.rows;
-    throw error;
-  }).finally(() => yahooSearchInflight.delete(key));
-  yahooSearchInflight.set(key, request);
-  return request;
-
-  async function fetchYahoo(): Promise<JsonRecord[]> {
-    const url = new URL("https://query2.finance.yahoo.com/v1/finance/search");
-    url.searchParams.set("q", query);
-    url.searchParams.set("quotesCount", String(limit));
-    url.searchParams.set("newsCount", "0");
-    url.searchParams.set("enableFuzzyQuery", "true");
-    const payload = await yahooJson(url.toString(), fetch, { "User-Agent": "quantura-market-search/1.0" }, 15 * 60_000) as JsonRecord;
-    const quotes = Array.isArray(payload.quotes) ? payload.quotes : [];
-    return quotes.slice(0, limit).flatMap((value) => {
-      const item = value && typeof value === "object" ? value as JsonRecord : {};
-      const symbol = text(item.symbol, 32).toUpperCase();
-      if (!symbol || !/^[A-Z0-9.^=\-]{1,32}$/.test(symbol)) return [];
-      const assetClass = yahooAssetClass(item.quoteType, symbol);
-      if (!PROVIDER_CAPABILITIES.yahoo.forecasting.includes(assetClass as any)) return [];
-      return [{
-        resource_type: "instrument",
-        resource_id: `yahoo:${symbol}`,
-        symbol,
-        name: text(item.longname || item.shortname || item.name, 220) || symbol,
-        asset_class: assetClass,
-        source: "yahoo",
-        exchange: text(item.exchDisp || item.exchange, 80) || null,
-        currency: text(item.currency, 16) || null,
-        unit: assetClass === "fx" ? "quote currency per base currency" : null,
-        history_available: true,
-        forecast_available: true,
-      }];
-    });
+let assetCatalog: { at: number; rows: Awaited<ReturnType<AlpacaClient["listAssets"]>> } | null = null;
+let assetCatalogRequest: Promise<Awaited<ReturnType<AlpacaClient["listAssets"]>>> | null = null;
+async function searchAlpacaCatalog(query: string, limit: number): Promise<JsonRecord[]> {
+  if (!assetCatalog || Date.now() - assetCatalog.at > 86400000) {
+    if (!assetCatalogRequest) assetCatalogRequest = new AlpacaClient().listAssets().then(rows => {
+      assetCatalog = { at: Date.now(), rows }; return rows;
+    }).finally(() => { assetCatalogRequest = null; });
+    await assetCatalogRequest;
   }
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return assetCatalog!.rows.filter(a => words.every(w => `${a.symbol} ${a.name}`.toLowerCase().includes(w)))
+    .sort((a,b) => Number(b.symbol.toLowerCase() === query.toLowerCase()) - Number(a.symbol.toLowerCase() === query.toLowerCase()))
+    .slice(0,limit).map(a => ({ resource_type: "instrument", resource_id: "alpaca:"+a.symbol, symbol:a.symbol,
+      name:a.name, asset_class:"equity", source:"alpaca", exchange:a.exchange, currency:"USD", unit:"USD per share", history_available:true, forecast_available:true }));
 }
 
 async function searchAlpaca(query: string): Promise<JsonRecord[]> {
@@ -162,9 +108,9 @@ async function verifiedAlpacaAsset(symbol: string): Promise<JsonRecord[]> {
   return rows;
 }
 
-export function alpacaCandidateSymbols(yahooRows: JsonRecord[], alpacaRows: JsonRecord[], limit = 3): string[] {
+export function alpacaCandidateSymbols(candidateRows: JsonRecord[], alpacaRows: JsonRecord[], limit = 3): string[] {
   const existing = new Set(alpacaRows.map(row => String(row.symbol || "")));
-  return [...new Set(yahooRows.filter(row => row.asset_class === "equity")
+  return [...new Set(candidateRows.filter(row => row.asset_class === "equity")
     .map(row => String(row.symbol || "")))].filter(symbol => symbol && !existing.has(symbol)).slice(0, limit);
 }
 
@@ -233,7 +179,7 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
     const requested = text(req.query.source || "auto", 40).toLowerCase();
     const mode = text(req.query.mode || "open", 20);
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
-    if (!["auto", "yahoo", "alpaca", "dukascopy", "polymarket_us", "kalshi", "kalshi_perps"].includes(requested) || !["open", "live", "any"].includes(mode)) {
+    if (!["auto", "alpaca", "dukascopy", "polymarket_us", "kalshi", "kalshi_perps", "gemini", "fiscaldata", "worldbank_data360"].includes(requested) || !["open", "live", "any"].includes(mode)) {
       res.status(422).json({ ok: false, error: "search_filter_invalid", message: "Choose a supported source and market status." }); return;
     }
     if (query.length < 2 && mode !== "live" && requested!=="dukascopy") {
@@ -243,15 +189,18 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
     const groups: Record<string, JsonRecord[]> = {};
     const errors: Record<string, string> = {};
     const tasks: Array<Promise<void>> = [];
+    if(mode!=="live" && ["fiscaldata","worldbank_data360"].includes(requested))tasks.push(economicClient.search(requested,query,limit).then(result=>{
+      groups[requested]=result.results.map((row:any)=>({resource_type:"economic_series",resource_id:requested+":"+row.id,symbol:row.id,name:row.name,asset_class:"economic_series",source:requested,exchange:requested==="fiscaldata"?"U.S. Treasury":"World Bank Data360",history_available:true,forecast_available:true,
+        economic_source:{type:"economic_series",provider:requested,...(requested==="fiscaldata"?{series_id:row.id}:{dataset_id:row.dataset_id,indicator_id:row.indicator_id})}}));
+    }).catch(()=>{errors[requested]="temporarily_unavailable";}));
+    if(["auto","gemini"].includes(requested))tasks.push(geminiMarketClient.search(query,limit,mode).then(rows=>{groups.gemini=rows;}).catch(()=>{errors.gemini="temporarily_unavailable";}));
     if(mode!=="live" && ["auto","dukascopy"].includes(requested)) tasks.push(dukascopy.search(query,limit).then(result=>{groups.dukascopy=result.rows;if(result.stale)errors.dukascopy="catalog_snapshot";}).catch(()=>{errors.dukascopy="temporarily_unavailable";}));
     if (["auto","kalshi_perps"].includes(requested)) tasks.push(kalshiPerps.search(query,limit)
       .then(rows=>{groups.kalshi_perps=mode==="any"?rows:rows.filter(r=>r.status==="active");})
       .catch(()=>{errors.kalshi_perps="temporarily_unavailable";}));
-    if (mode !== "live" && ["auto", "yahoo"].includes(requested)) {
-      tasks.push(searchYahoo(query, limit).then((rows) => { groups.yahoo = rows; }).catch(() => { errors.yahoo = "temporarily_unavailable"; }));
-    }
     if (mode !== "live" && ["auto", "alpaca"].includes(requested)) {
-      tasks.push(verifiedAlpacaAsset(query.toUpperCase()).then((rows) => { groups.alpaca = rows; }).catch(() => { errors.alpaca = "unavailable_or_not_found"; }));
+      tasks.push(searchAlpacaCatalog(query,limit).catch(() => verifiedAlpacaAsset(query.toUpperCase()))
+        .then(rows => {groups.alpaca=rows;}).catch(() => {errors.alpaca="temporarily_unavailable";}));
     }
     for (const source of ["polymarket_us", "kalshi"] as PredictionMarketSource[]) {
       if (requested !== "auto" && requested !== source) continue;
@@ -260,12 +209,6 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
         .catch(() => { errors[source] = "temporarily_unavailable"; }));
     }
     await Promise.all(tasks);
-    if (requested === "auto" && mode !== "live" && groups.yahoo?.length) {
-      const symbols = alpacaCandidateSymbols(groups.yahoo, groups.alpaca || []);
-      const verified = await Promise.all(symbols.map(symbol => verifiedAlpacaAsset(symbol).catch(() => [])));
-      groups.alpaca = [...(groups.alpaca || []), ...verified.flat()].slice(0, limit);
-      if (groups.alpaca.length) delete errors.alpaca;
-    }
     const results = Object.values(groups).flat();
     const recommended = req.query.rank === "true" ? await rankVerifiedCandidates(query, results, {...options,ip:searchClientAddress(req)}) : null;
     if (recommended) for (const rows of Object.values(groups)) rows.sort((a,b)=>Number(b.resource_id===recommended)-Number(a.resource_id===recommended));

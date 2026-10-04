@@ -55,6 +55,7 @@
     <link rel="stylesheet" href="/market-logos.css?v=20260926-logos" />
     <script defer src="/market-logos.js?v=20260926-logos"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
     <script defer src="/app.js?v=20261003-header-trial"></script>
     <script defer src="/q-market.js?v=20260928-intervals"></script>
     <script defer src="/q-download.js?v=20260928-intervals"></script>
@@ -66,7 +67,8 @@
       window.__QUANTURA_RC_TEMPLATE_ID__ = "firebase-server";
       window.__QUANTURA_RC_INITIAL_FETCH_RESPONSE__ = {"status":200,"eTag":"etag-quantura-e2e3d-firebase-server-fetch--1213937490","config":{"welcome_message":"","forecast_prophet_enabled":"true","forecast_canvas_enabled":"true","push_notifications_enabled":"true","webpush_vapid_key":"","stripe_checkout_enabled":"true","stripe_public_key":"","holiday_promo":"false"}};
     </script>
-  </head>
+  <script defer src="/economic-data.js?v=20261003"></script>
+</head>
   <body>
     <header class="header">
       <div class="container nav">
@@ -134,10 +136,10 @@
                               <select id="ensemble-source-type" name="source_type">
                                 <option value="ticker">Market ticker</option><option value="kalshi_perp">Kalshi perpetual · underlying spot scale</option>
                                 <option value="prediction_market">Selected prediction market</option>
-                                <option value="series">Upload your own CSV</option>
+                                <option value="economic_series">Economic series</option><option value="gemini_spot">Gemini spot market</option><option value="series">Upload your own CSV</option>
                               </select>
                             </div>
-                            <div class="field q-identity-compat" data-ensemble-source="ticker kalshi_perp">
+                            <div class="field q-identity-compat" data-ensemble-source="ticker kalshi_perp gemini_spot">
                               <label class="label" for="ensemble-ticker">Ticker</label>
                               <input id="ensemble-ticker" name="ticker" placeholder="AAPL" autocomplete="off" />
                             </div>
@@ -148,11 +150,12 @@
                             <div class="field" data-ensemble-history-count><label class="label" for="ensemble-history-limit">Last N observations</label><input id="ensemble-history-limit" name="history_limit" type="number" min="2" max="500" step="1" value="500" required /><small class="muted">Up to N real bars before the cutoff, after any history filters. Missing intervals are not filled. Model minimums still apply.</small></div>
                             <div class="field q-identity-compat" data-ensemble-source="ticker">
                               <label class="label" for="ensemble-provider">Market-data provider</label>
-                              <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="yahoo">Yahoo Finance</option><option value="dukascopy">Dukascopy</option></select>
+                              <select id="ensemble-provider" name="provider"><option value="auto">Auto</option><option value="alpaca">Alpaca</option><option value="dukascopy">Dukascopy</option></select>
                             </div>
-                            <div class="field" data-ensemble-source="ticker kalshi_perp"><label class="label" for="ensemble-ticker-frequency">Observed bars</label><select id="ensemble-ticker-frequency" name="ticker_frequency"><option value="1Min">Minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option><option value="30Min">30 minutes</option><option value="1Hour">Hourly</option><option value="4Hour">4 hours</option><option value="1Day" selected>Daily</option><option value="1Week">Weekly</option><option value="1Month">Monthly</option></select></div>
+                            <div class="field" data-ensemble-source="ticker kalshi_perp gemini_spot"><label class="label" for="ensemble-ticker-frequency">Observed bars</label><select id="ensemble-ticker-frequency" name="ticker_frequency"><option value="1Min">Minute</option><option value="5Min">5 minutes</option><option value="15Min">15 minutes</option><option value="30Min">30 minutes</option><option value="1Hour">Hourly</option><option value="4Hour">4 hours</option><option value="1Day" selected>Daily</option><option value="1Week">Weekly</option><option value="1Month">Monthly</option></select></div>
                             <div class="field" data-ensemble-source="ticker" data-ensemble-stock-session><label class="label" for="ensemble-ticker-session">Stock trading hours</label><select id="ensemble-ticker-session" name="ticker_session"><option value="extended" selected>Premarket + regular + after-hours</option><option value="regular">Regular hours only</option></select><small class="muted">Intraday forecasts use observed extended-hours bars when the provider has them. Hourly bars are used only after their hour has completed.</small></div>
                             <div class="field" data-ensemble-dukascopy hidden><label class="label" for="ensemble-price-side">Quote side</label><select id="ensemble-price-side" name="price_side"><option value="bid">Bid close</option><option value="ask">Ask close</option></select><small class="muted">Completed UTC candles. Forecast periods include market closures.</small></div>
+                            <div class="field economic-data-controls" id="economic-forecast-controls" data-ensemble-source="economic_series" hidden><div data-economic-fields></div><p data-economic-status role="status" aria-live="polite">Search an economic indicator to select its series.</p><div class="hero-actions"><button type="button" class="cta secondary small" data-economic-preview>Preview history</button><button type="button" class="cta secondary small" data-economic-download disabled>Download CSV</button><a class="task-chip" data-economic-link href="https://data360.worldbank.org/en/api" target="_blank" rel="noopener" hidden>Source details</a></div><div class="table-wrap" data-economic-table></div></div>
                             <div class="field" data-ensemble-source="workspace_dataset" hidden>
                               <label class="label" for="ensemble-dataset-id">Workspace dataset ID</label>
                               <input id="ensemble-dataset-id" name="dataset_id" placeholder="Saved Forecast Foundry dataset ID" autocomplete="off" />
@@ -171,6 +174,8 @@
                               <small id="ensemble-csv-status" class="muted" role="status">Choose a CSV, then select its date and value columns.</small>
                             </div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-date">Date / time column</label><select id="ensemble-csv-date"></select></div>
+                            <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-name">Dataset name</label><input id="ensemble-csv-name" maxlength="120" placeholder="Name your dataset" /></div>
+                            <details class="field" data-ensemble-source="series" id="ensemble-csv-preview" hidden open><summary>CSV preview</summary><p class="small muted" id="ensemble-csv-preview-note">Your file stays in this browser until you run a forecast.</p><div class="table-wrap" id="ensemble-csv-preview-table"></div></details>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-target">Numeric value column</label><select id="ensemble-csv-target"></select></div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-frequency">Observation interval</label><select id="ensemble-csv-frequency"><option value="1min">Minute</option><option value="5min">5 minutes</option><option value="15min">15 minutes</option><option value="30min">30 minutes</option><option value="1h">Hourly</option><option value="4h">4 hours</option><option value="1D" selected>Daily</option><option value="1W-MON">Weekly</option><option value="1MS">Monthly</option></select></div>
                             <div class="field">
@@ -442,7 +447,7 @@
                   </section>
 				  <!-- BEGIN_TERMINAL_PROFILE_PANEL -->
   <section class="panel hidden terminal-profile-panel" data-panel="profile" aria-labelledby="terminal-profile-title">
-    <div class="terminal-profile-heading"><div class="eyebrow">Your account</div><h2 id="terminal-profile-title">Profile</h2><p class="small muted">Manage your account, requests, workspaces, and API access in Terminal.</p></div>
+    <div class="terminal-profile-heading"><div class="eyebrow">Your account</div><h2 id="terminal-profile-title">Profile</h2><p class="small muted">Manage your account, saved requests, team, and API access.</p></div>
     
     <details class="terminal-profile-group" id="terminal-profile-auth" data-profile-guest open>
       <summary>Sign in or create an account</summary>
@@ -558,13 +563,15 @@
           <div class="section-title">
             <div><div class="eyebrow">Private account settings</div><h2>Profile</h2><p class="small">Manage your private account details and saved research.</p></div>
           </div>
+          <div class="clerk-account-card" data-clerk-user-profile></div>
+          <div data-clerk-pricing hidden></div>
           <div class="content-grid">
             <div class="card">
               <h3>Account</h3>
               <div class="profile-item"><span class="label">Signed in as</span><span id="user-email" class="value">Not signed in</span></div>
               <div class="profile-item"><span class="label">Provider</span><span id="user-provider" class="value">—</span></div>
               <div class="profile-item"><span class="label">Status</span><span id="user-status" class="pill">Logged Out</span></div>
-              <div class="billing-panel"><span class="label">Billing</span><a id="billing-portal-link" class="cta secondary small" href="/account">Sign in to manage billing</a><span class="small muted">Manage your plan, invoices, and payment method in Stripe.</span></div>
+              <div class="billing-panel"><span class="label">Billing</span><a id="billing-portal-link" class="cta secondary small" href="/account">Sign in to manage billing</a><span class="small muted">Manage your existing Stripe subscription here. Clerk subscriptions are managed in Account settings above.</span></div>
               <div class="notice small">This settings area is authenticated and private. Public profiles and user discovery have been removed.</div>
             </div>
 
@@ -598,8 +605,9 @@
 	      </section>
     </details>
     <details class="terminal-profile-group" id="terminal-profile-collaboration" data-profile-account hidden>
-      <summary>Workspaces and collaborators</summary>
+      <summary>Team settings</summary>
       <section class="terminal-profile-content" id="collaboration">
+        <div class="container clerk-team-settings"><div data-clerk-organization-switcher></div><div data-clerk-organization-profile></div></div>
         <div class="container">
           <div class="section-title">
             <div><div class="eyebrow">Workspace settings</div><h2>Workspaces &amp; collaboration</h2><p class="small">Organize CSVs and research inside isolated workspaces with live, fine-grained access controls.</p></div>
@@ -678,8 +686,8 @@
             <div><div class="eyebrow">Account / Developer</div><h2>API Keys</h2><p class="small">Create personal credentials for Quantura's versioned API. Workspace roles and plan access are evaluated dynamically on every request.</p></div>
             <div class="hero-actions" id="profile-api-docs-links" hidden><a class="cta secondary" href="/developers/api"><i class="iconoir-book" aria-hidden="true"></i><span>Interactive API docs</span></a><a class="cta secondary" href="/api/openapi.json"><i class="iconoir-code-brackets" aria-hidden="true"></i><span>OpenAPI</span></a></div>
           </div>
-          <p id="profile-api-docs-status" class="small" role="status">API documentation is included with an active 14-day Pro trial or subscription.</p>
-          <a class="cta secondary" id="profile-api-trial" href="/pricing">Explore Pro</a>
+          <p id="profile-api-docs-status" class="small" role="status">API and MCP access are available with an enterprise agreement.</p>
+          <a class="cta secondary" id="profile-api-trial" href="/pricing#enterprise">Explore Pro</a>
           <div class="content-grid developer-key-grid">
             <form id="api-key-form" class="card" autocomplete="off">
               <h3>Create API key</h3>

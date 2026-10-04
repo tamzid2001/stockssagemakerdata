@@ -10442,3 +10442,28 @@ html .toast[data-variant="warn"] {
   border-radius: 10px;
   margin-bottom: 16px;
 }
+/* Account components inherit Quantura's layout and palette. */
+.clerk-account-card {margin:24px auto;max-width:900px;min-width:0;}
+.clerk-team-switcher {padding:12px;min-height:48px;}
+.clerk-team-settings {display:grid;gap:24px;padding-top:20px;}
+.clerk-web .auth-grid, .clerk-web #collaboration > .container:not(.clerk-team-settings) {display:none!important;}
+.clerk-web [data-clerk-state="signed-in"] #header-auth,
+body[data-clerk-state="signed-in"] #header-auth {display:none!important;}
+body[data-clerk-state="signed-out"] [data-clerk-user-button] {display:none;}
+.founder-letter {max-width:780px;}
+.founder-letter p {font-size:1.05rem;line-height:1.85;margin:20px 0;}
+.founder-signature {margin-top:30px!important;}
+.research-note-page > summary {font-size:1.1rem;font-weight:650;cursor:pointer;line-height:1.5;}
+.research-note-page[open] > summary {margin-bottom:14px;}
+[data-clerk-user-profile] {overflow-x:auto;}
+@media(max-width:600px) {.clerk-account-card {margin:16px 0;}.founder-letter p {font-size:1rem;}}
+
+.economic-explorer { margin-block: 1.5rem; }
+.economic-data-controls { grid-column: 1 / -1; }
+.economic-explorer input, .economic-explorer select, .economic-data-controls select {font-size:1rem;min-height:48px;}
+.economic-explorer .hero-actions {flex-wrap:wrap;}
+
+.blog-post-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-block: 2rem 0; padding-block-start: 1.5rem; border-top: 1px solid var(--border); }
+.blog-post-navigation .cta { min-height: 44px; }
+.blog-post-navigation input { flex: 1 1 100%; min-width: 0; }
+.blog-post-navigation button:disabled { opacity: .5; cursor: default; }

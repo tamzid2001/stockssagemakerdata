@@ -4,17 +4,11 @@ import { AlpacaClient, AlpacaError, barsToCsv, classifyEquitySession } from "./a
 import { fetchStockHistoryData } from "./marketDataRoutes";
 import { YahooFinanceClient } from "./yahooMarketData";
 
-test("Yahoo throttling falls back only to a verified US asset and reports real provider provenance", async () => {
-  const rateLimit=new AlpacaError('rate_limit','Yahoo rate-limited',429);let calls=0;
-  const yahoo={getStockBars:async()=>{throw rateLimit;}} as unknown as YahooFinanceClient;
-  const alpaca={isConfigured:()=>true,getAsset:async()=>({symbol:'SPY',status:'active',assetClass:'us_equity'}),getStockBars:async(input:any)=>{
-    calls++;assert.equal(input.feed,'');return {symbol:'SPY',timeframe:'1Day',feed:'iex',adjustment:'raw',session:'regular',rows:[]};
-  }} as unknown as AlpacaClient;
-  const result=await fetchStockHistoryData({symbol:'SPY',source:'yahoo',feed:'yahoo'},{alpaca,yahoo});
-  assert.equal(result.provider,'alpaca');assert.equal(result.sourceRequested,'yahoo');assert.equal(result.fallbackUsed,true);assert.equal(result.feed,'iex');
-  await assert.rejects(fetchStockHistoryData({symbol:'EURUSD=X',source:'yahoo'},{alpaca,yahoo}),error=>error===rateLimit);assert.equal(calls,1);
-  const noAsset={...alpaca,getAsset:async()=>{throw new Error('not an asset');}} as unknown as AlpacaClient;
-  await assert.rejects(fetchStockHistoryData({symbol:'7203.T',source:'yahoo'},{alpaca:noAsset,yahoo}),error=>error===rateLimit);assert.equal(calls,1);
+test("removed history providers are rejected and automatic Alpaca history never silently changes source", async () => {
+  const failure = new AlpacaError("rate_limit", "Provider rate limited", 429);
+  const alpaca = {getStockBars:async()=>{throw failure;}} as unknown as AlpacaClient;
+  await assert.rejects(fetchStockHistoryData({symbol:"SPY",source:"yahoo"},{alpaca}),/Choose Alpaca/);
+  await assert.rejects(fetchStockHistoryData({symbol:"SPY",source:"auto"},{alpaca}),error=>error===failure);
 });
 import { buildMlbMinuteRows, discoverMlbMarkets, encodePriceHistoryRequest, fetchPolymarketPricePoints } from "./polymarketMlb";
 import {

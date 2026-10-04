@@ -73,7 +73,7 @@
     if (field || record.length) line();
     const headers = (records.shift() || []).map(value => value.trim());
     if (!headers.length || headers.some(value => !value) || new Set(headers).size !== headers.length) throw new Error("CSV needs unique, nonempty column headers.");
-    if (records.length < 40) throw new Error("Upload at least 40 time-series rows.");
+    if (!records.length) throw new Error("Upload a CSV with at least one data row.");
     if (records.some(row => row.length !== headers.length)) throw new Error("Every CSV row must have the same number of columns.");
     return { headers, rows: records };
   }

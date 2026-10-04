@@ -6,6 +6,11 @@ from typing import Any, Callable
 
 from flask import Flask, request
 
+from firebase_admin import auth as compatibility_auth
+from clerk_auth import install_clerk_verifier
+
+install_clerk_verifier(compatibility_auth)
+
 import main
 
 app = Flask(__name__)

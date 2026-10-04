@@ -150,7 +150,7 @@ function setApiHeaders(res: Response, requestId: string, limit?: number, remaini
 function extractApiKey(req: Request): string {
   const xApiKey = text(req.headers["x-api-key"], 500);
   if (xApiKey) return xApiKey;
-  const authorization = text(req.headers.authorization, 700);
+  const authorization = text(req.headers.authorization, 16384);
   return authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
 }
 
@@ -285,7 +285,7 @@ function enterprise(options: RouteOptions, scope: ForecastApiScope, handler: Ent
 }
 
 async function requireAdmin(req: Request, options: RouteOptions): Promise<admin.auth.DecodedIdToken> {
-  const authorization = text(req.headers.authorization, 700);
+  const authorization = text(req.headers.authorization, 16384);
   const token = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   if (!token) throw new Error("unauthenticated");
   const decoded = await options.auth.verifyIdToken(token).catch(() => null);

@@ -1,5 +1,11 @@
 # Release history
 
+## v2.2.0
+
+Clerk sessions across the web and retained APIs; server-owned enterprise API access; Alpaca-only stock discovery/downloads; Gemini, World Bank Data360 and Treasury Fiscal Data; CSV previews/names; blog navigation; domain verification; caching and function bundle reductions.
+
+[Release notes](https://github.com/tamzid2001/stockssagemakerdata/releases/tag/v2.2.0) · [Tracked notes](https://github.com/tamzid2001/stockssagemakerdata/blob/main/docs/releases/v2.2.0.md)
+
 ## v2.1.0
 
 Multi-interval forecasts and reproducible research: six additional intervals, shared calendar semantics, API/MCP capabilities, Dukascopy catalog and native archives, game ensembles and navigation, research matrices, product presentation and worker reliability.

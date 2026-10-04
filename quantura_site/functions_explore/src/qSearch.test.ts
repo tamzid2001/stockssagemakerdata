@@ -51,7 +51,7 @@ test("Jev ranks only verified candidates; outage and exact symbols preserve dete
   assert.equal(await rankVerifiedCandidates("ONE",rows,{decide}),null);assert.equal(calls,1);
   assert.equal(await rankVerifiedCandidates("different ambiguous player",rows,{decide:async()=>{throw Error("timeout");}}),null);
 });
-test("sentence-discovered Yahoo equities can also be verified as Alpaca symbols",()=>{
+test("catalog-discovered equities can also be verified as Alpaca symbols",()=>{
   const yahoo=[{symbol:"AAPL",asset_class:"equity"},{symbol:"AAPL",asset_class:"equity"},
     {symbol:"MSFT",asset_class:"equity"},{symbol:"BTC-USD",asset_class:"crypto"},{symbol:"NVDA",asset_class:"equity"}];
   assert.deepEqual(alpacaCandidateSymbols(yahoo,[]),["AAPL","MSFT","NVDA"]);
@@ -61,7 +61,7 @@ test("Q Search HTTP errors and capabilities expose no secrets or arbitrary sourc
   const app=express();registerMarketSearchRoutes(app);const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));
   const port=(server.address() as any).port;
   try{const res=await fetch(`http://127.0.0.1:${port}/market-search/event?source=evil&event_id=../secret`);assert.equal(res.status,422);assert.equal((await res.json() as any).error,"event_query_invalid");
-    const caps=await fetch(`http://127.0.0.1:${port}/market-search/capabilities`);assert.equal(caps.status,200);const providers=(await caps.json() as any).providers;assert.equal(Object.keys(providers).length,6);assert.ok(providers.dukascopy);
+    const caps=await fetch(`http://127.0.0.1:${port}/market-search/capabilities`);assert.equal(caps.status,200);const providers=(await caps.json() as any).providers;assert.equal(Object.keys(providers).length,8);assert.ok(providers.dukascopy);assert.ok(providers.gemini);assert.ok(providers.fiscaldata);assert.ok(providers.worldbank_data360);assert.equal(providers.yahoo,undefined);
   }finally{server.close();}
 });
 test("search rate limits use Vercel's validated edge IP without globally trusting proxies",()=>{

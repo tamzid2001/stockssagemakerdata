@@ -34,6 +34,6 @@ test("stock service derives genuine completed months and preserves provider prov
 });
 test("API source enums accept every published canonical interval and native UI value",()=>{
   const doc=buildOpenApiDocument() as any;
-  const enums=doc.components.schemas.EnsembleForecastRequest.allOf[1].properties.source.oneOf.filter((source:any)=>source.properties.type.const==="ticker"||source.properties.type.const==="prediction_market").map((source:any)=>source.properties.frequency.enum);
+  const enums=doc.components.schemas.EnsembleForecastRequest.allOf[1].properties.source.oneOf.filter((source:any)=>source.properties?.type?.const==="ticker"||source.properties?.type?.const==="prediction_market").map((source:any)=>source.properties.frequency.enum);
   for(const entry of publicModelCapabilities().frequencies as any[])for(const values of enums){assert.ok(values.includes(entry.frequency));assert.ok(values.includes(entry.timeframe));}
 });

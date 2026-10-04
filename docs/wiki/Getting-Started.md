@@ -8,7 +8,7 @@
 4. Review quantiles and historical overlays. Sign in to retain requests in your profile.
 5. Compare opportunities in [Screener](https://quantura.studio/screener).
 
-Secure guest forecasts have fair-use limits. Scoped API keys and current workspace permissions govern protected API operations.
+Secure guest forecasts have fair-use limits. Sign-in uses Clerk with Google or email/password. Pro includes a 14-day website trial. Programmatic API access, personal keys and the OpenAPI reference require an active server-owned enterprise grant; browser-editable plans cannot grant access.
 
 ## Develop locally
 

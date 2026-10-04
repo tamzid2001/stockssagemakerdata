@@ -7,7 +7,7 @@
   const workspace=form.closest(".market-search-workspace")||form.parentElement;
   const resources=new Map(),cache=new Map();let timer,controller,sequence=0,eventView=null,lastGroups={},lastErrors={};
   const escapeHtml=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
-  const providerLabel=s=>({alpaca:"Alpaca",yahoo:"Yahoo Finance",dukascopy:"Dukascopy",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
+  const providerLabel=s=>({gemini:"Gemini",fiscaldata:"Treasury Fiscal Data",worldbank_data360:"World Bank Data360",alpaca:"Alpaca",dukascopy:"Dukascopy",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
   queryInput.setAttribute("aria-controls","market-search-results");queryInput.setAttribute("aria-describedby","market-search-status");queryInput.setAttribute("aria-expanded","false");queryInput.maxLength=2048;
   function closeResults(){clearTimeout(timer);controller?.abort();controller=null;++sequence;results.hidden=true;results.removeAttribute("aria-busy");queryInput.setAttribute("aria-expanded","false");workspace.classList.remove("search-expanded");}
   const outside=e=>{if(!workspace.contains(e.target))closeResults();};
@@ -39,6 +39,8 @@
   }
   function discoveryQuery(raw){
     if(/^https?:\/\//i.test(raw))return {query:raw,mode:"open",source:"auto"};
+    const economic=raw.match(/^(world\s*bank|data360|worlddata|fiscal(?:\s*data)?|treasury|gemini)\s*:?\s*/i);
+    if(economic)return {query:raw.slice(economic[0].length).trim(),mode:"open",source:/^(world|data360)/i.test(economic[1])?"worldbank_data360":/^gemini/i.test(economic[1])?"gemini":"fiscaldata"};
     if(/^dukascopy\b/i.test(raw))return {query:raw.replace(/^dukascopy\s*:?\s*/i,"").trim(),mode:"open",source:"dukascopy"};
     const historical=/\binclude\s+historical\b|^historical(?:\s+(?:markets|games))?\b\s*:?/i;
     const live=/\blive\s+games\b|^live\s*:/i;
@@ -109,7 +111,7 @@
     if(intent==="forecast"){
       const source=document.getElementById("ensemble-source-type"),ticker=document.getElementById("ensemble-ticker"),provider=document.getElementById("ensemble-provider");
       if(ticker)ticker.value=row.symbol;if(provider)provider.value=row.source==="dukascopy"?"dukascopy":"auto";
-      if(source){source.value=row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new Event("change",{bubbles:true}));}
+      if(source){source.value=row.resource_type==="economic_series"?"economic_series":row.source==="gemini"?"gemini_spot":row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new Event("change",{bubbles:true}));}
     }
     if(intent!=="add-download")setPanel(intent==="forecast"?"forecast":"download");
     window.dispatchEvent(new CustomEvent("quantura:market-selected",{detail:{resource:row,intent}}));

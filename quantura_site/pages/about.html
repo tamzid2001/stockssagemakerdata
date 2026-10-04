@@ -50,6 +50,7 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
     <script defer src="/app.js?v=20261003-header-trial"></script>
   <script defer src="/q-market.js?v=20261003-header"></script>
 <script defer src="/market-search.js?v=20261003-header"></script>
@@ -80,7 +81,7 @@
             <div class="eyebrow">About Quantura</div>
             <h1>Built for clarity when markets are noisy.</h1>
             <p>
-              Quantura connects market data, probabilistic forecasting, screening, and private research workflows in one interface. Deterministic analysis appears first; optional AI interpretation remains user-controlled.
+              Explore market data, compare forecast ranges, and build research you can revisit.
             </p>
             <div class="metric-strip" style="margin-top: 14px;">
               <span class="metric-chip"><span class="metric-label">Focus</span><span class="metric-value">Forecast distributions</span></span>
@@ -88,7 +89,7 @@
             </div>
           </div>
           <aside class="card">
-            <div class="badge-chip" style="margin-bottom: 10px;">Developer</div>
+            <div class="badge-chip" style="margin-bottom: 10px;">Founder</div>
             <h3 style="margin-bottom: 8px;">Tamzid Ullah</h3>
             <p class="small" style="margin: 0 0 12px;">
               Founder and engineer · Master's in Computer Science, New York Institute of Technology
@@ -107,34 +108,22 @@
       </section>
 
       <section class="section">
-        <div class="container">
-          <div class="content-grid">
-          <article class="card">
-            <h3>Why Quantura exists</h3>
-            <div class="feature-list" style="margin-top: 10px;">
-              <div class="feature"><span></span>Make research and forecasting transparent and auditable.</div>
-              <div class="feature"><span></span>Preserve the P1/P25/P50/P75/P99 Quantura Forecast distribution rather than presenting one false-certainty target.</div>
-              <div class="feature"><span></span>Keep credentials server-side and isolate private user workspaces.</div>
-              <div class="feature"><span></span>Make AI interpretation optional, balanced, and secondary to the source data.</div>
-            </div>
-          </article>
-          <article class="card">
-            <h3>What the platform includes</h3>
-            <div class="feature-list" style="margin-top: 10px;">
-              <div class="feature"><span></span>Quantura Forecast multi-model distributions with deterministic quantile scenarios.</div>
-              <div class="feature"><span></span>Alpaca and Yahoo Finance historical equity and options data workflows.</div>
-              <div class="feature"><span></span>Prediction CSV validation, anomalies, model-bias heuristics, and date-aware boundary alerts.</div>
-              <div class="feature"><span></span>Broad-universe quantitative screening and MLB Polymarket pregame datasets.</div>
-              <div class="feature"><span></span>Private AWS role configuration for user-owned SageMaker execution.</div>
-            </div>
-          </article>
-          </div>
-          <div class="card about-principles" style="margin-top: 18px;">
-            <div class="eyebrow">Operating principles</div>
-            <h3>Evidence, uncertainty, and user control</h3>
-            <p class="small">Quantura is a research platform, not a promise of trading outcomes. Source timestamps and missing fields stay visible, scenario percentages keep their true mathematical sign, and external infrastructure costs remain clearly separated from platform access.</p>
-            <div class="hero-actions"><a class="cta" href="/forecasting">Open forecasting workspace</a><a class="cta secondary" href="/research">Read the SageMaker workflow</a></div>
-          </div>
+        <div class="container founder-letter" aria-labelledby="founder-letter-title">
+          <div class="eyebrow">A letter from the founder</div>
+          <h2 id="founder-letter-title">Better questions. Clearer decisions.</h2>
+          <p>Markets give us more information than we can use. Prices move, headlines compete for attention, and a single prediction can make an uncertain future look deceptively simple.</p>
+          <p>I built Quantura to make that uncertainty easier to examine. You should be able to see the data behind a forecast, compare a range of outcomes, and test an idea before deciding what to do with it.</p>
+          <p>My goal is to bring the tools of quantitative research within reach of independent investors, traders, and small research teams. That means connecting useful data with forecasting, screening, and saved work in a place that feels approachable.</p>
+          <p>Quantura will keep evolving. The principle behind it stays the same: help people think more clearly about markets, with evidence they can inspect and conclusions they can question.</p>
+          <p>Thank you for being part of that journey.</p>
+          <p class="founder-signature"><strong>Tamzid Ullah</strong><br><span class="small muted">Founder, Quantura</span></p>
+          <div class="hero-actions"><a class="cta" href="/forecasting">Explore Forecast</a><a class="cta secondary" href="/research">Read the research guides</a></div>
+        </div>
+      </section>
+      <section class="section about-principles">
+        <div class="container content-grid">
+          <article class="card"><h3>See the evidence</h3><p>Inspect observed history, model choices, and forecast ranges together.</p></article>
+          <article class="card"><h3>Keep your work</h3><p>Save forecasts, compare ideas, and return to the research behind a decision.</p></article>
         </div>
       </section>
 

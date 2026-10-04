@@ -4,21 +4,21 @@
     <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Research | SageMaker Canvas Time-Series Forecasting</title>
-        <meta name="description" content="A practical SageMaker Canvas time-series forecasting workflow connecting Quantura historical data, prediction quantiles, analysis, and AWS execution." />
+    <title>Research | Quantura</title>
+        <meta name="description" content="Research guides, economic data, and forecasting workflows." />
         <meta name="robots" content="index, follow" />
     <meta name="keywords" content="market research dashboard, macro analysis, treasury data, inflation data" />
         <link rel="canonical" href="https://quantura.studio/research" />
-        <meta property="og:title" content="Quantura Research | Market Intelligence + MLOps" />
-        <meta property="og:description" content="Curated research notes and architecture blueprint for demand forecasting and MLOps." />
+        <meta property="og:title" content="Research | Quantura" />
+        <meta property="og:description" content="Research guides, economic data, and forecasting workflows." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/research" />
         <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura Research | Market Intelligence + MLOps" />
-    <meta name="twitter:description" content="Curated research notes and architecture blueprint for demand forecasting and MLOps." />
+    <meta name="twitter:title" content="Research | Quantura" />
+    <meta name="twitter:description" content="Research guides, economic data, and forecasting workflows." />
     <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/research" />
     <meta name="author" content="Quantura" />
@@ -50,9 +50,12 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
+    <script defer src="/research-notes.js?v=20261003-concise"></script>
     <script defer src="/app.js?v=20261003-header-trial"></script>
   <script defer src="/q-market.js?v=20261003-header"></script>
 <script defer src="/market-search.js?v=20261003-header"></script>
+<script defer src="/economic-data.js?v=20261003"></script>
 </head>
   <body class="research-page">
     <header class="header">
@@ -76,10 +79,8 @@
         <div class="container">
           <div class="section-title research-intro">
             <div class="eyebrow">AWS SageMaker Canvas</div>
-            <h1>Time-series forecasting, from market data to quantile review.</h1>
-            <p class="small">
-              This research hub documents the practical path through Quantura: export chronological data, build a time-series model in SageMaker Canvas, upload its quantile predictions, and review the forecast distribution without mixing deterministic analysis with optional AI interpretation.
-            </p>
+            <h1>Turn market data into testable ideas.</h1>
+            <p class="small">Download history, compare forecast ranges, and evaluate your strategy. Use the guides below to build a repeatable research workflow.</p>
           </div>
 
           <div
@@ -89,16 +90,17 @@
             data-rn-slot-id="research-native-slot-1"
             data-rn-placement="research_surface"
             data-rn-context="research"
-            data-rn-title="Research surface: RNW injection"
-            data-rn-body="Shared React Native UI is mounted here. Native ad requests are runtime-gated to iOS/Android app shells."
+            data-rn-title="Research tools"
+            data-rn-body="Explore forecasts, market history, and saved research."
             data-rn-placeholder="true"
           ></div>
 
+          <section class="card economic-explorer" id="economic-explorer" aria-labelledby="economic-heading"><h2 id="economic-heading">Economic data</h2><p class="small">Explore World Bank indicators and U.S. Treasury series. Download observations or forecast a selected series.</p><form action="/api/economic-data/search" method="get"><div class="form-grid"><div class="field"><label for="economic-provider">Database</label><select id="economic-provider" name="provider"><option value="fiscaldata">Treasury Fiscal Data</option><option value="worldbank_data360">World Bank Data360</option></select></div><div class="field"><label for="economic-query">Indicator</label><input id="economic-query" name="q" type="search" maxlength="100" placeholder="Debt, GDP growth, population…" /></div></div><button class="cta secondary" type="submit">Find indicators</button></form><div class="hero-actions" data-economic-results></div><div data-economic-fields></div><p data-economic-status role="status" aria-live="polite">Search an economic indicator to select its series.</p><div class="hero-actions"><button type="button" class="cta secondary small" data-economic-preview>Preview history</button><button type="button" class="cta secondary small" data-economic-download disabled>Download CSV</button><a class="task-chip" data-economic-link href="https://data360.worldbank.org/en/api" target="_blank" rel="noopener" hidden>Source details</a></div><div class="table-wrap" data-economic-table></div><button type="button" class="cta" data-economic-forecast>Use in Forecast</button></section>
           <div class="research-pillars" aria-label="SageMaker Canvas forecasting workflow">
             <article class="card research-pillar">
               <h2>1. Prepare the Canvas dataset</h2>
               <ul class="research-bullet-list">
-                <li>Use Historical Data for chronological Alpaca or Yahoo Finance equity bars.</li>
+                <li>Use Historical Data for chronological Alpaca equity bars or Dukascopy instruments.</li>
                 <li>Use Sports Forecasting for Polymarket US MLB pregame one-minute datasets.</li>
                 <li>Map a text item ID, datetime timestamp, and numeric target column.</li>
                 <li>Keep observations regular; distinguish missing values from genuine zeroes.</li>
@@ -116,15 +118,15 @@
           </div>
 
           <section class="card research-component-map" aria-labelledby="research-component-map-title">
-            <div class="eyebrow">Quantura component map</div>
-            <h2 id="research-component-map-title">Where each website component fits</h2>
+            <div class="eyebrow">Research tools</div>
+            <h2 id="research-component-map-title">Choose your next step</h2>
             <div class="research-note-grid">
-              <div><strong>Historical Data</strong><p class="small muted">Select Alpaca, Yahoo Finance, or automatic fallback; preview and export a valid CSV.</p></div>
-              <div><strong>Forecast Foundry</strong><p class="small muted">Validate Canvas prediction CSVs and analyze quantiles, anomalies, bias, and tail signals.</p></div>
-              <div><strong>Quantura Forecast</strong><p class="small muted">Compare multi-model P1/P25/P50/P75/P99 distribution scenarios with optional balanced AI analysis.</p></div>
-              <div><strong>Screener</strong><p class="small muted">Find cross-sectional dislocations between actual price and stored forecast quantiles.</p></div>
-              <div><strong>Sports Forecasting</strong><p class="small muted">Prepare MLB pregame probability series for the same time-series workflow.</p></div>
-              <div><strong>AWS / SageMaker</strong><p class="small muted">Connect a private IAM role so permitted jobs run under, and are billed to, the user's AWS account.</p></div>
+              <div><strong>Historical Data</strong><p class="small muted">Download observed history from Alpaca, Dukascopy, or supported market sources.</p></div>
+              <div><strong>Forecast Foundry</strong><p class="small muted">Upload predictions and inspect their ranges and anomalies.</p></div>
+              <div><strong>Quantura Forecast</strong><p class="small muted">Compare models and forecast quantiles with the observed history.</p></div>
+              <div><strong>Screener</strong><p class="small muted">Filter markets by price relative to a forecast quantile.</p></div>
+              <div><strong>Sports Forecasting</strong><p class="small muted">Review Kalshi and Polymarket game forecasts before kickoff.</p></div>
+              <div><strong>AWS / SageMaker</strong><p class="small muted">Connect your AWS account to run SageMaker jobs.</p></div>
             </div>
           </section>
 
@@ -186,8 +188,8 @@
           </section>
 
           <section class="research-note-pages" aria-label="Internal research note pages">
-            <article class="card research-note-page" id="note-demand-foundations">
-              <h3>Foundations: Baselines and classical models</h3>
+            <details class="card research-note-page" id="note-demand-foundations">
+              <summary>Foundations: Baselines and classical models</summary>
               <p>
                 Start with naive and seasonal-naive baselines, then move into moving averages and ARIMA/ETS. This gives a
                 stable benchmark before adding modern architectures that can hide failure modes.
@@ -200,10 +202,10 @@
                 <li><a href="https://otexts.com/fpp3/" target="_blank" rel="noopener noreferrer">Forecasting: Principles and Practice</a></li>
                 <li><a href="https://www.statsmodels.org/stable/tsa.html" target="_blank" rel="noopener noreferrer">Statsmodels Time Series</a></li>
               </ul>
-            </article>
+            </details>
 
-            <article class="card research-note-page" id="note-demand-modern">
-              <h3>Modern forecasting: Multi-horizon and interpretable deep models</h3>
+            <details class="card research-note-page" id="note-demand-modern">
+              <summary>Modern forecasting: Multi-horizon and interpretable deep models</summary>
               <p>
                 Train models to emit full forward paths, not single points. Pair sequence encoders with interpretable attention
                 and feature importance so commercial stakeholders can audit forecast drivers.
@@ -216,10 +218,10 @@
                 <li><a href="https://arxiv.org/abs/1912.09363" target="_blank" rel="noopener noreferrer">Temporal Fusion Transformers</a></li>
                 <li><a href="https://pytorch-forecasting.readthedocs.io/" target="_blank" rel="noopener noreferrer">PyTorch Forecasting</a></li>
               </ul>
-            </article>
+            </details>
 
-            <article class="card research-note-page" id="note-demand-evaluation">
-              <h3>Evaluation: Rolling validation and leakage controls</h3>
+            <details class="card research-note-page" id="note-demand-evaluation">
+              <summary>Evaluation: Rolling validation and leakage controls</summary>
               <p>
                 Use rolling windows with strict time ordering, then report point and interval metrics side by side. Validate
                 that feature snapshots and joins do not leak future information into training or evaluation windows.
@@ -232,10 +234,10 @@
                 <li><a href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html" target="_blank" rel="noopener noreferrer">TimeSeriesSplit</a></li>
                 <li><a href="https://otexts.com/fpp3/accuracy.html" target="_blank" rel="noopener noreferrer">Forecast Accuracy Metrics</a></li>
               </ul>
-            </article>
+            </details>
 
-            <article class="card research-note-page" id="note-aws-metrics">
-              <h3>SageMaker Canvas metrics and Quantura quantile review</h3>
+            <details class="card research-note-page" id="note-aws-metrics">
+              <summary>SageMaker Canvas metrics and Quantura quantile review</summary>
               <p>
                 SageMaker Canvas reports advanced time-series metrics including Average wQL, WAPE, RMSE, MAPE, and MASE. These measurements describe different error characteristics; no single score replaces inspection of the forecast horizon and quantile calibration.
               </p>
@@ -258,10 +260,10 @@
                 <li><a href="https://docs.aws.amazon.com/sagemaker/latest/dg/canvas-build-model-how-to.html" target="_blank" rel="noopener noreferrer">Build a Canvas time-series model</a></li>
                 <li><a href="https://docs.aws.amazon.com/sagemaker/latest/dg/canvas-metrics.html" target="_blank" rel="noopener noreferrer">SageMaker Canvas metrics reference</a></li>
               </ul>
-            </article>
+            </details>
 
-            <article class="card research-note-page" id="note-demand-signals">
-              <h3>Signal engineering: Demand inflection features</h3>
+            <details class="card research-note-page" id="note-demand-signals">
+              <summary>Signal engineering: Demand inflection features</summary>
               <p>
                 Convert forecast curves into actionable features: first and second derivative (delta, acceleration), surprise
                 versus realized values, and regime filters that suppress low-confidence transitions.
@@ -274,10 +276,10 @@
                 <li><a href="https://arxiv.org/abs/2205.13504" target="_blank" rel="noopener noreferrer">Forecasting with uncertainty-aware objectives</a></li>
                 <li><a href="https://mlflow.org/docs/latest/index.html" target="_blank" rel="noopener noreferrer">MLflow tracking and signatures</a></li>
               </ul>
-            </article>
+            </details>
 
-            <article class="card research-note-page" id="note-mlops-cicd">
-              <h3>MLOps: CI/CD and continuous training</h3>
+            <details class="card research-note-page" id="note-mlops-cicd">
+              <summary>MLOps: CI/CD and continuous training</summary>
               <p>
                 Treat model updates as software releases with deterministic builds, test gates, staged promotion, and automated
                 rollback triggers for unstable live performance.
@@ -290,10 +292,10 @@
                 <li><a href="https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning" target="_blank" rel="noopener noreferrer">Google MLOps guide</a></li>
                 <li><a href="https://www.kubeflow.org/docs/components/pipelines/" target="_blank" rel="noopener noreferrer">Kubeflow Pipelines</a></li>
               </ul>
-            </article>
+            </details>
 
-            <article class="card research-note-page" id="note-mlops-monitoring">
-              <h3>MLOps: Data validation and model monitoring</h3>
+            <details class="card research-note-page" id="note-mlops-monitoring">
+              <summary>MLOps: Data validation and model monitoring</summary>
               <p>
                 Monitor feature distributions, input quality, prediction drift, and business KPIs together. Trigger retraining
                 only when quality gates or drift thresholds are breached.
@@ -306,10 +308,10 @@
                 <li><a href="https://evidentlyai.com/" target="_blank" rel="noopener noreferrer">Evidently monitoring patterns</a></li>
                 <li><a href="https://www.tensorflow.org/tfx/data_validation/get_started" target="_blank" rel="noopener noreferrer">TensorFlow Data Validation</a></li>
               </ul>
-            </article>
+            </details>
 
-            <article class="card research-note-page" id="note-mlops-registry">
-              <h3>MLOps: Experiment tracking, registry, lineage</h3>
+            <details class="card research-note-page" id="note-mlops-registry">
+              <summary>MLOps: Experiment tracking, registry, lineage</summary>
               <p>
                 Every model should be reproducible from data snapshot to deployment hash. Link experiment IDs to model registry
                 entries and keep inference lineage for governance and postmortem debugging.
@@ -322,7 +324,7 @@
                 <li><a href="https://www.mlflow.org/docs/latest/model-registry.html" target="_blank" rel="noopener noreferrer">MLflow Model Registry</a></li>
                 <li><a href="https://modelcards.withgoogle.com/about" target="_blank" rel="noopener noreferrer">Model Cards</a></li>
               </ul>
-            </article>
+            </details>
           </section>
 
           <section class="card research-note-page" id="forecast-api" aria-labelledby="forecast-api-title">

@@ -71,7 +71,7 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
     try {
     if(!auth)throw Error("authentication_unavailable");
     const principal=await authenticatePlatformRequest(req,{db,auth});
-    if(principal.guest || principal.authMethod!=="firebase_session")throw Error("sign_in_required");
+    if(principal.guest || !["firebase_session","clerk_session"].includes(principal.authMethod))throw Error("sign_in_required");
     return principal.userId;
     } catch {res.status(401).json({error:"sign_in_required"});return null;}
   };
@@ -108,20 +108,20 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
       res.setHeader("Cache-Control","private, no-store");res.json({saved:true,id:savedId,request_id:requestId,url:`/forecasting?panel=forecast&userGameForecastId=${savedId}`});
     }catch{res.status(503).json({error:"saved_forecast_unavailable"});}
   });
-  router.get("/screener/games",async(req,res)=>{
-    const cursor=String(req.query.cursor||"");
-    if(cursor&&!/^[a-f0-9]{32}$/.test(cursor)){res.status(400).json({error:"invalid_cursor"});return;}
-    try {
-      const date=gameDate();
-      let query=db.collection("game_forecast_catalog").where("game_date","==",date).orderBy(admin.firestore.FieldPath.documentId());
-      if(cursor)query=query.startAfter(cursor);
-      const [games,status]=await Promise.all([
-        query.limit(501).get(),
-        db.collection("game_forecast_status").get(),
-      ]);
-      const page=games.docs.slice(0,500),nextCursor=games.size>500?page.at(-1)!.id:null;
-      const items=page.flatMap(doc=>{const publicRow=publicGameForecast(doc.data());return publicRow?[publicRow]:[];})
-        .sort((a,b)=>String(a.game_start).localeCompare(String(b.game_start))||String(a.event_title).localeCompare(String(b.event_title)));
+  // Hourly publications are shared public data. Reuse one bounded read across
+  // pagination and quote refreshes, including concurrent requests in this instance.
+  const catalogTtlMs=5*60*1000;
+  let catalog:{date:string;until:number;promise:Promise<{items:Record<string,unknown>[];coverage:Record<string,unknown>[];bounded:boolean}>}|undefined;
+  const todayCatalog=()=>{
+    const date=gameDate();
+    if(!catalog || catalog.date!==date || catalog.until<=Date.now()) {
+      const promise=(async()=>{
+        const [games,status]=await Promise.all([
+          db.collection("game_forecast_catalog").where("game_date","==",date).orderBy(admin.firestore.FieldPath.documentId()).limit(10001).get(),
+          db.collection("game_forecast_status").get(),
+        ]);
+        const items=games.docs.slice(0,10000).flatMap(doc=>{const row=publicGameForecast(doc.data());return row?[row]:[];})
+          .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
       const current=status.docs.map(doc=>({...doc.data(),id:doc.id})).filter((data:any)=>data.game_date===date && ["kalshi","polymarket_us"].includes(data.provider));
       const coverage=["kalshi","polymarket_us"].flatMap(provider=>{
         const all=current.filter((d:any)=>d.provider===provider),sharded=all.filter((d:any)=>d.shards>1);
@@ -129,8 +129,25 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
         if(!selected.length)return [];
         return [{provider,updated_at:selected.map((d:any)=>text(d.updated_at,50)).sort().at(-1),eligible:selected.reduce((n,d:any)=>n+(Number(d.eligible)||0),0),successful:selected.reduce((n,d:any)=>n+(Number(d.successful)||0),0),failed:selected.reduce((n,d:any)=>n+(Number(d.failed)||0),0),partial:selected.some((d:any)=>d.partial===true)||sharded.length>0&&sharded.length<Number((sharded[0] as any).shards)}];
       });
-      res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");
-      res.json({date,time_zone:"America/New_York",items,coverage,next_cursor:nextCursor,bounded:nextCursor!==null});
+        return {items,coverage,bounded:games.size>10000};
+      })();
+      const entry={date,until:Date.now()+catalogTtlMs,promise};catalog=entry;
+      promise.catch(()=>{if(catalog===entry)catalog=undefined;});
+    }
+    return catalog.promise;
+  };
+  const currentStatus=(item:Record<string,unknown>):Record<string,unknown>=>({...item,
+    status:Date.now()>=Math.floor(Date.parse(String(item.game_start))/3600000)*3600000?"final_pregame":"updating_pregame"});
+  router.get("/screener/games",async(req,res)=>{
+    const cursor=String(req.query.cursor||"");
+    if(cursor&&!/^[a-f0-9]{32}$/.test(cursor)){res.status(400).json({error:"invalid_cursor"});return;}
+    try {
+      const date=gameDate(),data=await todayCatalog();
+      const remaining=data.items.filter(item=>!cursor || String(item.id)>cursor),page=remaining.slice(0,500);
+      const nextCursor=remaining.length>500?String(page.at(-1)!.id):null;
+      const items=page.map(currentStatus).sort((a,b)=>String(a.game_start).localeCompare(String(b.game_start))||String(a.event_title).localeCompare(String(b.event_title)));
+      res.setHeader("Cache-Control","public, max-age=30, s-maxage=60");
+      res.json({date,time_zone:"America/New_York",items,coverage:data.coverage,next_cursor:nextCursor,bounded:nextCursor!==null || data.bounded});
     }catch{res.status(503).json({error:"games_unavailable",message:"Game forecasts are temporarily unavailable."});}
   });
   router.get("/screener/games/prices",async(_req,res)=>{
@@ -138,10 +155,9 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
       const date=gameDate();
       if(!prices || prices.date!==date || prices.until<Date.now()) {
         const promise=(async()=>{
-          const data=await db.collection("game_forecast_catalog").where("game_date","==",date).limit(10001).get();
-          const rows=data.docs.slice(0,10000).flatMap(doc=>{const row=publicGameForecast(doc.data());return row?[row]:[];});
-          const items=await gameMarketPrices(rows);
-          return {date,items,bounded:data.size>10000,missing:items.filter(item=>item.latest_price===null).length};
+          const data=await todayCatalog();
+          const items=await gameMarketPrices(data.items.map(currentStatus));
+          return {date,items,bounded:data.bounded,missing:items.filter(item=>item.latest_price===null).length};
         })();
         const entry={date,until:Date.now()+60000,promise};prices=entry;
         promise.catch(()=>{if(prices===entry)prices=undefined;});

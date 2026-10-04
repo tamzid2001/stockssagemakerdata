@@ -121,6 +121,7 @@ test("revoked and expired keys immediately fail authentication", async () => {
     const tokenId = hashPlatformApiKey(generated.rawKey);
     const records = new Map<string, RecordValue>([
       ["users/user-1", { plan: "quant" }],
+      ["enterprise_api_accounts/user-1", { status:"active", tier:"enterprise" }],
       [`quantura_api_keys/${tokenId}`, { user_id: "user-1", name: "CI", scopes: ["account:read"], revoked_at: null, expires_at: null }],
     ]);
     const db = new FakeDb(records) as any;
@@ -140,6 +141,7 @@ test("revoked and expired keys immediately fail authentication", async () => {
 test("configured platform admin is verified dynamically, retains billing plan, and cannot bypass workspace boundaries", async () => {
   const records = new Map<string, RecordValue>([
     ["users/admin-user", { plan: "free" }],
+      ["enterprise_api_accounts/admin-user", { status:"active", tier:"enterprise" }],
     ["users/other", { plan: "quant" }],
     ["users/other/collaborators/admin-user", { role: "viewer" }],
   ]);
@@ -173,6 +175,7 @@ test("admin API key checks current identity without encoding admin privileges in
     const key = generatePlatformApiKey().rawKey;
     const records = new Map<string, RecordValue>([
       ["users/admin-user", { plan: "free" }],
+      ["enterprise_api_accounts/admin-user", { status:"active", tier:"enterprise" }],
       [`quantura_api_keys/${hashPlatformApiKey(key)}`, { user_id: "admin-user", name: "CI", scopes: ["forecasts:read"] }],
     ]);
     let verified = true;

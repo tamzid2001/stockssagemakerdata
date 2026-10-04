@@ -12,7 +12,7 @@
   const adminFetch = async (path, options = {}) => {
     const user = currentUser();
     if (!user) throw new Error("Sign in with the authorized admin account first.");
-    const token = await user.getIdToken();
+    const token = await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
     const response = await fetch(path, {
       ...options,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.headers || {}) },

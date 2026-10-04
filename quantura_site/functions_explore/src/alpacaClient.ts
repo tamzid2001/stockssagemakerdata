@@ -299,6 +299,13 @@ export class AlpacaClient {
     };
   }
 
+  async listAssets(): Promise<AlpacaAsset[]> {
+    const payload = await this.request("/v2/assets?status=active&asset_class=us_equity", { trading: true });
+    if (!Array.isArray(payload)) throw new AlpacaError("upstream", "Alpaca returned an unreadable asset catalog.", 502);
+    return payload.map(item => ({ symbol: String(item.symbol || "").toUpperCase(), name: String(item.name || item.symbol || ""),
+      exchange: String(item.exchange || ""), assetClass: String(item.class || "us_equity"), status: String(item.status || ""), tradable: item.tradable === true }));
+  }
+
   async getStockBars(input: StockHistoryInput): Promise<{ symbol: string; timeframe: string; feed: string; adjustment: string; session: string; rows: AlpacaBar[] }> {
     const symbol = normalizeSymbol(input.symbol);
     const { start, end } = normalizeRange(input.start, input.end);

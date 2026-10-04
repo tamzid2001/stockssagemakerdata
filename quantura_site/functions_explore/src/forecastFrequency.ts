@@ -37,6 +37,13 @@ export function frequencyEnd(timestamp: number, value: unknown): number {
   return frequency==="1MS" || frequency==="1W-MON" ? frequencyBounds(timestamp,frequency)[1] : timestamp+frequencyMinutes(frequency)*60000;
 }
 export function predictionPeriods(last: number, end: number, value: unknown): number {
+  if(["1ME","1QE-DEC","1YE-DEC"].includes(String(value))) {
+    const step=value==="1ME"?1:value==="1QE-DEC"?3:12;
+    let count=0,anchor=new Date(last);
+    let next=Date.UTC(anchor.getUTCFullYear(),anchor.getUTCMonth()+step+1,0);
+    while(next<=end && count<=1024){count++;anchor=new Date(next);next=Date.UTC(anchor.getUTCFullYear(),anchor.getUTCMonth()+step+1,0);}
+    return count;
+  }
   let frequency;
   try{frequency=forecastFrequency(value);}catch{
     const match=String(value).match(/^(\d+)(min|h|D)$/i);

@@ -73,7 +73,7 @@
     const outgoing=[...messages.slice(-8).map(({role,content})=>({role,content})),{role:"user",content:question}],userRowIndex=list.childElementCount;
     addMessage("user",question);input.value="";
     try {
-      const token=await user.getIdToken();
+      const token=await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
       const response=await fetch("/api/support/chat",{method:"POST",credentials:"same-origin",signal:request.signal,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({messages:outgoing})});
       const payload=await response.json().catch(()=>({}));if(turn!==generation)return;
       if(!response.ok)throw new Error([401,422,429,503].includes(response.status)?payload.error?.message||"Support is unavailable. Please retry.":"Support is unavailable. Please retry or contact us.");

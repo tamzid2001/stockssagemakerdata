@@ -82,7 +82,7 @@ const injectRemoteConfig = (html, { initialFetchResponse }) => {
 // Validate metadata before using it in markup. Local development has a stable
 // fallback; production deploy.sh and Vercel Git builds both provide a commit.
 const PUBLIC_SHELL_ASSET_VERSION = [process.env.VERCEL_GIT_COMMIT_SHA, process.env.GITLAB_SERVICE_VERSION]
-  .find((value) => /^[a-f0-9]{40}$/i.test(value || ""))?.slice(0, 12) || "20260912b";
+  .find((value) => /^[a-f0-9]{40}$/i.test(value || ""))?.slice(0, 12) || "20261003-release";
 const injectPublicShellAssets = (html) =>
   String(html || "")
     .replace(/<\/head>/i, (closing) => `${html.includes('name="p:domain_verify"') ? "" : '<meta name="p:domain_verify" content="2ec98785be619c0fe5489916ae586017" />\n'}${closing}`)
