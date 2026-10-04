@@ -15,16 +15,16 @@ test('Clerk account settings and saved research render once inside Terminal Prof
   assert.match(source, /<!-- TERMINAL_PROFILE_PANEL -->/);
   assert.equal(output.includes('<!-- TERMINAL_PROFILE_PANEL -->'), false);
   assert.equal(buildTerminalProfilePanel(dashboard).includes('Kanban board'), false);
-  assert.match(extractDashboardPanel(dashboard, 'orders'), /id="profile-requests"/);
+  assert.match(extractDashboardPanel(dashboard, 'requests'), /id="profile-requests"/);
 
   const { document } = new JSDOM(output).window;
   const profile = document.querySelector('[data-panel-router="terminal"] [data-panel="profile"]');
   assert.ok(profile);
-  for (const id of ['profile-requests', 'workspace-select']) {
+  for (const id of ['profile-requests']) {
     assert.ok(profile.querySelector(`#${id}`), id);
   }
   assert.ok(profile.querySelector('[data-clerk-user-profile]'));
-  for(const id of ['user-email','user-status','billing-portal-link','api-key-form','terminal-profile-developer'])assert.equal(profile.querySelector(`#${id}`),null,id);
+  for(const id of ['user-email','user-status','billing-portal-link','api-key-form','terminal-profile-developer','user-orders','workspace-select','terminal-profile-collaboration'])assert.equal(profile.querySelector(`#${id}`),null,id);
   const ids = [...document.querySelectorAll('[id]')].map((el) => el.id);
   assert.equal(new Set(ids).size, ids.length, 'source and imported controls must not duplicate IDs');
   assert.equal(profile.querySelector('[id="productivity"]'), null);
@@ -38,6 +38,7 @@ test('Terminal navigation keeps Profile while Clerk owns account sign-in and sig
   assert.deepEqual(labels, ['Forecast', 'Download', 'Screener', 'Profile']);
   assert.equal(document.querySelector('#dashboard-auth-link'), null);
   assert.equal(document.querySelector('#header-auth'), null);
+  assert.equal(document.querySelector('.workspace-sidebar-switcher'), null);
   const app = read('public/app.js');
   assert.match(app, /terminal: \["forecast", "download", "screener", "profile"\]/);
   assert.match(app, /data-auth-nav="true"/);

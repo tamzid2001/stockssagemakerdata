@@ -219,7 +219,7 @@ Provider data and model checkpoints can have separate licensing and redistributi
 
 ### October 3 account and navigation updates
 
-Search is compact in the shared header; Screener and API Docs are available from Terminal/Profile. API documentation, OpenAPI downloads and personal API keys require a server-owned enterprise grant, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
+Search is compact in the shared header; Screener is available in Terminal. Profile uses Clerk account and billing components alongside saved forecast, download, CSV and Jev requests. API documentation, OpenAPI downloads and personal API keys require a server-owned enterprise grant, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
 
 ### October 3 website and data release
 

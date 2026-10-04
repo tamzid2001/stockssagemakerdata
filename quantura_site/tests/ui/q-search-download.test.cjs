@@ -57,6 +57,26 @@ test('multi-outcome basket preserves six soccer sides and never mixes providers'
   const kalshi={...row(8),resource_id:'kalshi:8',source:'kalshi',contract:{...row(8).contract,source:'kalshi'}};
   w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:kalshi,intent:'download'}}));assert.equal(w.document.querySelectorAll('[data-remove]').length,1);d.window.close();
 });
+
+test('signed-in download previews save reopenable settings; restored requests do not duplicate history',async()=>{
+  const d=dom(),w=d.window,records=[];
+  w.QuanturaRequests={signedIn:()=>true,save:async record=>{records.push(record);return {id:record.requestId};}};
+  w.fetch=async()=>({ok:true,json:async()=>({provider:'alpaca',rows:[{timestamp:'2026-01-02T00:00:00Z',close:101}]})});
+  w.eval(source('q-market.js'));w.eval(source('q-download.js'));
+  w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:stock,intent:'download'}}));
+  const form=w.document.getElementById('q-download-form');
+  form.dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();await tick();
+  assert.equal(records.length,1);assert.equal(records[0].type,'download');
+  const record=records[0],savedConfig=JSON.parse(record.input.settings_json);
+  assert.equal(JSON.parse(record.input.selection_json).symbol,stock.symbol);
+  assert.ok(savedConfig.end);assert.match(w.document.getElementById('qd-status').textContent,/Saved to Requests/);
+  w.dispatchEvent(new w.CustomEvent('quantura:download-request',{detail:{resource:JSON.parse(record.input.selection_json),settings:savedConfig,contracts:[],requestId:record.requestId}}));
+  assert.equal(w.document.getElementById('qd-end').value,savedConfig.end);
+  form.dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();await tick();assert.equal(records.length,1);
+  w.document.getElementById('qd-limit').value='500';w.document.getElementById('qd-limit').dispatchEvent(new w.Event('change',{bubbles:true}));
+  form.dispatchEvent(new w.Event('submit',{cancelable:true}));await tick();await tick();assert.equal(records.length,2);
+  d.window.close();
+});
 test('old routes map to Q Download; no pricing/model/forecast API behavior is replaced',()=>{
   assert.match(source('app.js'),/\["sports-autopilot", "news", "options", "download"\].*return "download"/);
   assert.equal(api.requestFor(stock,settings).body.source,"auto");

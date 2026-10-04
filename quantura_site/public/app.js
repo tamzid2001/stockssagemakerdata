@@ -158,12 +158,13 @@
     { key: "daily", label: "Daily research reminder", hint: "A concise reminder to review account activity." },
     { key: "weekly", label: "Weekly activity recap", hint: "A summary of recent Quantura activity." },
   ]);
-  const MY_REQUEST_TYPES = new Set(["forecast", "screener", "indicator", "modelCouncil"]);
+  const MY_REQUEST_TYPES = new Set(["forecast", "download", "csv", "screener", "jev"]);
   const MY_REQUEST_TYPE_LABELS = {
     forecast: "Forecasting",
+    download: "Download",
+    csv: "Uploaded CSV",
     screener: "Screeners",
-    indicator: "Indicators",
-    modelCouncil: "Forecast Review",
+    jev: "Jev",
   };
   const getNativePlatform = () => {
     try {
@@ -2299,7 +2300,9 @@
           window.dispatchEvent(new CustomEvent("quantura:panel-changed", {detail:{panel:next}}));
           const marketSelector = document.querySelector(".market-search-workspace");
           if (marketSelector) marketSelector.hidden = !marketSelector.classList.contains("header-market-search") && ["autopilot", "foundry", "profile", "screener"].includes(next);
-		      if (next === "profile" && /^#terminal-profile-(auth|profile|orders|collaboration|developer)$/.test(window.location.hash)) {
+          const selectedMarketBanner = document.getElementById("q-selected-market");
+          if (selectedMarketBanner) selectedMarketBanner.hidden = next === "profile";
+		      if (next === "profile" && /^#terminal-profile-(auth|profile|requests)$/.test(window.location.hash)) {
 		        const requestedGroup = document.getElementById(window.location.hash.slice(1));
 		        if (requestedGroup instanceof HTMLDetailsElement && !requestedGroup.hidden) requestedGroup.open = true;
 		      }
@@ -2585,7 +2588,7 @@
 
     const preferredByRouter = {
       terminal: ["forecast", "download", "screener", "profile"],
-      dashboard: ["orders", "profile", "developer", "productivity", "collaboration", "notifications"],
+      dashboard: ["requests", "profile"],
     };
     const preferredByPath = {
       "/screener": ["/forecasting", "/screener", "/research", "/historical-data"],
@@ -8693,9 +8696,9 @@
       },
     },
     dashboard: {
-      defaultPanel: "orders",
+      defaultPanel: "requests",
       panelToPath: {
-        orders: "/dashboard",
+        requests: "/dashboard",
         profile: "/dashboard",
         productivity: "/productivity",
         collaboration: "/collaboration",
@@ -8703,7 +8706,7 @@
         auth: "/account",
       },
       pathAliases: {
-        "/dashboard/orders": "orders",
+        "/dashboard/orders": "requests",
         "/dashboard/profile": "profile",
         "/dashboard/productivity": "productivity",
         "/dashboard/collaboration": "collaboration",
@@ -14506,6 +14509,34 @@
     URL.revokeObjectURL(objectUrl);
   };
 
+  const applyEnsembleCsvPreview = (text, filename) => {
+    const table = window.QuanturaForecastControls.parseCsv(text);
+    ensembleUiState.csvTable = table;
+    ensembleUiState.csvText = text;
+    ensembleUiState.csvSavedId = null;
+    ensembleUiState.csvName = String(filename || "Uploaded time series").replace(/\.csv$/i, "").slice(0,120);
+    const name = document.getElementById("ensemble-csv-name");
+    if (name) name.value = ensembleUiState.csvName;
+    const preview = document.getElementById("ensemble-csv-preview-table");
+    if (preview) {
+      const grid = document.createElement("table"), head = grid.createTHead().insertRow();
+      for (const value of table.headers) {const cell=document.createElement("th");cell.scope="col";cell.textContent=value;head.append(cell);}
+      const body = grid.createTBody();
+      for (const values of table.rows.slice(0,20)) {const row=body.insertRow();for(const value of values)row.insertCell().textContent=value;}
+      preview.replaceChildren(grid);
+      document.getElementById("ensemble-csv-preview-note").textContent = `First ${Math.min(20,table.rows.length)} of ${table.rows.length.toLocaleString()} rows. Save to Requests to keep this CSV in your account.`;
+    }
+    for (const id of ["ensemble-csv-date", "ensemble-csv-target"]) {
+      const select = document.getElementById(id);select.replaceChildren(...table.headers.map(header => new Option(header, header)));
+    }
+    document.getElementById("ensemble-csv-date").value = table.headers.find(name => /date|time|^ds$/i.test(name)) || table.headers[0];
+    document.getElementById("ensemble-csv-target").value = table.headers.find(name => /close|value|target|^y$/i.test(name)) || table.headers[1];
+    const saveButton = document.getElementById("ensemble-csv-save");
+    if (saveButton) saveButton.disabled = false;
+    document.getElementById("ensemble-csv-status").textContent = `${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns. Review columns and interval before running.`;
+    return table;
+  };
+
   const bindEnsembleForecastUi = () => {
     if (!ui.ensembleForecastSettings || ui.ensembleForecastSettings.dataset.bound === "1") return;
     ui.ensembleForecastSettings.dataset.bound = "1";
@@ -14546,30 +14577,36 @@
       const preview = document.getElementById("ensemble-csv-preview-table");
       preview?.replaceChildren();
       ensembleUiState.csvTable = null;
+      ensembleUiState.csvText = null;
+      ensembleUiState.csvSavedId = null;
+      document.getElementById("ensemble-csv-save").disabled = true;
       const file = event.target.files?.[0]; if (!file) return;
       try {
         if (file.size > 2*1024*1024) throw new Error("CSV must be at most 2 MB.");
-        const table = controls.parseCsv(await file.text());
+        const text = await file.text();
         if (sequence !== csvUploadSequence) return;
-        ensembleUiState.csvTable = table; ensembleUiState.csvName = file.name;
-        const name = document.getElementById("ensemble-csv-name");
-        if(name) name.value = file.name.replace(/\.csv$/i, "").slice(0,120);
-        ensembleUiState.csvName = name?.value || file.name;
-        if(preview) {
-          const grid = document.createElement("table"), head = grid.createTHead().insertRow();
-          for(const value of table.headers) {const cell=document.createElement("th");cell.scope="col";cell.textContent=value;head.append(cell);}
-          const body=grid.createTBody();
-          for(const values of table.rows.slice(0,20)) {const row=body.insertRow();for(const value of values)row.insertCell().textContent=value;}
-          preview.append(grid);
-          document.getElementById("ensemble-csv-preview-note").textContent = `First ${Math.min(20,table.rows.length)} of ${table.rows.length.toLocaleString()} rows. Your file stays in this browser until you run a forecast.`;
-        }
-        for (const id of ["ensemble-csv-date", "ensemble-csv-target"]) {
-          const select = document.getElementById(id); select.replaceChildren(...table.headers.map(header => new Option(header, header)));
-        }
-        document.getElementById("ensemble-csv-date").value = table.headers.find(name => /date|time|^ds$/i.test(name)) || table.headers[0];
-        document.getElementById("ensemble-csv-target").value = table.headers.find(name => /close|value|target|^y$/i.test(name)) || table.headers[1];
-        status.textContent = `${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns. Review columns and interval before running.`;
+        applyEnsembleCsvPreview(text, file.name);
       } catch (error) { if(sequence === csvUploadSequence) status.textContent = error.message; }
+    });
+    document.getElementById("ensemble-csv-save")?.addEventListener("click", async event => {
+      if (!requireFullAccount("Sign in to save your CSV to Requests.")) return;
+      const button = event.currentTarget, status = document.getElementById("ensemble-csv-status");
+      button.disabled = true;
+      try {
+        if (!ensembleUiState.csvTable || !ensembleUiState.csvText) throw new Error("Choose a CSV to preview first.");
+        const originalText = ensembleUiState.csvText, originalName = ensembleUiState.csvName;
+        const rowCount = ensembleUiState.csvTable.rows.length;
+        const input = {date_column:document.getElementById("ensemble-csv-date").value,target_column:document.getElementById("ensemble-csv-target").value,frequency:document.getElementById("ensemble-csv-frequency").value};
+        let csvId = ensembleUiState.csvSavedId;
+        if (!csvId) {
+          const payload = await apiRequestJson("/api/v1/uploads/csv", {method:"POST",body:{filename:`${originalName}.csv`,csv_text:originalText,metadata:{source_type:"csv_preview"}}});
+          csvId = payload.data.id;
+          if (originalText === ensembleUiState.csvText) ensembleUiState.csvSavedId = csvId;
+        }
+        await upsertMyRequest({type:"csv",requestId:`csv__${csvId}`,title:originalName,sourceRef:{collection:"uploaded_csvs",id:csvId},input,outputsMeta:{status:"saved",summary:`${rowCount.toLocaleString()} rows · CSV preview`}});
+        if (originalText === ensembleUiState.csvText) status.textContent = "CSV saved to Requests. You can reopen its preview from Profile.";
+      } catch (error) {status.textContent = error.message || "Your CSV could not be saved. The local preview remains available.";}
+      finally {button.disabled = !ensembleUiState.csvTable;}
     });
     const csvHelp = document.getElementById("ensemble-csv-help");
     document.getElementById("ensemble-csv-help-open")?.addEventListener("click", () => csvHelp?.showModal());
@@ -14813,7 +14850,7 @@
   };
 
   const buildSourceRequestId = (type, sourceId) => {
-    const normalizedType = normalizeMyRequestType(type) || "forecast";
+    const normalizedType = normalizeMyRequestType(type) === "jev" ? "modelCouncil" : normalizeMyRequestType(type) || "forecast";
     const normalizedSourceId = String(sourceId || "")
       .trim()
       .replace(/[^A-Za-z0-9._:\-]/g, "_")
@@ -14949,8 +14986,8 @@
     const raw = String(value || "").trim();
     if (!raw) return "";
     const lowered = raw.toLowerCase();
-    if (lowered === "forecast" || lowered === "screener" || lowered === "indicator") return lowered;
-    if (lowered === "modelcouncil" || lowered === "model_council" || lowered === "model-council") return "modelCouncil";
+    if (["forecast", "download", "csv", "screener", "jev"].includes(lowered)) return lowered;
+    if (lowered === "modelcouncil" || lowered === "model_council" || lowered === "model-council") return "jev";
     return "";
   };
 
@@ -15114,8 +15151,8 @@
       .map((item) => {
         const id = escapeHtml(String(item?.id || ""));
         const type = normalizeMyRequestType(item?.type) || "forecast";
-        const typeLabel = escapeHtml(String(item?.typeLabel || MY_REQUEST_TYPE_LABELS[type] || type));
-        const title = escapeHtml(String(item?.title || "Request").replace(/^Quantura Forecast\s*·\s*/i,""));
+        const typeLabel = escapeHtml(String(MY_REQUEST_TYPE_LABELS[type] || item?.typeLabel || type));
+        const title = escapeHtml(String(item?.title || "Request").replace(/^Quantura Forecast\s*·\s*/i,"").replace(/Model Council/gi,"Jev"));
         const rawTicker = String(item?.input?.market_symbol || item?.ticker || item?.input?.ticker || "");
         const ticker = escapeHtml(rawTicker || "—");
         const provider = item?.input?.provider;
@@ -15156,9 +15193,9 @@
               ${summary ? `<div><strong>Summary</strong> ${summary}</div>` : ""}
             </div>
             <div class="order-actions" style="display:flex;gap:10px;flex-wrap:wrap;">
-              <button class="cta secondary small" type="button" data-action="my-request-load" data-request-id="${id}">${icon("play")}<span>Load</span></button>
+              <button class="cta secondary small" type="button" data-action="my-request-load" data-request-id="${id}">${icon("play")}<span>${type === "csv" ? "Preview" : type === "download" ? "Open download" : "Load"}</span></button>
               ${workflowRunUrl ? `<a class="cta secondary small" href="${workflowRunUrl}" target="_blank" rel="noopener noreferrer">${icon("git-branch")}<span>Open workflow</span></a>` : ""}
-              <button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>
+              ${!["csv", "download"].includes(type) ? `<button class="cta secondary small" type="button" data-action="my-request-share" data-request-id="${id}">${icon("share-ios")}<span>Share</span></button>` : ""}
               <button class="cta secondary small" type="button" data-action="my-request-rename" data-request-id="${id}">${icon("edit-pencil")}<span>Rename</span></button>
               <button class="cta secondary small" type="button" data-action="my-request-duplicate" data-request-id="${id}">${icon("copy")}<span>Duplicate</span></button>
               <button class="cta secondary small danger" type="button" data-action="my-request-delete" data-request-id="${id}">${icon("trash")}<span>Delete</span></button>
@@ -15180,7 +15217,7 @@
       const publishedFilter = normalizeMyRequestPublishedFilter(filters.published);
       const sourceRows = Array.isArray(state.myRequests) ? state.myRequests : [];
       const rows = sourceRows.filter((item) => {
-        if (Boolean(item?.deleted)) return false;
+        if (Boolean(item?.deleted) || String(item?.type || "").toLowerCase() === "indicator") return false;
         const itemType = normalizeMyRequestType(item?.type);
         if (typeFilter && itemType !== typeFilter) return false;
         if (publishedFilter === "published" && !Boolean(item?.published)) return false;
@@ -15340,6 +15377,11 @@
     }
     return request;
   };
+
+  window.QuanturaRequests = Object.freeze({
+    signedIn: () => hasFullAccount(),
+    save: payload => hasFullAccount() ? upsertMyRequest(payload) : Promise.resolve(null),
+  });
 
   const updateMyRequest = async (requestId, payload = {}, { method = "PATCH", path = "" } = {}) => {
     const id = String(requestId || "").trim();
@@ -16182,7 +16224,7 @@
         const savedRequest = await upsertMyRequest({
 	        type: "modelCouncil",
           requestId: requestDocId,
-	        title: `${symbol} Forecast Review`,
+	        title: `${symbol} Jev response`,
 	        input: {
 	          ticker: symbol,
 	          question: finalPrompt,
@@ -23451,10 +23493,30 @@
     const normalized = normalizeMyRequestType(type);
     if (isSportsAutopilotMyRequest(request)) return "sports-autopilot";
     if (isAutopilotMyRequest(request)) return "autopilot";
+    if (normalized === "download") return "download";
     if (normalized === "screener") return "screener";
     if (normalized === "indicator") return "forecast";
-    if (normalized === "modelCouncil") return "ticker-query";
+    if (normalized === "jev") return "ticker-query";
     return "forecast";
+  };
+
+  const previewSavedJevResponse = (item) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "ensemble-help";
+    dialog.setAttribute("aria-label", "Saved Jev response");
+    const close = document.createElement("button");
+    close.type = "button";close.className = "cta secondary small";close.textContent = "Close";
+    close.addEventListener("click", () => dialog.close());
+    const title = document.createElement("h2");title.textContent = String(item.title || "Jev response").replace(/Model Council/gi,"Jev");
+    const question = document.createElement("p");question.textContent = item.input?.question || item.input?.prompt || "";
+    const answer = document.createElement("div");answer.style.whiteSpace = "pre-wrap";
+    const response = item.outputsMeta?.response || item.outputsMeta?.answer || item.outputsMeta?.bodyMarkdown || item.outputsMeta?.summary;
+    answer.textContent = typeof response === "object" ? JSON.stringify(response,null,2) : response || "No saved response is available.";
+    const footer = document.createElement("p");footer.className = "small muted";footer.textContent = "AI can sometimes make mistakes. Please check important info.";
+    dialog.append(close,title,question,answer,footer);document.body.append(dialog);
+    dialog.addEventListener("close", () => dialog.remove(), {once:true});
+    dialog.addEventListener("click", event => {const bounds=dialog.getBoundingClientRect();if(event.target===dialog && (event.clientX<bounds.left || event.clientX>bounds.right || event.clientY<bounds.top || event.clientY>bounds.bottom))dialog.close();});
+    dialog.showModal();
   };
 
   const loadMyRequestIntoUi = async ({ requestId = "", request = null, db, functions, notify = true } = {}) => {
@@ -23471,15 +23533,40 @@
     }
 
     const type = normalizeMyRequestType(item.type) || "forecast";
+    if (type === "jev" && !ui.tickerQueryOutput) {previewSavedJevResponse(item);return item;}
     const panelId = mapMyRequestTypeToPanel(type, item);
     if (typeof window.__quanturaSetPanel === "function") {
-      window.__quanturaSetPanel(panelId, { pushPath: false });
+      window.__quanturaSetPanel(panelId, { pushPath: ["csv", "download"].includes(type) });
     }
 
     const sourceRef = item.sourceRef && typeof item.sourceRef === "object" ? item.sourceRef : {};
     const sourceId = String(sourceRef.id || "").trim();
     const input = item.input && typeof item.input === "object" ? item.input : {};
     const outputsMeta = item.outputsMeta && typeof item.outputsMeta === "object" ? item.outputsMeta : {};
+    if (type === "csv") {
+      if (sourceRef.collection !== "uploaded_csvs" || !/^[A-Za-z0-9_-]{1,220}$/.test(sourceId)) throw new Error("The saved CSV source is missing.");
+      const response = await fetch(`/api/v1/uploads/csv/${encodeURIComponent(sourceId)}/download`, {headers:await buildApiAuthHeaders(),credentials:"same-origin"});
+      if (!response.ok) throw new Error("This CSV is unavailable or you no longer have access.");
+      const source = document.getElementById("ensemble-source-type");
+      if (source) {source.value = "series";source.dispatchEvent(new Event("change", {bubbles:true}));}
+      applyEnsembleCsvPreview(await response.text(), item.title || "Uploaded CSV");
+      for (const [id,key] of [["ensemble-csv-date","date_column"],["ensemble-csv-target","target_column"],["ensemble-csv-frequency","frequency"]]) {
+        const control = document.getElementById(id);
+        if (control && [...control.options].some(option => option.value === input[key])) control.value = input[key];
+      }
+      document.getElementById("ensemble-csv-frequency")?.dispatchEvent(new Event("change", {bubbles:true}));
+      ensembleUiState.csvSavedId = sourceId;
+      document.getElementById("ensemble-csv-status").textContent = "Saved CSV loaded. Preview it or run a forecast.";
+      return item;
+    }
+    if (type === "download") {
+      const resource = JSON.parse(String(input.selection_json || "null"));
+      const settings = JSON.parse(String(input.settings_json || "{}"));
+      const contracts = JSON.parse(String(input.contracts_json || "[]"));
+      if (!window.QuanturaQMarket?.validResource(resource)) throw new Error("The saved download selection is missing.");
+      window.dispatchEvent(new CustomEvent("quantura:download-request", {detail:{resource,settings,contracts,requestId:id}}));
+      return item;
+    }
     const ticker = normalizeTicker(input.ticker || item.ticker || "");
     if (ticker) syncTickerInputs(ticker, { source: "my_request_load" });
 
@@ -23548,7 +23635,7 @@
       return item;
     }
 
-    if (type === "modelCouncil") {
+    if (type === "jev") {
       const provider = String(input.provider || outputsMeta.provider || "").trim().toLowerCase();
       const model = normalizeAiModelId(input.model || outputsMeta.model || "");
       if (ui.tickerQueryTicker && ticker) ui.tickerQueryTicker.value = ticker;
@@ -23586,7 +23673,7 @@
         state.tickerContext.tickerQueryLastResponse = responsePayload;
         renderTickerQueryResult(responsePayload);
       }
-      if (notify) showToast("Forecast Review request loaded.");
+      if (notify) showToast("Jev request loaded.");
       return item;
     }
 
@@ -23620,7 +23707,9 @@
         await renderSharedSportsFoundryRequest(request, String(shareMeta?.shareUrl || "").trim());
       } else if (isAutopilotMyRequest(request)) {
         await renderSharedFoundryRequest(request, String(shareMeta?.shareUrl || "").trim(), autopilotRun);
-      } else if (type === "modelCouncil" && ui.tickerQueryOutput) {
+      } else if (type === "jev" && !ui.tickerQueryOutput) {
+        previewSavedJevResponse(request);
+      } else if (type === "jev" && ui.tickerQueryOutput) {
         const outputsMeta = request.outputsMeta && typeof request.outputsMeta === "object" ? request.outputsMeta : {};
         const answer = String(outputsMeta.answer || outputsMeta.summary || "").trim();
         renderTickerQueryResult({
@@ -24804,7 +24893,7 @@
         const next = String(panel || "").trim();
         if (!next) return;
         syncAccountView();
-        if(next==="profile" && hasFullAccount()) {loadUserProfile(db,state.user).catch(()=>{});refreshWorkspacePanel().catch(()=>{});}
+        if(next==="profile" && hasFullAccount() && !window.QuanturaAuth?.enabled) {loadUserProfile(db,state.user).catch(()=>{});refreshWorkspacePanel().catch(()=>{});}
         if (next === "forecast") refreshPrimaryForecast();
         const showTickerChart = next === "ticker";
         const showStudioMain = showTickerChart;

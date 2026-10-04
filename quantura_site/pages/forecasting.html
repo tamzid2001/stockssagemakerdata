@@ -92,7 +92,6 @@
     <main>
       <div class="app-layout">
         <aside class="app-sidebar">
-	          <div class="sidebar-card workspace-sidebar-switcher"><label class="small" for="forecast-workspace-select"><strong>Workspace</strong></label><select id="forecast-workspace-select" data-workspace-select><option>Sign in to load</option></select><a class="cta secondary small" href="/forecasting?panel=profile#terminal-profile-collaboration"><i class="iconoir-settings" aria-hidden="true"></i><span>Workspace settings</span></a></div>
 	          <nav class="sidebar-nav" aria-label="Terminal navigation">
 	            <a class="sidebar-link active" href="/forecasting" data-panel-target="forecast"><i class="iconoir-magic-wand" aria-hidden="true"></i><span>Forecast</span></a>
               <a class="sidebar-link" href="/historical-data" data-panel-target="download"><i class="iconoir-download" aria-hidden="true"></i><span>Download</span></a>
@@ -175,7 +174,7 @@
                             </div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-date">Date / time column</label><select id="ensemble-csv-date"></select></div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-name">Dataset name</label><input id="ensemble-csv-name" maxlength="120" placeholder="Name your dataset" /></div>
-                            <details class="field" data-ensemble-source="series" id="ensemble-csv-preview" hidden open><summary>CSV preview</summary><p class="small muted" id="ensemble-csv-preview-note">Your file stays in this browser until you run a forecast.</p><div class="table-wrap" id="ensemble-csv-preview-table"></div></details>
+                            <details class="field" data-ensemble-source="series" id="ensemble-csv-preview" hidden open><summary>CSV preview</summary><p class="small muted" id="ensemble-csv-preview-note">Preview your file before forecasting. Save it to Requests to reopen later.</p><div class="table-wrap" id="ensemble-csv-preview-table"></div><button class="cta secondary small" type="button" id="ensemble-csv-save" disabled>Save to Requests</button></details>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-target">Numeric value column</label><select id="ensemble-csv-target"></select></div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-frequency">Observation interval</label><select id="ensemble-csv-frequency"><option value="1min">Minute</option><option value="5min">5 minutes</option><option value="15min">15 minutes</option><option value="30min">30 minutes</option><option value="1h">Hourly</option><option value="4h">4 hours</option><option value="1D" selected>Daily</option><option value="1W-MON">Weekly</option><option value="1MS">Monthly</option></select></div>
                             <div class="field">
