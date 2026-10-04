@@ -287,7 +287,7 @@ const PROMO_END_MS = (() => {
 })();
 
 type SavedItemType = "forecast" | "screener" | "model_council" | "post";
-type MyRequestType = "forecast" | "screener" | "indicator" | "modelCouncil";
+type MyRequestType = "forecast" | "download" | "csv" | "jev" | "screener" | "indicator" | "modelCouncil";
 type MyRequestShareVisibility = "private" | "unlisted" | "public";
 
 type SystemFolderConfig = {
@@ -430,13 +430,16 @@ const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   inactiveHidden: true,
 };
 
-const MY_REQUEST_TYPE_SET = new Set<MyRequestType>(["forecast", "screener", "indicator", "modelCouncil"]);
+const MY_REQUEST_TYPE_SET = new Set<MyRequestType>(["forecast", "download", "csv", "jev", "screener"]);
 const MY_REQUEST_SHARE_VISIBILITY_SET = new Set<MyRequestShareVisibility>(["private", "unlisted", "public"]);
 const MY_REQUEST_TYPE_LABEL: Record<MyRequestType, string> = {
   forecast: "Forecast",
+  download: "Download",
+  csv: "Uploaded CSV",
   screener: "Screener",
   indicator: "Indicator",
-  modelCouncil: "Model Council",
+  modelCouncil: "Jev",
+  jev: "Jev",
 };
 
 const ROUTES = express.Router();
@@ -1778,8 +1781,8 @@ function normalizeMyRequestType(value: unknown): MyRequestType | "" {
   const raw = sanitizeText(value, 40).trim();
   if (!raw) return "";
   const lower = raw.toLowerCase();
-  if (lower === "forecast" || lower === "screener" || lower === "indicator") return lower;
-  if (lower === "modelcouncil" || lower === "model_council" || lower === "model-council") return "modelCouncil";
+  if (["forecast", "download", "csv", "jev", "screener", "indicator"].includes(lower)) return lower as MyRequestType;
+  if (lower === "modelcouncil" || lower === "model_council" || lower === "model-council") return "jev";
   return "";
 }
 
@@ -1796,7 +1799,7 @@ function normalizeMyRequestId(value: unknown): string {
 }
 
 function buildMyRequestDocId(type: MyRequestType, sourceId: string): string {
-  const cleanType = normalizeMyRequestType(type) || "forecast";
+  const cleanType = normalizeMyRequestType(type) === "jev" ? "modelCouncil" : normalizeMyRequestType(type) || "forecast";
   const cleanSourceId = normalizeSourceId(sourceId).replace(/[^A-Za-z0-9._:\-]/g, "_").slice(0, 180);
   return `${cleanType}__${cleanSourceId || "item"}`;
 }
@@ -1806,13 +1809,15 @@ function defaultMyRequestTitle(type: MyRequestType, payload: Record<string, unkn
   if (type === "forecast") {
     return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} forecast`;
   }
+  if (type === "download") return sanitizeText(payload.title, 160) || `${ticker || "Market"} download`;
+  if (type === "csv") return sanitizeText(payload.title, 160) || "Uploaded CSV";
   if (type === "screener") {
     return sanitizeText(payload.title, 160) || "Screener run";
   }
   if (type === "indicator") {
     return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} indicators`;
   }
-  return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} Model Council`;
+  return sanitizeText(payload.title, 160) || `${ticker || "Ticker"} Jev response`;
 }
 
 function ensureMyRequestShareSlug(seed = ""): string {
@@ -1928,9 +1933,9 @@ function buildMyRequestBody(type: MyRequestType, outputsMeta: Record<string, unk
     outputsMeta.body ||
     outputsMeta.markdown ||
     outputsMeta.narrative;
-  const richBody = sanitizeRichText(preferredValue, type === "modelCouncil" ? 24000 : 16000);
+  const richBody = sanitizeRichText(preferredValue, type === "jev" ? 24000 : 16000);
   if (richBody) return richBody;
-  if (type === "modelCouncil") {
+  if (type === "jev") {
     return sanitizeRichText(outputsMeta.summary, 8000);
   }
   return "";
@@ -1945,7 +1950,11 @@ function normalizeMyRequestInput(input: unknown): Record<string, unknown> {
       const cleanKey = sanitizeText(key, 60);
       if (!cleanKey) return;
       if (typeof value === "string") {
-        out[cleanKey] = sanitizeText(value, 4000);
+        if (["selection_json", "settings_json", "contracts_json"].includes(cleanKey)) {
+          if (Buffer.byteLength(value, "utf8") > 30000) throw new Error("invalid_request_payload");
+          try { out[cleanKey] = JSON.stringify(JSON.parse(value)); }
+          catch { throw new Error("invalid_request_payload"); }
+        } else out[cleanKey] = sanitizeText(value, 4000);
         return;
       }
       if (typeof value === "number" || typeof value === "boolean") {
@@ -2021,8 +2030,8 @@ function myRequestShareUrl(slug: string, data: Record<string, unknown> = {}): st
   if (type === "indicator") {
     return `${PUBLIC_ORIGIN}/indicators?requestShare=${encodeURIComponent(cleanSlug)}`;
   }
-  if (type === "modelCouncil") {
-    return `${PUBLIC_ORIGIN}/model-council?requestShare=${encodeURIComponent(cleanSlug)}`;
+  if (type === "jev") {
+    return `${PUBLIC_ORIGIN}/forecasting?requestShare=${encodeURIComponent(cleanSlug)}`;
   }
   return `${PUBLIC_ORIGIN}/forecasting?requestShare=${encodeURIComponent(cleanSlug)}`;
 }
@@ -3344,7 +3353,7 @@ async function syncLegacyRequestsForUser(uid: string): Promise<void> {
     const requestId = buildMyRequestDocId("modelCouncil", doc.id);
     queueSync(requestId, {
       type: "modelCouncil",
-      title: sanitizeText(data.title, 160) || `${ticker || "Ticker"} Model Council`,
+      title: sanitizeText(data.title, 160) || `${ticker || "Ticker"} Jev response`,
       input: {
         ticker,
         question: sanitizeText(data.question, 4000),
@@ -5367,8 +5376,8 @@ function buildMyRequestCaption(
       400
     );
   }
-  if (type === "modelCouncil") {
-    return sanitizeText(`${ticker || title} Model Council response is ready for review.`, 400);
+  if (type === "jev") {
+    return sanitizeText(`${ticker || title} Jev response is ready for review.`, 400);
   }
   return sanitizeText(title, 400);
 }
@@ -9382,7 +9391,7 @@ async function persistModelCouncilResponse(
   const responseRef = db.collection(MODEL_COUNCIL_RESPONSE_COLLECTION).doc();
   await responseRef.set({
     userId: viewer.uid,
-    title: `${ticker || "Ticker"} Model Council`,
+    title: `${ticker || "Ticker"} Jev response`,
     ticker,
     question: buildModelCouncilQuestion(payload),
     answer: sanitizeRichText(result.text, 20000),
@@ -13562,7 +13571,7 @@ ROUTES.get("/my-requests", async (req, res) => {
 
     const page = selectRequestPage(requestDocs, viewer.uid, limit, snap.more, (doc) => {
         const item = toMyRequestResponse(doc.id, doc.data, { includePayload: true });
-        if (asBoolean(item.deleted, false)) return null;
+        if (asBoolean(item.deleted, false) || item.type === "indicator") return null;
         const itemType = normalizeMyRequestType(item.type);
         if (typeFilter && itemType !== typeFilter) return null;
         if (publishedFilter === "published" && !asBoolean(item.published, false)) return null;
@@ -13682,6 +13691,7 @@ ROUTES.post("/my-requests", async (req, res) => {
       res.status(401).json({ error: code });
       return;
     }
+    if (code === "invalid_request_payload") {res.status(400).json({error:code});return;}
     console.error("[API] upsert my request failed", error);
     res.status(500).json({ error: "my_request_upsert_failed" });
   }

@@ -87,6 +87,7 @@ const injectPublicShellAssets = (html) =>
   String(html || "")
     .replace(/<\/head>/i, (closing) => `${html.includes('name="p:domain_verify"') ? "" : '<meta name="p:domain_verify" content="2ec98785be619c0fe5489916ae586017" />\n'}${closing}`)
     .replace(/\/app\.js(?:\?v=[A-Za-z0-9._-]+)?/g, `/app.min.js?v=${PUBLIC_SHELL_ASSET_VERSION}`)
+    .replace(/\/(quantura-auth|q-download)\.js(?:\?v=[A-Za-z0-9._-]+)?/g, (_match, name) => `/${name}.js?v=${PUBLIC_SHELL_ASSET_VERSION}`)
     .replace(/\/styles\.css(?:\?v=[A-Za-z0-9._-]+)?/g, `/styles.min.css?v=${PUBLIC_SHELL_ASSET_VERSION}`)
     .replace(/\/assets\/quantura-icon\.svg/g, `/favicon.svg?v=${PUBLIC_SHELL_ASSET_VERSION}`);
 

@@ -52,9 +52,66 @@ test('search can continue beyond an empty loaded page, refresh resets paging, si
   api.state.user=null;await api.load();api.render();assert.equal(api.state.myRequests.length,0);assert.equal(api.state.myRequestsNextCursor,null);assert.equal(w.document.querySelector('[data-my-requests-pagination]').hidden,true);
   d.window.close();
 });
-test('My Requests does not hide types behind an implicit forecast filter or Type dropdown',()=>{
+test('My Requests defaults to all types and offers the current request categories',()=>{
   for(const dir of ['pages','functions_ssr/templates']){
     const html=fs.readFileSync(path.join(root,dir,'forecasting.html'),'utf8');
-    assert.doesNotMatch(html,/data-my-requests-type|data-my-requests-panel data-default-type/);
+    assert.doesNotMatch(html,/data-my-requests-panel data-default-type/);
+    if(dir.includes("templates")){
+      const document=new JSDOM(html).window.document;
+      const values=[...document.querySelectorAll("#profile-requests [data-my-requests-type] option")].map(option=>option.value);
+      assert.deepEqual(values,["","forecast","download","csv","jev"]);
+    }
   }
+});
+
+test('legacy response records use Jev and retired Indicator requests stay out of the list',async()=>{
+  const {d,w,api}=history();await api.load();
+  api.state.myRequests=[{id:'retired',type:'indicator',title:'Old indicator'},{id:'reply',type:'jev',title:'AAPL Model Council',outputsMeta:{answer:'Historical range analysis'}}];
+  api.render();assert.doesNotMatch(w.document.querySelector('[data-my-requests-list]').textContent,/Old indicator|Model Council/);
+  assert.match(w.document.querySelector('[data-my-requests-list]').textContent,/AAPL Jev/);
+  const normalize=app.slice(app.indexOf('  const normalizeMyRequestType ='),app.indexOf('  const normalizeMyRequestVisibility ='));
+  w.eval(`${normalize}window.normalizeType=normalizeMyRequestType;`);
+  for(const type of ['modelCouncil','model_council','model-council','jev'])assert.equal(w.normalizeType(type),'jev');
+  assert.equal(w.normalizeType('indicator'),'');d.window.close();
+});
+
+test('CSV preview saves a named private resource once and retains columns for reopening',async()=>{
+  const markup=fs.readFileSync(path.join(root,'pages/forecasting.html'),'utf8');
+  const d=new JSDOM(markup,{url:'https://quantura.studio/forecasting',runScripts:'outside-only'}),w=d.window,calls=[],records=[];
+  w.QuanturaForecastControls=require(path.join(root,'public/forecast-controls.js'));
+  w.apiRequestJson=async(path,options)=>{calls.push({path,...options});return {data:{id:'csv_test'}};};
+  w.upsertMyRequest=async record=>records.push(record);
+  const helper=app.slice(app.indexOf('  const applyEnsembleCsvPreview ='),app.indexOf('  const bindEnsembleForecastUi ='));
+  const start=app.indexOf('    document.getElementById("ensemble-csv-save")?.addEventListener');
+  const save=app.slice(start,app.indexOf('    const csvHelp =',start));
+  w.eval(`const ensembleUiState={};const requireFullAccount=()=>true;${helper}${save}window.csvTest={state:ensembleUiState,preview:applyEnsembleCsvPreview};`);
+  const text='time,close,other\n2026-01-01,100,1\n2026-01-02,101,2\n';
+  w.csvTest.preview(text,'Strategy input.csv');
+  assert.equal(calls.length,0,'preview must not upload private content without Save');
+  assert.match(w.document.getElementById('ensemble-csv-preview-table').textContent,/101/);
+  w.document.getElementById('ensemble-csv-target').value='other';
+  w.document.getElementById('ensemble-csv-save').click();await tick();await tick();
+  assert.equal(calls[0].path,'/api/v1/uploads/csv');assert.equal(calls[0].body.csv_text,text);
+  assert.equal(records[0].title,'Strategy input');assert.equal(records[0].input.target_column,'other');
+  assert.equal(records[0].sourceRef.id,'csv_test');assert.equal('csv_text' in records[0].input,false);
+  w.document.getElementById('ensemble-csv-save').click();await tick();await tick();assert.equal(calls.length,1,'repeated Save reuses the existing stored file');
+  d.window.close();
+});
+
+test('reopening a CSV request uses authenticated storage and restores its selected columns',async()=>{
+  const d=new JSDOM(fs.readFileSync(path.join(root,'pages/forecasting.html'),'utf8'),{url:'https://quantura.studio/forecasting?panel=profile',runScripts:'outside-only'}),w=d.window,calls=[];
+  w.QuanturaForecastControls=require(path.join(root,'public/forecast-controls.js'));
+  w.fetch=async(url,options)=>{calls.push({url,options});return {ok:true,text:async()=>'date,close,volume\n2026-01-01,100,3\n2026-01-02,101,5\n'};};
+  const helper=app.slice(app.indexOf('  const applyEnsembleCsvPreview ='),app.indexOf('  const bindEnsembleForecastUi ='));
+  const load=app.slice(app.indexOf('  const loadMyRequestIntoUi ='),app.indexOf('  const loadSharedMyRequestFromUrl ='));
+  w.__quanturaSetPanel=(panel,options)=>calls.push({panel,options});
+  w.eval(`const ensembleUiState={},ui={};const hasSessionUser=()=>true;const normalizeMyRequestType=value=>value;const mapMyRequestTypeToPanel=()=>"forecast";const buildApiAuthHeaders=async()=>({Authorization:"Bearer synthetic-test"});${helper}${load}window.loadCsv=loadMyRequestIntoUi;`);
+  const request={id:'csv__csv_test',type:'csv',title:'Research series',sourceRef:{collection:'uploaded_csvs',id:'csv_test'},input:{date_column:'date',target_column:'volume',frequency:'1h'}};
+  await w.loadCsv({request});
+  assert.equal(calls[0].panel,'forecast');assert.equal(calls[0].options.pushPath,true);
+  assert.equal(calls[1].url,'/api/v1/uploads/csv/csv_test/download');assert.equal(calls[1].options.headers.Authorization,'Bearer synthetic-test');
+  assert.equal(w.document.getElementById('ensemble-csv-name').value,'Research series');
+  assert.equal(w.document.getElementById('ensemble-csv-target').value,'volume');
+  assert.match(w.document.getElementById('ensemble-csv-preview-table').textContent,/101/);
+  w.fetch=async()=>({ok:false});await assert.rejects(w.loadCsv({request}),/unavailable|access/);d.window.close();
 });

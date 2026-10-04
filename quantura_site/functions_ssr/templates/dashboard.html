@@ -87,7 +87,6 @@
     <main>
       <div class="app-layout">
 	        <aside class="app-sidebar">
-	          <div class="sidebar-card clerk-team-switcher"><div data-clerk-organization-switcher></div></div>
 	          <div class="sidebar-card">
 	            <div class="small"><strong>Shortcuts</strong></div>
 	            <a class="cta secondary small" href="/forecasting"><i class="iconoir-candlestick-chart" aria-hidden="true"></i><span>Open terminal</span></a>
@@ -95,10 +94,9 @@
 	            <a class="cta secondary small hidden" id="nav-admin" href="/admin"><i class="iconoir-shield-check" aria-hidden="true"></i><span>Admin dashboard</span></a>
 	          </div>
 			          <nav class="sidebar-nav" aria-label="Dashboard navigation">
-			            <a class="sidebar-link active" href="/dashboard" data-panel-target="orders"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Orders</span></a>
+			            <a class="sidebar-link active" href="/forecasting?panel=profile#terminal-profile-requests" data-panel-target="requests"><i class="iconoir-shopping-bag-check" aria-hidden="true"></i><span>Requests</span></a>
 		            <a class="sidebar-link" href="/dashboard?panel=profile" data-panel-target="profile"><i class="iconoir-user" aria-hidden="true"></i><span>Profile</span></a>
 
-		            <a class="sidebar-link" href="/collaboration" data-panel-target="collaboration"><i class="iconoir-group" aria-hidden="true"></i><span>Team settings</span></a>
 
 
 		          </nav>
@@ -213,9 +211,6 @@
 
       <section class="section panel hidden" data-panel="profile" id="profile">
         <div class="container">
-          <div class="section-title">
-            <div><div class="eyebrow">Private account settings</div><h2>Profile</h2><p class="small">Manage your private account details and saved research.</p></div>
-          </div>
           <div class="clerk-account-card" data-clerk-user-profile></div>
           <div data-clerk-pricing hidden></div>
         </div>
@@ -225,26 +220,18 @@
 
 
 
-	      <section class="section panel" data-panel="orders" id="dashboard">
-	        <div class="container">
-	          <div class="section-title">
-	            <h2>Your orders</h2>
-	            <p class="small">Track your subscription requests and fulfillment status.</p>
-	          </div>
-	            <div class="dashboard-grid">
-	            <div class="card">
-	              <h3>Order history</h3>
-	              <div id="user-orders" class="order-list panel-output"></div>
-	            </div>
-	            <div class="card" data-my-requests-panel id="profile-requests">
-	              <div class="card-head"><h3>Requests</h3><button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button></div>
-                  <label>Search requests<input type="search" data-my-requests-search placeholder="Title, market, date" /></label>
-                  <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
-                  <div class="order-list panel-output" data-my-requests-list></div>
-	            </div>
-	          </div>
-	        </div>
-	      </section>
+      <section class="section panel" data-panel="requests" id="requests">
+        <div class="container">
+          <div class="card" data-my-requests-panel id="profile-requests">
+            <div class="card-head"><h3>Saved requests</h3><button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button></div>
+            <label>Search requests<input type="search" data-my-requests-search placeholder="Name, market, date" /></label>
+            <label>Request type<select data-my-requests-type><option value="">All requests</option><option value="forecast">Forecasts</option><option value="download">Downloads</option><option value="csv">Uploaded CSVs</option><option value="jev">Jev</option></select></label>
+            <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
+            <div class="order-list panel-output" data-my-requests-list></div>
+            <div data-my-requests-pagination></div>
+          </div>
+        </div>
+      </section>
 
       <section class="section panel hidden" data-panel="collaboration" id="collaboration">
         <div class="container clerk-team-settings"><div data-clerk-organization-switcher></div><div data-clerk-organization-profile></div></div>

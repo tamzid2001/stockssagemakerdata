@@ -67,10 +67,10 @@
       const host=document.createElement("div");host.dataset.clerkUserButton="";header.append(host);
     }
     if(resources.user) {
-      component("[data-clerk-user-button]","UserButton",{userProfileUrl:"/forecasting?panel=profile",userProfileMode:"navigation"});
+      component("[data-clerk-user-button]","UserButton",{userProfileUrl:"/forecasting?panel=profile",userProfileMode:"navigation",userProfileProps:{apiKeysProps:{hide:true}}});
       component("[data-clerk-organization-switcher]","OrganizationSwitcher",{hidePersonal:false,afterSelectOrganizationUrl:location.pathname+location.search,afterSelectPersonalUrl:location.pathname+location.search});
-      component("[data-clerk-user-profile]","UserProfile",{routing:"hash"});
-      if(resources.organization)component("[data-clerk-organization-profile]","OrganizationProfile",{routing:"hash"});
+      component("[data-clerk-user-profile]","UserProfile",{routing:"hash",apiKeysProps:{hide:true}});
+      if(resources.organization)component("[data-clerk-organization-profile]","OrganizationProfile",{routing:"hash",apiKeysProps:{hide:true}});
     }
   }
   // Capture old web auth actions before the legacy/native handlers run.

@@ -3,7 +3,7 @@
   const byId=id=>document.getElementById(id), form=byId("q-download-form"), api=window.QuanturaQMarket;
   if(!form||!api)return;
   const html=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
-  let selected=null,saved=null,controller=null,sequence=0,optionSequence=0,optionController=null,optionSymbol="";
+  let selected=null,saved=null,controller=null,sequence=0,optionSequence=0,optionController=null,optionSymbol="",restoredRequestId="";
   const basket=new Map();
   const value=id=>byId(`qd-${id}`).value;
   const status=text=>{byId("qd-status").textContent=text;};
@@ -12,7 +12,7 @@
   byId("qd-start").value=local(new Date(Date.now()-7*86400000));
   byId("qd-timezone").textContent=Intl.DateTimeFormat().resolvedOptions().timeZone;
   function invalidate(message="Settings changed. Preview again before downloading."){
-    controller?.abort();controller=null;++sequence;saved=null;
+    controller?.abort();controller=null;++sequence;saved=null;restoredRequestId="";
     byId("qd-csv").disabled=byId("qd-json").disabled=true;
     byId("qd-preview").disabled=false;byId("qd-preview").removeAttribute("aria-busy");byId("qd-cancel").hidden=true;
     byId("qd-preview-table").replaceChildren();status(message);
@@ -70,6 +70,7 @@
   }
   window.addEventListener("quantura:market-selected",event=>{
     const row=event.detail?.resource;if(!api.validResource(row))return;
+    restoredRequestId="";
     const prediction=row.resource_type==="prediction_market_contract";
     const adding=event.detail.intent==="add-download";
     if(!adding||!prediction||selected?.source!==row.source)basket.clear();
@@ -81,6 +82,20 @@
     invalidate("Market selected. Preview to retrieve historical observations.");renderBasket();configure();
     if(event.detail.intent==="options"){byId("qd-kind").value="options";configure();}
     if(value("kind")==="options")void loadExpirations();
+  });
+  window.addEventListener("quantura:download-request",event=>{
+    const {resource,settings:config={},contracts=[],requestId=""}=event.detail||{};
+    if(!api.validResource(resource))return;
+    window.dispatchEvent(new CustomEvent("quantura:market-selected",{detail:{resource,intent:"download"}}));
+    for(const row of contracts)if(api.validResource(row) && row.source===resource.source)basket.set(row.resource_id,row);
+    renderBasket();
+    for(const [key,value] of Object.entries(config)) {
+      const control=byId(`qd-${key.replace(/_/g,"-")}`);
+      if(control)control.value=String(value??"");
+    }
+    configure();optionSymbol=config.optionSymbol||"";
+    restoredRequestId=requestId;
+    status("Saved download settings loaded. Preview to refresh the observations.");
   });
   byId("qd-basket").addEventListener("click",event=>{
     const button=event.target.closest("[data-remove]");if(!button)return;
@@ -99,7 +114,7 @@
     byId("qd-option-status").textContent=`Selected ${optionSymbol}. Preview its history below.`;
   });
   form.addEventListener("submit",async event=>{
-    event.preventDefault();invalidate();const run=sequence;
+    event.preventDefault();const requestId=restoredRequestId;invalidate();restoredRequestId=requestId;const run=sequence;
     try{
       const config=settings(),request=api.requestFor(selected,config,[...basket.values()].map(r=>r.contract));
       controller=new AbortController();byId("qd-preview").disabled=true;byId("qd-preview").setAttribute("aria-busy","true");byId("qd-cancel").hidden=false;status("Downloading real provider observations…");
@@ -124,6 +139,14 @@
       const warnings=payload.validation?.messages||payload.metadata?.validation?.messages||payload.warnings||[];
       status(`${rows.length.toLocaleString()} rows · ${metadata.provider} · ${times[0]||"no start"} → ${times.at(-1)||"no end"} UTC. Preview shows up to 100 rows; exports include all ${rows.length}. ${warnings.join(" ")}`);
       byId("qd-csv").disabled=byId("qd-json").disabled=!rows.length;
+      if(rows.length && !restoredRequestId && window.QuanturaRequests?.signedIn()) {
+        const selection={...selected},savedConfig={...config,end:request.body.end?local(new Date(request.body.end)):config.end};
+        const id=`download__${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
+        try {
+          const record=await window.QuanturaRequests.save({type:"download",requestId:id,title:`${api.label(selection)} · ${config.frequency} download`,input:{ticker:selection.symbol,provider:metadata.provider,selection_json:JSON.stringify(selection),settings_json:JSON.stringify(savedConfig),contracts_json:JSON.stringify([...basket.values()])},outputsMeta:{status:"ready",summary:`${rows.length.toLocaleString()} rows · ${metadata.provider}`}});
+          if(run===sequence && record) {restoredRequestId=record.id;status(`${byId("qd-status").textContent} Saved to Requests.`);}
+        } catch(error) {if(run===sequence)status(`${byId("qd-status").textContent} Request history could not be saved; your export is ready.`);}
+      }
     }catch(error){if(run===sequence&&error.name!=="AbortError")status(error.message||"History could not be downloaded.");}
     finally{if(run===sequence){byId("qd-preview").disabled=false;byId("qd-preview").removeAttribute("aria-busy");byId("qd-cancel").hidden=true;}}
   });
