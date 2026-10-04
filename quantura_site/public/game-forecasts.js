@@ -10,7 +10,7 @@
     const key=user.uid+':'+entry.item.id+':'+entry.item.generated_at;if(savedFor.has(key))return;
     saveBusy=true;
     try{
-      const token=await user.getIdToken();
+      const token=await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
       const response=await fetch(`/api/screener/games/${entry.item.id}/save`,{method:'POST',headers:{Authorization:`Bearer ${token}`},credentials:'same-origin',signal:AbortSignal.timeout(15000)});
       if(!response.ok)throw Error();const result=await response.json();savedFor.add(key);
       if(viewed===entry && window.firebase?.auth?.().currentUser?.uid===user.uid){const status=el('p','Saved to your profile’s Requests.','small');status.setAttribute('role','status');page.append(status);}
@@ -201,7 +201,7 @@
     if(!page){window.location.href=href(id);return;}
     const run=++sequence;viewed=null;page.hidden=false;page.setAttribute('aria-busy','true');page.replaceChildren(el('p','Loading saved game forecast…'));
     try{
-      const headers={};if(saved){const user=window.firebase?.auth?.().currentUser;if(!user||user.isAnonymous)throw Error();headers.Authorization=`Bearer ${await user.getIdToken()}`;}
+      const headers={};if(saved){const user=window.firebase?.auth?.().currentUser;if(!user||user.isAnonymous)throw Error();headers.Authorization=`Bearer ${await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken())}`;}
       const response=await fetch(`/api/screener/games/${saved?'saved/':''}${encodeURIComponent(id)}`,{headers,signal:AbortSignal.timeout(20000)});if(!response.ok)throw Error();const {item}=await response.json();if(run!==sequence)return;
       const rows=item.predictions;if(!Array.isArray(rows)||!rows.length)throw Error();const available=bands.filter(q=>rows.every(r=>Number.isFinite(r.quantiles?.[q])));if(!available.includes('0.5'))throw Error();
       page.replaceChildren(provider(item),el('h2',item.event_title),el('p',item.outcome),el('p',`Game starts ${time(item.game_start)}. Forecast ends ${time(item.forecast_end)}.`),el('p',`${item.recomputed_at?'Recomputed':'Updated'} ${time(item.recomputed_at||item.generated_at)} · ${item.history_count} genuine hourly observations · ${item.models.join(' + ')}`,'small'),el('p',`Pregame data through ${time(item.input_cutoff)} · ${item.recomputed_at?'Retrospective recalculation from the original pregame cutoff.':item.status==='final_pregame'?'Final pregame forecast.':'Updates hourly until the start hour.'}`,'small muted'));

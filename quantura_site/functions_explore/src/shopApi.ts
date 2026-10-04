@@ -3,7 +3,10 @@ import admin from "firebase-admin";
 import helmet from "helmet";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 import Stripe from "stripe";
+import { createQuanturaAuth, type QuanturaIdentity } from "./clerkAuth";
+import { clerkSubscriptionAccess } from "./clerkBilling";
 import { randomUUID } from "node:crypto";
+import { hasEnterpriseApiAccess } from "./enterpriseAccess";
 import documentation from "./apiDocumentation.json";
 import { proSubscriptionPlan, proCheckoutOptions, subscriptionAccess, billingAccess, BILLING_ACCOUNTS } from "./subscriptionBilling";
 import {
@@ -64,7 +67,7 @@ async function billingIdentity(req:Request,res:Response) {
   try {
     const token=asString(req.headers.authorization).match(/^Bearer (.+)$/i)?.[1];
     if(!token)throw Error();
-    const user=await admin.auth().verifyIdToken(token,true);
+    const user=await createQuanturaAuth(admin.auth()).verifyIdToken(token,true) as QuanturaIdentity;
     if(user.firebase?.sign_in_provider==='anonymous')throw Error();
     return user;
   }catch{res.status(401).json({error:'sign_in_required',message:'Sign in to manage a Pro subscription.'});return null;}
@@ -309,7 +312,10 @@ app.get("/api/shop/subscription-access",async (req,res)=>{
   res.set("Cache-Control","private, no-store");
   const principal=await billingIdentity(req,res);if(!principal)return;
   const value=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
-  res.json({data:billingAccess(value)});
+  const legacy=billingAccess(value);
+  const current=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
+  const access=legacy.docs_available?{...legacy,billing_provider:"stripe"}:current?{...current,can_trial:current.can_trial && legacy.can_trial}:legacy;
+  res.json({data:{...access,pro_available:access.docs_available,docs_available:await hasEnterpriseApiAccess(db,principal.uid,principal.clerk_user_id)}});
 });
 
 app.get("/api/shop/api-docs",async (req,res)=>{
@@ -317,7 +323,8 @@ app.get("/api/shop/api-docs",async (req,res)=>{
   res.set("Cache-Control","private, no-store");
   const principal=await billingIdentity(req,res);if(!principal)return;
   const value=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
-  if(!billingAccess(value).docs_available){res.status(403).json({error:"pro_required",message:"API documentation requires an active Pro trial or subscription."});return;}
+  const current=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
+  if(!await hasEnterpriseApiAccess(db,principal.uid,principal.clerk_user_id)){res.status(403).json({error:"enterprise_required",message:"API documentation requires an enterprise agreement."});return;}
   res.json({data:documentation});
 });
 
@@ -356,6 +363,9 @@ app.post("/api/shop/subscription-checkout", async (req, res) => {
   }
 
   try {
+    const clerkAccess=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
+    if(clerkAccess?.docs_available)throw new Error("subscription_already_active");
+    if(payload.trial===true && clerkAccess && !clerkAccess.can_trial)throw new Error("trial_already_used");
     const trial=payload.trial===true,ref=db.collection(BILLING_ACCOUNTS).doc(uid),now=Date.now(),key=randomUUID();
     // Server-only ledger and a durable idempotency key serialize checkout across
     // instances. A retry cannot create a second trial, including across cycles.

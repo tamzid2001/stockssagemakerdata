@@ -35,6 +35,8 @@ type ResolveResult = {
 const CACHE_CONTROL_MAX_AGE = 300;
 
 export function registerFiscalDataRoutes(router: Router, options: RegisterOptions): void {
+  const memory = new Map<string,{until:number;payload:Awaited<ReturnType<typeof fetchFiscalPayload>>}>();
+  const inflight = new Map<string,Promise<Awaited<ReturnType<typeof fetchFiscalPayload>>>>();
   router.get("/fiscaldata/registry", (_req, res) => {
     res.status(200).json({
       generatedAt: new Date().toISOString(),
@@ -61,23 +63,27 @@ export function registerFiscalDataRoutes(router: Router, options: RegisterOption
       });
       const queryString = query.toString();
       const cacheDocId = buildFiscalCacheDocId(resolved.endpoint, queryString);
-      const cached = await readFiscalCache(options.db, cacheDocId, resolved.ttlSeconds);
-      if (cached?.isFresh) {
+      const cached = memory.get(cacheDocId);
+      if (cached && cached.until > Date.now()) {
         setCachingHeaders(res, resolved.ttlSeconds, true);
         res.status(200).json(cached.payload);
         return;
       }
 
-      const payload = await fetchFiscalPayload(resolved.endpoint, query, {
-        fetchImpl: options.fetchImpl,
-      });
-
-      await writeFiscalCache(options.db, cacheDocId, {
-        endpoint: resolved.endpoint,
-        query: queryString,
-        ttlSeconds: resolved.ttlSeconds,
-        payload,
-      });
+      let task=inflight.get(cacheDocId);
+      if(!task){
+        const ttl=resolved.ttlSeconds;
+        task=fetchFiscalPayload(resolved.endpoint,query,{fetchImpl:options.fetchImpl}).then(payload=>{
+          // Arbitrary public query pages do not need permanent database copies.
+          if(Buffer.byteLength(JSON.stringify(payload))<500000){
+            if(memory.size>=32)memory.delete(memory.keys().next().value!);
+            memory.set(cacheDocId,{payload,until:Date.now()+ttl*1000});
+          }
+          return payload;
+        }).finally(()=>inflight.delete(cacheDocId));
+        inflight.set(cacheDocId,task);
+      }
+      const payload=await task;
 
       setCachingHeaders(res, resolved.ttlSeconds, false);
       res.status(200).json(payload);

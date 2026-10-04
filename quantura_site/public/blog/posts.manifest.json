@@ -176,8 +176,8 @@
     },
     {
       "weekIndex": 74,
-      "title": "Yahoo Finance Options History as an Availability Fallback",
-      "rawTitle": "Yahoo Finance Options History as an Availability Fallback",
+      "title": "Options History: Availability and Source Coverage",
+      "rawTitle": "Options History: Availability and Source Coverage",
       "slug": "2026-07-30-yahoo-finance-options-history-as-an-availability-fallback",
       "dateIso": "2026-07-30",
       "topic": "data-validation",
@@ -775,8 +775,8 @@
     },
     {
       "weekIndex": 54,
-      "title": "Alpaca and Yahoo Finance Fallback Without Silent Source Changes",
-      "rawTitle": "Alpaca and Yahoo Finance Fallback Without Silent Source Changes",
+      "title": "Alpaca Price History Without Silent Source Changes",
+      "rawTitle": "Alpaca Price History Without Silent Source Changes",
       "slug": "2026-03-12-alpaca-and-yahoo-finance-fallback-without-silent-source-changes",
       "dateIso": "2026-03-12",
       "topic": "data-validation",

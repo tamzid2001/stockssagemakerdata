@@ -111,12 +111,12 @@ test('Screener uses semantic tokens and contained responsive layouts', () => {
 
 test('market selector debounces, preserves source metadata, and supports arrow/Escape navigation', async () => {
   const d=dom(page('forecasting.html')); const w=d.window; let requests=0;
-  w.fetch=async()=>{requests++; return {ok:true,json:async()=>({count:1,groups:{yahoo:[{resource_id:'fixture',symbol:'TEST',name:'Test instrument with a long display name',asset_class:'equity',source:'yahoo',exchange:'TEST EXCHANGE',forecast_available:true}]}})};};
+  w.fetch=async()=>{requests++; return {ok:true,json:async()=>({count:1,groups:{alpaca:[{resource_id:'fixture',symbol:'TEST',name:'Test instrument with a long display name',asset_class:'equity',source:'alpaca',exchange:'TEST EXCHANGE',forecast_available:true}]}})};};
   w.eval(source('market-search.js'));
   const query=w.document.getElementById('market-search-query');
   for(const value of ['T','TE','TEST']) {query.value=value;query.dispatchEvent(new w.Event('input'));}
   await new Promise(r=>setTimeout(r,350)); assert.equal(requests,1);
-  const result=w.document.getElementById('market-search-results'); assert.match(result.textContent,/Yahoo Finance/); assert.match(result.textContent,/TEST EXCHANGE/);
+  const result=w.document.getElementById('market-search-results'); assert.match(result.textContent,/Alpaca/); assert.match(result.textContent,/TEST EXCHANGE/);
   query.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})); assert.equal(w.document.activeElement.dataset.marketAction,'forecast');
   w.document.activeElement.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true})); assert.equal(w.document.activeElement.dataset.marketAction,'history');
   w.document.activeElement.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true})); assert.equal(w.document.activeElement,query); assert.equal(result.hidden,true);
@@ -465,7 +465,7 @@ test('market selection configures the primary ensemble, including dataset-to-tic
   const d=dom(page('forecasting.html')); const w=d.window; const document=w.document;
   w.HTMLElement.prototype.scrollIntoView=()=>{};
   let panel=''; w.__quanturaSetPanel=value=>{panel=value;};
-  w.fetch=async()=>({ok:true,json:async()=>({count:1,groups:{yahoo:[{resource_id:'yahoo:TEST',symbol:'TEST',name:'Test equity',asset_class:'equity',source:'yahoo',forecast_available:true}]}})});
+  w.fetch=async()=>({ok:true,json:async()=>({count:1,groups:{alpaca:[{resource_id:'alpaca:TEST',symbol:'TEST',name:'Test equity',asset_class:'equity',source:'alpaca',forecast_available:true}]}})});
   document.getElementById('ensemble-source-type').value='workspace_dataset';
   let changes=0;document.getElementById('ensemble-source-type').addEventListener('change',()=>changes++);
   w.eval(source('market-search.js'));

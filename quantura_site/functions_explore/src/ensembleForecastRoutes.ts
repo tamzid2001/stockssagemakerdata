@@ -1,3 +1,5 @@
+import {economicClient} from "./economicData";
+import {geminiMarketClient} from "./geminiMarketData";
 import crypto from "node:crypto";
 import {reserveForecast,releaseForecast} from "./forecastAdmission";
 import type { Request, Response, Router } from "express";
@@ -506,8 +508,8 @@ export function normalizeEnsemblePreset(body: JsonRecord, plan: PlanKey): JsonRe
   // Presets remain resource-agnostic: retain history controls, never an
   // uploaded dataset, an input array, credentials, or another workspace ID.
   const historyControls: JsonRecord = { history_lag_minutes: body.history_lag_minutes ?? 0 };
-  if (source.type === "prediction_market" || source.type === "ticker" || source.type === "kalshi_perp") {
-    historyControls.limit = forecastObservationLimit(source.limit, source.type === "ticker" ? MAX_HISTORY_ROWS : 500);
+  if (source.type === "prediction_market" || source.type === "ticker" || source.type === "kalshi_perp" || source.type === "economic_series" || source.type === "gemini_spot") {
+    historyControls.limit = forecastObservationLimit(source.limit, ["ticker","economic_series","gemini_spot"].includes(String(source.type)) ? MAX_HISTORY_ROWS : 500);
   }
   if (source.type === "prediction_market") Object.assign(historyControls, historySelection({...source, ...(source.history_phase === "auto" ? {history_phase:"both"} : {})}), source.history_phase === "auto" ? {history_phase:"auto"} : {});
   return { ...configuration, history_controls: historyControls };
@@ -522,6 +524,17 @@ async function materializeSource(
 ): Promise<{ rows: Array<{ timestamp: string; target: number }>; source: JsonRecord; frequency: string; timezone: string }> {
   const source = plain(sourceValue);
   const type = text(source.type || "ticker", 40);
+  if (type === "economic_series") {
+    const history=await economicClient.history(source,cutoff);
+    return {rows:normalizeSeriesRows(history.rows,"timestamp","target",2,50000),frequency:history.frequency,timezone:"UTC",
+      source:{...history.source,name:history.metadata.name,units:history.metadata.units,provenance:history.metadata,warnings:history.warnings}};
+  }
+  if (type === "gemini_spot") {
+    assertOnlyKeys(source,["type","symbol","frequency","limit","start","end"],"source");
+    const history=await geminiMarketClient.history({...source,end:cutoff===undefined?source.end:new Date(cutoff).toISOString()});
+    return {rows:normalizeSeriesRows(history.rows.map(row=>({...row,timestamp:new Date(frequencyEnd(Date.parse(row.timestamp),history.frequency)).toISOString()})),"timestamp","close",2,50000),frequency:history.frequency,timezone:"UTC",
+      source:{type,provider:"gemini",symbol:history.symbol,frequency:history.frequency,limit:source.limit||500,units:"quote currency per base unit",provenance:history.metadata,warnings:history.warnings}};
+  }
   if (type === "kalshi_perp") {
     assertOnlyKeys(source,["type","symbol","frequency","limit"],"source");
     const limit=forecastObservationLimit(source.limit),frequency=perpFrequency(source.frequency);
@@ -1011,7 +1024,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     normalizeEnsembleConfiguration(body, access.plan);
     const cutoff = absoluteHistoryCutoff(body);
     const materialized = await materializeSource(options, principal, workspaceId, body.source, cutoff);
-    const calendarBody = materialized.source.provider==="dukascopy" || materialized.source.type==="ticker" && materialized.frequency!=="1D" ? {...body,calendar:"NONE",horizon_mode:"frequency_periods"} : materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
+    const calendarBody = ["economic_series","gemini_spot"].includes(text(materialized.source.type)) || materialized.source.provider==="dukascopy" || materialized.source.type==="ticker" && materialized.frequency!=="1D" ? {...body,calendar:"NONE",horizon_mode:"frequency_periods"} : materialized.source.type === "kalshi_perp" ? {...body,calendar:"NONE"} : body;
     const configuration = normalizeEnsembleConfiguration(resolvePredictionEnd(calendarBody, materialized.rows.at(-1)!.timestamp, materialized.frequency), access.plan);
     if (configuration.analysis_mode === "recent_signal_search") {
       const requiredQuantiles = configuration.search_signal_rule === "cutoff_above_p99" ? [.99] : [.1,.5,.9];

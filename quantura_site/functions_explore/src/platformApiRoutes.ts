@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { Request, Response, Router } from "express";
 import type admin from "firebase-admin";
+import { requireEnterpriseApiAccess } from "./enterpriseAccess";
 import {
   PLATFORM_API_SCOPES,
   authenticatePlatformRequest,
@@ -194,14 +195,15 @@ function recordTime(value: Record<string, any>): number {
 }
 
 export function registerPlatformApiRoutes(router: Router, options: Options): void {
-  router.get("/openapi.json", (_req, res) => {
-    res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=3600");
+  router.get("/openapi.json", wrap(options, async (_req, res, principal) => {
+    await requireEnterpriseApiAccess(options.db, principal.userId, principal.clerkUserId);
+    res.setHeader("Cache-Control", "private, no-store");
     res.json(buildOpenApiDocument(options.publicOrigin));
-  });
+  }));
   router.get("/v1/plans", (_req, res) => res.json({ data: publicPlanEntitlements(), meta: { api_version: "v1" } }));
 
   router.post("/calendar/interactions", wrap(options, async (req, res, principal, requestId) => {
-    if (principal.authMethod !== "firebase_session") throw new Error("session_required");
+    if (!["firebase_session", "clerk_session"].includes(principal.authMethod)) throw new Error("session_required");
     const body = plain(req.body);
     const eventName = text(body.event_name, 80).toLowerCase().replace(/[^a-z0-9_:-]/g, "_");
     const allowed = new Set([
@@ -499,7 +501,7 @@ export function registerPlatformApiRoutes(router: Router, options: Options): voi
     sendData(res, PLATFORM_API_SCOPES, requestId, { count: PLATFORM_API_SCOPES.length });
   }));
   router.get("/account/api-keys", wrap(options, async (_req, res, principal, requestId) => {
-    if (principal.authMethod !== "firebase_session") throw new Error("session_required");
+    if (!["firebase_session", "clerk_session"].includes(principal.authMethod)) throw new Error("session_required");
     const snapshot = await options.db.collection(API_KEYS).where("user_id", "==", principal.userId).limit(100).get();
     const keys = snapshot.docs.map((doc) => {
       const value = plain(doc.data());
@@ -508,14 +510,14 @@ export function registerPlatformApiRoutes(router: Router, options: Options): voi
     sendData(res, keys, requestId, { count: keys.length });
   }));
   router.post("/account/api-keys", wrap(options, async (req, res, principal, requestId) => {
-    if (principal.authMethod !== "firebase_session") throw new Error("session_required");
+    if (!["firebase_session", "clerk_session"].includes(principal.authMethod)) throw new Error("session_required");
     const body = plain(req.body);
     const created = await createPersonalApiKey(options.db, principal, { name: body.name, scopes: body.scopes, expiresAt: body.expires_at });
     res.status(201);
     sendData(res, { ...created, secret_shown_once: true }, requestId);
   }));
   router.post("/account/api-keys/:keyId/replace", wrap(options, async (req, res, principal, requestId) => {
-    if (principal.authMethod !== "firebase_session") throw new Error("session_required");
+    if (!["firebase_session", "clerk_session"].includes(principal.authMethod)) throw new Error("session_required");
     const ref = options.db.collection(API_KEYS).doc(text(req.params.keyId, 128));
     const snapshot = await ref.get();
     if (!snapshot.exists || text(snapshot.data()?.user_id, 220) !== principal.userId) throw new Error("api_key_not_found");
@@ -527,7 +529,7 @@ export function registerPlatformApiRoutes(router: Router, options: Options): voi
     sendData(res, { ...created, secret_shown_once: true }, requestId);
   }));
   router.delete("/account/api-keys/:keyId", wrap(options, async (req, res, principal, requestId) => {
-    if (principal.authMethod !== "firebase_session") throw new Error("session_required");
+    if (!["firebase_session", "clerk_session"].includes(principal.authMethod)) throw new Error("session_required");
     const ref = options.db.collection(API_KEYS).doc(text(req.params.keyId, 128));
     const snapshot = await ref.get();
     if (!snapshot.exists || text(snapshot.data()?.user_id, 220) !== principal.userId) throw new Error("api_key_not_found");

@@ -10,3 +10,5 @@
 .game-forecast-page .game-forecast-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
 body.game-forecast-view #ensemble-forecast-settings,body.game-forecast-view .panel[data-panel=forecast]>.panel-header p{display:none}
 .logo-attribution{display:block;margin-top:12px;font-size:12px;color:var(--muted-foreground)}
+.home-buy-symbol {display:inline-flex;align-items:center;gap:10px;}
+.home-buy-symbol .market-logo {flex:none;}

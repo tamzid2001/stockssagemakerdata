@@ -1,0 +1,24 @@
+import { FORECAST_FREQUENCY_INPUTS } from "./forecastFrequency";
+
+export function addEconomicOpenapi(document: any) {
+  const source = {type:"object",additionalProperties:false,required:["type","provider"],properties:{
+    type:{const:"economic_series"},provider:{type:"string",enum:["fiscaldata","worldbank_data360"]},
+    series_id:{type:"string",enum:["debt_to_penny","rates_of_exchange","avg_interest_rates","operating_cash_balance"]},
+    value_field:{type:"string"},dataset_id:{type:"string"},indicator_id:{type:"string"},ref_area:{type:"string"},
+    dimensions:{type:"object",additionalProperties:{type:"string"}},limit:{type:"integer",minimum:2,maximum:50000,default:500},start:{type:"string"},end:{type:"string"}},
+    oneOf:[{properties:{provider:{const:"fiscaldata"}},required:["series_id"]},{properties:{provider:{const:"worldbank_data360"}},required:["dataset_id","indicator_id"]}],
+    description:"Select one series and one value for every required dimension. Reporting periods are daily, month-end, quarter-end, or year-end. Current revised data is not a point-in-time vintage."};
+  const gemini = {type:"object",additionalProperties:false,required:["type","symbol"],properties:{type:{const:"gemini_spot"},symbol:{type:"string"},frequency:{type:"string",enum:FORECAST_FREQUENCY_INPUTS},limit:{type:"integer",minimum:2,maximum:50000,default:500},start:{type:"string"},end:{type:"string"}},description:"Verified Gemini exchange spot symbol. Only completed candles returned by the provider's bounded recent window are available."};
+  document.components.schemas.EconomicSeriesSource=source;
+  document.components.schemas.GeminiSpotSource=gemini;
+  document.components.schemas.EnsembleForecastRequest.allOf[1].properties.source.oneOf.push({$ref:"#/components/schemas/EconomicSeriesSource"},{$ref:"#/components/schemas/GeminiSpotSource"});
+  const response={description:"Provider-verified result, with source metadata and any coverage warnings.",content:{"application/json":{schema:{type:"object",required:["ok"],properties:{ok:{type:"boolean"}}}}}};
+  const errors={"403":{description:"Enterprise API credential required."},"422":{description:"Invalid source, dimensions, dates, or history selection."},"502":{description:"Provider temporarily unavailable."}};
+  document.paths["/economic-data/search"]={get:{operationId:"searchEconomicSeries",summary:"Search Treasury Fiscal Data or World Bank Data360 indicators",tags:["Economic data"],security:[{bearerAuth:[]}],parameters:[
+    {name:"provider",in:"query",schema:{type:"string",enum:["fiscaldata","worldbank_data360"],default:"fiscaldata"}},
+    {name:"q",in:"query",schema:{type:"string",maxLength:100}}, {name:"limit",in:"query",schema:{type:"integer",minimum:1,maximum:20,default:10}}, {name:"offset",in:"query",schema:{type:"integer",minimum:0,maximum:100000,default:0}}],responses:{"200":response,...errors}}};
+  for(const action of ["describe","history"])document.paths["/economic-data/"+action]={post:{operationId:action+"EconomicSeries",summary:action==="describe"?"Inspect a series's dimensions, values, and units":"Download a single observed economic time series",tags:["Economic data"],security:[{bearerAuth:[]}],requestBody:{required:true,content:{"application/json":{schema:{$ref:"#/components/schemas/EconomicSeriesSource"}}}},responses:{"200":response,...errors}}};
+  document.paths["/market-data/gemini/history"]={post:{operationId:"downloadGeminiHistory",summary:"Download Completed Historical Spot Candles From Gemini Exchange",tags:["Gemini exchange"],security:[{bearerAuth:[]}],requestBody:{required:true,content:{"application/json":{schema:{type:"object",required:["symbol"],properties:{symbol:{type:"string"},frequency:{type:"string",enum:FORECAST_FREQUENCY_INPUTS},limit:{type:"integer",minimum:2,maximum:50000},start:{type:"string"},end:{type:"string"}}}}}},responses:{"200":response,...errors}}};
+  document.paths["/market-data/gemini/prediction-contract"]={post:{operationId:"getGeminiPredictionContract",summary:"Get Verified Gemini Prediction Contract Observations and History Availability",tags:["Gemini exchange"],security:[{bearerAuth:[]}],requestBody:{required:true,content:{"application/json":{schema:{type:"object",required:["event_id","contract_id"],properties:{event_id:{type:"string"},contract_id:{type:"string"},symbol:{type:"string"}}}}}},responses:{"200":response,...errors}}};
+  document.tags.push({name:"Economic data",description:"Native reporting periods and explicit dimensions."},{name:"Gemini exchange",description:"Exchange market data, separate from Google Gemini AI models."});
+}

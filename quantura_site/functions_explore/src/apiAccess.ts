@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import type { Request } from "express";
 import type admin from "firebase-admin";
 import { normalizePlan, PLAN_ENTITLEMENTS, planHasFeature, type PlanKey } from "./planEntitlements";
+import { clerkClient, type QuanturaIdentity } from "./clerkAuth";
+import { clerkSubscriptionAccess } from "./clerkBilling";
+import { rapidApiPrincipal } from "./rapidApiAuth";
+import { requireEnterpriseApiAccess } from "./enterpriseAccess";
 
 export const PLATFORM_API_SCOPES = [
   "account:read", "workspaces:read", "workspaces:write", "forecasts:read", "forecasts:write",
@@ -52,7 +56,9 @@ export type ApiPrincipal = {
   tokenName: string;
   tokenScopes: PlatformApiScope[];
   plan: PlanKey;
-  authMethod: "api_key" | "firebase_session";
+  authMethod: "api_key" | "firebase_session" | "clerk_session" | "rapidapi";
+  clerkUserId?: string;
+  organizationId?: string;
   platformAdmin?: boolean;
   guest?: boolean;
 };
@@ -172,11 +178,12 @@ export function hashPlatformApiKey(rawKey: string, pepper = process.env.QUANTURA
 }
 
 export function extractBearer(req: Request): string {
-  const authorization = clean(req.headers.authorization, 1200);
+  const authorization = clean(req.headers.authorization, 16384);
   return authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || "";
 }
 
-async function userPlan(db: FirebaseFirestore.Firestore, userId: string): Promise<PlanKey> {
+async function userPlan(db: FirebaseFirestore.Firestore, userId: string, clerkUserId?: string): Promise<PlanKey> {
+  if(clerkUserId && (await clerkSubscriptionAccess(clerkUserId)).docs_available)return "pro";
   const billing=await db.collection("billing_accounts").doc(userId).get();
   if(billing.exists){
     const value=billing.data()||{};
@@ -194,19 +201,23 @@ export async function authenticatePlatformRequest(
   req: Request,
   options: { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; adminEmails?: readonly string[] }
 ): Promise<ApiPrincipal> {
+  const rapid = rapidApiPrincipal(req);
+  if (rapid) return rapid;
   const bearer = extractBearer(req);
   if (!bearer) throw new Error("api_key_missing");
 
   if (!bearer.startsWith(KEY_PREFIX)) {
-    const decoded = await options.auth.verifyIdToken(bearer).catch(() => null);
+    const decoded = await options.auth.verifyIdToken(bearer).catch(() => null) as QuanturaIdentity | null;
     if (!decoded?.uid) throw new Error("api_key_invalid");
     return {
       userId: decoded.uid,
       tokenId: null,
       tokenName: "Web session",
       tokenScopes: [...PLATFORM_API_SCOPES],
-      plan: await userPlan(options.db, decoded.uid),
-      authMethod: "firebase_session",
+      plan: decoded.firebase?.sign_in_provider === "anonymous" ? "free" : await userPlan(options.db, decoded.uid, decoded.clerk_user_id),
+      authMethod: decoded.clerk_user_id ? "clerk_session" : "firebase_session",
+      clerkUserId: decoded.clerk_user_id,
+      organizationId: decoded.clerk_organization_id,
       guest: decoded.firebase?.sign_in_provider === "anonymous",
       platformAdmin: await verifiedPlatformAdmin(options.auth, decoded.uid, options.adminEmails),
     };
@@ -221,13 +232,21 @@ export async function authenticatePlatformRequest(
   const userId = clean(value.user_id, 220);
   if (!userId) throw new Error("api_key_invalid");
   const scopes = validatePlatformScopes(value.scopes);
-  void snapshot.ref.set({ last_used_at: new Date().toISOString() }, { merge: true }).catch(() => undefined);
+  let clerkUserId=clean(value.clerk_user_id,128) || undefined;
+  if(!clerkUserId && process.env.CLERK_SECRET_KEY)clerkUserId=(await options.db.collection("auth_accounts").doc(userId).get()).data()?.clerk_user_id;
+  await requireEnterpriseApiAccess(options.db, userId, clerkUserId);
+  // Authentication and revocation are still read every time. Last-used metadata
+  // needs minute precision, rather than a billed write for every polling call.
+  if (!Number.isFinite(Date.parse(String(value.last_used_at))) || Date.now()-Date.parse(String(value.last_used_at))>=60000) {
+    void snapshot.ref.set({ last_used_at: new Date().toISOString() }, { merge: true }).catch(() => undefined);
+  }
   return {
     userId,
     tokenId,
     tokenName: clean(value.name, 120),
     tokenScopes: scopes,
-    plan: await userPlan(options.db, userId),
+    plan: "research",
+    clerkUserId,
     authMethod: "api_key",
     platformAdmin: await verifiedPlatformAdmin(options.auth, userId, options.adminEmails),
   };
@@ -253,6 +272,23 @@ export async function resolveWorkspaceAccess(
 ): Promise<WorkspaceAccess> {
   const workspaceId = clean(workspaceIdValue, 220);
   if (!workspaceId) throw new Error("workspace_id_required");
+  if (principal.authMethod === "rapidapi" && workspaceId !== principal.userId) throw new Error("workspace_forbidden");
+  if(workspaceId.startsWith("org_")) {
+    let clerkUserId=principal.clerkUserId;
+    if(!clerkUserId)clerkUserId=(await db.collection("auth_accounts").doc(principal.userId).get()).data()?.clerk_user_id;
+    if(!clerkUserId)throw new Error("workspace_forbidden");
+    // Check current membership for every request, including personal API keys.
+    // A selected org, request body, or stale JWT role is not an authorization.
+    const members=await clerkClient().organizations.getOrganizationMembershipList({organizationId:workspaceId,userId:[clerkUserId],limit:1});
+    const member=members.data.find(item=>item.publicUserData?.userId===clerkUserId);
+    if(!member)throw new Error("workspace_forbidden");
+    const organization=member.organization;
+    const role:WorkspaceRole=organization.createdBy===clerkUserId && member.role==="org:admin"?"owner":member.role==="org:admin"?"admin":member.role==="org:member"?"analyst":"viewer";
+    const subscription=await clerkSubscriptionAccess(clerkUserId,workspaceId);
+    const plan:PlanKey=subscription.docs_available?"pro":"free";
+    return {workspaceId,role,plan,capabilities:PLAN_ENTITLEMENTS[plan].features,permissions:permissionsForRole(role),resourceScope:defaultResourceScope(),
+      ownerUserId:workspaceId,name:organization.name,slug:organization.slug||workspaceId,legacyPersonal:false};
+  }
   const workspaceSnapshot = await db.collection(WORKSPACES).doc(workspaceId).get();
   const workspace = (workspaceSnapshot.data() || {}) as Record<string, any>;
   const ownerUserId = clean(workspace.owner_user_id, 220);
@@ -355,6 +391,7 @@ export async function listAccessibleWorkspaces(
   ].filter(Boolean))];
   const memberships = await Promise.all(workspaceIds.map((workspaceId) => resolveWorkspaceAccess(db, principal, workspaceId).catch(() => null)));
   const combined = [own, ...memberships.filter((item): item is WorkspaceAccess => Boolean(item))];
+  if(principal.organizationId)combined.push(await resolveWorkspaceAccess(db,principal,principal.organizationId));
   return [...new Map(combined.map((workspace) => [workspace.workspaceId, workspace])).values()];
 }
 
@@ -363,6 +400,7 @@ export async function createPersonalApiKey(
   principal: ApiPrincipal,
   input: { name: unknown; scopes: unknown; expiresAt?: unknown }
 ): Promise<{ id: string; key: string; prefix: string; name: string; scopes: PlatformApiScope[]; createdAt: string; expiresAt: string | null }> {
+  await requireEnterpriseApiAccess(db, principal.userId, principal.clerkUserId);
   const name = clean(input.name, 120);
   if (!name) throw new Error("api_key_name_required");
   const scopes = validatePlatformScopes(input.scopes);
@@ -374,6 +412,7 @@ export async function createPersonalApiKey(
   const createdAt = new Date().toISOString();
   await db.collection(API_KEYS).doc(id).create({
     user_id: principal.userId,
+    ...(principal.clerkUserId ? {clerk_user_id:principal.clerkUserId} : {}),
     name,
     prefix,
     scopes,

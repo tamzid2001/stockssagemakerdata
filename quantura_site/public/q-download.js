@@ -41,6 +41,7 @@
     // These aggregations already exist in the prediction-market export service.
     const interval=byId("qd-frequency"),old=interval.value;
     interval.innerHTML=[...[['1Min','Minute'],['1Hour','Hourly'],['1Day','Daily']],...(prediction?[['raw','Raw observations / trades'],['5m','5 minutes'],['15m','15 minutes'],['30m','30 minutes'],['4h','4 hours'],['1w','Weekly'],['1month','Monthly'],['final','Final observation']]:value('kind')!=='options'&&(stock||dukascopy||selected?.source==='kalshi_perps')?[['5m','5 minutes'],['15m','15 minutes'],['30m','30 minutes'],['4h','4 hours'],['1Week','Weekly'],['1Month','Monthly']]:[])].map(([v,label])=>`<option value="${v}">${label}</option>`).join("");
+    if(selected?.resource_type==="economic_series")interval.innerHTML=`<option value="${html(selected.frequency||'native')}">Native reporting frequency</option>`;
     interval.value=[...interval.options].some(o=>o.value===old)?old:"1Day";
   }
   async function loadChain(){

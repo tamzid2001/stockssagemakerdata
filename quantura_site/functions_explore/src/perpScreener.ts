@@ -31,7 +31,7 @@ export async function loadPerpForecasts(db:FirebaseFirestore.Firestore):Promise<
   let hit=cache.get(db);
   if(!hit || hit.until<Date.now()) {
     const value=db.collection("perp_forecast_catalog").limit(1000).get().then(data=>data.docs.map(doc=>doc.data() as QuantScreenerRow));
-    hit={until:Date.now()+60000,value};cache.set(db,hit);
+    hit={until:Date.now()+5*60000,value};cache.set(db,hit);
     value.catch(()=>cache.delete(db));
   }
   return hit.value;

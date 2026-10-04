@@ -125,7 +125,7 @@
     const sourceSelect = byId("market-history-source");
     const feedSelect = byId("alpaca-feed");
     const syncSourceControls = () => {
-      const yahooOnly = sourceSelect?.value === "yahoo";
+
       const perps = sourceSelect?.value === "kalshi_perps";
       for (const id of ["alpaca-feed","alpaca-session","alpaca-adjustment"]) {
         const control=byId(id);if(control){control.disabled=perps;control.closest(".field").hidden=perps;}
@@ -137,8 +137,8 @@
       for(const option of rowLimit.options)option.disabled=perps && (!Number.isFinite(Number(option.value)) || Number(option.value)>5000);
       if(rowLimit.selectedOptions[0]?.disabled)rowLimit.value="500";
       if (feedSelect) {
-        feedSelect.disabled = yahooOnly || perps;
-        feedSelect.title = yahooOnly ? "Yahoo Finance selects its own public chart feed." : "Choose an Alpaca market-data feed.";
+        feedSelect.disabled = perps;
+        feedSelect.title = "Choose an Alpaca market-data feed.";
       }
     };
     sourceSelect?.addEventListener("change", syncSourceControls);
@@ -146,8 +146,8 @@
     jsonRequest("/api/market-data/history/status")
       .then((payload) => {
         const alpaca = payload?.sources?.alpaca?.available ? "Alpaca connected" : "Alpaca unavailable";
-        const yahoo = payload?.sources?.yahoo?.available ? "Yahoo Finance available" : "Yahoo Finance unavailable";
-        status(historyStatus, `${alpaca} · ${yahoo}. Automatic mode uses the first available source.`, payload?.sources?.yahoo?.available ? "success" : "warning");
+
+        status(historyStatus, `${alpaca}. Choose Dukascopy for supported FX, metals, and indices.`, payload?.sources?.alpaca?.available ? "success" : "warning");
       })
       .catch((error) => status(historyStatus, error.message, "error"));
     form.addEventListener("submit", async (event) => {
@@ -214,10 +214,10 @@
     byId("alpaca-option-end").value = isoDate(end);
     byId("alpaca-option-start").value = isoDate(new Date(end.getTime() - 7 * 86400000));
     const syncOptionSource = () => {
-      const yahooOnly = sourceSelect?.value === "yahoo";
+
       if (feedSelect) {
-        feedSelect.disabled = yahooOnly;
-        feedSelect.title = yahooOnly ? "Yahoo Finance selects its own public options feed." : "Choose an Alpaca options feed.";
+        feedSelect.disabled = false;
+        feedSelect.title = "Choose an Alpaca options feed.";
       }
       expiration.innerHTML = '<option value="">Expirations load automatically</option>';
       expiration.disabled = true;
@@ -611,7 +611,7 @@
     for (let attempt = 0; attempt < 40; attempt += 1) {
       if (window.firebase?.apps?.length && window.firebase.auth) {
         const user = window.firebase.auth().currentUser;
-        if (user && !user.isAnonymous) return user.getIdToken();
+        if (user && !user.isAnonymous) return window.QuanturaAuth?.getToken(user) ?? user.getIdToken();
         if (user?.isAnonymous) throw new Error("Sign in with a full account to manage private integrations.");
       }
       await new Promise((resolve) => setTimeout(resolve, 150));

@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{JSDOM}=require('jsdom');
 const root=path.join(__dirname,'../..'),source=f=>fs.readFileSync(path.join(root,'public',f),'utf8'),page=fs.readFileSync(path.join(root,'pages/forecasting.html'),'utf8');
 const api=require('../../public/q-market.js'),tick=()=>new Promise(r=>setTimeout(r,5));
-const stock={resource_id:'yahoo:AAPL',resource_type:'instrument',symbol:'AAPL',name:'Apple',asset_class:'equity',source:'yahoo',forecast_available:true};
+const stock={resource_id:'alpaca:AAPL',resource_type:'instrument',symbol:'AAPL',name:'Apple',asset_class:'equity',source:'alpaca',forecast_available:true};
 const settings={kind:'history',range:'latest',frequency:'1Day',limit:500,end:'',session:'regular',adjustment:'split',phase:'auto',layout:'normalized',target:'price',missing:'leave'};
 const dom=()=>new JSDOM(page,{url:'https://quantura.studio/forecasting',runScripts:'outside-only'});
 const row=i=>({resource_id:`polymarket_us:${i}`,resource_type:'prediction_market_contract',symbol:`match-${i}`,name:`Player ${i}`,source:'polymarket_us',event_slug:'match',outcome:`Yes ${i}`,market_group:i%2?'Player props':'Totals',market_title:`Player ${i} total`,forecast_available:true,contract_id:`${i}`,contract:{source:'polymarket_us',contractId:`${i}`,providerSymbol:`match-${i}`,eventTitle:'A vs B',side:'long'}});
@@ -44,9 +44,9 @@ test('download snapshot invalidates on selection/date changes and stale requests
   const d=dom(),w=d.window,pending=[];w.fetch=()=>new Promise(r=>pending.push(r));w.eval(source('q-market.js'));w.eval(source('q-download.js'));
   const select=r=>w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:r,intent:'download'}}));
   select(stock);const form=w.document.getElementById('q-download-form');form.dispatchEvent(new w.Event('submit',{cancelable:true}));
-  select({...stock,symbol:'MSFT',resource_id:'yahoo:MSFT'});pending[0]({ok:true,json:async()=>({rows:[{timestamp:'2026-01-01',close:100}],provider:'yahoo'})});await tick();
+  select({...stock,symbol:'MSFT',resource_id:'alpaca:MSFT'});pending[0]({ok:true,json:async()=>({rows:[{timestamp:'2026-01-01',close:100}],provider:'alpaca'})});await tick();
   assert.equal(w.document.getElementById('qd-csv').disabled,true);assert.equal(w.document.getElementById('qd-preview-table').textContent,'');
-  form.dispatchEvent(new w.Event('submit',{cancelable:true}));pending[1]({ok:true,json:async()=>({rows:[{timestamp:'2026-01-02',close:101}],provider:'yahoo'})});await tick();
+  form.dispatchEvent(new w.Event('submit',{cancelable:true}));pending[1]({ok:true,json:async()=>({rows:[{timestamp:'2026-01-02',close:101}],provider:'alpaca'})});await tick();
   assert.equal(w.document.getElementById('qd-csv').disabled,false);assert.match(w.document.getElementById('qd-preview-table').textContent,/101/);
   w.document.getElementById('qd-end').dispatchEvent(new w.Event('input',{bubbles:true}));assert.equal(w.document.getElementById('qd-csv').disabled,true);d.window.close();
 });

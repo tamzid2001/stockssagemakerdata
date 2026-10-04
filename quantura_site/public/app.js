@@ -58,7 +58,7 @@
       const headers = { "Content-Type": "application/json" };
       try {
         const currentUser = typeof firebase !== "undefined" ? firebase.auth?.()?.currentUser : null;
-        const idToken = currentUser ? await currentUser.getIdToken() : "";
+        const idToken = currentUser ? await (window.QuanturaAuth?.getToken(currentUser) ?? currentUser.getIdToken()) : "";
         if (idToken) headers.Authorization = `Bearer ${idToken}`;
       } catch (_error) {
         // Anonymous callable functions remain available without an ID token.
@@ -83,7 +83,7 @@
   const quanturaApi = async (path, { method = "GET", body, responseType = "json" } = {}) => {
     const currentUser = typeof firebase !== "undefined" && typeof firebase.auth === "function" ? firebase.auth().currentUser : null;
     if (!currentUser) throw new Error("Sign in to use workspace APIs.");
-    const token = await currentUser.getIdToken();
+    const token = await (window.QuanturaAuth?.getToken(currentUser) ?? currentUser.getIdToken());
     const headers = { Accept: responseType === "blob" ? "*/*" : "application/json", Authorization: `Bearer ${token}` };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const response = await fetch(path, {
@@ -841,7 +841,7 @@
       panel_market_headlines_title: "Top market headlines",
       panel_market_headlines_subtitle: "Attributed RSS market headlines with provider selection, source links, and native-only ad slots between article groups.",
       panel_ticker_query_title: "Forecast Review",
-      panel_ticker_query_subtitle: "Run multi-provider analysis with structured Yahoo Finance context modules.",
+      panel_ticker_query_subtitle: "Run multi-provider analysis with verified source context.",
       label_ticker: "Ticker",
       label_timeframe: "Timeframe",
       button_load_chart: "Load chart",
@@ -2995,7 +2995,7 @@
     const currentUser = typeof firebase !== "undefined" && firebase.auth ? firebase.auth().currentUser : null;
     if (!currentUser || currentUser.isAnonymous) return;
     try {
-      const token = await currentUser.getIdToken();
+      const token = await (window.QuanturaAuth?.getToken(currentUser) ?? currentUser.getIdToken());
       const eventName = Array.isArray(definition) ? definition[0] : String(name || "");
       const title = Array.isArray(definition) ? definition[1] : String(params.title || eventName).replaceAll("_", " ");
       await fetch("/api/calendar/interactions", {
@@ -5024,6 +5024,8 @@
   const resolveActiveWorkspaceId = (user) => {
     if (!user) return "";
     const allowed = new Set(buildWorkspaceOptions(user).map((o) => o.id));
+    const clerkWorkspace=window.QuanturaAuth?.workspaceId;
+    if(clerkWorkspace)return clerkWorkspace;
     const desired = state.activeWorkspaceId || "";
     return allowed.has(desired) ? desired : user.uid;
   };
@@ -5065,7 +5067,7 @@
   };
 
   const refreshWorkspaces = async (user = state.user) => {
-    if (!user) return [];
+    if (!user || !(ui.workspaceSelects?.length || ui.workspaceSelect)) return [];
     const payload = await quanturaApi("/api/v1/workspaces");
     state.sharedWorkspaces = Array.isArray(payload?.data) ? payload.data : [];
     renderWorkspaceSelect(user);
@@ -7688,18 +7690,23 @@
   };
 
   const refreshWorkspacePanel = async () => {
+    if (![ui.workspaceCsvList,ui.workspaceAuditList,ui.collabList].some(hasActiveDataHost)) return;
     renderWorkspaceSummary();
     await Promise.all([refreshCollaboration(), refreshWorkspaceCsvs(), refreshWorkspaceAudit()]);
   };
 
+  const hasActiveDataHost = (element) => Boolean(element && !document.hidden && !element.closest("[hidden], .hidden"));
+
   const startUserOrders = (db, user) => {
     if (state.unsubscribeOrders) state.unsubscribeOrders();
-    if (!user) return;
+    state.unsubscribeOrders = null;
+    if (!user || !hasActiveDataHost(ui.userOrders)) return;
 
     state.unsubscribeOrders = db
       .collection("orders")
       .where("userId", "==", user.uid)
       .orderBy("createdAt", "desc")
+      .limit(100)
       .onSnapshot(
         (snapshot) => {
           const orders = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -7722,13 +7729,15 @@
 
 	  const startUserForecasts = (db, workspaceUserId) => {
 	    if (state.unsubscribeForecasts) state.unsubscribeForecasts();
-	    const containers = [ui.userForecasts, ui.savedForecastsList].filter(Boolean);
+        state.unsubscribeForecasts = null;
+	    const containers = [ui.userForecasts, ui.savedForecastsList].filter(hasActiveDataHost);
 	    if (!workspaceUserId || containers.length === 0) return;
 
 	    state.unsubscribeForecasts = db
 	      .collection("forecast_requests")
 	      .where("userId", "==", workspaceUserId)
 	      .orderBy("createdAt", "desc")
+          .limit(100)
 	      .onSnapshot(
           (snapshot) => {
             const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -7744,7 +7753,8 @@
 
     const startScreenerRuns = (db, workspaceUserId) => {
       if (state.unsubscribeScreenerRuns) state.unsubscribeScreenerRuns();
-      if (!ui.screenerLoadSelect && !ui.screenerOutput) return;
+      state.unsubscribeScreenerRuns = null;
+      if (![ui.screenerLoadSelect,ui.screenerOutput].some(hasActiveDataHost)) return;
       if (!workspaceUserId || !db) return;
 
       state.unsubscribeScreenerRuns = db
@@ -8052,6 +8062,7 @@
       .collection("autopilot_requests")
       .where("userId", "==", user.uid)
       .orderBy("createdAt", "desc")
+      .limit(100)
       .onSnapshot(
         (snapshot) => {
           const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -8075,6 +8086,7 @@
       .collection("prediction_uploads")
       .where("userId", "==", user.uid)
       .orderBy("createdAt", "desc")
+      .limit(100)
       .onSnapshot(
         (snapshot) => {
           const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
@@ -8095,6 +8107,8 @@
 
   const startAdminOrders = (db) => {
     if (state.unsubscribeAdmin) state.unsubscribeAdmin();
+    state.unsubscribeAdmin = null;
+    if (!hasActiveDataHost(ui.adminOrders)) return;
     state.unsubscribeAdmin = db
       .collection("orders")
       .orderBy("createdAt", "desc")
@@ -8334,7 +8348,10 @@
   };
 
   const ensureUserProfile = async (db, user) => {
-    if (!user) return;
+    if (!user || isAnonymousUser(user)) return;
+    const cacheKey=`quantura_profile_initialized:${user.uid}`;
+    let last=0;try{last=Number(window.sessionStorage.getItem(cacheKey)||0);}catch{}
+    if(last>0 && Date.now()-last<60*60*1000) return;
     const userRef = db.collection("users").doc(user.uid);
     const snapshot = await userRef.get();
     const existing = snapshot.exists ? snapshot.data() : {};
@@ -8372,6 +8389,7 @@
       },
       { merge: true }
     );
+    try{window.sessionStorage.setItem(cacheKey,String(Date.now()));}catch{}
   };
 
   const buildCsv = (rows, headers) => {
@@ -12738,6 +12756,7 @@
   const loadEarningsFollowSet = async ({ force = false } = {}) => {
     const db = state.clients?.db;
     const uid = String(state.user?.uid || "").trim();
+    if (!ui.earningsCalendarOutput && !document.getElementById("earnings-calendar")) return readLocalEarningsFollows();
     if (!db || !uid) {
       state.earningsCalendar.follows = readLocalEarningsFollows();
       state.earningsCalendar.followsUid = uid || "anon";
@@ -13536,7 +13555,7 @@
       })
       .join("");
     ui.tickerQueryModulesOutput.innerHTML = `
-      <div class="small"><strong>Selected yfinance modules</strong></div>
+      <div class="small"><strong>Selected source fields</strong></div>
       <div class="model-council-modules-stack">${details}</div>
     `;
     ui.tickerQueryModulesOutput.classList.remove("hidden");
@@ -13643,7 +13662,7 @@
       const auth = state.clients?.auth;
       const user = auth?.currentUser;
       if (user) {
-        const token = await user.getIdToken();
+        const token = await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
         if (token) headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
@@ -13990,7 +14009,7 @@
       field.querySelector("input").disabled = field.hidden;
     });
     const horizon = document.getElementById("ensemble-horizon-mode");
-    const frequency = ["ticker","kalshi_perp"].includes(type) ? document.getElementById("ensemble-ticker-frequency")?.value : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : type === "workspace_dataset" ? ensembleDatasetFrequency(new FormData(ui.ensembleForecastForm)) : document.getElementById("ensemble-market-frequency")?.value;
+    const frequency = ["ticker","kalshi_perp","gemini_spot"].includes(type) ? document.getElementById("ensemble-ticker-frequency")?.value : type === "economic_series" ? window.QuanturaEconomics?.frequency() : type === "series" ? document.getElementById("ensemble-csv-frequency")?.value : type === "workspace_dataset" ? ensembleDatasetFrequency(new FormData(ui.ensembleForecastForm)) : document.getElementById("ensemble-market-frequency")?.value;
     const intraday = dukascopy || type !== "ticker" || frequency !== "1Day";
     if (horizon) {
       horizon.closest(".field").hidden = intraday;
@@ -14020,7 +14039,11 @@
     if (!["workspace_dataset", "series"].includes(sourceType) && (!Number.isInteger(historyLimit) || historyLimit < 2 || historyLimit > 500)) throw new Error("Choose 2–500 historical observations. Model minimums still apply.");
     const selection = window.QuanturaMarketSelection;
     if (sourceType === "prediction_market" && !(selection?.contract_id || selection?.contract?.contractId)) throw new Error("Select a team/side from market search, Live moneylines, or a pasted market link.");
-    const source = sourceType === "series"
+    const source = sourceType === "economic_series"
+      ? {...window.QuanturaEconomics.source(),limit:historyLimit}
+      : sourceType === "gemini_spot"
+      ? {type:"gemini_spot",symbol:String(data.get("ticker")||"").trim().toUpperCase(),frequency:window.QuanturaForecastControls.frequencyMeta(data.get("ticker_frequency")).frequency,limit:historyLimit}
+      : sourceType === "series"
       ? { type: "series", name: ensembleUiState.csvName, rows: window.QuanturaForecastControls.csvSeries(ensembleUiState.csvTable || {headers:[],rows:[]}, document.getElementById("ensemble-csv-date").value, document.getElementById("ensemble-csv-target").value), timestamp_column: "timestamp", target_column: "target", frequency: document.getElementById("ensemble-csv-frequency").value, timezone: ensembleTimeZone() }
       : sourceType === "kalshi_perp"
       ? {type:"kalshi_perp",symbol:String(data.get("ticker")||"").trim().toUpperCase(),frequency:window.QuanturaForecastControls.frequencyMeta(data.get("ticker_frequency")).frequency,limit:historyLimit}
@@ -14056,8 +14079,9 @@
     const lag = cutoffMode === "relative" ? ensembleDurationMinutes(data.get("history_lag_amount") || 0, String(data.get("history_lag_unit") || "minutes"), Infinity) : 0;
     const cutoffAt = cutoffMode === "date" ? window.QuanturaForecastControls.cutoffInstant(document.getElementById("ensemble-history-cutoff").value) : undefined;
     const endAt = document.getElementById("ensemble-prediction-mode")?.value === "date" ? window.QuanturaForecastControls.localInstant(document.getElementById("ensemble-prediction-end").value) : undefined;
-    const durationUnit = document.getElementById("ensemble-prediction-unit")?.value || window.QuanturaForecastControls.frequencyMeta(source.frequency).unit;
-    const steps = endAt ? 30 : window.QuanturaForecastControls.durationBars(data.get("prediction_length") || 30,durationUnit,source.frequency);
+    const sourceFrequency=sourceType==="economic_series"?window.QuanturaEconomics.frequency():source.frequency;
+    const durationUnit = document.getElementById("ensemble-prediction-unit")?.value || window.QuanturaForecastControls.frequencyMeta(sourceFrequency).unit;
+    const steps = endAt ? 30 : window.QuanturaForecastControls.durationBars(data.get("prediction_length") || 30,durationUnit,sourceFrequency);
     if (!Number.isInteger(steps) || steps < 1 || steps > 512) throw new Error("Choose a duration aligned with the observation interval, from 1 to 512 bars.");
     return {
       workspace_id: state.activeWorkspaceId || state.user?.uid || "",
@@ -14067,11 +14091,11 @@
       ...(cutoffAt ? { history_cutoff_at: cutoffAt } : {}),
       ...(endAt ? { prediction_end_at: endAt } : {}),
       prediction_length: steps,
-      horizon_mode: ["prediction_market","series","kalshi_perp"].includes(sourceType) || (sourceType === "ticker" && source.frequency !== "1Day") ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
+      horizon_mode: ["prediction_market","series","kalshi_perp","economic_series","gemini_spot"].includes(sourceType) || (sourceType === "ticker" && source.frequency !== "1Day") ? "frequency_periods" : String(data.get("horizon_mode") || "trading_sessions"),
       quantiles: getEnsembleQuantiles(),
       transform: sourceType === "prediction_market" ? "logit" : String(data.get("transform") || "auto"),
       context_length: contextRaw ? Number(contextRaw) : null,
-      frequency: window.QuanturaForecastControls.frequencyMeta(source.frequency).frequency,
+      frequency: window.QuanturaForecastControls.frequencyMeta(sourceFrequency).frequency,
       calendar: sourceType === "ticker" && source.provider!=="dukascopy" && source.frequency === "1Day" ? "NYSE" : "NONE",
       model_failure_policy: String(data.get("model_failure_policy") || "fail"),
       models,
@@ -14171,7 +14195,7 @@
       title: { text: escapeHtml(ensembleMarketIdentity(job).title), font: {size:13}, x:0.02 },
       margin: { l: mobile?48:62, r: 16, t: 58, b: mobile?175:125, autoexpand:false }, height: mobile?565:490, hovermode: "closest", uirevision: job.forecast_id,
       xaxis: { type: "date", ...(chartRange ? { range: chartRange.map(t=>new Date(t).toISOString()), autorange: false } : {}), title: { text: intraday ? `Time (${timeZone})` : "Session date", standoff: 14 }, automargin:true, rangebreaks:window.QuanturaForecastControls.exchangeDateBreaks(job), tickmode: "array", tickvals: tickTimes.map(t=>new Date(t).toISOString()), ticktext: tickTimes.map(t => new Intl.DateTimeFormat(undefined,intraday ? {timeZone,hour:'numeric',minute:'2-digit',hour12:true} : {timeZone:"UTC",month:"short",day:"numeric"}).format(t)), tickformat: intraday ? "%I:%M %p" : "%b %d", hoverformat: "%I:%M %p", rangeslider: { visible: false } },
-      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "kalshi_perp" ? "USD per underlying unit" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
+      yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "economic_series" ? String(source.units||"Value") : source.type === "kalshi_perp" ? "USD per underlying unit" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
       legend: { orientation: "h", yref:"container", y:0.01, yanchor:"bottom", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
       shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:plotTimestamp(inputHistory.at(-1)),x1:plotTimestamp(inputHistory.at(-1)),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
@@ -14515,21 +14539,38 @@
       syncDates();
     }
     document.getElementById("ensemble-csv-frequency")?.addEventListener("change", syncEnsembleSourceFields);
+    let csvUploadSequence = 0;
+    document.getElementById("ensemble-csv-name")?.addEventListener("input", event => { ensembleUiState.csvName = event.target.value.trim().slice(0,120) || "Uploaded time series"; });
     document.getElementById("ensemble-csv-file")?.addEventListener("change", async event => {
+      const sequence = ++csvUploadSequence;
       const status = document.getElementById("ensemble-csv-status");
+      const preview = document.getElementById("ensemble-csv-preview-table");
+      preview?.replaceChildren();
       ensembleUiState.csvTable = null;
       const file = event.target.files?.[0]; if (!file) return;
       try {
         if (file.size > 2*1024*1024) throw new Error("CSV must be at most 2 MB.");
         const table = controls.parseCsv(await file.text());
+        if (sequence !== csvUploadSequence) return;
         ensembleUiState.csvTable = table; ensembleUiState.csvName = file.name;
+        const name = document.getElementById("ensemble-csv-name");
+        if(name) name.value = file.name.replace(/\.csv$/i, "").slice(0,120);
+        ensembleUiState.csvName = name?.value || file.name;
+        if(preview) {
+          const grid = document.createElement("table"), head = grid.createTHead().insertRow();
+          for(const value of table.headers) {const cell=document.createElement("th");cell.scope="col";cell.textContent=value;head.append(cell);}
+          const body=grid.createTBody();
+          for(const values of table.rows.slice(0,20)) {const row=body.insertRow();for(const value of values)row.insertCell().textContent=value;}
+          preview.append(grid);
+          document.getElementById("ensemble-csv-preview-note").textContent = `First ${Math.min(20,table.rows.length)} of ${table.rows.length.toLocaleString()} rows. Your file stays in this browser until you run a forecast.`;
+        }
         for (const id of ["ensemble-csv-date", "ensemble-csv-target"]) {
           const select = document.getElementById(id); select.replaceChildren(...table.headers.map(header => new Option(header, header)));
         }
         document.getElementById("ensemble-csv-date").value = table.headers.find(name => /date|time|^ds$/i.test(name)) || table.headers[0];
         document.getElementById("ensemble-csv-target").value = table.headers.find(name => /close|value|target|^y$/i.test(name)) || table.headers[1];
         status.textContent = `${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns. Review columns and interval before running.`;
-      } catch (error) { status.textContent = error.message; }
+      } catch (error) { if(sequence === csvUploadSequence) status.textContent = error.message; }
     });
     const csvHelp = document.getElementById("ensemble-csv-help");
     document.getElementById("ensemble-csv-help-open")?.addEventListener("click", () => csvHelp?.showModal());
@@ -15003,6 +15044,7 @@
       state.myRequestsPanelState = {};
       return [];
     }
+    if (!ui.myRequestsPanels?.length) return [];
     if (state.myRequestsLoading) return state.myRequests;
     if (more && !state.myRequestsHasMore) return state.myRequests;
     if (!force && !more && state.myRequests.length && Date.now() - Number(state.myRequestsLoadedAt || 0) < 15000) {
@@ -15998,7 +16040,7 @@
 
   const syncModelCouncilSeo = () => {
     const title = "Forecast Review | Quantura";
-    const description = "Multi-provider Forecast Review with structured Yahoo Finance module context for ticker analysis.";
+    const description = "Multi-provider Forecast Review with verified source context for ticker analysis.";
     try {
       if (window.location.pathname === "/model-council" || window.location.pathname === "/ticker-query") {
         document.title = title;
@@ -20481,7 +20523,7 @@
   };
 
   const loadScreenerUsageToday = async (db) => {
-    if (!db || !state.user) return;
+    if (!db || !state.user || !hasActiveDataHost(ui.screenerOutput)) return;
     const weekKey = getWeeklyUsageKey();
     const docId = `${state.user.uid}_${weekKey}`;
     try {
@@ -22076,12 +22118,19 @@
   };
 
   const seedDefaultAIAgents = async (db, workspaceId) => {
-    if (!state.user || !workspaceId) return;
+    if (!state.user || !workspaceId || !hasActiveDataHost(document.getElementById("ai-agent-leaderboard"))) return;
     if (state.aiDefaultsSeededWorkspaceId === workspaceId) return;
     const { DEFAULT_AI_AGENTS } = await import("/admin-seed-data.js?v=20260924a");
     const collection = db.collection("users").doc(workspaceId).collection("ai_agents");
-    const writes = DEFAULT_AI_AGENTS.map((agent) =>
-      collection.doc(`default_${agent.id}`).set(
+    const marker=db.collection("users").doc(workspaceId).collection("settings").doc("ai_defaults_seed_v1");
+    await db.runTransaction(async transaction=>{
+      const seeded=await transaction.get(marker);
+      if(seeded.exists) return;
+      const refs=DEFAULT_AI_AGENTS.map(agent=>collection.doc(`default_${agent.id}`));
+      const existing=await Promise.all(refs.map(ref=>transaction.get(ref)));
+      DEFAULT_AI_AGENTS.forEach((agent,index)=>{
+        if(existing[index].exists) return;
+        transaction.set(refs[index],
         {
           ...agent,
           isDefault: true,
@@ -22105,11 +22154,10 @@
           ownerPublicProfile: true,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      )
-    );
-    await Promise.all(writes);
+        });
+      });
+      transaction.set(marker,{version:1,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    });
     state.aiDefaultsSeededWorkspaceId = workspaceId;
   };
 
@@ -22130,7 +22178,7 @@
     });
 
   const seedAdminPresetScreenerRuns = async (db, workspaceId) => {
-    if (!state.user || !db || !workspaceId) return;
+    if (!state.user || !db || !workspaceId || !hasActiveDataHost(ui.screenerOutput)) return;
     if (!isAdminUser(state.user)) return;
 
     const markerRef = db.collection("users").doc(workspaceId).collection("settings").doc("admin_screener_seed");
@@ -22195,7 +22243,8 @@
   const startAIAgents = (db, workspaceId) => {
     if (state.unsubscribeAIAgents) state.unsubscribeAIAgents();
     state.aiAgents = [];
-    if (!workspaceId) return;
+    state.unsubscribeAIAgents = null;
+    if (!workspaceId || !hasActiveDataHost(document.getElementById("ai-agent-leaderboard"))) return;
     state.unsubscribeAIAgents = db
       .collection("users")
       .doc(workspaceId)
@@ -24723,7 +24772,7 @@
           const nativeAuthBridge = installNativeAuthBridge(auth);
 
 	      state.clients = { auth, db, functions, storage, messaging };
-        const persistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(async () => {
+        const persistenceReady = Promise.resolve(window.QuanturaAuth?.ready).then(() => auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)).catch(async () => {
           await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
           showToast("Using session-only sign-in in this browser.", "warn");
         });
@@ -24731,9 +24780,32 @@
 	      hydrateUnsplashGallery(functions);
 	      bindFeatureVoteForms(functions);
 
+      const syncAccountView = () => {
+        const user=state.user,workspace=resolveActiveWorkspaceId(user);
+        const full=hasFullAccount(user) && !document.hidden;
+        const specs=[
+          ["unsubscribeOrders",[ui.userOrders],()=>startUserOrders(db,user)],
+          ["unsubscribeForecasts",[ui.userForecasts,ui.savedForecastsList],()=>startUserForecasts(db,workspace)],
+          ["unsubscribeScreenerRuns",[ui.screenerLoadSelect,ui.screenerOutput],()=>startScreenerRuns(db,workspace)],
+          ["unsubscribeAIAgents",[document.getElementById("ai-agent-leaderboard")],()=>{seedDefaultAIAgents(db,workspace).catch(()=>{});startAIAgents(db,workspace);}],
+          ["unsubscribeAdmin",[ui.adminOrders],()=>{if(isAdminUser(user))startAdminOrders(db);}],
+        ];
+        for(const [key,hosts,start] of specs) {
+          if(full && hosts.some(hasActiveDataHost)) {if(!state[key])start();}
+          else {state[key]?.();state[key]=null;}
+        }
+        if(!state.unsubscribeAIAgents)for(const key of ["unsubscribeAIFollows","unsubscribeAILikes"]) {state[key]?.();state[key]=null;}
+        if(full && ui.myRequestsPanels?.some(hasActiveDataHost))fetchMyRequestsList().then(renderMyRequestsPanels).catch(()=>{});
+      };
+      document.addEventListener("visibilitychange",syncAccountView);
+      document.addEventListener("quantura:organization",event=>{
+        if(!state.user)return;state.activeWorkspaceId=event.detail.id || state.user.uid;syncAccountView();
+      });
       window.__quanturaPanelActivated = (panel) => {
         const next = String(panel || "").trim();
         if (!next) return;
+        syncAccountView();
+        if(next==="profile" && hasFullAccount()) {loadUserProfile(db,state.user).catch(()=>{});refreshWorkspacePanel().catch(()=>{});}
         if (next === "forecast") refreshPrimaryForecast();
         const showTickerChart = next === "ticker";
         const showStudioMain = showTickerChart;
@@ -26650,7 +26722,8 @@
           window.__NATIVE_FCM_TOKEN__ = "";
         }
         clearPendingAuthCredential();
-        await auth.signOut();
+        if(window.QuanturaAuth?.enabled)await window.QuanturaAuth.signOut();
+        else await auth.signOut();
         showToast("Signed out.");
         logEvent("logout", { method: "firebase", runtime });
       };
@@ -27524,7 +27597,7 @@
                 quantileSchemaVersion: String(data.quantileSchemaVersion || "meta_prophet_v2_p1_p25_p50_p75_p99"),
                 engine: String(data.engine || ""),
                 sourceRequested: String(data.sourceRequested || payload.source || "auto"),
-                sourceUsed: String(data.sourceUsed || "yahoo"),
+                sourceUsed: String(data.sourceUsed || "alpaca"),
                 assetClass: String(data.assetClass || payload.assetClass || "equity"),
                 status: String(data.status || "completed"),
                 serviceMessage: [String(data.serviceMessage || "").trim(), historyLoadMessage].filter(Boolean).join(" "),
@@ -28171,7 +28244,7 @@
 	        const underlyingPrice = data.underlyingPrice;
 	        const riskFreeRate = data.riskFreeRate;
 	        const timeToExpiryYears = data.timeToExpiryYears;
-          const source = String(data.source || "yfinance").trim().toLowerCase();
+          const source = String(data.source || "alpaca").trim().toLowerCase();
           const referenceOnly = Boolean(data.referenceOnly);
           const fallbackUsed = Boolean(data.fallbackUsed);
           const notice = String(data.notice || "").trim();
@@ -28283,7 +28356,7 @@
 	              <div class="options-meta">
 	                <div class="small"><strong>Underlying:</strong> ${money(underlyingPrice)}</div>
 	                <div class="small"><strong>Expiration:</strong> ${escapeHtml(selectedExpiration)}</div>
-                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "reference" ? "Reference contract feed" : "Yahoo Finance")}</div>
+                  <div class="small"><strong>Source:</strong> ${escapeHtml(source === "reference" ? "Reference contract feed" : "Provider history")}</div>
 	                <div class="small"><strong>RFR:</strong> ${typeof riskFreeRate === "number" ? fmt(riskFreeRate, 3) : "—"} · <strong>T:</strong> ${
 	                  typeof timeToExpiryYears === "number" ? fmt(timeToExpiryYears, 3) : "—"
 	                }y</div>
@@ -29319,7 +29392,7 @@
             }
 
             await ensureUserProfile(db, user);
-            await loadUserProfile(db, user);
+            if(hasActiveDataHost(ui.profileForm)) await loadUserProfile(db, user);
             setProfileStatus("Profile settings are private to your account.");
             setAuthUi(user);
 
@@ -29490,7 +29563,7 @@
           refreshPrimaryForecast();
 		      startUserForecasts(db, activeWorkspaceId);
           startScreenerRuns(db, activeWorkspaceId);
-          await fetchMyRequestsList({ force: true }).catch(() => []);
+          if(ui.myRequestsPanels?.some(hasActiveDataHost))await fetchMyRequestsList().catch(() => []);
           renderMyRequestsPanels();
           if (ui.screenerGithubHistoryList) {
             loadPublicScreenerGithubRuns({ force: false }).catch(() => {});
@@ -29500,6 +29573,7 @@
           await seedDefaultAIAgents(db, activeWorkspaceId).catch(() => {});
           await seedAdminPresetScreenerRuns(db, activeWorkspaceId).catch(() => {});
           startAIAgents(db, activeWorkspaceId);
+          syncAccountView();
 	      await refreshWorkspacePanel();
 
         const pendingShare = String(getPendingShareId() || "").trim();

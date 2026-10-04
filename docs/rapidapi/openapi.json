@@ -1,0 +1,4313 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Quantura",
+    "version": "1.0.0",
+    "description": "Probabilistic market forecasts, verified market discovery, observed historical data, and screener quantiles. Forecasts run asynchronously: create a job, poll its status, then download the final ensemble. Enterprise agreements define compute admission and API quotas. Market data remains subject to provider coverage and licensing. Research estimates are not guaranteed returns.",
+    "contact": {
+      "name": "Quantura",
+      "url": "https://quantura.studio/contact"
+    },
+    "termsOfService": "https://quantura.studio/terms"
+  },
+  "servers": [
+    {
+      "url": "https://quantura.studio/api",
+      "description": "Quantura production origin behind RapidAPI"
+    }
+  ],
+  "security": [
+    {
+      "rapidApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Access",
+      "description": "Identity, token scopes, plans, and effective workspace access."
+    },
+    {
+      "name": "Ensemble Forecasts",
+      "description": "Asynchronous probabilistic time-series ensemble jobs and reproducible presets."
+    },
+    {
+      "name": "Economic data",
+      "description": "Native reporting periods and explicit dimensions."
+    },
+    {
+      "name": "Gemini exchange",
+      "description": "Exchange market data, separate from Google Gemini AI models."
+    }
+  ],
+  "paths": {
+    "/v1/me/access": {
+      "get": {
+        "tags": [
+          "Access"
+        ],
+        "summary": "Get the Authenticated User's Effective API, Plan, and Workspace Access",
+        "operationId": "getMyAccess",
+        "description": "Returns token scopes, personal plan, and current owner/editor/viewer membership. Membership is evaluated on every request.",
+        "responses": {
+          "200": {
+            "description": "Effective identity, scopes, plan, and workspaces.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "data": {
+                    "user": {
+                      "id": "usr_example",
+                      "email": "developer@example.com"
+                    },
+                    "token_scopes": [
+                      "account:read",
+                      "workspaces:read",
+                      "datasets:read"
+                    ],
+                    "personal_plan": "pro",
+                    "workspaces": [
+                      {
+                        "id": "ws_01JEXAMPLE9Y6Z",
+                        "name": "Institutional Research",
+                        "slug": "institutional-research",
+                        "owner_user_id": "usr_example_owner",
+                        "role": "owner",
+                        "permissions": [
+                          "workspace.read",
+                          "csv.list",
+                          "csv.read",
+                          "csv.download"
+                        ],
+                        "resource_scope": {
+                          "csv": {
+                            "mode": "all",
+                            "ids": []
+                          },
+                          "forecasts": {
+                            "mode": "all",
+                            "ids": []
+                          }
+                        },
+                        "capabilities": [
+                          "csv.read",
+                          "forecast.read"
+                        ],
+                        "legacy_personal": false,
+                        "created_at": "2026-09-03T14:30:00.000Z",
+                        "updated_at": "2026-09-03T14:30:00.000Z"
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "tags": [
+          "Access"
+        ],
+        "summary": "Get the Authenticated User's Effective Quantura Product Capabilities",
+        "operationId": "getCapabilities",
+        "responses": {
+          "200": {
+            "description": "Personal and workspace-scoped capability map.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "data": {
+                    "forecasting": true,
+                    "screener": true,
+                    "historical_data": true,
+                    "options": true,
+                    "sports": true,
+                    "dataset_download": true,
+                    "backtesting": true,
+                    "collaboration": true,
+                    "sagemaker": true
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/forecast/models": {
+      "get": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "List Available Ensemble Models, Quantile Support, and License Constraints",
+        "operationId": "getEnsembleModelCapabilities",
+        "description": "Latest and historical cutoffs (including 120/180-day replays) select data before the N-bar limit, subject to provider retention; inference runs now. Returns supported intervals (1min, 5min, 15min, 30min, 1h, 4h, 1D, 1W-MON, 1MS), completed-bar calendar semantics, plan, runtime, quantile, horizon, device, checkpoint and TimesFM licensing availability. Weeks begin Monday UTC; monthly periods use real calendar months. No secret values are returned.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Effective model capabilities.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCapabilitiesEnvelope"
+                },
+                "example": {
+                  "data": {
+                    "frequencies": [
+                      {
+                        "frequency": "1min",
+                        "timeframe": "1Min",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": null,
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "5min",
+                        "timeframe": "5Min",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": null,
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "15min",
+                        "timeframe": "15Min",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": null,
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "30min",
+                        "timeframe": "30Min",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": null,
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "1h",
+                        "timeframe": "1Hour",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": null,
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "4h",
+                        "timeframe": "4Hour",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": null,
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "1D",
+                        "timeframe": "1Day",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": null,
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "1W-MON",
+                        "timeframe": "1Week",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": "week",
+                        "week_start": "Monday",
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      },
+                      {
+                        "frequency": "1MS",
+                        "timeframe": "1Month",
+                        "bucket_timezone": "UTC",
+                        "calendar_period": "month",
+                        "completed_bars_only": true,
+                        "missing_intervals": "not_filled"
+                      }
+                    ],
+                    "models": [
+                      {
+                        "id": "prophet",
+                        "name": "Meta Prophet",
+                        "available": true,
+                        "default_weight": 0.2,
+                        "quantile_support": {
+                          "type": "requested"
+                        }
+                      },
+                      {
+                        "id": "toto",
+                        "name": "Toto 2.0",
+                        "available": true,
+                        "default_weight": 0.2,
+                        "quantile_support": {
+                          "min": 0.1,
+                          "max": 0.9,
+                          "interpolation_inside_range": true
+                        }
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/ensemble-forecasts": {
+      "post": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "Create an Asynchronous Multi-Model Quantura Forecast Job",
+        "operationId": "createEnsembleForecast",
+        "description": "Validates the source and immutable configuration, snapshots authorized input data, enqueues a durable worker, and returns HTTP 202. Component-model arrays are not exposed in the standard result.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 180
+            },
+            "description": "Replays the same normalized request without launching duplicate compute."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnsembleForecastRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Forecast job queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnsembleForecastEnvelope"
+                },
+                "example": {
+                  "data": {
+                    "forecast_id": "ens_01JEXAMPLE7M6N",
+                    "status": "queued",
+                    "progress": {
+                      "completed_models": 0,
+                      "total_models": 4,
+                      "current_model": null
+                    },
+                    "status_url": "/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N",
+                    "result_url": "/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N"
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unsupported model, quantile, horizon, dataset, or transform configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/ensemble-forecasts/{forecast_id}": {
+      "get": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "Get an Ensemble Forecast Job's Progress or Completed Quantile Results",
+        "operationId": "getEnsembleForecast",
+        "parameters": [
+          {
+            "name": "forecast_id",
+            "in": "path",
+            "required": true,
+            "description": "Forecast id or unique slug.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Queued/running progress or completed ensemble predictions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnsembleForecastEnvelope"
+                },
+                "example": {
+                  "data": {
+                    "forecast_id": "ens_01JEXAMPLE7M6N",
+                    "status": "completed",
+                    "progress": {
+                      "completed_models": 1,
+                      "total_models": 1,
+                      "current_model": null
+                    },
+                    "status_url": "/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N",
+                    "result_url": "/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N",
+                    "quantiles": [
+                      0.1,
+                      0.5,
+                      0.9
+                    ],
+                    "predictions": [
+                      {
+                        "timestamp": "2026-09-21T00:00:00Z",
+                        "quantiles": {
+                          "0.1": 98,
+                          "0.5": 100,
+                          "0.9": 102
+                        }
+                      }
+                    ]
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Forecast job not found."
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/ensemble-forecasts/{forecast_id}/reproduce": {
+      "post": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "Create a New Forecast Job from an Immutable Historical Configuration",
+        "operationId": "reproduceEnsembleForecast",
+        "description": "Creates a new durable job from the original authorized input snapshot, exact model checkpoints, and stored configuration. Current workspace permissions, plan, and license gates are re-evaluated.",
+        "parameters": [
+          {
+            "name": "forecast_id",
+            "in": "path",
+            "required": true,
+            "description": "Forecast id or unique slug.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Reproduction job queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnsembleForecastEnvelope"
+                },
+                "example": {
+                  "data": {
+                    "forecast_id": "ens_01JEXAMPLE7M6N",
+                    "status": "queued",
+                    "progress": {
+                      "completed_models": 0,
+                      "total_models": 4,
+                      "current_model": null
+                    },
+                    "status_url": "/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N",
+                    "result_url": "/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N"
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Original forecast job not found."
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/ensemble-forecasts/{forecast_id}/download": {
+      "get": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "Download a Completed Ensemble Forecast as CSV or JSON",
+        "operationId": "downloadEnsembleForecast",
+        "parameters": [
+          {
+            "name": "forecast_id",
+            "in": "path",
+            "required": true,
+            "description": "Forecast id or unique slug.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "json"
+              ],
+              "default": "csv"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV or JSON attachment containing final ensemble values only.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "timestamp,p01,p25,p50,p75,p99\n2026-09-04T00:00:00.000Z,135.10,140.25,144.80,149.30,157.90\n"
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Completed result not found."
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/ensemble-forecasts/{forecast_id}/observations": {
+      "get": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "Read newly observed prices to overlay a saved forecast",
+        "operationId": "getEnsembleForecastObservations",
+        "description": "Returns genuine selected-side targets (Kalshi closing ask, Polymarket US display quote) or stock closes after the immutable input cutoff. The first prediction-row minute is retained when available, even outside the most recent 500 observations; worker completion does not move this comparison to another minute. A quote preceding publication is retrospective, not a backdated fill. Stock rows include interval and exchange session_date metadata; minute closes are not final daily closes. Does not run models or revise predictions. Poll no faster than once per minute. Stock overlays have no fixed 90-day cutoff-age limit: retained forecast-interval closes support 120/180-day replays, bounded to 2,000 rows; recent stock minutes use a seven-day window. Prediction-market and perpetual live overlays expire 90 days after input cutoff and expose their availability state. Provider retention still applies. Dataset-only jobs return no live observations.",
+        "parameters": [
+          {
+            "name": "forecast_id",
+            "in": "path",
+            "required": true,
+            "description": "Forecast id or unique slug.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized current observations, possibly empty when no new data is available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "forecast_id": {
+                          "type": "string"
+                        },
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "timestamp": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "target": {
+                                "type": "number"
+                              }
+                            }
+                          }
+                        },
+                        "input_cutoff": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "observed_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "availability": {
+                          "type": "string"
+                        },
+                        "refresh_after_seconds": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "forecast_id": "ens_example",
+                    "rows": [
+                      {
+                        "timestamp": "2026-09-11T22:01:00Z",
+                        "target": 0.51
+                      }
+                    ],
+                    "input_cutoff": "2026-09-11T22:00:00Z",
+                    "observed_at": "2026-09-11T22:01:10Z",
+                    "availability": "available",
+                    "refresh_after_seconds": 60
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Scope, plan, or workspace authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "message",
+                        "request_id"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
+    },
+    "/v1/screener/forecasts/{ticker}": {
+      "get": {
+        "tags": [
+          "Screener"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "getPublishedScreenerForecast",
+        "summary": "Open the exact published weekly forecast for a screener ticker",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 20
+            }
+          },
+          {
+            "name": "scan_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "description": "Exact published scan; old scan returns 404, never silently substitutes a new one."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "json"
+              ]
+            },
+            "description": "Optional attachment; omit for JSON data envelope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Seven-session final ensemble and input history; example abbreviated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "data": {
+                    "forecast_id": "screener-example-TEST",
+                    "status": "completed",
+                    "prediction_length": 7,
+                    "horizon_mode": "trading_sessions",
+                    "frequency": "1D",
+                    "published_screener": {
+                      "ticker": "TEST",
+                      "scan_id": "example"
+                    },
+                    "predictions": [
+                      {
+                        "timestamp": "2026-09-21T00:00:00Z",
+                        "quantiles": {
+                          "0.01": 80,
+                          "0.1": 90,
+                          "0.25": 95,
+                          "0.5": 100,
+                          "0.75": 105,
+                          "0.9": 110,
+                          "0.99": 120
+                        }
+                      }
+                    ],
+                    "history": [
+                      {
+                        "timestamp": "2026-09-17T00:00:00Z",
+                        "target": 99
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/screener/forecasts/{ticker}/observations": {
+      "get": {
+        "tags": [
+          "Screener"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "getPublishedScreenerObservations",
+        "summary": "Retrieve observed stock closes for the published screener forecast chart",
+        "parameters": [
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 20
+            }
+          },
+          {
+            "name": "scan_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "description": "Exact published scan; old scan returns 404, never silently substitutes a new one."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Actual observations; missing bars are not filled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "data": {
+                    "rows": [
+                      {
+                        "timestamp": "2026-09-18T20:00:00Z",
+                        "target": 100,
+                        "interval": "1min",
+                        "provider": "alpaca"
+                      }
+                    ],
+                    "availability": "available",
+                    "observed_at": "2026-09-18T20:01:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-data/perps/markets": {
+      "get": {
+        "servers": [
+          {
+            "url": "https://quantura.studio/api"
+          }
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "tags": [
+          "Kalshi Perpetuals"
+        ],
+        "operationId": "listKalshiPerpetualContracts",
+        "summary": "List all available Kalshi perpetual contracts and normalized spot-scale prices",
+        "responses": {
+          "200": {
+            "description": "Successful response (example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "provider": "kalshi_perps",
+                  "markets": [
+                    {
+                      "resource_type": "perpetual_contract",
+                      "symbol": "KXBTCPERP",
+                      "name": "Bitcoin perpetual",
+                      "asset_class": "perpetual",
+                      "status": "active",
+                      "contract_size": 0.0001,
+                      "underlying_multiplier": 1,
+                      "underlying_units_per_contract": 0.0001,
+                      "unit": "USD per underlying unit",
+                      "spot_reference_price": 81000,
+                      "reference_contract_price": 8.1,
+                      "available_granularities": [
+                        "1min",
+                        "5min",
+                        "15min",
+                        "30min",
+                        "1h",
+                        "4h",
+                        "1D",
+                        "1W-MON",
+                        "1MS"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider unavailable or request invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "error": "perps_provider_unavailable",
+                  "message": "Perpetual history is unavailable. No substitute prices were returned."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-data/perps/history": {
+      "get": {
+        "servers": [
+          {
+            "url": "https://quantura.studio/api"
+          }
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "tags": [
+          "Kalshi Perpetuals"
+        ],
+        "operationId": "getKalshiPerpetualTradeCloses",
+        "summary": "Download completed Kalshi perpetual trade closes as CSV or JSON",
+        "description": "Completed traded-price OHLC normalized to USD per underlying unit by dividing Kalshi's per-contract prices by contract_size × underlying_multiplier. Raw scaling metadata is returned for auditability. Null closes and missing bars are not filled. Bounded backward time-window retrieval; maximum 20,000 intervals per date range and 5,000 returned rows. Market data is public; forecast execution still uses authenticated workspace authorization.",
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^KX[A-Z0-9]{1,36}PERP$"
+            },
+            "example": "KXBTCPERP"
+          },
+          {
+            "name": "frequency",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1min",
+                "5min",
+                "15min",
+                "30min",
+                "1h",
+                "4h",
+                "1D",
+                "1W-MON",
+                "1MS"
+              ],
+              "default": "1h"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000,
+              "default": 500
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "default": "json"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response (example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "provider": "kalshi_perps",
+                  "symbol": "KXBTCPERP",
+                  "frequency": "1min",
+                  "rows": [
+                    {
+                      "timestamp": "2026-09-20T12:01:00Z",
+                      "open": 81000,
+                      "high": 82000,
+                      "low": 80500,
+                      "close": 81500,
+                      "volume": 100
+                    }
+                  ],
+                  "count": 1,
+                  "metadata": {
+                    "field": "price.close / (contract_size * underlying_multiplier)",
+                    "provider_field": "price.close",
+                    "units": "USD per underlying unit",
+                    "contract_size": 0.0001,
+                    "underlying_multiplier": 1,
+                    "timezone": "UTC",
+                    "timestamp_convention": "end_period_ts",
+                    "missing_intervals": "not_filled",
+                    "redistribution_status": "review_required"
+                  },
+                  "warnings": []
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "timestamp,open,high,low,close,volume\r\n2026-09-20T12:01:00Z,81000,82000,80500,81500,100"
+              }
+            }
+          },
+          "422": {
+            "description": "Provider unavailable or request invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "error": "perps_provider_unavailable",
+                  "message": "Perpetual history is unavailable. No substitute prices were returned."
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Provider unavailable or request invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "error": "perps_provider_unavailable",
+                  "message": "Perpetual history is unavailable. No substitute prices were returned."
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider unavailable or request invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "error": "perps_provider_unavailable",
+                  "message": "Perpetual history is unavailable. No substitute prices were returned."
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "servers": [
+          {
+            "url": "https://quantura.studio/api"
+          }
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "tags": [
+          "Kalshi Perpetuals"
+        ],
+        "operationId": "downloadKalshiPerpetualTradeCloses",
+        "summary": "Request a bounded Kalshi perpetual historical download by date range",
+        "description": "Completed traded-price OHLC normalized to USD per underlying unit by dividing Kalshi's per-contract prices by contract_size × underlying_multiplier. Raw scaling metadata is returned for auditability. Null closes and missing bars are not filled. Bounded backward time-window retrieval; maximum 20,000 intervals per date range and 5,000 returned rows. Market data is public; forecast execution still uses authenticated workspace authorization.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "symbol"
+                ],
+                "properties": {
+                  "symbol": {
+                    "type": "string",
+                    "pattern": "^KX[A-Z0-9]{1,36}PERP$"
+                  },
+                  "frequency": {
+                    "type": "string",
+                    "enum": [
+                      "1min",
+                      "5min",
+                      "15min",
+                      "30min",
+                      "1h",
+                      "4h",
+                      "1D",
+                      "1W-MON",
+                      "1MS"
+                    ],
+                    "default": "1h"
+                  },
+                  "start": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "end": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5000,
+                    "default": 500
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "csv"
+                    ],
+                    "default": "json"
+                  }
+                }
+              },
+              "example": {
+                "symbol": "KXBTCPERP",
+                "frequency": "1h",
+                "limit": 500,
+                "format": "json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response (example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "provider": "kalshi_perps",
+                  "symbol": "KXBTCPERP",
+                  "frequency": "1min",
+                  "rows": [
+                    {
+                      "timestamp": "2026-09-20T12:01:00Z",
+                      "open": 81000,
+                      "high": 82000,
+                      "low": 80500,
+                      "close": 81500,
+                      "volume": 100
+                    }
+                  ],
+                  "count": 1,
+                  "metadata": {
+                    "field": "price.close / (contract_size * underlying_multiplier)",
+                    "provider_field": "price.close",
+                    "units": "USD per underlying unit",
+                    "contract_size": 0.0001,
+                    "underlying_multiplier": 1,
+                    "timezone": "UTC",
+                    "timestamp_convention": "end_period_ts",
+                    "missing_intervals": "not_filled",
+                    "redistribution_status": "review_required"
+                  },
+                  "warnings": []
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "timestamp,open,high,low,close,volume\r\n2026-09-20T12:01:00Z,81000,82000,80500,81500,100"
+              }
+            }
+          },
+          "422": {
+            "description": "Provider unavailable or request invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "error": "perps_provider_unavailable",
+                  "message": "Perpetual history is unavailable. No substitute prices were returned."
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Provider unavailable or request invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "error": "perps_provider_unavailable",
+                  "message": "Perpetual history is unavailable. No substitute prices were returned."
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider unavailable or request invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "error": "perps_provider_unavailable",
+                  "message": "Perpetual history is unavailable. No substitute prices were returned."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-search": {
+      "servers": [
+        {
+          "url": "https://quantura.studio/api"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Q Search"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "searchQuanturaMarkets",
+        "summary": "Search stocks, Dukascopy instruments, perpetuals and event contracts",
+        "description": "Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Optional ranking orders verified candidates; it cannot invent or select a contract.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "alpaca",
+                "dukascopy",
+                "kalshi",
+                "polymarket_us",
+                "kalshi_perps"
+              ],
+              "default": "auto"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "live",
+                "any"
+              ],
+              "default": "open"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 8
+            }
+          },
+          {
+            "name": "rank",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "default": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response (illustrative example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "query": "AAPL",
+                  "count": 1,
+                  "groups": {
+                    "yahoo": [
+                      {
+                        "resource_type": "instrument",
+                        "resource_id": "yahoo:AAPL",
+                        "symbol": "AAPL",
+                        "name": "Apple Inc.",
+                        "asset_class": "equity",
+                        "source": "yahoo",
+                        "exchange": "NASDAQ",
+                        "history_available": true,
+                        "forecast_available": true
+                      }
+                    ]
+                  },
+                  "errors": {},
+                  "coverage": "Bounded provider discovery."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-data/dukascopy/instruments": {
+      "servers": [
+        {
+          "url": "https://quantura.studio/api"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Q Search"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "listDukascopyInstruments",
+        "summary": "Browse every instrument in the complete Dukascopy catalog",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response (illustrative example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "provider": "dukascopy",
+                  "instruments": [],
+                  "total": 1504,
+                  "next_offset": 100,
+                  "stale": false
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-search/resolve": {
+      "servers": [
+        {
+          "url": "https://quantura.studio/api"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Q Search"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "resolveQuanturaMarketLink",
+        "summary": "Resolve a Polymarket US or Kalshi market link",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Only approved provider links. Choose the returned outcome/side explicitly. Use event browsing to discover related props and other contracts.",
+        "responses": {
+          "200": {
+            "description": "Successful response (illustrative example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "count": 1,
+                  "groups": {
+                    "kalshi": [
+                      {
+                        "resource_type": "prediction_market_contract",
+                        "resource_id": "kalshi:EXAMPLE-GAME-HOME:YES",
+                        "symbol": "EXAMPLE-GAME-HOME",
+                        "name": "Home · Home vs Away",
+                        "asset_class": "prediction_market",
+                        "source": "kalshi",
+                        "exchange": "Kalshi",
+                        "unit": "decimal probability (0–1)",
+                        "history_available": true,
+                        "forecast_available": true,
+                        "event_id": "EXAMPLE-GAME",
+                        "market_id": "EXAMPLE-GAME-HOME",
+                        "contract_id": "EXAMPLE-GAME-HOME:YES",
+                        "side": "yes",
+                        "outcome": "Home",
+                        "contract": {
+                          "source": "kalshi",
+                          "eventId": "EXAMPLE-GAME",
+                          "marketId": "EXAMPLE-GAME-HOME",
+                          "contractId": "EXAMPLE-GAME-HOME:YES",
+                          "providerSymbol": "EXAMPLE-GAME-HOME",
+                          "side": "yes",
+                          "outcome": "Home",
+                          "eventTitle": "Home vs Away",
+                          "marketTitle": "Home to win"
+                        }
+                      }
+                    ]
+                  },
+                  "errors": {},
+                  "coverage": "Provider-verified contracts for this link."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-search/event": {
+      "servers": [
+        {
+          "url": "https://quantura.studio/api"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Q Search"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "browseQuanturaEventMarkets",
+        "summary": "Browse an event's moneylines, props and related markets",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kalshi",
+                "polymarket_us"
+              ]
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins.",
+        "responses": {
+          "200": {
+            "description": "Successful response (illustrative example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "source": "kalshi",
+                  "event_id": "EXAMPLE-GAME",
+                  "title": "Example game",
+                  "count": 0,
+                  "groups": {
+                    "kalshi": []
+                  },
+                  "related_events": [
+                    {
+                      "event_id": "EXAMPLE-TOTAL",
+                      "label": "EXAMPLE-TOTAL",
+                      "group": "Totals"
+                    }
+                  ],
+                  "related_complete": true,
+                  "next_cursor": null,
+                  "total_contracts": null,
+                  "coverage": "Paged live and archived contracts for this event."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-search/capabilities": {
+      "servers": [
+        {
+          "url": "https://quantura.studio/api"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Q Search"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "getQuanturaSearchCapabilities",
+        "summary": "List provider capabilities before selecting markets or intervals",
+        "responses": {
+          "200": {
+            "description": "Successful response (illustrative example)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "providers": {
+                    "kalshi": {
+                      "label": "Kalshi",
+                      "assetClasses": [
+                        "prediction_market"
+                      ],
+                      "search": true,
+                      "history": true,
+                      "forecasting": [
+                        "prediction_market"
+                      ],
+                      "redistributionStatus": "review_required"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/market-data/stocks/history": {
+      "servers": [
+        {
+          "url": "https://quantura.studio/api"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Q Download"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "operationId": "downloadQuanturaStockHistory",
+        "summary": "Download split-adjusted stock history with automatic provider routing",
+        "description": "Q Download previews JSON and exports that exact snapshot as CSV/JSON. Provider coverage varies; missing bars are not fabricated. format=csv returns a CSV attachment. No uploaded workspace files are exposed here.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "symbol"
+                ],
+                "properties": {
+                  "symbol": {
+                    "type": "string"
+                  },
+                  "contractSymbol": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "alpaca",
+                      "dukascopy"
+                    ],
+                    "default": "auto"
+                  },
+                  "price_side": {
+                    "type": "string",
+                    "enum": [
+                      "bid",
+                      "ask"
+                    ],
+                    "default": "bid"
+                  },
+                  "page_mode": {
+                    "type": "boolean",
+                    "description": "Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings."
+                  },
+                  "cursor": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "end": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "timeframe": {
+                    "type": "string",
+                    "enum": [
+                      "1min",
+                      "5min",
+                      "15min",
+                      "30min",
+                      "1h",
+                      "4h",
+                      "1D",
+                      "1W-MON",
+                      "1MS",
+                      "1Min",
+                      "5Min",
+                      "15Min",
+                      "30Min",
+                      "1Hour",
+                      "4Hour",
+                      "1Day",
+                      "1Week",
+                      "1Month",
+                      "1m",
+                      "5m",
+                      "15m",
+                      "30m",
+                      "1w"
+                    ]
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "enum": [
+                      500,
+                      1000,
+                      1500,
+                      2000,
+                      50000
+                    ]
+                  },
+                  "adjustment": {
+                    "type": "string",
+                    "enum": [
+                      "raw",
+                      "split",
+                      "all"
+                    ]
+                  },
+                  "session": {
+                    "type": "string",
+                    "enum": [
+                      "regular",
+                      "extended"
+                    ]
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "csv"
+                    ]
+                  }
+                }
+              },
+              "example": {
+                "symbol": "AAPL",
+                "source": "auto",
+                "timeframe": "1Day",
+                "limit": 500,
+                "adjustment": "split",
+                "format": "json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON rows or CSV attachment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": true,
+                  "provider": "alpaca",
+                  "sourceRequested": "auto",
+                  "fallbackUsed": false,
+                  "symbol": "AAPL",
+                  "timeframe": "1Day",
+                  "count": 1,
+                  "rows": [
+                    {
+                      "timestamp": "2026-09-18T04:00:00Z",
+                      "open": 100,
+                      "high": 102,
+                      "low": 99,
+                      "close": 101,
+                      "volume": 1000
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/economic-data/search": {
+      "get": {
+        "operationId": "searchEconomicSeries",
+        "summary": "Search Treasury Fiscal Data or World Bank Data360 indicators",
+        "tags": [
+          "Economic data"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fiscaldata",
+                "worldbank_data360"
+              ],
+              "default": "fiscaldata"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 10
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider-verified result, with source metadata and any coverage warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "success": true
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Enterprise API credential required."
+          },
+          "422": {
+            "description": "Invalid source, dimensions, dates, or history selection."
+          },
+          "502": {
+            "description": "Provider temporarily unavailable."
+          }
+        }
+      }
+    },
+    "/v1/economic-data/describe": {
+      "post": {
+        "operationId": "describeEconomicSeries",
+        "summary": "Inspect a series's dimensions, values, and units",
+        "tags": [
+          "Economic data"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EconomicSeriesSource"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider-verified result, with source metadata and any coverage warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "success": true
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Enterprise API credential required."
+          },
+          "422": {
+            "description": "Invalid source, dimensions, dates, or history selection."
+          },
+          "502": {
+            "description": "Provider temporarily unavailable."
+          }
+        }
+      }
+    },
+    "/v1/economic-data/history": {
+      "post": {
+        "operationId": "historyEconomicSeries",
+        "summary": "Download a single observed economic time series",
+        "tags": [
+          "Economic data"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EconomicSeriesSource"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider-verified result, with source metadata and any coverage warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "success": true
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Enterprise API credential required."
+          },
+          "422": {
+            "description": "Invalid source, dimensions, dates, or history selection."
+          },
+          "502": {
+            "description": "Provider temporarily unavailable."
+          }
+        }
+      }
+    },
+    "/v1/market-data/gemini/history": {
+      "post": {
+        "operationId": "downloadGeminiHistory",
+        "summary": "Download Completed Historical Spot Candles From Gemini Exchange",
+        "tags": [
+          "Gemini exchange"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "symbol"
+                ],
+                "properties": {
+                  "symbol": {
+                    "type": "string"
+                  },
+                  "frequency": {
+                    "type": "string",
+                    "enum": [
+                      "1min",
+                      "5min",
+                      "15min",
+                      "30min",
+                      "1h",
+                      "4h",
+                      "1D",
+                      "1W-MON",
+                      "1MS",
+                      "1Min",
+                      "5Min",
+                      "15Min",
+                      "30Min",
+                      "1Hour",
+                      "4Hour",
+                      "1Day",
+                      "1Week",
+                      "1Month",
+                      "1m",
+                      "5m",
+                      "15m",
+                      "30m",
+                      "1w"
+                    ]
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 50000
+                  },
+                  "start": {
+                    "type": "string"
+                  },
+                  "end": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider-verified result, with source metadata and any coverage warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "success": true
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Enterprise API credential required."
+          },
+          "422": {
+            "description": "Invalid source, dimensions, dates, or history selection."
+          },
+          "502": {
+            "description": "Provider temporarily unavailable."
+          }
+        }
+      }
+    },
+    "/v1/market-data/gemini/prediction-contract": {
+      "post": {
+        "operationId": "getGeminiPredictionContract",
+        "summary": "Get verified Gemini prediction-contract history availability",
+        "tags": [
+          "Gemini exchange"
+        ],
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "event_id",
+                  "contract_id"
+                ],
+                "properties": {
+                  "event_id": {
+                    "type": "string"
+                  },
+                  "contract_id": {
+                    "type": "string"
+                  },
+                  "symbol": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Provider-verified result, with source metadata and any coverage warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "success": true
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Enterprise API credential required."
+          },
+          "422": {
+            "description": "Invalid source, dimensions, dates, or history selection."
+          },
+          "502": {
+            "description": "Provider temporarily unavailable."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "rapidApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-RapidAPI-Key",
+        "description": "Your RapidAPI application key. RapidAPI supplies the API-specific gateway credential privately. A private enterprise CUSTOM subscription is required."
+      }
+    },
+    "schemas": {
+      "ModelSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "weight"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "EnsembleConfiguration": {
+        "type": "object",
+        "required": [
+          "prediction_length",
+          "horizon_mode",
+          "quantiles",
+          "models"
+        ],
+        "properties": {
+          "prediction_length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 512,
+            "default": 30
+          },
+          "horizon_mode": {
+            "type": "string",
+            "enum": [
+              "trading_sessions",
+              "calendar_days",
+              "frequency_periods"
+            ]
+          },
+          "quantiles": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 21,
+            "uniqueItems": true,
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "exclusiveMaximum": true,
+              "maximum": 1
+            }
+          },
+          "transform": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "log",
+              "none",
+              "logit"
+            ],
+            "default": "auto",
+            "description": "Prediction-market sources enforce bounded logit forecasting, with epsilon 1e-6 at transform boundaries."
+          },
+          "context_length": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 40,
+            "maximum": 16384,
+            "default": 512
+          },
+          "model_failure_policy": {
+            "type": "string",
+            "enum": [
+              "fail",
+              "renormalize"
+            ],
+            "default": "fail"
+          },
+          "frequency": {
+            "type": "string",
+            "default": "1D",
+            "description": "Canonical market intervals: 1min, 5min, 15min, 30min, 1h, 4h, 1D, 1W-MON, 1MS. source.frequency determines market input bars; series/workspace datasets can also use validated pandas offsets."
+          },
+          "calendar": {
+            "type": "string",
+            "default": "NYSE"
+          },
+          "models": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "prophet": {
+                "$ref": "#/components/schemas/ModelSelection"
+              },
+              "toto": {
+                "$ref": "#/components/schemas/ModelSelection"
+              },
+              "granite": {
+                "$ref": "#/components/schemas/ModelSelection"
+              },
+              "chronos": {
+                "$ref": "#/components/schemas/ModelSelection"
+              },
+              "timesfm": {
+                "$ref": "#/components/schemas/ModelSelection"
+              }
+            }
+          }
+        }
+      },
+      "EnsembleForecastRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EnsembleConfiguration"
+          },
+          {
+            "type": "object",
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "workspace_id": {
+                "type": "string"
+              },
+              "analytics_context": {
+                "type": "object",
+                "description": "Optional consented website telemetry; sanitized separately from model configuration and excluded from cache identity. Invalid or unavailable telemetry does not block forecasting.",
+                "properties": {
+                  "analytics_consent": {
+                    "enum": [
+                      "granted"
+                    ]
+                  },
+                  "client_id": {
+                    "type": "string"
+                  },
+                  "session_id": {
+                    "type": "integer"
+                  },
+                  "consent_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "history_lag_minutes": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0,
+                "description": "Input cutoff before request time, in minutes (hours × 60; days × 1440). Select up to 500 observations BEFORE cutoff. Source retention still applies. No fixed 90-day cutoff-age cap: 120 days is 172800 minutes; 180 days is 259200 minutes. Availability depends on provider retention. Positive values create a historical replay, not a previously published forecast. Later observations are separate overlays."
+              },
+              "toto_variant": {
+                "type": "string",
+                "enum": [
+                  "4m",
+                  "22m",
+                  "313m",
+                  "1b",
+                  "2.5b"
+                ],
+                "default": "4m",
+                "description": "Approved Toto size, smallest to largest. Only relevant when Toto is enabled. The server pins the checkpoint and revision, including in the cache identity; clients cannot submit arbitrary model repositories. All sizes require at least 32 observed values."
+              },
+              "history_cutoff_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Optional past absolute cutoff with timezone offset (ISO 8601), subject to available source history. Cannot be combined with a positive history_lag_minutes. Browser calendar values convert from the user's device timezone to UTC."
+              },
+              "prediction_end_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Optional absolute end date/time. After input materialization, the server derives the number of forecast bars only for completed future interval boundaries through this time (never rounded past the requested end), still subject to 512 and model-specific limits. NYSE daily forecasts use real exchange sessions in the selected calendar window. Overrides prediction_length."
+              },
+              "source": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "symbol"
+                    ],
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "ticker"
+                        ]
+                      },
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "alpaca",
+                          "dukascopy"
+                        ]
+                      },
+                      "price_side": {
+                        "type": "string",
+                        "enum": [
+                          "bid",
+                          "ask"
+                        ],
+                        "default": "bid",
+                        "description": "Dukascopy quote side, persisted for refresh and observations."
+                      },
+                      "start": {
+                        "type": "string",
+                        "format": "date"
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 10000,
+                        "default": 500,
+                        "description": "Maximum latest valid observations before cutoff. Model minimum history requirements still apply."
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "1min",
+                          "5min",
+                          "15min",
+                          "30min",
+                          "1h",
+                          "4h",
+                          "1D",
+                          "1W-MON",
+                          "1MS",
+                          "1Min",
+                          "5Min",
+                          "15Min",
+                          "30Min",
+                          "1Hour",
+                          "4Hour",
+                          "1Day",
+                          "1Week",
+                          "1Month",
+                          "1m",
+                          "5m",
+                          "15m",
+                          "30m",
+                          "1w"
+                        ],
+                        "default": "1Day",
+                        "description": "Only completed observations. Weekly/monthly closes aggregate real daily bars on Monday UTC / first-of-month UTC boundaries. Calendar months are never approximated as 30 days."
+                      },
+                      "field": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "high",
+                          "low",
+                          "close",
+                          "volume"
+                        ]
+                      },
+                      "adjustment": {
+                        "type": "string",
+                        "enum": [
+                          "raw",
+                          "split",
+                          "dividend",
+                          "spin-off",
+                          "all"
+                        ],
+                        "default": "raw",
+                        "description": "Provider price adjustment. The selected provider must support the requested adjustment."
+                      },
+                      "session": {
+                        "type": "string",
+                        "enum": [
+                          "regular",
+                          "extended"
+                        ],
+                        "default": "regular"
+                      },
+                      "feed": {
+                        "type": "string",
+                        "enum": [
+                          "iex",
+                          "sip",
+                          "boats",
+                          "otc"
+                        ],
+                        "description": "Alpaca defaults to iex; other feeds require provider entitlement. The selected basis is persisted for overlays and refreshes."
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "provider",
+                      "symbol",
+                      "contract_id"
+                    ],
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "prediction_market"
+                        ]
+                      },
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "polymarket_us",
+                          "kalshi"
+                        ]
+                      },
+                      "symbol": {
+                        "type": "string",
+                        "description": "Provider market slug (Polymarket US) or market ticker (Kalshi)."
+                      },
+                      "contract_id": {
+                        "type": "string",
+                        "description": "Exact selected side ID from market lookup; verified server-side."
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 500,
+                        "default": 500,
+                        "description": "Maximum latest genuine observations after phase, cutoff and time-window filtering. Fewer are used if unavailable; missing bars are never filled. Model minimums apply."
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "1min",
+                          "5min",
+                          "15min",
+                          "30min",
+                          "1h",
+                          "4h",
+                          "1D",
+                          "1W-MON",
+                          "1MS",
+                          "1Min",
+                          "5Min",
+                          "15Min",
+                          "30Min",
+                          "1Hour",
+                          "4Hour",
+                          "1Day",
+                          "1Week",
+                          "1Month",
+                          "1m",
+                          "5m",
+                          "15m",
+                          "30m",
+                          "1w"
+                        ],
+                        "default": "1min"
+                      },
+                      "history_phase": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "both",
+                          "pregame",
+                          "in_game"
+                        ],
+                        "default": "both",
+                        "description": "The website defaults to auto: pregame plus in-game before 32 elapsed game minutes, then in-game only, evaluated at the input cutoff. Missing event start keeps auto on both; explicit phase-specific requests require a verified start. Existing API clients retain both when omitted."
+                      },
+                      "history_lookback_minutes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 129600,
+                        "default": 0,
+                        "description": "0 imposes no extra time restriction; positive values restrict elapsed history before cutoff. For pregame, the window ends at the earlier of cutoff and game start. source.limit then selects the latest N genuine observations."
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "dataset_id",
+                      "timestamp_column",
+                      "target_column"
+                    ],
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "workspace_dataset"
+                        ]
+                      },
+                      "dataset_id": {
+                        "type": "string"
+                      },
+                      "timestamp_column": {
+                        "type": "string"
+                      },
+                      "target_column": {
+                        "type": "string"
+                      },
+                      "frequency": {
+                        "type": "string"
+                      },
+                      "timezone": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "rows"
+                    ],
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "series"
+                        ]
+                      },
+                      "rows": {
+                        "type": "array",
+                        "maxItems": 10000,
+                        "items": {
+                          "type": "object"
+                        }
+                      },
+                      "timestamp_column": {
+                        "type": "string"
+                      },
+                      "target_column": {
+                        "type": "string"
+                      },
+                      "frequency": {
+                        "type": "string"
+                      },
+                      "timezone": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "type",
+                      "symbol"
+                    ],
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "kalshi_perp"
+                        ]
+                      },
+                      "symbol": {
+                        "type": "string",
+                        "pattern": "^KX[A-Z0-9]{1,36}PERP$"
+                      },
+                      "frequency": {
+                        "enum": [
+                          "1min",
+                          "5min",
+                          "15min",
+                          "30min",
+                          "1h",
+                          "4h",
+                          "1D",
+                          "1W-MON",
+                          "1MS"
+                        ],
+                        "default": "1h"
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 500,
+                        "default": 500
+                      }
+                    },
+                    "description": "Kalshi perpetual forecast on normalized USD-per-underlying-unit trade closes. Set horizon_mode=frequency_periods and calendar=NONE; price transforms auto/log/none, never logit. Source, units and contract scaling are resolved by the server."
+                  },
+                  {
+                    "$ref": "#/components/schemas/EconomicSeriesSource"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GeminiSpotSource"
+                  }
+                ]
+              },
+              "analysis_mode": {
+                "type": "string",
+                "enum": [
+                  "forecast"
+                ],
+                "default": "forecast",
+                "description": "New jobs provide forecast quantiles without buy/sell classifications. Historical saved jobs remain readable."
+              }
+            }
+          }
+        ]
+      },
+      "EnsemblePrediction": {
+        "type": "object",
+        "required": [
+          "timestamp",
+          "quantiles"
+        ],
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "quantiles": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Canonical decimal quantile string to final ensemble value."
+          }
+        }
+      },
+      "HistoricalForecastValidation": {
+        "type": "object",
+        "required": [
+          "policy",
+          "method",
+          "status",
+          "metrics"
+        ],
+        "description": "Optional legacy historical-validation summary preserved on older results. New forecast requests and reproductions do not run a holdout or delay completion for metrics. These legacy scores describe a separate forecast, not the requested future predictions.",
+        "properties": {
+          "policy": {
+            "enum": [
+              "chronological_holdout_v1"
+            ]
+          },
+          "method": {
+            "enum": [
+              "chronological_holdout"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "insufficient_history",
+              "no_matching_outcomes",
+              "failed"
+            ]
+          },
+          "training_rows": {
+            "type": "integer",
+            "minimum": 2
+          },
+          "holdout_rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "training_end_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validation_start_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "validation_end_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requested_models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effective_weights_by_quantile": {
+            "type": "object"
+          },
+          "metrics": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "point_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "mae": {
+                "type": "number",
+                "nullable": true,
+                "minimum": 0
+              },
+              "rmse": {
+                "type": "number",
+                "nullable": true,
+                "minimum": 0
+              },
+              "smape": {
+                "type": "number",
+                "nullable": true,
+                "minimum": 0,
+                "maximum": 2,
+                "description": "Ratio, not percent; the UI multiplies by 100. Zero/zero contributes zero."
+              },
+              "average_wql": {
+                "type": "number",
+                "nullable": true,
+                "minimum": 0,
+                "description": "Mean twice-pinball loss divided by total absolute actual values; null for all-zero actuals."
+              }
+            }
+          }
+        },
+        "example": {
+          "policy": "chronological_holdout_v1",
+          "method": "chronological_holdout",
+          "status": "completed",
+          "training_rows": 493,
+          "holdout_rows": 7,
+          "training_end_at": "2026-09-08T20:00:00Z",
+          "validation_start_at": "2026-09-09T20:00:00Z",
+          "validation_end_at": "2026-09-17T20:00:00Z",
+          "metrics": {
+            "count": 7,
+            "point_count": 7,
+            "mae": 1.25,
+            "rmse": 1.6,
+            "smape": 0.012,
+            "average_wql": 0.018
+          }
+        }
+      },
+      "EnsembleForecastEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "forecast_id",
+              "status"
+            ],
+            "properties": {
+              "forecast_id": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "completed",
+                  "failed"
+                ]
+              },
+              "progress": {
+                "type": "object",
+                "nullable": true
+              },
+              "predictions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/EnsemblePrediction"
+                }
+              },
+              "historical_validation": {
+                "$ref": "#/components/schemas/HistoricalForecastValidation"
+              },
+              "effective_weights_by_quantile": {
+                "type": "object"
+              },
+              "status_url": {
+                "type": "string"
+              },
+              "result_url": {
+                "type": "string"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "api_version": {
+                "enum": [
+                  "v1"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "ModelCapabilitiesEnvelope": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "historical_cutoffs": {
+                "type": "object",
+                "properties": {
+                  "latest_available": {
+                    "enum": [
+                      true
+                    ]
+                  },
+                  "relative_unit": {
+                    "enum": [
+                      "minutes"
+                    ]
+                  },
+                  "absolute_timezone_required": {
+                    "enum": [
+                      true
+                    ]
+                  },
+                  "cutoff_age_limit": {
+                    "enum": [
+                      "available_timeline_and_provider_retention"
+                    ]
+                  },
+                  "selection_order": {
+                    "enum": [
+                      "cutoff_before_latest_N"
+                    ]
+                  },
+                  "replay_generated_now": {
+                    "enum": [
+                      true
+                    ]
+                  }
+                }
+              },
+              "frequencies": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "frequency": {
+                      "type": "string"
+                    },
+                    "timeframe": {
+                      "type": "string"
+                    },
+                    "bucket_timezone": {
+                      "enum": [
+                        "UTC"
+                      ]
+                    },
+                    "completed_bars_only": {
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "missing_intervals": {
+                      "enum": [
+                        "not_filled"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "meta": {
+            "type": "object"
+          }
+        }
+      },
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "request_id"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "EconomicSeriesSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "provider"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "economic_series"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "fiscaldata",
+              "worldbank_data360"
+            ]
+          },
+          "series_id": {
+            "type": "string",
+            "enum": [
+              "debt_to_penny",
+              "rates_of_exchange",
+              "avg_interest_rates",
+              "operating_cash_balance"
+            ]
+          },
+          "value_field": {
+            "type": "string"
+          },
+          "dataset_id": {
+            "type": "string"
+          },
+          "indicator_id": {
+            "type": "string"
+          },
+          "ref_area": {
+            "type": "string"
+          },
+          "dimensions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 50000,
+            "default": 500
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "provider": {
+                "enum": [
+                  "fiscaldata"
+                ]
+              }
+            },
+            "required": [
+              "series_id"
+            ]
+          },
+          {
+            "properties": {
+              "provider": {
+                "enum": [
+                  "worldbank_data360"
+                ]
+              }
+            },
+            "required": [
+              "dataset_id",
+              "indicator_id"
+            ]
+          }
+        ],
+        "description": "Select one series and one value for every required dimension. Reporting periods are daily, month-end, quarter-end, or year-end. Current revised data is not a point-in-time vintage."
+      },
+      "GeminiSpotSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "symbol"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "gemini_spot"
+            ]
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "frequency": {
+            "type": "string",
+            "enum": [
+              "1min",
+              "5min",
+              "15min",
+              "30min",
+              "1h",
+              "4h",
+              "1D",
+              "1W-MON",
+              "1MS",
+              "1Min",
+              "5Min",
+              "15Min",
+              "30Min",
+              "1Hour",
+              "4Hour",
+              "1Day",
+              "1Week",
+              "1Month",
+              "1m",
+              "5m",
+              "15m",
+              "30m",
+              "1w"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 50000,
+            "default": 500
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          }
+        },
+        "description": "Verified Gemini exchange spot symbol. Only completed candles returned by the provider's bounded recent window are available."
+      }
+    }
+  }
+}

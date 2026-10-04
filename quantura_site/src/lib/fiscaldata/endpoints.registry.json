@@ -5,11 +5,20 @@
     "title": "Treasury Reporting Rates of Exchange",
     "category": "FX",
     "defaultQuery": {
-      "fields": ["country_currency_desc", "exchange_rate", "record_date"],
-      "sort": ["-record_date"],
-      "page": { "number": 1, "size": 100 }
+      "fields": [
+        "country_currency_desc",
+        "exchange_rate",
+        "record_date"
+      ],
+      "sort": [
+        "-record_date"
+      ],
+      "page": {
+        "number": 1,
+        "size": 100
+      }
     },
-    "updateCadence": "daily",
+    "updateCadence": "quarterly",
     "ttlSeconds": 86400,
     "ui": {
       "view": "table+sparkline",
@@ -23,9 +32,19 @@
     "title": "Average Interest Rates",
     "category": "Rates",
     "defaultQuery": {
-      "fields": ["record_date", "security_desc", "avg_interest_rate_amt"],
-      "sort": ["-record_date"],
-      "page": { "number": 1, "size": 100 }
+      "fields": [
+        "record_date",
+        "security_type_desc",
+        "security_desc",
+        "avg_interest_rate_amt"
+      ],
+      "sort": [
+        "-record_date"
+      ],
+      "page": {
+        "number": 1,
+        "size": 100
+      }
     },
     "updateCadence": "monthly",
     "ttlSeconds": 86400,
@@ -41,16 +60,26 @@
     "title": "Operating Cash Balance",
     "category": "Cash",
     "defaultQuery": {
-      "fields": ["record_date", "account_type", "open_today_bal", "close_today_bal"],
-      "sort": ["-record_date"],
-      "page": { "number": 1, "size": 100 }
+      "fields": [
+        "record_date",
+        "account_type",
+        "open_today_bal",
+        "close_today_bal"
+      ],
+      "sort": [
+        "-record_date"
+      ],
+      "page": {
+        "number": 1,
+        "size": 100
+      }
     },
     "updateCadence": "daily",
     "ttlSeconds": 3600,
     "ui": {
       "view": "table+sparkline",
       "primaryDateField": "record_date",
-      "primaryValueField": "close_today_bal"
+      "primaryValueField": "open_today_bal"
     }
   },
   {
@@ -59,9 +88,19 @@
     "title": "Debt to the Penny",
     "category": "Debt",
     "defaultQuery": {
-      "fields": ["record_date", "debt_held_public_amt", "intragov_hold_amt", "tot_pub_debt_out_amt"],
-      "sort": ["-record_date"],
-      "page": { "number": 1, "size": 100 }
+      "fields": [
+        "record_date",
+        "debt_held_public_amt",
+        "intragov_hold_amt",
+        "tot_pub_debt_out_amt"
+      ],
+      "sort": [
+        "-record_date"
+      ],
+      "page": {
+        "number": 1,
+        "size": 100
+      }
     },
     "updateCadence": "daily",
     "ttlSeconds": 86400,

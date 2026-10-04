@@ -5,9 +5,13 @@ import admin from "firebase-admin";
 import crypto from "crypto";
 import { GoogleAuth } from "google-auth-library";
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
+import { registerEconomicDataRoutes } from "./economicData";
+import { registerGeminiMarketRoutes } from "./geminiMarketData";
 import { registerFiscalDataRoutes } from "./fiscaldataProxy";
 import { registerMarketDataRoutes } from "./marketDataRoutes";
 import { registerMarketSearchRoutes } from "./marketSearch";
+import { requireScope } from "./apiAccess";
+import { requireEnterpriseApiAccess } from "./enterpriseAccess";
 import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
@@ -17,6 +21,7 @@ import { registerSupportChatRoutes } from "./supportChat";
 import { kalshiPerps, registerKalshiPerpsRoutes } from "./kalshiPerps";
 import { perpScreenerDataset } from "./perpScreener";
 import { authenticatePlatformRequest, requireWorkspacePermission, resolveWorkspaceAccess } from "./apiAccess";
+import { createQuanturaAuth, registerClerkAuthRoutes } from "./clerkAuth";
 import { registerEnsembleForecastRoutes } from "./ensembleForecastRoutes";
 import { registerMarketResearchWatchdog } from "./marketResearchWatchdog";
 import { isAllowedUserCsvImportStoragePath } from "./uploadedCsv";
@@ -149,7 +154,8 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const screenerMarketService = new ScreenerMarketService(new AlpacaClient(), new ScreenerSignalStore(db), process.env.SCREENER_ALPACA_FEED || "iex");
-const auth = admin.auth();
+const legacyAuth = admin.auth();
+const auth = createQuanturaAuth(legacyAuth);
 const messaging = admin.messaging();
 
 const app = express();
@@ -663,8 +669,31 @@ const AUTOMATION_EMAIL_REPLY_TO = asString(process.env.AUTOMATION_EMAIL_REPLY_TO
 const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
+registerClerkAuthRoutes(ROUTES, db, legacyAuth);
+registerEconomicDataRoutes(ROUTES);
+registerGeminiMarketRoutes(ROUTES);
 registerMarketDataRoutes(ROUTES);
 registerMarketSearchRoutes(ROUTES, { db });
+// Versioned SDK/gateway routes match the OpenAPI server URL. The website uses
+// the unversioned discovery routes; enterprise credentials protect API clients.
+const enterpriseDataRoutes = express.Router();
+enterpriseDataRoutes.use(["/market-search", "/market-data", "/economic-data"], async (req, res, next) => {
+  try {
+    const principal = await authenticatePlatformRequest(req, { db, auth });
+    if (!["api_key", "rapidapi"].includes(principal.authMethod)) await requireEnterpriseApiAccess(db, principal.userId, principal.clerkUserId);
+    requireScope(principal, "market_data:read");
+    next();
+  } catch {
+    res.set("Cache-Control", "private, no-store");
+    res.status(403).json({ error: "enterprise_required", message: "Use an authorized enterprise API credential." });
+  }
+});
+registerMarketDataRoutes(enterpriseDataRoutes);
+registerMarketSearchRoutes(enterpriseDataRoutes, { db });
+registerEconomicDataRoutes(enterpriseDataRoutes);
+registerGeminiMarketRoutes(enterpriseDataRoutes);
+registerKalshiPerpsRoutes(enterpriseDataRoutes);
+ROUTES.use("/v1", enterpriseDataRoutes);
 registerMarketResearchWatchdog(ROUTES);
 registerPolymarketMlbRoutes(ROUTES);
 registerPredictionMarketDataRoutes(ROUTES);

@@ -6,7 +6,7 @@ export function proSubscriptionPlan(value:Record<string,unknown>) {
   if(value.tier!=="pro" || !["monthly","yearly"].includes(String(value.cycle)))return null;
   const cycle=value.cycle as "monthly"|"yearly";
   return {tier:"pro" as const,cycle,amountCents:cycle==="yearly"?plans.plans.pro.annualCents:plans.plans.pro.monthlyCents,
-    label:cycle==="yearly"?"Quantura Pro Annual":"Quantura Pro Monthly",description:"Forecasts, screening, historical data, saved research, and API access."};
+    label:cycle==="yearly"?"Quantura Pro Annual":"Quantura Pro Monthly",description:"Forecasts, screening, historical data, saved research."};
 }
 
 export const PRO_TRIAL_DAYS=14;

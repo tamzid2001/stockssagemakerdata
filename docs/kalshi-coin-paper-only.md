@@ -1,4 +1,4 @@
-# Kalshi coin traders: paper mode
+# Kalshi coin traders: disabled
 
 BTC, BNB, DOGE, ETH, NEAR and ZEC live gates were disabled and their running live
 jobs cancelled on September 26, 2026 at the user's request. Live continuation was
@@ -18,7 +18,5 @@ they do not modify the live journal, cash balance or existing exchange positions
 Paper results start a fresh recovery cycle. Private encrypted forecast evidence
 and checkpoints remain in the existing restricted collections/bucket.
 
-Set every coin's `WATCHDOG_MODE=paper`, `CONTINUOUS=true`, and `LIVE_ENABLED=false`
-for paper continuation. The watchdog resolves current main for paper workers;
-live mode still requires the independently pinned approval and enabled gate.
+On October 3, 2026, all six approved trader workflows, both approved-trader watchdogs, and the shared coin worker were disabled at the user's request. Six active/queued runs were cancelled, and all repository continuation and live-enabled gates were set to `false`. The workflows remain available in the repository for review; restarting requires deliberate re-enabling. This shutdown does not alter exchange positions or historical paper journals.
 The legacy BTC research workflow remains off to avoid duplicate experiments.
