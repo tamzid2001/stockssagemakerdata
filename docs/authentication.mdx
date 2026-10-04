@@ -5,10 +5,10 @@ description: "Create a scoped Quantura API key, copy it once, and authenticate r
 
 # Authentication and API keys
 
-Quantura API keys use the `qnt_live_` prefix and are sent as bearer credentials:
+Create personal API keys through Clerk in Quantura Profile. These keys use the `ak_` prefix and are sent as bearer credentials. Existing legacy `qnt_live_` keys remain supported:
 
 ```http
-Authorization: Bearer qnt_live_...
+Authorization: Bearer ak_REPLACE_ME
 ```
 
 Never place API keys in query strings, browser storage, client-side bundles, screenshots, analytics events, or logs.
@@ -16,18 +16,18 @@ Never place API keys in query strings, browser storage, client-side bundles, scr
 ## Get your API key
 
 1. Sign in to Quantura.
-2. Open **Account / Developer** from the dashboard, or use the **Manage API keys** action on the developer API page.
-3. Choose **Create API key** and give the key a descriptive name.
-4. For an integration that only lists and downloads uploaded CSV files, grant `datasets:read`. Add `workspaces:read` when the integration needs to discover shared workspaces.
-5. Copy the `qnt_live_...` secret immediately. The plaintext secret is shown only once.
+2. Open **Profile → Account settings → API keys**. This tab requires paid Pro, enterprise or verified administrator access; free and trial-only accounts are excluded.
+3. Choose **Add new key**, give it a descriptive name, and set an expiration.
+4. If your integration uses an operator-provisioned scoped key, request only the scopes it needs. A personal Clerk key without explicit scopes uses your full personal API scope set, subject to resource ownership and current paid access.
+5. Copy the secret from Clerk and keep it private.
 6. Store the key in a server-side secret manager or environment variable such as `QUANTURA_API_KEY`.
 
-The public developer page is available at `/developers/api`. The machine-readable endpoint reference is generated from `/api/openapi.json` and is also used by the Mintlify endpoint reference.
+The authenticated developer page is available at `/developers/api`. The endpoint reference at `/api/openapi.json` uses the same paid/admin access policy and supplies the Mintlify reference.
 
 ## CSV download quickstart
 
 ```bash
-export QUANTURA_API_KEY="qnt_live_..."
+export QUANTURA_API_KEY="ak_REPLACE_ME"
 
 curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
   "https://quantura.studio/api/v1/workspaces"
@@ -37,9 +37,9 @@ See [Q Search](/docs/q-search) and [Q Download](/docs/q-download) for public mar
 
 ## Key lifecycle
 
-API keys support a name, scopes, optional expiration, last-used timestamp, replacement, and immediate revocation. The plaintext secret is returned only at creation. Quantura stores a keyed digest and a non-secret prefix for identification.
+Clerk manages personal key names, expiration and revocation. Quantura verifies each key with Clerk on every request, resolves the migrated user ID and checks the current entitlement. Organization keys are not supported by this personal-key flow.
 
-Replacing a key creates a new secret and revokes the replaced credential. Revoking a key takes effect immediately for future requests.
+For rotation, create a replacement key, update your integration and revoke the old key. Revocation takes effect for future requests. Legacy Quantura keys store a keyed digest and non-secret prefix; their replacement operation revokes the replaced credential.
 
 ## Scopes
 

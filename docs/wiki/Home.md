@@ -16,7 +16,7 @@ Quantura connects market observations, probabilistic forecasts and reproducible 
 
 ## v2.2.0
 
-Clerk accounts, enterprise API permissions, Gemini/World Bank/Treasury data, CSV previews and named uploads, concise Research/About pages, three blog navigation controls, distinct post images and domain-verification assets are included. [Read the release](https://github.com/tamzid2001/stockssagemakerdata/releases/tag/v2.2.0).
+Clerk accounts and paid Pro/enterprise/admin API permissions, Gemini/World Bank/Treasury/BigQuery data, CSV previews and named uploads, concise Research/About pages, three blog navigation controls, distinct post images, Bluesky posts and domain-verification assets are included. Firestore polling and unchanged billing writes are reduced. [Read the release](https://github.com/tamzid2001/stockssagemakerdata/releases/tag/v2.2.0).
 
 ## Earlier v2.1.0
 
