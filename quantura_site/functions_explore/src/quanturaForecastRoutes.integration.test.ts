@@ -193,6 +193,12 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
   const address = server.address() as { port: number };
   const call = (path: string, token = keys[0], body?: unknown) => fetch(`http://127.0.0.1:${address.port}/api${path}`, { method: body === undefined ? "GET" : "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   try {
+    const unentitled = await call(`/v1/forecast/models?workspace_id=${workspace}`);
+    assert.equal(unentitled.status, 403, "an existing API key cannot bypass enterprise access");
+    assert.equal((await unentitled.json()).error.code, "ENTERPRISE_UPGRADE_REQUIRED");
+    for (const user of [owner, viewer]) {
+      await db.collection("enterprise_api_accounts").doc(user).set({tier: "enterprise", status: "active"});
+    }
     const capabilities = await call(`/v1/forecast/models?workspace_id=${workspace}`);
     assert.equal(capabilities.status, 200);
     assert.equal((await capabilities.json()).data.models.filter((model: any) => model.available).length, 5);

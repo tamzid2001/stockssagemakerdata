@@ -84,7 +84,7 @@ export function apiError(error: unknown): { status: number; code: string; messag
   const raw = text((error as any)?.message || error, 300).toLowerCase();
   const code = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "INVALID_REQUEST";
   if (/api_key_(missing|invalid|revoked|expired)|worker_token_invalid/.test(raw)) return { status: 401, code, message: "Authentication failed." };
-  if (/insufficient_scope|workspace_(forbidden|read_only|permission_denied|resource_forbidden|owner_required)|plan_upgrade|required_entitlement|commercial_license/.test(raw)) return { status: 403, code, message: "This identity is not authorized for the requested operation." };
+  if (/insufficient_scope|workspace_(forbidden|read_only|permission_denied|resource_forbidden|owner_required)|(?:plan|enterprise)_upgrade|required_entitlement|commercial_license/.test(raw)) return { status: 403, code, message: "This identity is not authorized for the requested operation." };
   if (/not_found/.test(raw)) return { status: 404, code, message: "The requested forecast resource was not found." };
   if (/already|idempotency_conflict|claim_conflict/.test(raw)) return { status: 409, code, message: "The request conflicts with the current forecast state." };
   if (/rate_limit|quota|concurrent/.test(raw)) return { status: 429, code, message: "The forecast compute limit has been reached." };
