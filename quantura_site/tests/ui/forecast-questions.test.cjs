@@ -47,3 +47,10 @@ test('saved conversations render safely and link to the exact published snapshot
  assert.equal(w.document.querySelectorAll('script').length,0);assert.match(w.document.querySelector('dialog').textContent,/<script>bad\(\)<\/script>/);
  assert.equal(new URL(w.document.querySelector('dialog a').href).searchParams.get('screenerScan'),'2026-10-06-scan');
 });
+test('a failed note load cannot overwrite saved notes; retry restores the existing points',async()=>{
+ const {w,host}=setup();let reads=0;const j={...job(),frequency:'1D'};
+ w.QuanturaForecastQA.attach(host,{job:j,reference:{kind:'ensemble',id:'test'},chart:{data:[]},request:async()=>{if(++reads===1)throw Error('Account is still loading');return {data:{notes:[{id:'saved',text:'Existing note',series:'history',timestamp:j.history[0].timestamp,value:100}]}};}});await tick();
+ assert.equal(host.querySelector('.jev-note-form button').disabled,true);assert.equal(host.querySelector('.forecast-note-controls>button').disabled,true);
+ const retry=[...host.querySelectorAll('button')].find(b=>b.textContent==='Retry loading notes');assert.equal(retry.hidden,false);retry.click();await tick();
+ assert.match(host.querySelector('.jev-notes-list').textContent,/Existing note.*Oct 1, 2026/);assert.equal(host.querySelector('.jev-note-form button').disabled,false);assert.equal(host.querySelector('.forecast-note-controls>button').disabled,true);
+});
