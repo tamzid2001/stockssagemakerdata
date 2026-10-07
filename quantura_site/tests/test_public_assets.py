@@ -506,7 +506,7 @@ def test_shared_branding_uses_favicon_and_footer_has_no_personal_address():
     assert ".replace(/\\/assets\\/quantura-icon\\.svg/g" in ssr
     assert "node.innerHTML = '<a href=\"mailto:hello@quantura.studio\">hello@quantura.studio</a>'" in client
     for marker in [
-        ">Terminal<",
+        ">Forecast<",
         ">Screener<",
         ">Profile<",
         ">Forecasts<",

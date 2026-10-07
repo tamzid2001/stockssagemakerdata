@@ -806,7 +806,7 @@
   });
   let UI_I18N_TEXT = Object.freeze({
     en: Object.freeze({
-      nav_terminal: "Terminal",
+      nav_terminal: "Forecast",
       nav_research: "Research",
       nav_blog: "Blog",
       nav_pricing: "Pricing",
@@ -8829,7 +8829,7 @@
     if (!navs.length && !navActions.length) return;
     navs.forEach((nav) => {
       nav.innerHTML = `
-        <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Terminal</span></a>
+        <a href="/forecasting" data-analytics="nav_forecasting">${icon("candlestick-chart")}<span>Forecast</span></a>
         <a href="/pricing" data-analytics="nav_pricing">${icon("wallet")}<span>Pricing</span></a>
         <a href="/shop" data-analytics="nav_shop">${icon("shopping-bag")}<span>Shop</span></a>
         <a href="/blog" data-analytics="nav_blog">${icon("page")}<span>Blog</span></a>
@@ -8880,7 +8880,7 @@
         platform.className = "small";
         platform.innerHTML = `
           <strong>Platform</strong>
-          <div><a href="/forecasting">Terminal</a></div>
+          <div><a href="/forecasting">Forecast</a></div>
           <div><a href="/screener">Screener</a></div>
           <div><a href="/forecasts">Forecasts</a></div>
           <div><a href="/research">Research</a></div>
@@ -14201,6 +14201,7 @@
       yaxis: { ...(yRange?{range:yRange,autorange:false}:{}), automargin:true, title: { text: source.type === "prediction_market" ? "Probability (0–1)" : source.type === "economic_series" ? String(source.units||"Value") : source.type === "kalshi_perp" ? "USD per underlying unit" : source.type === "ticker" ? "Price" : "Target", standoff:8 } },
       legend: { orientation: "h", yref:"container", y:0.01, yanchor:"bottom", x:0, xanchor:"left", font:{size:11}, tracegroupgap:8 },
       shapes: inputHistory.length ? [{type:"line",xref:"x",yref:"paper",x0:plotTimestamp(inputHistory.at(-1)),x1:plotTimestamp(inputHistory.at(-1)),y0:0,y1:1,line:{color:dark?"#94a3b8":"#475569",width:1,dash:"dash"}}] : [],
+      annotations: window.QuanturaForecastQA?.plotAnnotations(job) || [],
     }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["lasso2d", "select2d"] });
     const chart=ui.ensembleForecastChart;
     // Reserve the actual wrapped legend height plus axis-label space. Anchoring
@@ -14340,6 +14341,10 @@
     }
     await renderEnsembleChart(job);
     renderEnsembleLiveQuote(job);
+    window.QuanturaForecastQA?.attach(document.getElementById("ensemble-forecast-questions"), {
+      job, chart: ui.ensembleForecastChart,
+      reference: job.published_screener ? {kind:"screener",symbol:job.published_screener.ticker,scan_id:job.published_screener.scan_id} : {kind:"ensemble",id:job.forecast_id},
+    });
     const identity = ensembleMarketIdentity(job);
     if (!job.published_screener) await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
     startEnsembleObservations(job);
@@ -14535,7 +14540,18 @@
     const saveButton = document.getElementById("ensemble-csv-save");
     if (saveButton) saveButton.disabled = false;
     document.getElementById("ensemble-csv-status").textContent = `${table.rows.length.toLocaleString()} rows · ${table.headers.length} columns. Review columns and interval before running.`;
+    updateCsvQuestionsPreview();
     return table;
+  };
+
+  const updateCsvQuestionsPreview = () => {
+    const host=document.getElementById("ensemble-csv-questions");
+    if(!host || !ensembleUiState.csvTable)return;
+    try {
+      const rows=window.QuanturaForecastControls.csvSeries(ensembleUiState.csvTable,document.getElementById("ensemble-csv-date").value,document.getElementById("ensemble-csv-target").value).sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp)).slice(-500);
+      const name=document.getElementById("ensemble-csv-name").value.trim() || "Uploaded time series",frequency=document.getElementById("ensemble-csv-frequency").value;
+      window.QuanturaForecastQA?.attach(host,{job:{title:name,source:{type:"csv_preview",name},history:rows,predictions:[]},reference:{kind:"preview",name,frequency,rows}});
+    } catch {window.QuanturaForecastQA?.dispose(host);host.hidden=true;}
   };
 
   const bindEnsembleForecastUi = () => {
@@ -14570,6 +14586,7 @@
       syncDates();
     }
     document.getElementById("ensemble-csv-frequency")?.addEventListener("change", syncEnsembleSourceFields);
+    for(const id of ["ensemble-csv-date","ensemble-csv-target","ensemble-csv-frequency","ensemble-csv-name"])document.getElementById(id)?.addEventListener("change",updateCsvQuestionsPreview);
     let csvUploadSequence = 0;
     document.getElementById("ensemble-csv-name")?.addEventListener("input", event => { ensembleUiState.csvName = event.target.value.trim().slice(0,120) || "Uploaded time series"; });
     document.getElementById("ensemble-csv-file")?.addEventListener("change", async event => {
@@ -14577,6 +14594,7 @@
       const status = document.getElementById("ensemble-csv-status");
       const preview = document.getElementById("ensemble-csv-preview-table");
       preview?.replaceChildren();
+      const csvQuestions=document.getElementById("ensemble-csv-questions");window.QuanturaForecastQA?.dispose(csvQuestions);if(csvQuestions)csvQuestions.hidden=true;
       ensembleUiState.csvTable = null;
       ensembleUiState.csvText = null;
       ensembleUiState.csvSavedId = null;
@@ -23536,7 +23554,11 @@
     }
 
     const type = normalizeMyRequestType(item.type) || "forecast";
-    if (type === "jev" && !ui.tickerQueryOutput) {previewSavedJevResponse(item);return item;}
+    if (type === "jev" && !ui.tickerQueryOutput) {
+      if(item.outputsMeta?.conversation_id && window.QuanturaForecastQA)await window.QuanturaForecastQA.restore(item.outputsMeta.conversation_id);
+      else previewSavedJevResponse(item);
+      return item;
+    }
     const panelId = mapMyRequestTypeToPanel(type, item);
     if (typeof window.__quanturaSetPanel === "function") {
       window.__quanturaSetPanel(panelId, { pushPath: ["csv", "download"].includes(type) });
@@ -29388,6 +29410,7 @@
 			      auth.onAuthStateChanged(async (user) => {
           const previousUser = state.user;
           const previousUid = String(previousUser?.uid || "").trim();
+          if(previousUid && previousUid!==String(user?.uid || ""))window.QuanturaForecastQA?.clear();
           const previousWasFull = hasFullAccount(previousUser);
           const previousWasAnonymous = isAnonymousUser(previousUser);
           const isFirstAuthEvent = !state.authStateBootstrapped;

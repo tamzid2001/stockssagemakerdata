@@ -4,6 +4,48 @@ from market_research.provider import QuanturaProvider, KalshiProvider
 import pytest
 
 
+def test_cleanup_splits_oversized_index_deletes_and_preserves_other_provider():
+    from types import SimpleNamespace
+    from market_research.pregame_screener import delete_expired_catalog, COLLECTION
+    committed, sizes = [], []
+    docs = [SimpleNamespace(reference=f"doc-{n}", to_dict=lambda n=n: {"provider": "polymarket_us" if n == 25 else "kalshi"}) for n in range(26)]
+    class Query:
+        def where(self, field, op, cutoff):
+            assert (field, op, cutoff) == ("game_date", "<", "2026-10-03")
+            return self
+        def limit(self, count):
+            assert count == 500
+            return self
+        def stream(self):
+            return iter(docs)
+    class Batch:
+        def __init__(self):
+            self.refs = []
+        def delete(self, reference):
+            self.refs.append(reference)
+        def commit(self):
+            sizes.append(len(self.refs))
+            if len(self.refs) > 3:
+                raise ValueError("400 Transaction too big. Decrease transaction size.")
+            committed.extend(self.refs)
+    db = SimpleNamespace(collection=lambda name: Query() if name == COLLECTION else None, batch=Batch)
+    assert delete_expired_catalog(db, "2026-10-03", "kalshi") == 25
+    assert len(committed) == len(set(committed)) == 25
+    assert "doc-25" not in committed
+    assert max(sizes) <= 20
+
+
+def test_cleanup_does_not_hide_permission_or_network_errors():
+    from types import SimpleNamespace
+    from market_research.pregame_screener import delete_expired_catalog
+    doc = SimpleNamespace(reference="doc", to_dict=lambda: {"provider": "kalshi"})
+    query = SimpleNamespace(where=lambda *args: query, limit=lambda *args: query, stream=lambda: iter([doc]))
+    batch = SimpleNamespace(delete=lambda *args: None, commit=lambda: (_ for _ in ()).throw(ValueError("permission denied")))
+    db = SimpleNamespace(collection=lambda *args: query, batch=lambda: batch)
+    with pytest.raises(ValueError, match="permission denied"):
+        delete_expired_catalog(db, "2026-10-03", "kalshi")
+
+
 def contract(start="2026-09-26T23:30:00Z"):
     return dict(eventStart=start,status="open",source="kalshi",contractId="GAME:yes",providerSymbol="GAME",eventId="GAME",eventTitle="A vs B",outcome="A")
 

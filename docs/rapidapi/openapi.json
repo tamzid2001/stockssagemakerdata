@@ -3020,7 +3020,7 @@
             }
           },
           "403": {
-            "description": "Enterprise API credential required."
+            "description": "Active paid Pro, enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3081,7 +3081,7 @@
             }
           },
           "403": {
-            "description": "Enterprise API credential required."
+            "description": "Active paid Pro, enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3142,7 +3142,7 @@
             }
           },
           "403": {
-            "description": "Enterprise API credential required."
+            "description": "Active paid Pro, enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3250,7 +3250,7 @@
             }
           },
           "403": {
-            "description": "Enterprise API credential required."
+            "description": "Active paid Pro, enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3326,7 +3326,7 @@
             }
           },
           "403": {
-            "description": "Enterprise API credential required."
+            "description": "Active paid Pro, enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."

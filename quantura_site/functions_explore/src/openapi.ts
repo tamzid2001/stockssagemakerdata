@@ -797,6 +797,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
   addPerpsSupportOpenapi(document,origin);
   addQSearchOpenapi(document,origin);
   addEconomicOpenapi(document);
+  addForecastQuestionOpenapi(document);
   // Discovery-only removal: authenticated runtime CSV routes remain compatible.
   for(const path of Object.keys(document.paths))if(path.includes("/uploads/csv"))delete document.paths[path];
   for(const name of ["UploadedCsv","UploadedCsvEnvelope","UploadedCsvListEnvelope","CsvDestination","CsvBulkDestination"])delete document.components.schemas[name];
@@ -807,3 +808,4 @@ import { addScreenerOpenapi } from "./screenerOpenapi";
 import { addPerpsSupportOpenapi } from "./perpsSupportOpenapi";
 
 import { addQSearchOpenapi } from "./qSearchOpenapi";
+import { addForecastQuestionOpenapi } from "./forecastQuestionOpenapi";

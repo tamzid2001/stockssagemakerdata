@@ -14,7 +14,7 @@ test('homepage has a concise forecast preview and accessible on-demand video', (
   assert.match(html, /quantura-intro\.mp4/);
   assert.match(html, /<track[^>]+kind="captions"/);
   assert.match(html, /Illustration/);
-  assert.match(app, /<span>Terminal<\/span>/);
+  assert.match(app, /<span>Forecast<\/span>/);
   assert.match(app, /<span>Shop<\/span>/);
   assert.match(app, /headerAuth\.innerHTML = accountAuthed[\s\S]{0,160}<span>Profile<\/span>[\s\S]{0,100}<span>Sign in<\/span>/);
   assert.match(app, /DOMContentLoaded.*init/);

@@ -37,6 +37,8 @@
     if(!response.ok)throw Error(payload.message||"Search is temporarily unavailable.");
     cache.set(url,{at:Date.now(),payload});if(cache.size>20)cache.delete(cache.keys().next().value);return payload;
   }
+  const initialSearch=new URLSearchParams(window.location.search).get('search');
+  if(initialSearch && initialSearch.length<=2048){queryInput.value=initialSearch;void search();}
   function discoveryQuery(raw){
     if(/^https?:\/\//i.test(raw))return {query:raw,mode:"open",source:"auto"};
     const economic=raw.match(/^(world\s*bank|data360|worlddata|fiscal(?:\s*data)?|treasury|gemini|big\s*query)\s*:?\s*/i);
