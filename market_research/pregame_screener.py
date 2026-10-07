@@ -97,6 +97,42 @@ def document(contract, forecast, now, original=None):
     }
 
 
+def delete_expired_catalog(db, cutoff, source, limit=500):
+    """Small delete commits; recursively split oversized index deletions.
+
+    Firestore counts removed document/index bytes in its transaction size.
+    Batching 500 deletes can therefore exceed the limit even though the
+    serialized delete requests themselves are small. Each provider cleans
+    only its own outputs; the caller runs cleanup on one shard only.
+    """
+    removed = 0
+
+    def commit(documents):
+        if not documents:
+            return 0
+        batch = db.batch()
+        for doc in documents:
+            batch.delete(doc.reference)
+        try:
+            batch.commit()
+        except Exception as error:
+            if "transaction too big" not in str(error).lower() or len(documents) == 1:
+                raise
+            middle = len(documents) // 2
+            return commit(documents[:middle]) + commit(documents[middle:])
+        return len(documents)
+
+    chunk = []
+    for doc in db.collection(COLLECTION).where("game_date", "<", cutoff).limit(limit).stream():
+        if doc.to_dict().get("provider") != source:
+            continue
+        chunk.append(doc)
+        if len(chunk) == 20:
+            removed += commit(chunk)
+            chunk = []
+    return removed + commit(chunk)
+
+
 def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_date=None):
     target_date = refresh_date or game_date(time.time())
     report = {"provider": source, "game_date": target_date, "eligible": 0, "successful": 0,
@@ -116,13 +152,8 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
         db = Store("pregame-screener-readonly", "pregame").db
         phase = "cleanup"
         # This collection contains only public game forecast outputs, never user data.
-        old = db.collection(COLLECTION).where("game_date", "<", game_date(time.time() - 3 * 86400)).limit(500).stream()
-        batch = db.batch()
-        for doc in old:
-            batch.delete(doc.reference)
-            report["removed_expired"] += 1
-        if report["removed_expired"]:
-            batch.commit()
+        if shard == 0:
+            report["removed_expired"] = delete_expired_catalog(db, game_date(time.time() - 3 * 86400), source)
         deadline = time.time() + 48 * 60
         originals = {}
         if refresh_published:

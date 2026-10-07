@@ -636,7 +636,7 @@ async function persistInputChunks(ref: FirebaseFirestore.DocumentReference, rows
   }
 }
 
-async function loadInputRows(ref: FirebaseFirestore.DocumentReference, minimumRows = 40): Promise<Array<{ timestamp: string; target: number }>> {
+export async function loadInputRows(ref: FirebaseFirestore.DocumentReference, minimumRows = 40): Promise<Array<{ timestamp: string; target: number }>> {
   const snapshots = await ref.collection(INPUT_CHUNKS).orderBy("__name__").limit(100).get();
   const rows = snapshots.docs.flatMap((doc) => Array.isArray(doc.data().rows) ? doc.data().rows : []);
   return normalizeSeriesRows(rows, "timestamp", "target", minimumRows);
@@ -942,17 +942,21 @@ function internal(options: Options, handler: (req: Request, res: Response, reque
   };
 }
 
+export async function loadPublishedForecast(db: FirebaseFirestore.Firestore, ticker: string, scanId: string) {
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(ticker) || !/^[A-Za-z0-9._-]{1,160}$/.test(scanId)) throw new Error("screener_forecast_not_found");
+  if (scanId.startsWith("perps-")) {
+    const items = await loadPerpForecasts(db);
+    return perpForecastSnapshot({items,scan_id:scanId,scan_date:"",generated_at:"",manifest:{},schema_version:"quantura_perps_daily_ensemble_v2"},ticker,scanId);
+  }
+  const scanDate=/^(\d{4}-\d{2}-\d{2})-/.exec(scanId)?.[1];
+  const dataset=await loadPublishedScreenerDataset(process.env.GITHUB_REPO_OWNER || "tamzid2001",process.env.GITHUB_REPO_NAME || "stockssagemakerdata",scanDate);
+  return screenerForecastSnapshot(dataset,ticker,scanId);
+}
+
 export function registerEnsembleForecastRoutes(router: Router, options: Options): void {
   const publishedSnapshot = async (req: Request) => {
     const scanId=text(req.query.scan_id || req.body?.scan_id,160);
-    if(scanId.startsWith("perps-")) {
-      const items=await loadPerpForecasts(options.db);
-      return perpForecastSnapshot({items,scan_id:scanId,scan_date:"",generated_at:"",manifest:{},schema_version:"quantura_perps_daily_ensemble_v2"},text(req.params.ticker,40),scanId);
-    }
-    const scanDate=/^(\d{4}-\d{2}-\d{2})-/.exec(scanId)?.[1];
-    const dataset=await loadPublishedScreenerDataset(
-      process.env.GITHUB_REPO_OWNER || "tamzid2001", process.env.GITHUB_REPO_NAME || "stockssagemakerdata",scanDate);
-    return screenerForecastSnapshot(dataset,text(req.params.ticker,40),scanId);
+    return loadPublishedForecast(options.db,text(req.params.ticker,40),scanId);
   };
   // Public, precomputed data only: opening a screener row does not run models or create private requests.
   router.get("/v1/screener/forecasts/:ticker", async (req,res) => {

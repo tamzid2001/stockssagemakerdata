@@ -28,6 +28,14 @@ See the [v2.2.0 release notes](docs/releases/v2.2.0.md) for scope and remaining 
 
 See the [release notes](docs/releases/v2.1.0.md) for the complete release scope and limitations.
 
+## Forecast questions and database discovery — October 2026
+
+The homepage and Research page expose BigQuery public datasets, World Bank Data360, Treasury Fiscal Data, Gemini, Dukascopy and market screening through the same search → preview → forecast flow.
+
+**Ask Jev** appears beneath completed ensembles, saved game forecasts and CSV previews. Three question cards cover Forecast, History and Evidence, with quantile-specific follow-ups. Answers distinguish observed values from forecast values and include the source, cutoff and model participants. Conversations save in Requests; high/low markers and private point notes are available on forecast charts.
+
+Jev makes typed routing decisions; Quantura calculates the answer's figures from authorized saved data. It does not invent strategy returns, live news or historical accuracy. [The Q&A guide](docs/jev-forecast-questions.mdx) documents the HTTP API, privacy, retries and bounded usage. The current documentation MCP allowlist remains read-only discovery; it does not automatically expose these new chat mutations.
+
 ## Research workflow
 
 | Step | Where | What it provides |
@@ -120,6 +128,11 @@ flowchart LR
     API <--> State[Firestore and private storage]
     API --> Data[Provider history and verified identities]
     Data --> BigQuery[Public BigQuery tables with dry-run byte caps]
+    API --> QA[Authorized saved forecast context]
+    QA --> Jev[Jev typed question routing]
+    Jev --> Facts[Computed observed and forecast facts]
+    Facts --> Requests[Private conversations and chart notes]
+    Requests --> State
     API --> Workers[GitHub Actions forecast/research workers]
     Workers --> Models[Approved time-series models]
     Workers -->|Claim, progress and result callbacks| API

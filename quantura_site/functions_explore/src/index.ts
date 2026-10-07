@@ -20,6 +20,7 @@ import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quant
 import { registerPlatformApiRoutes } from "./platformApiRoutes";
 import { registerBacktestRoutes } from "./backtestRoutes";
 import { registerSupportChatRoutes } from "./supportChat";
+import { registerForecastQuestionRoutes } from "./forecastQuestionRoutes";
 import { kalshiPerps, registerKalshiPerpsRoutes } from "./kalshiPerps";
 import { perpScreenerDataset } from "./perpScreener";
 import { authenticatePlatformRequest, requireWorkspacePermission, resolveWorkspaceAccess } from "./apiAccess";
@@ -732,6 +733,7 @@ registerGameForecastRoutes(ROUTES, db, auth);
 registerSupportChatRoutes(ROUTES, {
   db, auth, publicOrigin: PUBLIC_ORIGIN,
 });
+registerForecastQuestionRoutes(ROUTES,{db,auth,adminEmails:[ADMIN_EMAIL]});
 registerKalshiPerpsRoutes(ROUTES);
 
 // Retired public-social and currency endpoints. Keep an explicit response for

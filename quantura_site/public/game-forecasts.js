@@ -175,7 +175,7 @@
       };draw();cards.append(card);
     }
   }
-  function gameChart(item,history,showHistory,hours){
+  function gameChart(item,history,showHistory,hours,annotations=[]){
     const rows=item.predictions,cutoff=Date.parse(item.input_cutoff),last=Date.parse(rows.at(-1).timestamp);
     const observations=showHistory?history.filter(r=>!hours||Date.parse(r.timestamp)>=cutoff-hours*3600000):[];
     const first=observations.length?Date.parse(observations[0].timestamp):cutoff;
@@ -193,12 +193,14 @@
     }
     svg('line',{x1:x(item.input_cutoff),x2:x(item.input_cutoff),y1:26,y2:242,stroke:'var(--muted-foreground)','stroke-dasharray':'4 4','data-forecast-cutoff':''});
     svg('text',{x:x(item.input_cutoff),y:18,'text-anchor':x(item.input_cutoff)>560?'end':'start',fill:'var(--muted-foreground)','font-size':fontSize},'Forecast cutoff');
+    for(const note of annotations){const px=x(note.timestamp);if(px<left||px>692)continue;svg('circle',{cx:px,cy:y(note.value),r:5,fill:'var(--primary)','data-chart-note':''});const marker=svg('text',{x:Math.min(670,Math.max(left+5,px)),y:Math.max(35,y(note.value)-12),fill:'var(--foreground)','font-size':fontSize,'data-chart-note':''},note.label.length>32?note.label.slice(0,29)+'…':note.label);const title=document.createElementNS(chart.namespaceURI,'title');title.textContent=note.label;marker.append(title);}
     const axisDate=new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',timeZone:'America/New_York'}),axisClock=new Intl.DateTimeFormat(undefined,{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'});
     for(const [position,timestamp,anchor]of [[left,first,'start'],[692,last,'end']]){for(const [height,formatter]of [[264,axisDate],[294,axisClock]])svg('text',{x:position,y:height,'text-anchor':anchor,fill:'var(--muted-foreground)','font-size':fontSize},formatter.format(new Date(timestamp)));}
     return chart;
   }
   async function show(id,saved=false){
     if(!page){window.location.href=href(id);return;}
+    window.QuanturaForecastQA?.dispose(page.querySelector('.forecast-jev'));
     const run=++sequence;viewed=null;page.hidden=false;page.setAttribute('aria-busy','true');page.replaceChildren(el('p','Loading saved game forecast…'));
     try{
       const headers={};if(saved){const user=window.firebase?.auth?.().currentUser;if(!user||user.isAnonymous)throw Error();headers.Authorization=`Bearer ${await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken())}`;}
@@ -206,14 +208,14 @@
       const rows=item.predictions;if(!Array.isArray(rows)||!rows.length)throw Error();const available=bands.filter(q=>rows.every(r=>Number.isFinite(r.quantiles?.[q])));if(!available.includes('0.5'))throw Error();
       page.replaceChildren(provider(item),el('h2',item.event_title),el('p',item.outcome),el('p',`Game starts ${time(item.game_start)}. Forecast ends ${time(item.forecast_end)}.`),el('p',`${item.recomputed_at?'Recomputed':'Updated'} ${time(item.recomputed_at||item.generated_at)} · ${item.history_count} genuine hourly observations · ${item.models.join(' + ')}`,'small'),el('p',`Pregame data through ${time(item.input_cutoff)} · ${item.recomputed_at?'Retrospective recalculation from the original pregame cutoff.':item.status==='final_pregame'?'Final pregame forecast.':'Updates hourly until the start hour.'}`,'small muted'));
       if(available.length!==6)page.append(el('p','This older snapshot has fewer quantiles. The next successful ensemble refresh will replace it.','notice small'));
-      let history=Array.isArray(item.observations)?item.observations:[];
+      let history=Array.isArray(item.observations)?item.observations:[],chartNotes=[];
       const controls=el('div','','game-history-controls'),toggleLabel=el('label'),toggle=el('input');toggle.type='checkbox';toggle.checked=true;toggle.name='showGameHistory';toggleLabel.append(toggle,el('span','Show historical prices'));
       const rangeLabel=el('label','History window'),range=el('select');range.name='gameHistoryWindow';for(const [value,title]of[['12','Last 12 hours'],['24','Last 24 hours'],['0','All available history']]){const option=el('option',title);option.value=value;range.append(option);}rangeLabel.append(range);controls.append(toggleLabel,rangeLabel);
       const chartHost=el('div','','game-chart'),historyStatus=el('p',history.length?`${history.length} saved hourly observations.`:'Loading observed hourly prices…','small');historyStatus.setAttribute('role','status');
       const historyDetails=el('details'),historySummary=el('summary','Observed hourly prices'),historyScroll=el('div','','game-table-scroll');historyDetails.append(historySummary,historyScroll);
       const drawChart=()=>{
         const legend=el('div','','game-chart-legend');legend.append(el('span',toggle.checked&&history.length?'Solid line: observed hourly prices':'Historical prices hidden or unavailable'),el('span','Dashed line: forecast P50'));
-        chartHost.replaceChildren(gameChart(item,history,toggle.checked,Number(range.value)),legend);
+        chartHost.replaceChildren(gameChart(item,history,toggle.checked,Number(range.value),chartNotes),legend);
         historyDetails.hidden=!history.length;historySummary.textContent=`Observed hourly prices · ${history.length} observations`;
         const table=el('table'),head=el('thead'),tr=el('tr');for(const title of['Time','Observed price']){const th=el('th',title);th.scope='col';tr.append(th);}head.append(tr);table.append(head);
         const body=el('tbody');for(const row of history){const tr=el('tr');tr.append(el('td',time(row.timestamp)),el('td',percent(row.price)));body.append(tr);}table.append(body);historyScroll.replaceChildren(table);
@@ -228,6 +230,8 @@
       const fresh=el('button','New forecast','cta secondary');fresh.type='button';fresh.addEventListener('click',()=>{leaveSavedView();window.__quanturaSetPanel?.('forecast');document.getElementById('market-search-query')?.focus();});actions.append(fresh);
       const refresh=el('button',saved?'Reload saved forecast':'Refresh forecast','cta secondary');refresh.type='button';refresh.addEventListener('click',()=>show(id,saved));actions.append(refresh);
       const download=el('button','Download CSV','cta secondary');download.type='button';download.addEventListener('click',()=>{const csv=['timestamp,'+available.map(label).join(','),...rows.map(r=>[r.timestamp,...available.map(q=>r.quantiles[q])].join(','))].join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'})),a=el('a');a.href=url;a.download=`${item.provider}-${id}-pregame.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});actions.append(download);page.append(actions);
+      const qa=el('section');qa.setAttribute('aria-label','Jev game forecast questions');page.append(qa);
+      window.QuanturaForecastQA?.attach(qa,{job:{forecast_id:`game-${id}`,title:`${item.event_title} · ${item.outcome}`,source:{type:'prediction_market',symbol:item.symbol},history:(item.observations||[]).map(r=>({timestamp:r.timestamp,target:r.price})),predictions:item.predictions,generated_at:item.recomputed_at||item.generated_at},reference:{kind:saved?'saved_game':'game',id},onAnnotations:notes=>{chartNotes=notes;drawChart();}});
       const table=el('table','','game-probabilities');table.append(el('caption','Selected outcome probability · forecast quantiles'));const head=el('thead'),tr=el('tr');for(const title of['Time',...available.map(label)]){const th=el('th',title);th.scope='col';tr.append(th);}head.append(tr);table.append(head);
       const body=el('tbody');for(const row of rows){const tr=el('tr');tr.append(el('td',time(row.timestamp)));for(const q of available)tr.append(el('td',percent(row.quantiles[q])));body.append(tr);}table.append(body);const scroll=el('div','','game-table-scroll');scroll.append(table);page.append(scroll);
       const details=el('details');details.append(el('summary','Data and methodology'),el('p',item.method));if(item.schedule_verified_at)details.append(el('p',`Schedule verified ${time(item.schedule_verified_at)} · ${item.schedule_source}`,'small'));for(const warning of item.warnings||[])details.append(el('p',warning,'small'));page.append(details);
