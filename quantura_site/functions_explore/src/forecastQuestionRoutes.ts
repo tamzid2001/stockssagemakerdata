@@ -71,7 +71,7 @@ function failure(res:Response,error:any,requestId:string) {
   const message=String(error?.message || "");
   const status=/api_key_(missing|invalid|expired|revoked)|question_sign_in/.test(message)?401:/forbidden|scope_required|permission|plan_upgrade|required_entitlement/.test(message)?403:/not_found/.test(message)?404:/rate_limited/.test(message)?429:/busy|context_changed|not_ready|conversation_full/.test(message)?409:/question_.*invalid/.test(message)?422:503;
   if(status===429)res.setHeader("Retry-After","60");
-  const details:Record<number,[string,string]>={401:["SIGN_IN_REQUIRED","Sign in to ask Jev about this forecast."],403:["ACCESS_DENIED","You no longer have access to this forecast or this API operation."],404:["CONTEXT_NOT_FOUND","This saved forecast is unavailable. Reopen a published or completed forecast."],409:["CONTEXT_CONFLICT","The forecast changed or this conversation is busy or full. Reopen the forecast or start a new conversation."],422:["INVALID_QUESTION","Use a short question without secrets and a valid forecast reference."],429:["RATE_LIMITED","Jev’s request limit has been reached. Try again later."],503:["JEV_UNAVAILABLE","Jev is temporarily unavailable. Your question was not answered; please retry."]};
+  const details:Record<number,[string,string]>={401:["SIGN_IN_REQUIRED","Sign in to ask Scout about this forecast."],403:["ACCESS_DENIED","You no longer have access to this forecast or this API operation."],404:["CONTEXT_NOT_FOUND","This saved forecast is unavailable. Reopen a published or completed forecast."],409:["CONTEXT_CONFLICT","The forecast changed or this conversation is busy or full. Reopen the forecast or start a new conversation."],422:["INVALID_QUESTION","Use a short question without secrets and a valid forecast reference."],429:["RATE_LIMITED","Scout’s request limit has been reached. Try again later."],503:["JEV_UNAVAILABLE","Scout is temporarily unavailable. Your question was not answered; please retry."]};
   res.status(status).json({error:{code:details[status][0],message:details[status][1],request_id:requestId}});
 }
 export function registerForecastQuestionRoutes(router:Router,options:Options) {
@@ -116,10 +116,10 @@ export function registerForecastQuestionRoutes(router:Router,options:Options) {
         tx.update(conversationRef!,{messages:[...(saved.messages || []),message],pending:null,updated_at:message.created_at});
         const outputsMeta={conversation_id:conversationId,summary:answer.heading};
         tx.set(requestRef,existingRequest.exists?{outputsMeta,updatedAt:new Date(message.created_at)}:{
-          type:"jev",title:`${context.title} · Jev`,ownerUid:principal.userId,workspaceId:principal.userId,createdAt:new Date(saved.created_at),updatedAt:new Date(message.created_at),
+          type:"jev",title:`${context.title} · Scout`,ownerUid:principal.userId,workspaceId:principal.userId,createdAt:new Date(saved.created_at),updatedAt:new Date(message.created_at),
           input:{panel:"forecast",question,context_reference:reference.kind==="preview"?{kind:"preview",name:reference.name}:reference},
           outputsMeta,sourceRef:{collection:"jev_forecast_conversations",id:conversationId},status:"completed",
-          published:false,deleted:false,visibility:"private",share:{visibility:"private",slug:""},searchText:`${context.title} Jev`.toLowerCase(),
+          published:false,deleted:false,visibility:"private",share:{visibility:"private",slug:""},searchText:`${context.title} Scout`.toLowerCase(),
         },{merge:true});
       });
       res.json({data:{conversation_id:conversationId,...message},meta:{request_id:requestId}});

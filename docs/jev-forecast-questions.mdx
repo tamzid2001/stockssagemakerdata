@@ -1,11 +1,11 @@
 ---
-title: "Jev forecast questions"
+title: "Scout forecast questions"
 description: "Ask contextual questions about forecast values, input history and source evidence."
 ---
 
 ## In the website
 
-Open a completed Forecast or game snapshot. Three Jev cards cover **Forecast**, **History** and **Evidence**. Type your own question or explore quantile, range, data-quality and validation prompts. CSV previews also support questions about the selected observations before inference.
+Open a completed Forecast or game snapshot. Three Scout cards cover **Forecast**, **History** and **Evidence**. Type your own question or explore quantile, range, data-quality and validation prompts. CSV previews also support questions about the selected observations before inference.
 
 Responses show numerical facts labeled **observed**, **forecast**, or **metadata**. Source details include the input cutoff, native frequency and completed model participants. Saved conversations appear in **Profile → Requests**, where Load reopens the conversation. Sign-in is required to ask and save.
 
@@ -69,10 +69,10 @@ Use `history` for an observed input point or the exact decimal quantile key for 
 
 ## Interpretation and privacy
 
-Jev selects a typed topic, quantile and aggregation. Quantura computes the figures from saved data: up to 500 input observations and 512 forecast steps. Ambiguous questions receive clarification; provider failure returns `503 JEV_UNAVAILABLE`, without a substitute AI answer. These responses are structured calculations and authored explanations, not unrestricted generated market commentary.
+Scout selects a typed topic, quantile and aggregation. Quantura computes the figures from saved data: up to 500 input observations and 512 forecast steps. Ambiguous questions receive clarification; provider failure returns `503 JEV_UNAVAILABLE`, without a substitute AI answer. These responses are structured calculations and authored explanations, not unrestricted generated market commentary.
 
 No news, executions, strategy win rates or returns are inferred from quantiles. Prediction-market price/probability forecasts are distinct from the probability that a game outcome wins. Historical economic cutoffs do not establish vintage availability for revised data. Historical metrics appear only when an actual saved validation report exists.
 
-The Jev provider receives the question, recent question topics and compact source/availability metadata, not raw CSV files or complete history arrays. The conversation and calculated response persist privately in Firestore. API keys and passwords are rejected from questions; do not submit sensitive information.
+The Scout provider receives the question, recent question topics and compact source/availability metadata, not raw CSV files or complete history arrays. The conversation and calculated response persist privately in Firestore. API keys and passwords are rejected from questions; do not submit sensitive information.
 
 The current Mintlify MCP allowlist exposes read-only discovery and capabilities. These HTTP chat/note mutations are not automatically available as MCP tools.

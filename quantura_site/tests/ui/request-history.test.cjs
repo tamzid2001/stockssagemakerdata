@@ -64,11 +64,11 @@ test('My Requests defaults to all types and offers the current request categorie
   }
 });
 
-test('legacy response records use Jev and retired Indicator requests stay out of the list',async()=>{
+test('legacy response records use Scout and retired Indicator requests stay out of the list',async()=>{
   const {d,w,api}=history();await api.load();
   api.state.myRequests=[{id:'retired',type:'indicator',title:'Old indicator'},{id:'reply',type:'jev',title:'AAPL Model Council',outputsMeta:{answer:'Historical range analysis'}}];
   api.render();assert.doesNotMatch(w.document.querySelector('[data-my-requests-list]').textContent,/Old indicator|Model Council/);
-  assert.match(w.document.querySelector('[data-my-requests-list]').textContent,/AAPL Jev/);
+  assert.match(w.document.querySelector('[data-my-requests-list]').textContent,/AAPL Scout/);
   const normalize=app.slice(app.indexOf('  const normalizeMyRequestType ='),app.indexOf('  const normalizeMyRequestVisibility ='));
   w.eval(`${normalize}window.normalizeType=normalizeMyRequestType;`);
   for(const type of ['modelCouncil','model_council','model-council','jev'])assert.equal(w.normalizeType(type),'jev');
