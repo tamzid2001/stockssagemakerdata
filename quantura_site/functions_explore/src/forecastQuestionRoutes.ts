@@ -109,14 +109,17 @@ export function registerForecastQuestionRoutes(router:Router,options:Options) {
       leased=true;
       const answer=await (options.ask || askForecastQuestion)(context,question,claim.previous.map((m:any)=>({question:m.question,topic:m.response.topic})));
       const message={turn_id:turnId,question,response:answer,created_at:new Date().toISOString()};
+      const requestRef=options.db.collection("users").doc(principal.userId).collection("requests").doc(`jev__${conversationId}`);
       await options.db.runTransaction(async tx=>{
-        const snapshot=await tx.get(conversationRef!),saved=snapshot.data();
+        const [snapshot,existingRequest]=await Promise.all([tx.get(conversationRef!),tx.get(requestRef)]),saved=snapshot.data();
         if(saved?.owner_uid!==principal.userId || saved?.context_hash!==hash || saved?.pending?.turn_id!==turnId)throw new Error("question_context_changed");
         tx.update(conversationRef!,{messages:[...(saved.messages || []),message],pending:null,updated_at:message.created_at});
-        tx.set(options.db.collection("users").doc(principal.userId).collection("requests").doc(`jev__${conversationId}`),{
-          type:"jev",title:`${context.title} · Jev`,userId:principal.userId,createdAt:saved.created_at,updatedAt:message.created_at,
+        const outputsMeta={conversation_id:conversationId,summary:answer.heading};
+        tx.set(requestRef,existingRequest.exists?{outputsMeta,updatedAt:new Date(message.created_at)}:{
+          type:"jev",title:`${context.title} · Jev`,ownerUid:principal.userId,workspaceId:principal.userId,createdAt:new Date(saved.created_at),updatedAt:new Date(message.created_at),
           input:{panel:"forecast",question,context_reference:reference.kind==="preview"?{kind:"preview",name:reference.name}:reference},
-          outputsMeta:{conversation_id:conversationId,summary:answer.heading},sourceRef:{collection:"jev_forecast_conversations",id:conversationId},status:"completed",
+          outputsMeta,sourceRef:{collection:"jev_forecast_conversations",id:conversationId},status:"completed",
+          published:false,deleted:false,visibility:"private",share:{visibility:"private",slug:""},searchText:`${context.title} Jev`.toLowerCase(),
         },{merge:true});
       });
       res.json({data:{conversation_id:conversationId,...message},meta:{request_id:requestId}});
