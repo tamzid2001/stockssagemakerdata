@@ -204,6 +204,18 @@ def finalize(store,cloud,now,report):
             for key,_ in sorted(candidates,key=lambda r:r[1].get("close_at",0),reverse=True)[128:]:store.db.execute("DELETE FROM records WHERE kind=? AND id=?",(kind,key))
     return finalized
 
+def publish_checkpoint(store,cloud,output,now):
+    report=paper_report(store,now)
+    retired=finalize(store,cloud,now,report)
+    cloud.save(store)
+    report=paper_report(store,now)
+    report["archived_totals"]=store._get("checkpoints","archived_totals") or {}
+    report["totals_scope"]="origins are current buffer only; archived_totals are retired markets, independent per origin/strategy"
+    (output/"report-btc-live-minute-summary.json").write_text(json.dumps(report,allow_nan=False))
+    print(json.dumps({"event":"btc_minute_checkpoint","at":now,"finalized_markets":retired,
+        "coverage":report["publication_status_counts"],"collector":store._get("checkpoints","btc_collector_health"),
+        "firestore_writes":0}),flush=True)
+
 def run(duration):
     output=Path(os.environ.get("QUANTURA_RESEARCH_DIR","/tmp/btc-live-minutes"));output.mkdir(parents=True,exist_ok=True)
     cloud=CloudState();store=LocalStore(VERSION,"btc-all-minutes",output,capacity_bytes=64*1024*1024)
@@ -243,21 +255,14 @@ def run(duration):
                     print(json.dumps({k:v for k,v in record.items() if k!="forecasts"}),flush=True)
             now=int(time.time())
             if now-last_save>=300:
-                report=paper_report(store,now);retired=finalize(store,cloud,now,report);cloud.save(store);last_save=now
-                # Active-buffer totals exclude just-archived markets. They must
-                # not duplicate archived totals when the report is consumed.
-                report=paper_report(store,now)
-                report["archived_totals"]=store._get("checkpoints","archived_totals") or {}
-                report["totals_scope"]="origins are current buffer only; archived_totals are retired markets, independent per origin/strategy"
-                (output/"report-btc-live-minute-summary.json").write_text(json.dumps(report))
-                print(json.dumps({"event":"btc_minute_checkpoint","at":now,"finalized_markets":retired,"coverage":report["publication_status_counts"],"collector":store._get("checkpoints","btc_collector_health"),"firestore_writes":0}),flush=True)
+                publish_checkpoint(store,cloud,output,now);last_save=now
             threading.Event().wait(.5)
     except BaseException:
         failed=True;raise
     finally:
         collector.stop()
         if collector.thread.is_alive():raise RuntimeError("COLLECTOR_CHECKPOINT_STILL_WRITING")
-        if not failed:cloud.save(store)
+        if not failed:publish_checkpoint(store,cloud,output,int(time.time()))
         store.db.close()
 
 if __name__=="__main__":
