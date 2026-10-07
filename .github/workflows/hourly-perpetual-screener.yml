@@ -37,7 +37,7 @@ jobs:
         run: python -m pip install --no-cache-dir requests
       - name: Discover new listings and completed daily data
         id: discovery
-        run: python -m ensemble_forecasting.kalshi_perp_screener --shard "$SHARD" --shards 4 --discovery-only
+        run: PYTHONPATH=. python ensemble_forecasting/kalshi_perp_screener.py --shard "$SHARD" --shards 4 --discovery-only
       - name: Install pinned forecast runtime
         if: steps.discovery.outputs.needs_models == 'true'
         run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
