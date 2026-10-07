@@ -1,0 +1,80 @@
+name: BTC live minute forecasts — paper research
+run-name: BTC minute forecasts · ${{ inputs.duration_minutes }} minutes · paper only
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        type: choice
+        options: ['30', '330']
+        default: '330'
+        description: Bounded runner duration; forecasts use actual publication times
+      continuous:
+        type: boolean
+        default: false
+        description: Queue the next bounded worker after a durable checkpoint
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: quantura-btc-minute-forecast-worker-v1
+  cancel-in-progress: false
+jobs:
+  collect_and_forecast:
+    if: github.ref == 'refs/heads/main' && vars.KALSHI_BTC_MINUTE_FORECAST_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      PYTHONUNBUFFERED: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Record immutable numerical revision
+        run: echo "QUANTURA_CODE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Install locked CPU models and storage tools
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+      - name: Verify live deadlines, receipt rules, and durable retirement
+        run: python -m pytest -q market_research/tests/test_btc_minute_forecast_worker.py market_research/tests/test_btc_minute_archive.py market_research/tests/test_btc_sticky_tracking.py market_research/tests/test_btc_hold_tracking.py
+      - uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/quantura-btc-hf/hub
+          key: btc-minute-models-v1-${{ hashFiles('market_research/requirements.lock', 'quantura_site/functions_explore/src/ensembleModelRegistry.json') }}
+      - name: Collect independent one-minute quotes and forecast each origin
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/quantura-btc-hf
+          QUANTURA_RESEARCH_DIR: ${{ runner.temp }}/btc-live-minutes
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+          DURATION: ${{ inputs.duration_minutes }}
+        run: |
+          [[ "$DURATION" == '30' || "$DURATION" == '330' ]] || exit 1
+          python -m market_research.btc_minute_forecast_worker --duration-minutes "$DURATION"
+      - name: Publish aggregate paper-research report only
+        uses: actions/upload-artifact@v7
+        with:
+          name: btc-live-minute-summary-${{ github.run_id }}
+          path: ${{ runner.temp }}/btc-live-minutes/report-btc-live-minute-summary.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Queue successor after successful durable shutdown
+        if: success() && inputs.continuous && vars.KALSHI_BTC_MINUTE_FORECAST_ENABLED == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const workflow_id='kalshi-btc-minute-forecasts.yml';
+            const {data}=await github.rest.actions.listWorkflowRuns({...context.repo,workflow_id,branch:'main',per_page:20});
+            const active=data.workflow_runs.some(r=>r.id!==context.runId && r.status!=='completed');
+            if(!active) await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:'main',inputs:{duration_minutes:'330',continuous:'true'}});
+      - name: Describe research coverage
+        if: always()
+        run: |
+          echo 'Paper research only. No exchange orders or Firestore writes. Runner setup, handoff, API delay, or slow inference can cause missing/late origins; those are explicitly recorded and never backfilled as live forecasts.' >> "$GITHUB_STEP_SUMMARY"

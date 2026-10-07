@@ -110,6 +110,8 @@ Dedicated repository workers cover those studies:
 
 A high closed-basket win rate can coexist with losing positions left open. Reports must include floating P&L, ladder size, duration, costs and drawdown. Optimization on the development period is not evidence of future returns or a prop-firm challenge pass. Kalshi coin workflows are **paper only**; see the [paper-only operating policy](docs/kalshi-coin-paper-only.md).
 
+[BTC minute research](docs/btc-minute-research.md) collects genuine Kalshi 15-minute binary-market minute quotes, forecasts remaining time at origins 1–14, and tracks fixed-one paper entries with actual publication deadlines. Its dedicated continuous/recovery workflows use encrypted GCS checkpoints with zero Firestore writes and leave the existing coin traders disabled. Runner handoff and inference gaps are reported. The original 291-market replay can be exported with average entries, fixed-one results, and spread-aware opposite-side $1 sizing comparisons.
+
 ## Pro subscriptions
 
 [Quantura Pro](https://quantura.studio/pricing) is $199.99/month or $1,999.92/year, with a 14-day free trial, unlimited daily forecasts, Clerk checkout after sign-in and customer-owned billing management. Clerk subscription checks and signed billing webhooks maintain Pro status; trials are limited to one per account. Pro admission uses three concurrent jobs and a three-start/minute token bucket per workspace, with job-specific release across midnight and expiring abandoned leases. cancellation at period end retains access until the subscription ends. Enterprise requests use the contact popup for custom pricing. Existing free research preview and historical subscriptions are preserved.

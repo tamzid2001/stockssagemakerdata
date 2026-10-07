@@ -1,0 +1,28 @@
+name: BTC minute forecast research recovery
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: quantura-btc-minute-forecast-recovery-v1
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: vars.KALSHI_BTC_MINUTE_FORECAST_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resume only when this research worker has no active or queued run
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const workflow_id='kalshi-btc-minute-forecasts.yml';
+            const {data}=await github.rest.actions.listWorkflowRuns({...context.repo,workflow_id,branch:'main',per_page:20});
+            if(data.workflow_runs.some(r=>r.status!=='completed')) {
+              core.info('Minute research is already running or queued.');
+              return;
+            }
+            await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:'main',inputs:{duration_minutes:'330',continuous:'true'}});
