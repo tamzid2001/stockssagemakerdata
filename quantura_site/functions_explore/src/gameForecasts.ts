@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import {authenticatePlatformRequest} from "./apiAccess";
 import {gameMarketUrl, gameMarketPrices} from "./gameMarketQuotes";
 import {observedGameHistory, gameHistory} from "./gameHistory";
+import {publicGameCatalog, publicGameById} from "./screenerArtifacts";
 
 export function gameDate(now = Date.now()): string {
   return new Intl.DateTimeFormat("en-CA", {timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(now));
@@ -65,7 +66,7 @@ export function publicGameForecast(raw:Record<string,unknown>, now=Date.now(), d
   return base;
 }
 
-export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Firestore,auth?:admin.auth.Auth):void {
+export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Firestore,auth?:admin.auth.Auth, source={catalog:publicGameCatalog,byId:publicGameById}):void {
   let prices: {date:string; until:number; promise:Promise<Record<string,unknown>>} | undefined;
   const signedIn=async(req:any,res:any)=>{
     try {
@@ -88,8 +89,8 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
     try {
       const uid=await signedIn(req,res);if(!uid)return;const id=String(req.params.id);
       if(!/^[a-f0-9]{32}$/.test(id)){res.status(404).json({error:"not_found"});return;}
-      const raw=await db.collection("game_forecast_catalog").doc(id).get();
-      const forecast=raw.exists?publicGameForecast(raw.data()||{},Date.now(),true,true):null;
+      const raw=await source.byId(id);
+      const forecast=raw?publicGameForecast(raw,Date.now(),true,true):null;
       if(!forecast){res.status(404).json({error:"not_found"});return;}
       const savedId=crypto.createHash("sha256").update(JSON.stringify([uid,id,forecast.generated_at,forecast.input_cutoff])).digest("hex").slice(0,40);
       const saved=db.collection("user_game_forecasts").doc(savedId),requestId=`game__${savedId}`;
@@ -116,20 +117,17 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
     const date=gameDate();
     if(!catalog || catalog.date!==date || catalog.until<=Date.now()) {
       const promise=(async()=>{
-        const [games,status]=await Promise.all([
-          db.collection("game_forecast_catalog").where("game_date","==",date).orderBy(admin.firestore.FieldPath.documentId()).limit(10001).get(),
-          db.collection("game_forecast_status").get(),
-        ]);
-        const items=games.docs.slice(0,10000).flatMap(doc=>{const row=publicGameForecast(doc.data());return row?[row]:[];})
+        const data=await source.catalog();
+        const items=data.items.flatMap(raw=>{const row=publicGameForecast(raw);return row?[row]:[];})
           .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-      const current=status.docs.map(doc=>({...doc.data(),id:doc.id})).filter((data:any)=>data.game_date===date && ["kalshi","polymarket_us"].includes(data.provider));
+        const current=data.statuses.filter((data:any)=>data.game_date===date && ["kalshi","polymarket_us"].includes(data.provider));
       const coverage=["kalshi","polymarket_us"].flatMap(provider=>{
         const all=current.filter((d:any)=>d.provider===provider),sharded=all.filter((d:any)=>d.shards>1);
         const selected=sharded.length?sharded:all;
         if(!selected.length)return [];
         return [{provider,updated_at:selected.map((d:any)=>text(d.updated_at,50)).sort().at(-1),eligible:selected.reduce((n,d:any)=>n+(Number(d.eligible)||0),0),successful:selected.reduce((n,d:any)=>n+(Number(d.successful)||0),0),failed:selected.reduce((n,d:any)=>n+(Number(d.failed)||0),0),partial:selected.some((d:any)=>d.partial===true)||sharded.length>0&&sharded.length<Number((sharded[0] as any).shards)}];
       });
-        return {items,coverage,bounded:games.size>10000};
+        return {items,coverage,bounded:items.length>10000};
       })();
       const entry={date,until:Date.now()+catalogTtlMs,promise};catalog=entry;
       promise.catch(()=>{if(catalog===entry)catalog=undefined;});
@@ -177,8 +175,8 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
   router.get("/screener/games/:id/history",async(req,res)=>{
     const id=String(req.params.id);if(!/^[a-f0-9]{32}$/.test(id)){res.status(404).json({error:"not_found"});return;}
     try {
-      const doc=await db.collection("game_forecast_catalog").doc(id).get();
-      const item=doc.exists?publicGameForecast(doc.data()||{},Date.now(),true,true):null;
+      const raw=await source.byId(id);
+      const item=raw?publicGameForecast(raw,Date.now(),true,true):null;
       if(!item){res.status(404).json({error:"not_found"});return;}
       res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");res.json(await gameHistory(item));
     }catch{res.status(503).json({error:"game_history_unavailable"});}
@@ -187,8 +185,8 @@ export function registerGameForecastRoutes(router:Router,db:FirebaseFirestore.Fi
     const id=String(req.params.id);
     if(!/^[a-f0-9]{32}$/.test(id)){res.status(404).json({error:"not_found"});return;}
     try {
-      const doc=await db.collection("game_forecast_catalog").doc(id).get();
-      const item=doc.exists?publicGameForecast(doc.data()||{},Date.now(),true,true):null;
+      const raw=await source.byId(id);
+      const item=raw?publicGameForecast(raw,Date.now(),true,true):null;
       if(!item){res.status(404).json({error:"not_found",message:"This forecast is no longer in today’s screener."});return;}
       res.setHeader("Cache-Control","public, max-age=30, s-maxage=30");res.json({item});
     }catch{res.status(503).json({error:"games_unavailable"});}

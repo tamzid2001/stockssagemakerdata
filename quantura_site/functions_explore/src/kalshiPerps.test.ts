@@ -32,18 +32,18 @@ test("history uses bounded time-window paging, matching ticker and coalesced cac
   assert.deepEqual(a,b);assert.equal(a.rows.length,2);assert.equal(a.rows[0].close,81000);assert.equal(a.metadata.units,"USD per underlying unit");assert.equal(a.metadata.pages,2);assert.equal(calls,3);
   assert.equal((await service.search("btc"))[0].symbol,market.ticker);
   await assert.rejects(service.history({symbol:market.ticker,limit:50001}),/1–5000/);
-  const bad=new KalshiPerpsService(async url=>Response.json(String(url).endsWith("/markets")?{markets:[market]}:{ticker:"KXETHPERP",candlesticks:[]}),()=>now);
+  const bad=new KalshiPerpsService(async url=>Response.json(new URL(String(url)).pathname.endsWith("/markets")?{markets:[market]}:{ticker:"KXETHPERP",candlesticks:[]}),()=>now);
   await assert.rejects(bad.history({symbol:market.ticker}),/ticker_mismatch/);
 });
 test("catalog screener displays timestamped reference spot and never fabricates quantiles",async()=>{
-  const service=new KalshiPerpsService(async url=>Response.json(String(url).endsWith("/markets")?{markets:[market]}:{ticker:market.ticker,candlesticks:[bar(1789919400)]}),()=>1789919400000);
+  const service=new KalshiPerpsService(async url=>Response.json(new URL(String(url)).pathname.endsWith("/markets")?{markets:[market]}:{ticker:market.ticker,candlesticks:[bar(1789919400)]}),()=>1789919400000);
   const dataset=await service.screener();assert.equal(dataset.items[0].actual_price,81000);assert.equal(dataset.items[0].quote_source,"kalshi_perps_reference_spot");assert.equal(dataset.items[0].p50,null);
   assert.match(String(dataset.items[0].forecast_view_url),/marketSource=kalshi_perps/);
 });
 test("five-minute perpetual bars use completed native closes and omit empty and open buckets",async()=>{
   const start=Date.parse("2026-09-21T00:00:00Z"),end=start+12*60000;
   const service=new KalshiPerpsService(async url=>{
-    if(String(url).endsWith("/markets"))return Response.json({markets:[market]});
+    if(new URL(String(url)).pathname.endsWith("/markets"))return Response.json({markets:[market]});
     assert.equal(new URL(String(url)).searchParams.get("period_interval"),"1");
     return Response.json({ticker:market.ticker,candlesticks:[bar(start/1000+60,"8.1"),bar(start/1000+300,"8.2"),bar(start/1000+660,"8.3")]});
   },()=>end);
@@ -54,7 +54,7 @@ test("five-minute perpetual bars use completed native closes and omit empty and 
 test("default monthly perpetual history stays bounded and reads UTC hour closes",async()=>{
   const now=Date.parse("2026-09-21T00:00Z");let candleCalls=0;
   const service=new KalshiPerpsService(async url=>{
-    if(String(url).endsWith("/markets"))return Response.json({markets:[market]});
+    if(new URL(String(url)).pathname.endsWith("/markets"))return Response.json({markets:[market]});
     const query=new URL(String(url)).searchParams;
     assert.equal(query.get("period_interval"),"60");assert.ok(Number(query.get("start_ts"))>=0);candleCalls++;
     return Response.json({ticker:market.ticker,candlesticks:[]});
@@ -63,7 +63,7 @@ test("default monthly perpetual history stays bounded and reads UTC hour closes"
   assert.equal(result.frequency,"1MS");assert.equal(result.rows.length,0);assert.equal(result.metadata.base_frequency,"1h");assert.ok(candleCalls<=20);
 });
 test("perpetual history HTTP JSON/CSV and structured errors use same service",async()=>{
-  const service=new KalshiPerpsService(async url=>Response.json(String(url).endsWith("/markets")?{markets:[market]}:{ticker:market.ticker,candlesticks:[bar(1789919400)]}),()=>1789919400000);
+  const service=new KalshiPerpsService(async url=>Response.json(new URL(String(url)).pathname.endsWith("/markets")?{markets:[market]}:{ticker:market.ticker,candlesticks:[bar(1789919400)]}),()=>1789919400000);
   const app=express();app.use(express.json());registerKalshiPerpsRoutes(app,service);
   const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));
   const url=`http://127.0.0.1:${(server.address() as any).port}/market-data/perps/history`;
@@ -72,4 +72,17 @@ test("perpetual history HTTP JSON/CSV and structured errors use same service",as
     const csv=await fetch(`${url}?symbol=KXBTCPERP&limit=1&format=csv`);assert.match(await csv.text(),/timestamp,open,high,low,close,volume/);assert.equal(csv.headers.get("x-price-unit"),"USD per underlying unit");
     assert.equal((await fetch(`${url}?symbol=KXBTCPERP&frequency=2min`)).status,422);
   }finally{await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test("discovery follows listing cursors, isolates malformed listings and exposes a newly listed contract",async()=>{
+  const calls:string[]=[];
+  const service=new KalshiPerpsService(async input=>{
+    const url=new URL(String(input));calls.push(url.searchParams.get("cursor")||"");
+    return Response.json(url.searchParams.has("cursor")?{markets:[{...market,ticker:"KXNEWPERP",title:"New asset"}]}:{markets:[market,{ticker:"bad"}],cursor:"next"});
+  });
+  const [a,b]=await Promise.all([service.markets(),service.markets()]);
+  assert.equal(a.length,2);assert.deepEqual(a,b);assert.deepEqual(calls,["","next"]);
+  assert.equal((await service.search("New asset"))[0].symbol,"KXNEWPERP");
+  const loop=new KalshiPerpsService(async()=>Response.json({markets:[market],cursor:"same"}));
+  await assert.rejects(loop.markets(),/pagination_invalid/);
 });

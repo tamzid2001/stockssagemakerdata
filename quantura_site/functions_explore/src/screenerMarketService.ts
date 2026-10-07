@@ -1,35 +1,17 @@
-import { createHash } from "node:crypto";
-import type { Firestore } from "firebase-admin/firestore";
+import { screenerArtifacts } from "./screenerArtifacts";
 import { AlpacaClient } from "./alpacaClient";
 import type { QuantScreenerDataset, QuantScreenerRow } from "./quantScreener";
 import { advanceClosingSignal, decorateScreenerRow, finalizedClosingSignal, forecastRows, newYorkDate, SavedScreenerSignal, ScreenerQuote, ScreenerSignal } from "./screenerSignals";
 
-// A bounded number of state documents, not a write per ticker per minute.
-const bucketId = (symbol: string) => String(createHash("sha256").update(symbol).digest()[0] % 32).padStart(2,"0");
+/** Public comparison history travels with the exact publication it describes. */
 export class ScreenerSignalStore {
-  private cache: {until:number;states:Map<string,SavedScreenerSignal>} | undefined;
-  constructor(private db: Firestore) {}
+  constructor(_db?:unknown) {}
   async read(): Promise<Map<string,SavedScreenerSignal>> {
-    if (this.cache && this.cache.until > Date.now()) return this.cache.states;
-    const docs = await this.db.getAll(...Array.from({length:32},(_,i)=>this.db.collection("screener_signal_state").doc(String(i).padStart(2,"0"))));
-    const states = new Map<string,SavedScreenerSignal>();
-    for (const doc of docs) for (const [ticker,state] of Object.entries(doc.data()?.tickers || {})) states.set(ticker,state as SavedScreenerSignal);
-    this.cache={until:Date.now()+600_000,states};return states;
+    const data=(await screenerArtifacts.read("stocks")).data;
+    return new Map(Object.entries(data.signals || {}) as [string,SavedScreenerSignal][]);
   }
-  async save(signals: Map<string,ScreenerSignal>): Promise<number> {
-    const groups = new Map<string,Map<string,ScreenerSignal>>();
-    for (const [ticker,signal] of signals) { const id=bucketId(ticker); if(!groups.has(id))groups.set(id,new Map()); groups.get(id)!.set(ticker,signal); }
-    let changed=0;
-    for(const [id,entries] of groups) {
-      const ref=this.db.collection("screener_signal_state").doc(id);
-      changed += await this.db.runTransaction(async tx=>{
-        const snap=await tx.get(ref);const tickers=snap.data()?.tickers || {};let count=0;
-        for(const [ticker,signal] of entries) {const previous=tickers[ticker] || {}; const next=advanceClosingSignal(previous,signal);if(next!==previous){tickers[ticker]=next;count++;}}
-        if(count)tx.set(ref,{tickers,updated_at:new Date().toISOString()});return count;
-      });
-    }
-    this.cache=undefined;return changed;
-  }
+  // Closing history is computed by the artifact publisher, never by a web route.
+  async save(_signals: Map<string,ScreenerSignal>): Promise<number> {return 0;}
 }
 
 export class ScreenerMarketService {
@@ -57,7 +39,7 @@ export class ScreenerMarketService {
   }
   private async refresh(dataset:QuantScreenerDataset) {
     let states=new Map<string,SavedScreenerSignal>();const warnings:string[]=[];
-    try{states=await this.store.read();}catch{warnings.push("Archived comparison history is temporarily unavailable.");}
+    try{states="signals" in dataset?new Map(Object.entries((dataset as any).signals || {}) as [string,SavedScreenerSignal][]):await this.store.read();}catch{warnings.push("Archived comparison history is temporarily unavailable.");}
     const items=dataset.items.map(row=>decorateScreenerRow(row,undefined,states.get(row.ticker)));
     if(items.some(r=>r.status==="success" && r.signal_status==="daily_scan_requires_refresh"))warnings.push("The previous publication remains readable while the latest-close daily scan completes.");
     this.cached={until:Date.now()+300_000,scan:dataset.scan_id,items,warnings};return this.cached;

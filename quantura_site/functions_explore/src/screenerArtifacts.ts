@@ -28,13 +28,15 @@ export class ScreenerArtifactReader {
   private headers(){const token=process.env.GITHUB_ACTIONS_TOKEN || process.env.GITHUB_TOKEN;return {Accept:"application/vnd.github+json","X-GitHub-Api-Version":"2026-03-10","User-Agent":"quantura-public-screener",...(token?{Authorization:`Bearer ${token}`}:{})};}
   private root(){return `https://api.github.com/repos/${encodeURIComponent(this.owner)}/${encodeURIComponent(this.repo)}`;}
   private async json(path:string){const r=await this.request(this.root()+path,{headers:this.headers(),signal:AbortSignal.timeout(15_000),redirect:"error"});if(!r.ok)throw Error("screener_artifact_provider_unavailable");return r.json();}
-  async list(feed:string):Promise<ArtifactSummary[]> {
+  async list(feed:string,date?:string):Promise<ArtifactSummary[]> {
     this.checkFeed(feed);
-    const key=`${this.owner}/${this.repo}/index/${feed}`;
+    if(date && (feed!=="stocks" || !/^\d{4}-\d{2}-\d{2}$/.test(date)))throw Error("screener_artifact_date_invalid");
+    const name=`quantura-public-${feed}${date?`-${date}`:""}`;
+    const key=`${this.owner}/${this.repo}/index/${name}`;
     let rows:any=await this.shared.get(key).catch(()=>null);
-    if(!rows){const body=await this.json(`/actions/artifacts?name=${encodeURIComponent(`quantura-public-${feed}`)}&per_page=100`);rows=body.artifacts;
+    if(!rows){const body=await this.json(`/actions/artifacts?name=${encodeURIComponent(name)}&per_page=100`);rows=body.artifacts;
       if(!Array.isArray(rows))throw Error("screener_artifact_index_invalid");
-      rows=rows.filter((a:any)=>!a.expired && a.name===`quantura-public-${feed}` && a.workflow_run?.head_branch==="main" && a.workflow_run.head_repository_id===a.workflow_run.repository_id && Number.isSafeInteger(a.id) && a.size_in_bytes<=MAX_ZIP);
+      rows=rows.filter((a:any)=>!a.expired && a.name===name && a.workflow_run?.head_branch==="main" && a.workflow_run.head_repository_id===a.workflow_run.repository_id && Number.isSafeInteger(a.id) && a.size_in_bytes<=MAX_ZIP);
       await this.shared.set(key,rows,{ttl:60}).catch(()=>{});
     }
     return rows;
@@ -71,7 +73,8 @@ export class ScreenerArtifactReader {
     return value;
   }
   private async load(feed:string,date?:string){
-    const artifacts=await this.list(feed);
+    const dated=date?await this.list(feed,date):[];
+    const artifacts=dated.length?dated:await this.list(feed);
     // Archive dates refer to scan_date, never the Actions upload date. Walk a
     // bounded retained index because retries can upload several scans per day.
     for(const artifact of artifacts.slice(0,date?40:5)){

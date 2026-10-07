@@ -229,6 +229,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      actions: read
     steps:
       - name: Checkout authoritative code
         uses: actions/checkout@v6
@@ -263,6 +264,7 @@ jobs:
             --output-dir screener-work/final
           echo "coverage_ok=$(jq -r .coverage_ok screener-work/final/run-manifest.json)" >> "$GITHUB_OUTPUT"
           echo "coverage=$(jq -r .coverage_percentage screener-work/final/run-manifest.json)" >> "$GITHUB_OUTPUT"
+          echo "scan_date=$(jq -r .scan_date screener-work/final/run-manifest.json)" >> "$GITHUB_OUTPUT"
       - name: Upload aggregate and diagnostics
         if: always()
         uses: actions/upload-artifact@v7
@@ -271,6 +273,35 @@ jobs:
           path: screener-work/final
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/setup-node@v6
+        if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
+        with:
+          node-version: '24'
+      - name: Build shared stock publication validation
+        if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
+        working-directory: quantura_site/functions_explore
+        run: npm ci --no-audit --no-fund && npm run build
+      - name: Package stock prices, quantiles and comparison history
+        if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node quantura_site/functions_explore/scripts/publish-stock-artifact.cjs screener-work/final/quantura-screener-latest.json screener-work/public
+      - name: Publish validated stock snapshot
+        if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: quantura-public-stocks
+          path: screener-work/public/snapshot.json.gz
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain immutable dated stock scan
+        if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: quantura-public-stocks-${{ steps.aggregate.outputs.scan_date }}
+          path: screener-work/public/snapshot.json.gz
+          if-no-files-found: error
+          retention-days: 14
       - name: Publish rolling website dataset
         if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
         env:
@@ -304,7 +335,7 @@ jobs:
               gh release delete-asset screener-latest "$asset" --yes
             fi
           done < <(gh release view screener-latest --json assets --jq '.assets[].name')
-      - name: Persist daily Buy history and evaluate saved filters
+      - name: Evaluate private saved filters from the published artifact
         if: steps.aggregate.outputs.coverage_ok == 'true' && env.PUBLISH_RESULTS == 'true'
         env:
           CRON_SECRET: ${{ secrets.QUANTURA_CRON_SECRET }}

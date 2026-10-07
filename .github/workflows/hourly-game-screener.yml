@@ -18,6 +18,7 @@ on:
         description: 'Optional recent date (YYYY-MM-DD) to upgrade existing saved pregame snapshots'
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: hourly-game-screener
   cancel-in-progress: false
@@ -37,7 +38,7 @@ jobs:
       TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
       TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
       QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
-      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      GITHUB_TOKEN: ${{ github.token }}
       PROVIDER: ${{ matrix.provider }}
       MAX_CONTRACTS: ${{ inputs.max_contracts || 500 }}
       SHARD: ${{ matrix.shard }}
@@ -53,6 +54,7 @@ jobs:
           python-version: '3.12'
       - name: Use private runner-local model and artifact directories
         run: |
+          echo "QUANTURA_PUBLIC_DIR=$RUNNER_TEMP/public-pregame" >> "$GITHUB_ENV"
           echo "HF_HOME=$RUNNER_TEMP/quantura-hf" >> "$GITHUB_ENV"
           echo "QUANTURA_RESEARCH_DIR=$RUNNER_TEMP/hourly-research" >> "$GITHUB_ENV"
       - name: Install locked ensemble environment
@@ -65,6 +67,13 @@ jobs:
           if [ "$REFRESH_PUBLISHED" = "true" ]; then extra+=(--refresh-published); fi
           if [ -n "$REFRESH_DATE" ]; then extra+=(--refresh-date "$REFRESH_DATE"); fi
           python -m market_research.pregame_screener --provider "$PROVIDER" --max-contracts "$MAX_CONTRACTS" --shard "$SHARD" --shards 2 "${extra[@]}"
+      - name: Publish validated public forecast catalog
+        uses: actions/upload-artifact@v7
+        with:
+          name: quantura-public-games-${{ matrix.provider }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/public-pregame/snapshot.json.gz
+          if-no-files-found: error
+          retention-days: 3
       - name: Preserve partial or complete encrypted results
         if: always()
         uses: ./.github/actions/research-artifact

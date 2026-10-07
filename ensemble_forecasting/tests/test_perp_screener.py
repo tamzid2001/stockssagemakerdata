@@ -32,3 +32,38 @@ def test_publication_requires_real_five_model_ordered_daily_predictions():
         elif change == "hour_gap": broken["predictions"][0]["timestamp"] = broken["predictions"][1]["timestamp"]
         else: broken["predictions"][0]["quantiles"]["0.01"] = 200
         with pytest.raises(ValueError): build_snapshot({"ticker": "KXBTCPERP"}, history, broken, history[-1]["timestamp"])
+
+
+def test_discovery_detects_paged_new_listing_without_loading_models_or_writing_firestore(monkeypatch, tmp_path):
+    import json
+    import time
+    import requests
+    from market_research import public_snapshots
+    from ensemble_forecasting.kalshi_perp_screener import run
+    cutoff = int(time.time()) // 86400 * 86400
+    old = {"ticker": "KXBTCPERP", "history_cutoff_at": datetime.fromtimestamp(cutoff, timezone.utc).isoformat().replace("+00:00", "Z"), "forecast_engine": "quantura_perps_daily_ensemble_v2"}
+    stored = {"items": [old], "catalog": [{"ticker": old["ticker"]}]}
+    monkeypatch.setattr(public_snapshots, "previous", lambda *_: stored)
+    market = {"ticker": old["ticker"], "status": "active", "title": "BTC", "contract_size": "1", "underlying_multiplier": "1"}
+    class Response:
+        status_code = 200
+        def __init__(self, value): self.value = value
+        def raise_for_status(self): pass
+        def json(self): return self.value
+    class Session:
+        def get(self, url, params=None, **kwargs):
+            if url.endswith('/markets'):
+                return Response({"markets": [{**market, "ticker": "KXNEWPERP"}]} if params.get('cursor') else {"markets": [market], "cursor": "page2"})
+            symbol = url.split('/')[-2]
+            candles = [{"end_period_ts": cutoff-i*86400, "price": {"close": "100"}} for i in range(40 if symbol == old['ticker'] else 2)]
+            return Response({"ticker": symbol, "candlesticks": candles})
+    monkeypatch.setattr(requests, 'Session', Session)
+    monkeypatch.setenv('QUANTURA_PUBLIC_DIR', str(tmp_path/'public'))
+    monkeypatch.setenv('GITHUB_OUTPUT', str(tmp_path/'outputs'))
+    run(0, 1, True)
+    value = public_snapshots.unpack((tmp_path/'public'/'snapshot.json.gz').read_bytes(), 'perps-0')['data']
+    assert [r['ticker'] for r in value['catalog']] == ['KXBTCPERP', 'KXNEWPERP']
+    assert value['items'] == [old]
+    assert value['status']['new_listings'] == ['KXNEWPERP']
+    assert value['status']['failures'][0]['reason'] == 'INSUFFICIENT_GENUINE_DAILY_HISTORY'
+    assert (tmp_path/'outputs').read_text() == 'needs_models=false\n'

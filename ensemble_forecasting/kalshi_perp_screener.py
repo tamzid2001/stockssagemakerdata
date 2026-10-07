@@ -1,4 +1,4 @@
-"""Publish genuine hourly Kalshi perpetual forecasts outside Vercel.
+"""Discover Kalshi perpetual listings hourly; publish seven-day daily forecasts.
 
 One latest snapshot per ticker. Failed refreshes preserve the previous snapshot;
 no synthetic candles, substitute provider, or reduced-model forecast is published.
@@ -12,6 +12,8 @@ import gzip
 import hashlib
 import json
 import math
+import os
+import re
 import time
 
 import requests
@@ -81,10 +83,11 @@ def build_snapshot(market, history, result, generated_at):
             **{q: rows[0][q] for q in NAMES}}
 
 
-def run(shard=0, shards=1):
-    from ensemble_forecasting.worker import execute_job
-    from market_research.store import Store
-    db = Store("perps-screener-readonly", "perps").db
+def run(shard=0, shards=1, discovery_only=False):
+    from market_research.public_snapshots import previous as previous_public, write as write_public
+    feed = f"perps-{shard}"
+    stored = previous_public(feed)
+    snapshots = {row["ticker"]: row for row in stored["items"]}
     session = requests.Session()
     def get(path, params=None):
         for attempt in range(4):
@@ -94,10 +97,25 @@ def run(shard=0, shards=1):
             response.raise_for_status()
             return response.json()
         raise ValueError("PROVIDER_UNAVAILABLE")
-    markets = get("/margin/markets")["markets"]
-    selected = [m for m in markets if m["status"] == "active" and int(hashlib.sha256(m["ticker"].encode()).hexdigest()[:8], 16) % shards == shard]
+    markets, cursor, seen = [], "", set()
+    while True:
+        body = get("/margin/markets", {"limit": 1000, **({"cursor": cursor} if cursor else {})})
+        if not isinstance(body.get("markets"), list) or len(body["markets"]) > 1000:
+            raise ValueError("INVALID_PERPETUAL_CATALOG")
+        markets.extend(body["markets"])
+        cursor = body.get("cursor")
+        if not cursor:
+            break
+        if not isinstance(cursor, str) or cursor in seen or len(seen) >= 20:
+            raise ValueError("INVALID_PERPETUAL_CURSOR")
+        seen.add(cursor)
+    markets = list({m["ticker"]:m for m in markets if isinstance(m,dict) and isinstance(m.get("ticker"),str)}.values())
+    selected = [m for m in markets if isinstance(m, dict) and re.fullmatch(r"KX[A-Z0-9]{1,36}PERP", str(m.get("ticker", ""))) and m.get("status") == "active" and int(hashlib.sha256(m["ticker"].encode()).hexdigest()[:8], 16) % shards == shard]
+    active = {m["ticker"] for m in selected}
+    snapshots = {ticker: row for ticker, row in snapshots.items() if ticker in active}
     report = {"eligible": len(selected), "successful": 0, "failed": 0, "failures": [], "shard": shard, "shards": shards}
     config = configuration()
+    needs_models = False
     for market in selected:
         try:
             cutoff = int(time.time())//86400*86400
@@ -109,23 +127,19 @@ def run(shard=0, shards=1):
                 raise ValueError("INSUFFICIENT_GENUINE_DAILY_HISTORY")
             if datetime.fromisoformat(history[-1]["timestamp"].replace("Z", "+00:00")).timestamp() < cutoff-2*86400:
                 raise ValueError("DAILY_HISTORY_NOT_CURRENT")
-            ref = db.collection("perp_forecast_catalog").document(market["ticker"])
-            previous = ref.get().to_dict() or {}
+            previous = snapshots.get(market["ticker"], {})
             if previous.get("history_cutoff_at") == history[-1]["timestamp"] and previous.get("forecast_engine") == ENGINE:
                 report["successful"] += 1; continue
+            needs_models = True
+            if discovery_only:
+                continue
+            from ensemble_forecasting.worker import execute_job
             request = {key: value for key, value in config.items() if key not in {"model_checkpoints", "model_revisions", "history_lag_sessions", "adjustment", "model_failure_policy"}}
             result = execute_job({"request": request, "source": {"type": "kalshi_perp", "symbol": market["ticker"], "provider": "kalshi_perps"}, "runtime_mode": "production",
                                   "model_checkpoints": config["model_checkpoints"], "model_revisions": config["model_revisions"],
                                   "input": {"rows": history, "frequency": "1D", "timezone": "UTC"}}, minimum_history_rows=32)
             snapshot = build_snapshot(market, history, result, datetime.now(timezone.utc).isoformat())
-            # Monotonic publication protects against delayed/concurrent workers.
-            from google.cloud import firestore
-            @firestore.transactional
-            def publish(transaction):
-                existing = ref.get(transaction=transaction).to_dict() or {}
-                if str(existing.get("history_cutoff_at", "")) <= snapshot["history_cutoff_at"]:
-                    transaction.set(ref, snapshot)
-            publish(db.transaction())
+            snapshots[market["ticker"]] = snapshot
             report["successful"] += 1
             print(json.dumps({"ticker": market["ticker"], "status": "published", "history": len(history)}), flush=True)
         except Exception as error:
@@ -135,17 +149,30 @@ def run(shard=0, shards=1):
             report["failures"].append({"ticker": market["ticker"], "reason": reason})
             print(json.dumps(report["failures"][-1]), flush=True)
     report["updated_at"] = datetime.now(timezone.utc).isoformat()
-    db.collection("perp_forecast_status").document(str(shard)).set(report)
+    # The catalog is rediscovered hourly. Unchanged completed daily cutoffs reuse
+    # their five-model forecast, so newly listed contracts are detected cheaply.
+    report["new_listings"] = sorted(active - {m.get("ticker") for m in stored.get("catalog", [])})
+    report["needs_models"] = needs_models
+    report["discovery_only"] = discovery_only
+    report["run_status"] = "partial" if report["failed"] or discovery_only and needs_models else "completed"
+    # A new listing without 32 genuine daily observations still enters the
+    # catalog. Keep its forecast unavailable rather than synthesizing bars.
+    catalog = [{k:m.get(k) for k in ("ticker", "title", "status", "contract_size", "underlying_multiplier")} for m in selected]
+    write_public(feed, {"items": list(snapshots.values()), "status": report, "catalog": catalog}, os.environ.get("QUANTURA_PUBLIC_DIR", "/tmp/quantura-public-perps"))
+    if discovery_only and os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"needs_models={'true' if needs_models else 'false'}\n")
     print(json.dumps(report), flush=True)
-    if selected and not report["successful"]:
+    if not discovery_only and needs_models and selected and not report["successful"]:
         raise ValueError("NO_PERPETUAL_FORECASTS_PUBLISHED")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--discovery-only", action="store_true")
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shards", type=int, default=1)
     args = parser.parse_args()
     if args.shards < 1 or not 0 <= args.shard < args.shards:
         parser.error("invalid shard")
-    run(args.shard, args.shards)
+    run(args.shard, args.shards, args.discovery_only)

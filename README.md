@@ -127,7 +127,9 @@ flowchart LR
     Identity --> Bridge[Compatibility credential for data SDKs]
     Bridge --> State
     API --> Entitlement[Paid Pro subscription / enterprise grant / verified admin]
-    API <--> State[Firestore and private storage]
+    API <--> State[Private requests in Firestore and private storage]
+    API --> Public[Verified GitHub Actions public screener artifacts]
+    Workers --> Public
     API --> Data[Provider history and verified identities]
     Data --> BigQuery[Public BigQuery tables with dry-run byte caps]
     API --> QA[Authorized saved forecast context]
@@ -215,7 +217,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the wider application test suite and 
 
 Use `./deploy.sh` after committing and validating changes. The default Vercel workflow deploys API, compatibility API, newsletter, SSR and website projects in that order from `git archive HEAD`. Uncommitted changes are not deployed. `DEPLOY_DRY_RUN=true ./deploy.sh` prints the plan without publishing.
 
-The stock screener checks hourly for the latest unpublished completed NYSE session. Exchange dates and frozen close cutoffs survive delayed Actions runs and UTC midnight. Validated JSON/CSV assets publish before the completion marker; failed scans stay eligible for retry.
+The stock screener checks hourly for the latest unpublished completed NYSE session. Exchange dates and frozen close cutoffs survive delayed Actions runs and UTC midnight. Validated public Actions artifacts publish before the completion marker; failed scans stay eligible for retry. Stock snapshots and comparison history retain fourteen calendar days; game shards retain three days; perpetual shards retain seven days. Server readers verify archive checksums, workflow provenance and schema, then share immutable caches. Public screener publication and reads make zero Firestore document writes/reads. Private saved forecasts, requests and alert delivery records remain in Firestore. Rolling JSON/CSV release assets remain available for external downloads. Perpetual catalogs are discovered hourly; unchanged daily cutoffs reuse their five-model, seven-day forecast, and new listings without enough genuine history appear without fabricated quantiles.
 
 Publication reads the checked-in model registry directly and is checked with Python site packages disabled, so aggregation does not require the inference worker's pandas/Pydantic stack. On October 3, the recovered October 2 scan published 3,568 valid five-model forecasts out of 3,607 stocks (98.92% coverage), with 39 explicitly unavailable histories/predictions.
 

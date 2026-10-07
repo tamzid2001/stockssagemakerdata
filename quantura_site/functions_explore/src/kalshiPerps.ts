@@ -98,9 +98,21 @@ export class KalshiPerpsService {
   }
   markets() {
     return this.cached("catalog",300_000,async()=>{
-      const body=await this.get("/margin/markets");
-      if(!Array.isArray(body.markets)||body.markets.length>1000)throw new Error("perp_catalog_schema_invalid");
-      return body.markets.map(normalizePerpMarket);
+      const markets=new Map<string,ReturnType<typeof normalizePerpMarket>>(),seen=new Set<string>();
+      let cursor="";const deadline=Date.now()+25_000;
+      do {
+        const params=new URLSearchParams({limit:"1000",...(cursor?{cursor}:{})});
+        const body=await this.get(`/margin/markets?${params}`,deadline);
+        if(!Array.isArray(body.markets)||body.markets.length>1000)throw new Error("perp_catalog_schema_invalid");
+        for(const raw of body.markets) {
+          // One malformed listing must not hide every other genuine contract.
+          try {const market=normalizePerpMarket(raw);markets.set(market.symbol,market);} catch {}
+        }
+        cursor=typeof body.cursor==="string"?body.cursor:"";
+        if(cursor && (seen.has(cursor)||seen.size>=20))throw Error("perp_catalog_pagination_invalid");
+        if(cursor)seen.add(cursor);
+      }while(cursor);
+      return [...markets.values()];
     });
   }
   async search(query: string, limit=20) {
