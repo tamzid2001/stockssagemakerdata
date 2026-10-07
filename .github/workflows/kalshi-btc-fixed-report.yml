@@ -1,0 +1,32 @@
+name: BTC original cohort — fixed-one and opposite-dollar reports
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  report:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Locked analysis tools without model downloads
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-analysis.lock
+      - name: Verify sizing, spread handling, receipt timing, and original accounting
+        run: python -m pytest -q market_research/tests/test_btc_fixed_report.py market_research/tests/test_btc_bucket_report.py
+      - name: Verify original encrypted ledgers and export aggregate entry prices
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.btc_fixed_report --output "$RUNNER_TEMP/btc-fixed-report"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: btc-original-fixed-one-contract-report
+          path: ${{ runner.temp }}/btc-fixed-report
+          if-no-files-found: error
+          retention-days: 30
