@@ -27,7 +27,7 @@ Every chunk uploads an immutable artifact and has a same-day/universe-hash cache
 
 `coverage = successfully evaluated symbols / eligible symbols`
 
-The scheduled threshold is 90 percent. Below that threshold the Action fails after uploading diagnostics and preserves the previous `screener-latest` release. Passing runs publish JSON, CSV and a dated archive before uploading the completion manifest. Failed asset publication cannot mark a session complete. The backend applies validated server-side filtering, sorting, and pagination to the JSON asset and proxies the CSV without exposing a GitHub or Alpaca credential.
+The scheduled threshold is 90 percent. Below that threshold the Action fails after uploading diagnostics and preserves the previous `screener-latest` release. Passing runs publish validated public GitHub Actions artifacts containing the dataset and stock comparison history, plus an immutable dated artifact with fourteen-day retention. Rolling JSON/CSV release downloads are preserved for external consumers. Failed artifact publication cannot mark a session complete. The backend verifies main-branch workflow provenance, SHA-256 and schema before server-side filtering, sorting, pagination and CSV export. Shared caches reduce GitHub requests, and public screener data makes no Firestore reads or writes. Private alert delivery records and saved user requests remain in Firestore.
 
 ## Safe representative validation
 

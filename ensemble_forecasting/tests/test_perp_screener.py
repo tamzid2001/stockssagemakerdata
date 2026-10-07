@@ -67,3 +67,11 @@ def test_discovery_detects_paged_new_listing_without_loading_models_or_writing_f
     assert value['status']['new_listings'] == ['KXNEWPERP']
     assert value['status']['failures'][0]['reason'] == 'INSUFFICIENT_GENUINE_DAILY_HISTORY'
     assert (tmp_path/'outputs').read_text() == 'needs_models=false\n'
+
+
+def test_standalone_discovery_import_needs_no_model_environment():
+    import subprocess
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run([sys.executable, "-S", "-c", "import runpy,sys,types;sys.modules['requests']=types.ModuleType('requests');runpy.run_path('ensemble_forecasting/kalshi_perp_screener.py');assert 'numpy' not in sys.modules;assert 'ensemble_forecasting' not in sys.modules"], cwd=root, check=True)

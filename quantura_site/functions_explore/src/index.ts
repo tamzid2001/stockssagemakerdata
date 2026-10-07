@@ -8443,10 +8443,10 @@ ROUTES.get("/screener/data", async (req, res) => {
       generatedAt: dataset.generated_at,
       manifest: dataset.manifest,
       universeCount: dataset.items.length,
-      dataSource: perps ? "kalshi_perps" : "validated_github_release",
+      dataSource: "github_actions_artifacts",
       warnings: current.warnings,
       schemaVersion: dataset.schema_version,
-      comparisonPolicy: perps ? "Kalshi reference prices are normalized to USD per underlying unit; completed trade closes are the fallback. Published five-model hourly forecasts span the next 24 hours; quantile comparisons use the first forecast hour or horizon min/max/average." : "Stock prices use the latest completed daily close. Forecast quantiles span seven trading sessions; no intraday screener tracking.",
+      comparisonPolicy: perps ? "Kalshi reference prices are normalized to USD per underlying unit; completed trade closes are the fallback. Published five-model daily forecasts span seven days; quantile comparisons use the first forecast day or horizon min/max/average." : "Stock prices use the latest completed daily close. Forecast quantiles span seven trading sessions; no intraday screener tracking.",
     });
   } catch (error: any) {
     const detail = sanitizeText(error?.message || error, 120);
@@ -8455,7 +8455,7 @@ ROUTES.get("/screener/data", async (req, res) => {
       error: notPublished ? "screener_scan_unavailable" : "screener_dataset_load_failed",
       detail: notPublished
         ? "No validated full-universe scan has been published yet. The scheduled pipeline will publish only after its coverage threshold passes."
-        : "The latest validated screener dataset could not be loaded. Retry shortly; the prior release has not been overwritten.",
+        : "The latest validated screener dataset could not be loaded. Retry shortly; the prior verified publication remains available.",
     });
   }
 });
