@@ -53,7 +53,7 @@ def budget_quantity(price, precision, multiplier, include_fees):
         raise ValueError("BUDGET_BELOW_MINIMUM_QUANTITY")
     return float(Decimal(units)/100)
 
-def opposite_replay(original, games, *, price_policy, include_fees, precision, multiplier):
+def opposite_replay(original, games, *, price_policy, include_fees, precision, multiplier, with_ledger=False):
     if price_policy not in ("recorded_opposite_ask", "ideal_one_minus_original_ask"):
         raise ValueError("INVALID_OPPOSITE_PRICE_POLICY")
     trades, misses = [], []
@@ -92,7 +92,7 @@ def opposite_replay(original, games, *, price_policy, include_fees, precision, m
     count = len(trades)
     fees = summary["fees"]
     cost = summary["closed_entry_notional"]
-    return {"price_policy":price_policy,"budget_includes_fees":include_fees,"balance_precision":precision,
+    result = {"price_policy":price_policy,"budget_includes_fees":include_fees,"balance_precision":precision,
         "quantity_grid":0.01,"entry_budget_usd":1,"original_signals":len(original["trades"]),"missed_entries":len(misses),
         "trades":count,"wins":summary["wins"],"losses":summary["losses"],"win_rate_pct":100*summary["win_rate"] if count else None,
         "average_entry_cents":100*sum(t["entry_price"] for t in trades)/count if count else None,
@@ -105,6 +105,9 @@ def opposite_replay(original, games, *, price_policy, include_fees, precision, m
         "realized_max_drawdown_usd":summary["realized_equity_max_drawdown"],
         "longest_win_streak":summary["longest_winning_streak"],"longest_loss_streak":summary["longest_losing_streak"],
         **{k:v for k,v in bankroll(trades).items() if k != "assumptions" and k != "scope"}}
+    if with_ledger:
+        result["ledger"] = trades
+    return result
 
 def summarize(scenario):
     trades = [t for t in scenario["trades"] if t["status"] == "closed"]
