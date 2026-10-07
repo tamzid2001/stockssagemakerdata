@@ -105,7 +105,7 @@ export function answerForecastQuestion(context: ForecastContext, question: strin
       heading="Forecast scenarios";answer="These are forecast-distribution values at individual timestamps. This range does not measure the probability that an entire price path stays inside the band.";
       const keys=Object.keys(p[0].quantiles).sort((a,b)=>Number(a)-Number(b)),a=keys[0],b=keys.at(-1)!;
       for(const [label,row] of [["First",p[0]],["Final",p.at(-1)!]] as const){add(`${label} P${Number(a)*100}`,row.quantiles[a],"forecast",row.timestamp);add(`${label} P${Number(b)*100}`,row.quantiles[b],"forecast",row.timestamp);add(`${label} band width`,row.quantiles[b]-row.quantiles[a],"forecast",row.timestamp);}
-    } else {
+    } else if (quantile && statistic) {
       heading="Forecast values";answer="Values come from the saved forecast. An average over forecast steps is not the quantile of a cumulative return.";
       const keys=quantile==="none"?Object.keys(p[0].quantiles):[quantile];
       const requestedDate=question.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
