@@ -33,9 +33,10 @@ test('changing markets aborts the old context and ignores a delayed response',as
 });
 test('notes anchor to real points, escape chart HTML, and write only on explicit Save',async()=>{
  const {w,host}=setup();const calls=[],chart={data:[]},annotationChanges=[];w.Plotly={relayout:async(_chart,layout)=>annotationChanges.push(layout.annotations)};
- const j=job();w.QuanturaForecastQA.attach(host,{job:j,reference:{kind:'ensemble',id:'test'},chart,request:async(path,options)=>{calls.push({path,options});return {data:{notes:[]}};}});await tick();
+ const j={...job(),frequency:'1D'};w.QuanturaForecastQA.attach(host,{job:j,reference:{kind:'ensemble',id:'test'},chart,request:async(path,options)=>{calls.push({path,options});return {data:{notes:[]}};}});await tick();
  const note=host.querySelector('.jev-note-form input'),form=host.querySelector('.jev-note-form');note.value='<img src=x onerror=alert(1)>';form.requestSubmit();
  assert.equal(calls.filter(c=>c.path.includes('/save')).length,0);assert.equal(host.querySelectorAll('img').length,0);
+ assert.match(host.querySelector('.jev-notes-list').textContent,/Oct 1, 2026/);assert.doesNotMatch(host.querySelector('.jev-notes-list').textContent,/Sep 30|PM/);
  const annotations=w.QuanturaForecastQA.plotAnnotations(j);assert.match(annotations[0].text,/&lt;img/);assert.equal(annotations[0].y,100);
  host.querySelector('.forecast-note-controls>button').click();await tick();const save=calls.find(c=>c.path.endsWith('/save'));assert.equal(save.options.body.notes[0].value,undefined);assert.equal(save.options.body.notes[0].series,'history');
  host.querySelector('.jev-high-low input').click();assert.equal(w.QuanturaForecastQA.plotAnnotations(j).length,5);
@@ -45,4 +46,11 @@ test('saved conversations render safely and link to the exact published snapshot
  await w.QuanturaForecastQA.restore('id',async()=>({data:{title:'Saved',context_reference:{kind:'screener',symbol:'AAPL',scan_id:'2026-10-06-scan'},messages:[{question:'<script>bad()</script>',response:{heading:'Answer',answer:'Safe saved text',facts:[]}}]}}));
  assert.equal(w.document.querySelectorAll('script').length,0);assert.match(w.document.querySelector('dialog').textContent,/<script>bad\(\)<\/script>/);
  assert.equal(new URL(w.document.querySelector('dialog a').href).searchParams.get('screenerScan'),'2026-10-06-scan');
+});
+test('a failed note load cannot overwrite saved notes; retry restores the existing points',async()=>{
+ const {w,host}=setup();let reads=0;const j={...job(),frequency:'1D'};
+ w.QuanturaForecastQA.attach(host,{job:j,reference:{kind:'ensemble',id:'test'},chart:{data:[]},request:async()=>{if(++reads===1)throw Error('Account is still loading');return {data:{notes:[{id:'saved',text:'Existing note',series:'history',timestamp:j.history[0].timestamp,value:100}]}};}});await tick();
+ assert.equal(host.querySelector('.jev-note-form button').disabled,true);assert.equal(host.querySelector('.forecast-note-controls>button').disabled,true);
+ const retry=[...host.querySelectorAll('button')].find(b=>b.textContent==='Retry loading notes');assert.equal(retry.hidden,false);retry.click();await tick();
+ assert.match(host.querySelector('.jev-notes-list').textContent,/Existing note.*Oct 1, 2026/);assert.equal(host.querySelector('.jev-note-form button').disabled,false);assert.equal(host.querySelector('.forecast-note-controls>button').disabled,true);
 });

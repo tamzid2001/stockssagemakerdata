@@ -14550,7 +14550,7 @@
     try {
       const rows=window.QuanturaForecastControls.csvSeries(ensembleUiState.csvTable,document.getElementById("ensemble-csv-date").value,document.getElementById("ensemble-csv-target").value).sort((a,b)=>Date.parse(a.timestamp)-Date.parse(b.timestamp)).slice(-500);
       const name=document.getElementById("ensemble-csv-name").value.trim() || "Uploaded time series",frequency=document.getElementById("ensemble-csv-frequency").value;
-      window.QuanturaForecastQA?.attach(host,{job:{title:name,source:{type:"csv_preview",name},history:rows,predictions:[]},reference:{kind:"preview",name,frequency,rows}});
+      window.QuanturaForecastQA?.attach(host,{job:{title:name,frequency,source:{type:"csv_preview",name},history:rows,predictions:[]},reference:{kind:"preview",name,frequency,rows}});
     } catch {window.QuanturaForecastQA?.dispose(host);host.hidden=true;}
   };
 

@@ -9,6 +9,8 @@
   const time=(v,calendar=false)=>new Intl.DateTimeFormat(undefined,calendar?{dateStyle:'medium',timeZone:'UTC'}:{dateStyle:'medium',timeStyle:'short'}).format(new Date(v));
   const icon=()=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d','m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8L12 3Z M20 2v4 M18 4h4');svg.append(path);return svg;};
   async function transport(path,{body,signal,method='POST'}={}) {
+    await window.QuanturaAuth?.ready;
+    if(signal?.aborted)throw new DOMException('Request cancelled','AbortError');
     const user=window.firebase?.auth?.().currentUser;
     if(!user||user.isAnonymous)throw new Error('Sign in to ask Jev and save your research.');
     const token=await (window.QuanturaAuth?.getToken(user)??user.getIdToken());
@@ -32,7 +34,7 @@
     article.append(el('h5',response.heading || 'Saved response'),el('p',response.answer || 'No saved answer is available.'));
     if(response.facts?.length){const list=el('dl','','jev-facts');for(const fact of response.facts){const row=el('div');row.append(el('dt',fact.label),el('dd',format(fact.value)));if(fact.timestamp)row.append(el('span',`${fact.kind==='forecast'?'Forecast':'Observed'} · ${time(fact.timestamp,/^(1D|1W-MON|1MS)$/.test(response.frequency))}`,'small muted'));list.append(row);}article.append(list);}
     const details=el('details'),summary=el('summary','Sources and context');details.append(summary);
-    for(const ref of response.references || [])details.append(el('p',[ref.provider,ref.frequency,ref.input_cutoff?`Input cutoff ${time(ref.input_cutoff)}`:null,ref.generated_at?`Generated ${time(ref.generated_at)}`:null].filter(Boolean).join(' · '),'small'));
+    for(const ref of response.references || [])details.append(el('p',[ref.provider,ref.frequency,ref.input_cutoff?`Input cutoff ${time(ref.input_cutoff,/^(1D|1W-MON|1MS)$/.test(ref.frequency))}`:null,ref.generated_at?`Generated ${time(ref.generated_at)}`:null].filter(Boolean).join(' · '),'small'));
     for(const warning of response.warnings || [])details.append(el('p',warning,'small'));
     details.append(el('p','Answers use saved observations and forecast values. Live quotes and strategy returns require separate evidence.','small muted'));article.append(details);return article;
   }
@@ -65,11 +67,15 @@
     const add=el('button','Add note','cta secondary small');add.type='submit';add.disabled=true;form.append(label,select,textLabel,input,add);details.append(form);
     const list=el('ul','','jev-notes-list'),status=el('p','','small');status.setAttribute('role','status');details.append(list);
     const save=el('button','Save notes','cta secondary small');save.type='button';save.disabled=true;details.append(save,status);
-    const draw=()=>{list.replaceChildren();for(const n of state.notes){const row=el('li'),remove=el('button','Remove','task-chip');remove.type='button';remove.setAttribute('aria-label',`Remove note: ${n.text}`);remove.addEventListener('click',()=>{state.notes=state.notes.filter(note=>note.id!==n.id);save.disabled=false;draw();refreshAnnotations(state);});row.append(el('span',`${n.text} · ${n.series==='history'?'Observed':'P50'} · ${time(n.timestamp)} · ${format(n.value)}`),remove);list.append(row);}};
+    const draw=()=>{list.replaceChildren();for(const n of state.notes){const row=el('li'),remove=el('button','Remove','task-chip');remove.type='button';remove.setAttribute('aria-label',`Remove note: ${n.text}`);remove.addEventListener('click',()=>{state.notes=state.notes.filter(note=>note.id!==n.id);save.disabled=false;draw();refreshAnnotations(state);});row.append(el('span',`${n.text} · ${n.series==='history'?'Observed':'P50'} · ${time(n.timestamp,/^(1D|1W-MON|1MS)$/.test(state.job.frequency))} · ${format(n.value)}`),remove);list.append(row);}};
     form.addEventListener('submit',event=>{event.preventDefault();const point=state.points[Number(select.value)];if(add.disabled||!point||!input.value.trim())return;if(state.notes.length>=20){status.textContent='Use up to 20 notes per forecast.';return;}state.notes.push({id:uuid(),text:input.value.trim(),timestamp:point.timestamp,series:point.series,value:point.value});input.value='';save.disabled=false;draw();refreshAnnotations(state);});
     save.addEventListener('click',async()=>{save.disabled=true;status.textContent='Saving notes…';try{await state.request('/api/v1/jev/annotations/save',{body:{context:state.reference,notes:state.notes.map(({id,text,timestamp,series})=>({id,text,timestamp,series}))},signal:state.controller.signal});if(state.disposed)return;status.textContent='Notes saved to your account.';}catch(error){if(state.disposed)return;save.disabled=false;status.textContent=error.message;}});
+    // Do not replace existing notes if the initial account read fails.
+    const retry=el('button','Retry loading notes','task-chip');retry.type='button';retry.hidden=true;details.append(retry);
+    const read=async()=>{add.disabled=true;retry.hidden=true;status.textContent='Loading your chart notes…';try{const result=await state.request('/api/v1/jev/annotations/read',{body:{context:state.reference},signal:state.controller.signal});if(state.disposed)return;state.notes=result.data?.notes || [];draw();refreshAnnotations(state);add.disabled=false;status.textContent='';}catch(error){if(state.disposed)return;status.textContent=error.message;retry.hidden=false;}};
+    retry.addEventListener('click',read);
     // One read when a context opens. Chart redraws and typing never write to Firestore.
-    void state.request('/api/v1/jev/annotations/read',{body:{context:state.reference},signal:state.controller.signal}).then(result=>{if(state.disposed)return;state.notes=result.data?.notes || [];draw();refreshAnnotations(state);}).catch(()=>{}).finally(()=>{if(!state.disposed)add.disabled=false;});
+    void read();
     host.append(details);
   }
   function attach(host,{job,reference,request=transport,chart=null,onAnnotations=null}={}) {
