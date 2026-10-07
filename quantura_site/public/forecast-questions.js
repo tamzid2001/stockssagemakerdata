@@ -22,7 +22,7 @@
     return [
       {category:job.predictions?.length?'Forecast':'Data',question:median?'How does P50 change from the last observed value to the end of this forecast?':'Summarize the observed values in this series.'},
       {category:'History',question:'What were the observed high and low, and when did they occur?'},
-      {category:'Evidence',question:job.predictions?.length?'Which data source and models produced this forecast, and what should I check?':'What data checks should I make before forecasting this uploaded series?'},
+      {category:'Evidence',question:job.predictions?.length?'Where did these observations come from, and what are their units?':'What data checks should I make before forecasting this uploaded series?'},
     ];
   }
   function messageNode(message) {
