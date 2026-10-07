@@ -1,4 +1,4 @@
-import { gunzipSync } from "node:zlib";
+import { screenerArtifacts } from "./screenerArtifacts";
 
 export type QuantScreenerRow = Record<string, unknown> & {
   ticker: string;
@@ -291,53 +291,6 @@ export function filterSortPaginateRows(rows: QuantScreenerRow[], query: QuantScr
   };
 }
 
-function githubHeaders(): Record<string, string> {
-  const token = String(process.env.GITHUB_ACTIONS_TOKEN || process.env.GITHUB_TOKEN || "").trim();
-  return {
-    Accept: "application/vnd.github+json",
-    "User-Agent": "quantura-studio",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    if (!response.ok) throw new Error(`screener_dataset_http_${response.status}`);
-    return response;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function getReleaseAssets(owner: string, repo: string): Promise<Array<Record<string, unknown>>> {
-  if (releaseCache && releaseCache.expiresAt > Date.now()) return releaseCache.assets;
-  const response = await fetchWithTimeout(
-    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/tags/${RELEASE_TAG}`,
-    { headers: githubHeaders() }
-  );
-  const release = (await response.json()) as Record<string, unknown>;
-  const assets = Array.isArray(release.assets) ? (release.assets as Array<Record<string, unknown>>) : [];
-  releaseCache = { expiresAt: Date.now() + CACHE_TTL_MS, assets };
-  return assets;
-}
-
-async function fetchReleaseAsset(owner: string, repo: string, name: string): Promise<Response> {
-  const override = name === JSON_ASSET
-    ? String(process.env.SCREENER_DATA_URL || "").trim()
-    : name === CSV_ASSET
-      ? String(process.env.SCREENER_CSV_URL || "").trim()
-      : "";
-  if (override) return fetchWithTimeout(override, { headers: { "Cache-Control": "no-cache" } }, 20000);
-  const assets = await getReleaseAssets(owner, repo);
-  const asset = assets.find((candidate) => String(candidate.name || "") === name);
-  const url = String(asset?.browser_download_url || "").trim();
-  if (!url) throw new Error("screener_dataset_not_published");
-  return fetchWithTimeout(`${url}?v=${Math.floor(Date.now() / CACHE_TTL_MS)}`, { headers: { "Cache-Control": "no-cache" } }, 30000);
-}
-
 function validArchiveDate(date: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T00:00:00Z`)) &&
     new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
@@ -353,15 +306,9 @@ export function screenerArchiveDates(assets: Array<Record<string, unknown>>, lat
   return Array.from(new Set(available)).sort().reverse();
 }
 
-export async function listPublishedScreenerDates(owner: string, repo: string, latestDate: string): Promise<string[]> {
-  try {
-    return screenerArchiveDates(await getReleaseAssets(owner, repo), latestDate);
-  } catch (error) {
-    // Private staging can serve the current dataset from an override URL with
-    // no public GitHub release. It still gets the current date, never fake days.
-    if (process.env.SCREENER_DATA_URL) return screenerArchiveDates([], latestDate);
-    throw error;
-  }
+export async function listPublishedScreenerDates(_owner: string, _repo: string, latestDate: string): Promise<string[]> {
+  const data=(await screenerArtifacts.read("stocks")).data;
+  return screenerArchiveDates((data.archive_dates || []).map((date:string)=>({name:`quantura-screener-${date}.json.gz`})),latestDate);
 }
 
 export async function loadPublishedScreenerDataset(owner: string, repo: string, date?: string): Promise<QuantScreenerDataset> {
@@ -369,18 +316,12 @@ export async function loadPublishedScreenerDataset(owner: string, repo: string, 
   const cached = datasetCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
   if (date && !validArchiveDate(date)) throw new Error("screener_snapshot_not_found");
-  const name = date ? `quantura-screener-${date}.json.gz` : JSON_ASSET;
-  let response: Response;
-  if (date) {
-    const latest = await loadPublishedScreenerDataset(owner, repo);
-    const dates = await listPublishedScreenerDates(owner, repo, latest.scan_date);
-    if (!dates.includes(date)) throw new Error("screener_snapshot_not_found");
-    if (date === latest.scan_date) return latest;
-    response = await fetchReleaseAsset(owner, repo, name);
-  } else response = await fetchReleaseAsset(owner, repo, name);
-  const payload = (date
-    ? JSON.parse(gunzipSync(Buffer.from(await response.arrayBuffer())).toString("utf8"))
-    : await response.json()) as QuantScreenerDataset;
+  if(date) {
+    const latest=await loadPublishedScreenerDataset(owner,repo);
+    if(!(await listPublishedScreenerDates(owner,repo,latest.scan_date)).includes(date))throw Error("screener_snapshot_not_found");
+    if(date===latest.scan_date)return latest;
+  }
+  const payload=(await screenerArtifacts.read("stocks",date)).data as QuantScreenerDataset;
   if (!["quantura-screener-v2", "quantura-screener-v3"].includes(payload?.schema_version) || !Array.isArray(payload.items) || !payload.manifest) {
     throw new Error("screener_dataset_invalid");
   }
@@ -393,8 +334,7 @@ export async function loadPublishedScreenerDataset(owner: string, repo: string, 
 }
 
 export async function loadPublishedScreenerCsv(owner: string, repo: string): Promise<Buffer> {
-  const response = await fetchReleaseAsset(owner, repo, CSV_ASSET);
-  return Buffer.from(await response.arrayBuffer());
+  return Buffer.from(screenerRowsCsv((await loadPublishedScreenerDataset(owner,repo)).items));
 }
 
 /** Remove legacy trade-signal fields from current public research results. */
@@ -416,5 +356,5 @@ export function screenerRowsCsv(rows: QuantScreenerRow[]): string {
 
 export function clearPublishedScreenerCache(): void {
   datasetCache.clear();
-  releaseCache = null;
+  screenerArtifacts.clear();
 }

@@ -1,10 +1,11 @@
 import type { QuantScreenerDataset, QuantScreenerRow } from "./quantScreener";
 import { kalshiPerps, type KalshiPerpsService } from "./kalshiPerps";
+import { screenerArtifacts } from "./screenerArtifacts";
 import { screenerHistory } from "./screenerHistory";
 
 export const PERP_ENGINE = "quantura_perps_daily_ensemble_v2";
 export const PERP_LEVELS = ["p01","p25","p50","p75","p90","p99"];
-const cache = new WeakMap<FirebaseFirestore.Firestore,{until:number;value:Promise<QuantScreenerRow[]>}>();
+
 
 export function validPerpSnapshot(row: QuantScreenerRow, now=Date.now()): boolean {
   try {
@@ -27,18 +28,13 @@ export function validPerpSnapshot(row: QuantScreenerRow, now=Date.now()): boolea
   }catch{return false;}
 }
 
-export async function loadPerpForecasts(db:FirebaseFirestore.Firestore):Promise<QuantScreenerRow[]> {
-  let hit=cache.get(db);
-  if(!hit || hit.until<Date.now()) {
-    const value=db.collection("perp_forecast_catalog").limit(1000).get().then(data=>data.docs.map(doc=>doc.data() as QuantScreenerRow));
-    hit={until:Date.now()+5*60000,value};cache.set(db,hit);
-    value.catch(()=>cache.delete(db));
-  }
-  return hit.value;
+export async function loadPerpForecasts(_db:FirebaseFirestore.Firestore):Promise<QuantScreenerRow[]> {
+  const snapshots=await Promise.all([0,1,2,3].map(shard=>screenerArtifacts.read(`perps-${shard}`)));
+  return snapshots.flatMap(snapshot=>snapshot.data.items as QuantScreenerRow[]);
 }
 
-export async function perpScreenerDataset(db:FirebaseFirestore.Firestore,service:KalshiPerpsService=kalshiPerps):Promise<QuantScreenerDataset> {
-  const [quotes,snapshots]=await Promise.all([service.screener(),loadPerpForecasts(db)]);
+export async function perpScreenerDataset(db:FirebaseFirestore.Firestore,service:KalshiPerpsService=kalshiPerps,load=loadPerpForecasts):Promise<QuantScreenerDataset> {
+  const [quotes,snapshots]=await Promise.all([service.screener(),load(db)]);
   let published=0;
   const items=quotes.items.map(quote=>{
     const row=snapshots.find(item=>item.ticker===quote.ticker);

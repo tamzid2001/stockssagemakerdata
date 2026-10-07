@@ -3,6 +3,7 @@ import type { Router, Response } from "express";
 import type admin from "firebase-admin";
 import { authenticatePlatformRequest, authorizeWorkspaceAction, requireScope, requireWorkspacePermission, resolveWorkspaceAccess, type ApiPrincipal } from "./apiAccess";
 import { loadInputRows, loadPublishedForecast, publicEnsembleJob, validateWorkerResult } from "./ensembleForecastRoutes";
+import { publicGameById } from "./screenerArtifacts";
 import { publicGameForecast } from "./gameForecasts";
 import { askForecastQuestion, contextHash, normalizeQuestionContext, parseForecastQuestion, type ForecastContext } from "./forecastQuestions";
 
@@ -49,8 +50,8 @@ export async function loadQuestionContext(db:FirebaseFirestore.Firestore, princi
     if(doc.data()?.ownerUid!==principal.userId)throw new Error("workspace_forbidden");
     item=doc.data()?.forecast;
   }else{
-    const doc=await db.collection("game_forecast_catalog").doc(reference.id!).get();
-    item=doc.exists?publicGameForecast(doc.data()!,Date.now(),true,true):null;
+    const raw=await publicGameById(reference.id!);
+    item=raw?publicGameForecast(raw,Date.now(),true,true):null;
   }
   if(!item)throw new Error("question_context_not_found");
   return normalizeQuestionContext({title:`${item.event_title} · ${item.outcome}`,source:{type:"prediction_market",provider:item.provider,symbol:item.symbol,outcome:item.outcome,input_cutoff_at:item.input_cutoff},

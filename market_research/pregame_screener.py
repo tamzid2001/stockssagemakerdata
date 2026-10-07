@@ -1,7 +1,7 @@
 """Today-only public game forecasts from genuine completed pregame hours.
 
-No exchange credentials or order endpoints. One latest document per outcome;
-expired documents are deleted in bounded batches on subsequent hourly runs.
+No exchange credentials or order endpoints. One latest public snapshot per
+outcome; expired rows are pruned from retained Actions artifacts.
 """
 from __future__ import annotations
 import argparse
@@ -16,9 +16,9 @@ import time
 from zoneinfo import ZoneInfo
 from .engine import digest, iso, stamp
 from .provider import KalshiProvider, QuanturaProvider
+from .public_snapshots import previous, write as write_public
 
 NY = ZoneInfo("America/New_York")
-COLLECTION = "game_forecast_catalog"
 REPORT_FILENAME = "report-pregame-summary.json"
 GAME_QUANTILES = (.01, .25, .5, .75, .9, .99)
 
@@ -97,40 +97,8 @@ def document(contract, forecast, now, original=None):
     }
 
 
-def delete_expired_catalog(db, cutoff, source, limit=500):
-    """Small delete commits; recursively split oversized index deletions.
-
-    Firestore counts removed document/index bytes in its transaction size.
-    Batching 500 deletes can therefore exceed the limit even though the
-    serialized delete requests themselves are small. Each provider cleans
-    only its own outputs; the caller runs cleanup on one shard only.
-    """
-    removed = 0
-
-    def commit(documents):
-        if not documents:
-            return 0
-        batch = db.batch()
-        for doc in documents:
-            batch.delete(doc.reference)
-        try:
-            batch.commit()
-        except Exception as error:
-            if "transaction too big" not in str(error).lower() or len(documents) == 1:
-                raise
-            middle = len(documents) // 2
-            return commit(documents[:middle]) + commit(documents[middle:])
-        return len(documents)
-
-    chunk = []
-    for doc in db.collection(COLLECTION).where("game_date", "<", cutoff).limit(limit).stream():
-        if doc.to_dict().get("provider") != source:
-            continue
-        chunk.append(doc)
-        if len(chunk) == 20:
-            removed += commit(chunk)
-            chunk = []
-    return removed + commit(chunk)
+def prune_catalog(items, cutoff, source):
+    return {row["id"]: row for row in items if row.get("provider") == source and row.get("game_date", "") >= cutoff}
 
 
 def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_date=None):
@@ -143,23 +111,21 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
     output.mkdir(parents=True, exist_ok=True)
     # A bootstrap/provider failure must still leave an allowlisted encrypted report.
     (output / REPORT_FILENAME).write_text(json.dumps(report))
-    db = None
+    catalog = None
+    feed = f"games-{source}-{shard}"
     phase = "initialize"
     try:
         from .forecast import forecast_window
-        from .store import Store
         provider = KalshiProvider() if source == "kalshi" else QuanturaProvider()
-        db = Store("pregame-screener-readonly", "pregame").db
+        saved = previous(feed)
+        catalog = prune_catalog(saved["items"], game_date(time.time() - 3 * 86400), source)
         phase = "cleanup"
-        # This collection contains only public game forecast outputs, never user data.
-        if shard == 0:
-            report["removed_expired"] = delete_expired_catalog(db, game_date(time.time() - 3 * 86400), source)
+        report["removed_expired"] = len(saved["items"]) - len(catalog)
         deadline = time.time() + 48 * 60
         originals = {}
         if refresh_published:
-            for saved in db.collection(COLLECTION).where("game_date", "==", target_date).limit(1000).stream():
-                row = saved.to_dict()
-                if row.get("provider") == source:
+            for row in catalog.values():
+                if row.get("game_date") == target_date:
                     originals[row["contract_id"]] = row
         phase = "discovery"
         contracts, cursor, seen = {}, "0", set()
@@ -185,7 +151,7 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
         if refresh_date and refresh_date != game_date(time.time()):cursor=None
         total_eligible=len(selected)
         # Refresh every existing published snapshot before acquiring new outcomes.
-        selected.sort(key=lambda c:(c["contractId"] not in originals,c["eventStart"],c["contractId"]))
+        selected.sort(key=lambda c:(c["contractId"] not in originals, originals.get(c["contractId"], {}).get("generated_at", ""), c["eventStart"],c["contractId"]))
         selected = [c for c in selected[:maximum] if int(digest(c["contractId"])[:8],16) % shards == shard]
         report.update(eligible=len(selected), partial=bool(cursor) or total_eligible > maximum)
         phase = "forecast"
@@ -201,12 +167,12 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
                 contract = provider.verify_schedule(contract)
                 if game_date(stamp(contract["eventStart"])) != (target_date if original else game_date(time.time())):
                     if original:
-                        db.collection(COLLECTION).document(original["id"]).delete()
+                        catalog.pop(original["id"], None)
                     report["skipped"] += 1
                     continue
                 cutoff = int(stamp(original["input_cutoff"])) if original else int(time.time()) // 3600 * 3600
                 if original and (stamp(original.get("original_generated_at") or original["generated_at"]) >= stamp(contract["eventStart"]) // 3600 * 3600):
-                    db.collection(COLLECTION).document(original["id"]).delete()
+                    catalog.pop(original["id"], None)
                     raise ValueError("ORIGINAL_CUTOFF_NOT_PREGAME")
                 quotes = provider.hourly_history(contract, cutoff - 10 * 86400, cutoff)
                 if len(quotes) < 2:
@@ -238,10 +204,11 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
                 verified = provider.verify_schedule(contract)
                 if verified["eventStart"] != contract["eventStart"]:
                     if original:
-                        db.collection(COLLECTION).document(original["id"]).delete()
+                        catalog.pop(original["id"], None)
                     raise ValueError("SCHEDULE_CHANGED_DURING_INFERENCE")
                 doc = document(verified, forecast, int(time.time()), original)
-                db.collection(COLLECTION).document(doc["id"]).set(doc)
+                doc.pop("expires_at", None)
+                catalog[doc["id"]] = doc
                 report["successful"] += 1
                 print(json.dumps({"event": "pregame_published", "provider": source, "id": doc["id"], "hours": len(quotes), "models":doc["models"], "quantiles": list(doc["predictions"][0]["quantiles"]), "retrospective": bool(original)}), flush=True)
             except (ValueError, RuntimeError, TimeoutError) as error:
@@ -260,18 +227,16 @@ def run(source, maximum, refresh_published=False, shard=0, shards=1, refresh_dat
         raise
     finally:
         report["updated_at"] = iso(int(time.time()))
-        # Preserve local diagnostics even if publishing status to Firestore fails.
         (output / REPORT_FILENAME).write_text(json.dumps(report))
         status_failed = False
-        if db is not None:
+        if catalog is not None and report["run_status"] != "failed":
             try:
-                db.collection("game_forecast_status").document(source if shards==1 else f"{source}-{shard}").set(report)
+                write_public(feed, {"items": list(catalog.values()), "status": {k: report[k] for k in
+                    ("provider", "game_date", "eligible", "successful", "skipped", "failed", "partial", "run_status", "shard", "shards", "updated_at")}},
+                    os.environ.get("QUANTURA_PUBLIC_DIR", "/tmp/quantura-public-pregame"))
             except Exception:
-                status_failed = report["run_status"] != "failed"
-                report["status_error_code"] = "PREGAME_STATUS_PUBLICATION_FAILED"
-                if status_failed:
-                    report.update(run_status="failed", partial=True, failure_stage="status",
-                                  error_code="PREGAME_STATUS_PUBLICATION_FAILED")
+                status_failed = True
+                report.update(run_status="failed", partial=True, failure_stage="status", error_code="PREGAME_STATUS_PUBLICATION_FAILED")
                 (output / REPORT_FILENAME).write_text(json.dumps(report))
         print(json.dumps({"event": "pregame_summary", **report}), flush=True)
         if summary := os.environ.get("GITHUB_STEP_SUMMARY"):

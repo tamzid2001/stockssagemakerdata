@@ -1,6 +1,11 @@
 name: Initialize retained public screener artifacts
 on:
   workflow_dispatch:
+    inputs:
+      archive_date:
+        type: string
+        default: ''
+        description: 'Optional audited stock archive date (YYYY-MM-DD)'
 permissions:
   contents: read
   actions: read
@@ -14,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
+      ARCHIVE_DATE: ${{ inputs.archive_date || '' }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       FEED: ${{ matrix.feed }}
@@ -26,13 +32,20 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install requests
       - name: Read audited public migration seed
+        if: env.ARCHIVE_DATE == '' || matrix.feed == 'stocks'
         run: |
           mkdir -p "$RUNNER_TEMP/seed" "$RUNNER_TEMP/snapshot"
-          gh release download screener-artifact-bootstrap --pattern "$FEED.json.gz" --dir "$RUNNER_TEMP/seed"
-          python -m market_research.public_snapshots --feed "$FEED" --seed "$RUNNER_TEMP/seed/$FEED.json.gz" --output "$RUNNER_TEMP/snapshot"
+          ASSET="$FEED"
+          if [ -n "$ARCHIVE_DATE" ]; then
+            [[ "$ARCHIVE_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || exit 1
+            ASSET="stocks-$ARCHIVE_DATE"
+          fi
+          gh release download screener-artifact-bootstrap --pattern "$ASSET.json.gz" --dir "$RUNNER_TEMP/seed"
+          python -m market_research.public_snapshots --feed "$FEED" --seed "$RUNNER_TEMP/seed/$ASSET.json.gz" --output "$RUNNER_TEMP/snapshot"
       - uses: actions/upload-artifact@v7
+        if: env.ARCHIVE_DATE == '' || matrix.feed == 'stocks'
         with:
-          name: quantura-public-${{ matrix.feed }}
+          name: quantura-public-${{ matrix.feed }}${{ inputs.archive_date && format('-{0}', inputs.archive_date) || '' }}
           path: ${{ runner.temp }}/snapshot/snapshot.json.gz
           if-no-files-found: error
           retention-days: 30

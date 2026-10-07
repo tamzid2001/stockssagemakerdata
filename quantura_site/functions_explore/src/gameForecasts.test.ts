@@ -32,10 +32,10 @@ test("public contract metadata pairs actual binary sides without leaking worker 
 test("paged game catalog reaches outcomes beyond 1,000 and rejects malformed cursors",async t=>{
  let clock=now;t.mock.method(Date,"now",()=>clock);
  const routes=new Map<string,Function>(),rows=Array.from({length:1002},(_,n)=>({id:n.toString(16).padStart(32,"0"),data:()=>({...fixture(),id:n.toString(16).padStart(32,"0"),side:"yes"})}));
- let after="",limit=0,queries=0;
- const query:any={where:()=>query,orderBy:()=>query,startAfter:(cursor:string)=>{after=cursor;return query;},limit:(n:number)=>{limit=n;return query;},get:async()=>{queries++;const docs=rows.filter(row=>!after||row.id>after).slice(0,limit);return {docs,size:docs.length};}};
- const db:any={collection:(name:string)=>name==="game_forecast_catalog"?query:{get:async()=>({docs:[]})}};
- registerGameForecastRoutes({get:(path:string,handler:Function)=>routes.set(path,handler),post:()=>{}}as any,db);
+ let queries=0;
+ const db:any={collection:()=>{throw Error("public_read_must_not_touch_firestore");}};
+ const source={catalog:async()=>{queries++;return {items:rows.map(r=>r.data()),statuses:[],source:"github_actions_artifacts"};},byId:async(id:string)=>rows.find(r=>r.id===id)?.data()};
+ registerGameForecastRoutes({get:(path:string,handler:Function)=>routes.set(path,handler),post:()=>{}}as any,db,undefined,source);
  const fetchPage=async(cursor="")=>{let value:any;const res:any={setHeader:()=>{},status:(code:number)=>{res.statusCode=code;return res;},json:(payload:any)=>{value=payload;}};await routes.get("/screener/games")!({query:{cursor}},res);return {value,status:res.statusCode||200};};
  const [first,concurrent]=await Promise.all([fetchPage(),fetchPage()]);assert.equal(first.value.items.length,500);assert.equal(concurrent.value.items.length,500);
  const second=await fetchPage(first.value.next_cursor);assert.equal(second.value.items.length,500);

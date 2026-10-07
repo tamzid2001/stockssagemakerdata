@@ -1,10 +1,11 @@
 name: Daily Kalshi perpetual screener — five-model ensemble
 on:
   schedule:
-    - cron: '13 0 * * *'
+    - cron: '13 * * * *'
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: daily-perpetual-screener
   cancel-in-progress: false
@@ -18,7 +19,7 @@ jobs:
         shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      GITHUB_TOKEN: ${{ github.token }}
       TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
       TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
       SHARD: ${{ matrix.shard }}
@@ -29,8 +30,25 @@ jobs:
         with:
           python-version: '3.12'
       - name: Keep model downloads outside deployment bundles
-        run: echo "HF_HOME=$RUNNER_TEMP/quantura-perps-hf" >> "$GITHUB_ENV"
+        run: |
+          echo "HF_HOME=$RUNNER_TEMP/quantura-perps-hf" >> "$GITHUB_ENV"
+          echo "QUANTURA_PUBLIC_DIR=$RUNNER_TEMP/public-perps" >> "$GITHUB_ENV"
+      - name: Install lightweight discovery dependencies
+        run: python -m pip install --no-cache-dir requests
+      - name: Discover new listings and completed daily data
+        id: discovery
+        run: python -m ensemble_forecasting.kalshi_perp_screener --shard "$SHARD" --shards 4 --discovery-only
       - name: Install pinned forecast runtime
+        if: steps.discovery.outputs.needs_models == 'true'
         run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
       - name: Publish real seven-day forecasts
+        if: steps.discovery.outputs.needs_models == 'true'
         run: python -m ensemble_forecasting.kalshi_perp_screener --shard "$SHARD" --shards 4
+      - name: Publish public catalog and available genuine forecasts
+        if: always() && steps.discovery.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: quantura-public-perps-${{ matrix.shard }}
+          path: ${{ runner.temp }}/public-perps/snapshot.json.gz
+          if-no-files-found: error
+          retention-days: 7

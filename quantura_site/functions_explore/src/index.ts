@@ -156,7 +156,7 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
-const screenerMarketService = new ScreenerMarketService(new AlpacaClient(), new ScreenerSignalStore(db), process.env.SCREENER_ALPACA_FEED || "iex");
+const screenerMarketService = new ScreenerMarketService(new AlpacaClient(), new ScreenerSignalStore(), process.env.SCREENER_ALPACA_FEED || "iex");
 const legacyAuth = admin.auth();
 const auth = createQuanturaAuth(legacyAuth);
 configureBigQueryPublic(db);
@@ -14515,7 +14515,7 @@ ROUTES.all("/internal/cron/:jobName", async (req, res) => {
     }
     if (jobName === "screener-close") {
       const dataset = await loadPublishedScreenerDataset(GITHUB_REPO_OWNER, GITHUB_REPO_NAME);
-      const result = await screenerMarketService.close(dataset);
+      const result = {source:"github_actions_artifacts",public_writes:0};
       const current = await screenerMarketService.current(dataset);
       const digests = await runScreenerDigests({db,auth,publicOrigin:PUBLIC_ORIGIN},dataset,current.items);
       res.status(200).json({ok:true,job:jobName,result,digests});

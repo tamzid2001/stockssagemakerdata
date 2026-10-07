@@ -4,46 +4,12 @@ from market_research.provider import QuanturaProvider, KalshiProvider
 import pytest
 
 
-def test_cleanup_splits_oversized_index_deletes_and_preserves_other_provider():
-    from types import SimpleNamespace
-    from market_research.pregame_screener import delete_expired_catalog, COLLECTION
-    committed, sizes = [], []
-    docs = [SimpleNamespace(reference=f"doc-{n}", to_dict=lambda n=n: {"provider": "polymarket_us" if n == 25 else "kalshi"}) for n in range(26)]
-    class Query:
-        def where(self, field, op, cutoff):
-            assert (field, op, cutoff) == ("game_date", "<", "2026-10-03")
-            return self
-        def limit(self, count):
-            assert count == 500
-            return self
-        def stream(self):
-            return iter(docs)
-    class Batch:
-        def __init__(self):
-            self.refs = []
-        def delete(self, reference):
-            self.refs.append(reference)
-        def commit(self):
-            sizes.append(len(self.refs))
-            if len(self.refs) > 3:
-                raise ValueError("400 Transaction too big. Decrease transaction size.")
-            committed.extend(self.refs)
-    db = SimpleNamespace(collection=lambda name: Query() if name == COLLECTION else None, batch=Batch)
-    assert delete_expired_catalog(db, "2026-10-03", "kalshi") == 25
-    assert len(committed) == len(set(committed)) == 25
-    assert "doc-25" not in committed
-    assert max(sizes) <= 20
-
-
-def test_cleanup_does_not_hide_permission_or_network_errors():
-    from types import SimpleNamespace
-    from market_research.pregame_screener import delete_expired_catalog
-    doc = SimpleNamespace(reference="doc", to_dict=lambda: {"provider": "kalshi"})
-    query = SimpleNamespace(where=lambda *args: query, limit=lambda *args: query, stream=lambda: iter([doc]))
-    batch = SimpleNamespace(delete=lambda *args: None, commit=lambda: (_ for _ in ()).throw(ValueError("permission denied")))
-    db = SimpleNamespace(collection=lambda *args: query, batch=lambda: batch)
-    with pytest.raises(ValueError, match="permission denied"):
-        delete_expired_catalog(db, "2026-10-03", "kalshi")
+def test_public_artifact_pruning_retains_recent_provider_rows_only():
+    from market_research.pregame_screener import prune_catalog
+    rows=[{"id":"old","provider":"kalshi","game_date":"2026-10-02"},
+          {"id":"today","provider":"kalshi","game_date":"2026-10-07"},
+          {"id":"other","provider":"polymarket_us","game_date":"2026-10-07"}]
+    assert list(prune_catalog(rows,"2026-10-04","kalshi")) == ["today"]
 
 
 def contract(start="2026-09-26T23:30:00Z"):
@@ -195,29 +161,14 @@ def test_kalshi_schedule_accepts_nested_markets_when_top_level_is_empty():
 
 def screener_dependencies(monkeypatch, tmp_path, discover, status_error=False):
     from types import SimpleNamespace
-    from market_research import pregame_screener, store
-
-    class Database:
-        status = None
-        def collection(self, name):
-            return self
-        def where(self, *args):
-            return self
-        def limit(self, *args):
-            return self
-        def stream(self):
-            return []
-        def batch(self):
-            return self
-        def document(self, name):
-            return self
-        def set(self, value):
-            if status_error:
-                raise RuntimeError("database is unavailable")
-            self.status = value.copy()
-
-    db = Database()
-    monkeypatch.setattr(store, 'Store', lambda *args: SimpleNamespace(db=db))
+    from market_research import pregame_screener
+    db = SimpleNamespace(status=None)
+    monkeypatch.setattr(pregame_screener, 'previous', lambda *_: {"items": []})
+    def publish(feed, data, output):
+        if status_error:
+            raise RuntimeError("artifact is unavailable")
+        db.status=data['status']
+    monkeypatch.setattr(pregame_screener, 'write_public', publish)
     monkeypatch.setattr(pregame_screener, 'KalshiProvider', lambda: SimpleNamespace(discover=discover))
     monkeypatch.setenv('QUANTURA_RESEARCH_DIR', str(tmp_path / 'not-created-yet'))
     monkeypatch.setenv('QUANTURA_RESEARCH_ARTIFACT_KEY', '12' * 32)
@@ -241,10 +192,7 @@ def test_discovery_rate_limit_preserves_encrypted_failure_without_masking_root_c
     assert report['failure_stage'] == 'discovery'
     assert report['error_code'] == 'DATA_HTTP_429_RATE_LIMITED'
     assert report['successful'] == report['discovery_pages'] == 0
-    if status_error:
-        assert report['status_error_code'] == 'PREGAME_STATUS_PUBLICATION_FAILED'
-    else:
-        assert db.status == report
+    assert db.status is None, "failed discovery never replaces the last verified public artifact"
     package(source, tmp_path / 'failed.enc')
     decrypt(tmp_path / 'failed.enc', tmp_path / 'verified.zip')
     with zipfile.ZipFile(tmp_path / 'verified.zip') as archive:
@@ -254,11 +202,10 @@ def test_discovery_rate_limit_preserves_encrypted_failure_without_masking_root_c
 
 def test_bootstrap_failure_preserves_report_without_exception_credentials(tmp_path, monkeypatch):
     import json
-    from market_research import store
     worker, _ = screener_dependencies(monkeypatch, tmp_path, lambda *args: ([], {}))
     def fail(*args):
         raise RuntimeError('credential-value-must-never-be-archived')
-    monkeypatch.setattr(store, 'Store', fail)
+    monkeypatch.setattr(worker, 'previous', fail)
     with pytest.raises(RuntimeError):
         worker.run('kalshi', 500)
     text = (tmp_path / 'not-created-yet' / worker.REPORT_FILENAME).read_text()
@@ -282,7 +229,7 @@ def test_discovery_is_paced_one_page_at_a_time_and_empty_day_completes(tmp_path,
     report = json.loads((tmp_path / 'not-created-yet' / worker.REPORT_FILENAME).read_text())
     assert report['discovery_pages'] == 2 and report['eligible'] == 0
     assert report['run_status'] == 'completed' and not report['partial']
-    assert db.status == report
+    assert all(report[k] == v for k,v in db.status.items())
 
 
 def test_status_publication_failure_keeps_local_report_and_fails_job(tmp_path, monkeypatch):

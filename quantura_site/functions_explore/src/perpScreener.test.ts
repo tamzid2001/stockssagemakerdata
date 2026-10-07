@@ -16,7 +16,7 @@ function fixture():any {
 test("current real snapshots enable six quantile filters and preserve history in Forecast",async()=>{
   const row=fixture(),db:any={collection:()=>({limit:()=>({get:async()=>({docs:[{data:()=>row}]})})})};
   const service:any={screener:async()=>({items:[{ticker:row.ticker,actual_price:105,p50:null}],manifest:{}})};
-  const data=await perpScreenerDataset(db,service),merged=data.items[0];
+  const data=await perpScreenerDataset(db,service,async()=>[row]),merged=data.items[0];
   assert.equal(merged.p50,100);assert.match(String(merged.forecast_view_url),/screenerScan=perps-test/);
   assert.equal(rowMatchesQuery(merged,parseQuantScreenerQuery({quantileRules:JSON.stringify([{quantile:"p50",statistic:"max",operator:"lt",percent:0}])}).query),true);
   const snapshot=perpForecastSnapshot(data,row.ticker,row.scan_id);
