@@ -1,0 +1,38 @@
+name: Initialize retained public screener artifacts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  initialize:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        feed: [stocks, games-kalshi-0, games-kalshi-1, games-polymarket_us-0, games-polymarket_us-1, perps-0, perps-1, perps-2, perps-3]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      FEED: ${{ matrix.feed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests
+      - name: Read audited public migration seed
+        run: |
+          mkdir -p "$RUNNER_TEMP/seed" "$RUNNER_TEMP/snapshot"
+          gh release download screener-artifact-bootstrap --pattern "$FEED.json.gz" --dir "$RUNNER_TEMP/seed"
+          python -m market_research.public_snapshots --feed "$FEED" --seed "$RUNNER_TEMP/seed/$FEED.json.gz" --output "$RUNNER_TEMP/snapshot"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: quantura-public-${{ matrix.feed }}
+          path: ${{ runner.temp }}/snapshot/snapshot.json.gz
+          if-no-files-found: error
+          retention-days: 30
