@@ -12,7 +12,7 @@
     await window.QuanturaAuth?.ready;
     if(signal?.aborted)throw new DOMException('Request cancelled','AbortError');
     const user=window.firebase?.auth?.().currentUser;
-    if(!user||user.isAnonymous)throw new Error('Sign in to ask Jev and save your research.');
+    if(!user||user.isAnonymous)throw new Error('Sign in to ask Scout and save your research.');
     const token=await (window.QuanturaAuth?.getToken(user)??user.getIdToken());
     const response=await fetch(path,{method,credentials:'same-origin',headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(45000)]):AbortSignal.timeout(45000)});
     const value=await response.json().catch(()=>({}));
@@ -85,14 +85,14 @@
     dispose(host);host.hidden=false;
     const id=job.forecast_id || JSON.stringify(reference),state={id,signature,reference,request,chart,onAnnotations,job,controller:new AbortController(),disposed:false,conversationId:uuid(),messages:[],notes:[],points:points(job),highLow:false,pending:null};
     states.set(id,state);host.__jevState=state;host.className='forecast-jev';
-    const heading=el('div','','jev-heading'),title=el('h3',job.predictions?.length?'Ask Jev about this forecast':'Ask Jev about your data');title.prepend(icon());heading.append(title,el('p',job.source?.name||job.title||job.source?.symbol||'Your time series','small muted'));
+    const heading=el('div','','jev-heading'),title=el('h3',job.predictions?.length?'Ask Scout about this forecast':'Ask Scout about your data');title.prepend(icon());heading.append(title,el('p',job.source?.name||job.title||job.source?.symbol||'Your time series','small muted'));
     const cards=el('div','','jev-suggestions');for(const suggestion of suggestions(job)){const button=el('button','','jev-suggestion');button.type='button';button.append(icon(),el('span',suggestion.category,'jev-suggestion-category'),el('span',suggestion.question));button.addEventListener('click',()=>{input.value=suggestion.question;form.requestSubmit();});cards.append(button);}
     const topics=el('details','','jev-topics');topics.append(el('summary','Explore more questions'));const topicList=el('div','','jev-topic-list');
     const qs=Object.keys(job.predictions?.[0]?.quantiles || {}).sort((a,b)=>Number(a)-Number(b));
     const prompts=[...qs.map(q=>[`P${Number(q)*100}`,`What is the maximum P${Number(q)*100} across this forecast?`]),['Scenario range','How does the forecast range change over the horizon?'],['Historical variability','What is the historical variability of the observed values?'],['Data quality','What are the input cutoff, observation count and frequency?'],['Validation','Is there a saved historical validation report?'],['Strategy research','What evidence would I need to backtest an entry below P01?']];
     for(const [name,prompt]of prompts){const button=el('button',name,'task-chip');button.type='button';button.addEventListener('click',()=>{input.value=prompt;input.focus();});topicList.append(button);}topics.append(topicList);
-    const log=el('div','','jev-conversation');log.setAttribute('role','log');log.setAttribute('aria-live','polite');log.setAttribute('aria-relevant','additions');log.setAttribute('aria-label','Jev forecast conversation');
-    const form=el('form','','jev-question-form'),label=el('label','Your question'),input=el('textarea'),submit=el('button','Ask Jev','cta'),error=el('p','','jev-error small'),status=el('p','','small muted');
+    const log=el('div','','jev-conversation');log.setAttribute('role','log');log.setAttribute('aria-live','polite');log.setAttribute('aria-relevant','additions');log.setAttribute('aria-label','Scout forecast conversation');
+    const form=el('form','','jev-question-form'),label=el('label','Your question'),input=el('textarea'),submit=el('button','Ask Scout','cta'),error=el('p','','jev-error small'),status=el('p','','small muted');
     input.id=`jev-question-${uuid()}`;input.name='question';input.required=true;input.maxLength=1500;input.rows=2;input.placeholder='Ask about a quantile, past prices, sources or models…';label.htmlFor=input.id;
     error.id=`jev-error-${uuid()}`;error.setAttribute('role','alert');status.setAttribute('role','status');input.setAttribute('aria-describedby',error.id);submit.type='submit';form.append(label,input,submit,error,status);
     const reset=el('button','New conversation','task-chip');reset.type='button';reset.addEventListener('click',()=>{if(state.pending?.busy)return;state.conversationId=uuid();state.messages=[];state.pending=null;log.replaceChildren();status.textContent='New conversation. Earlier saved conversations remain in Requests.';});
@@ -115,7 +115,7 @@
   async function restore(conversationId,request=transport) {
     const result=await request(`/api/v1/jev/conversations/${encodeURIComponent(conversationId)}`,{method:'GET'}),saved=result.data;
     const dialog=el('dialog','','jev-saved-dialog'),close=el('button','Close','cta secondary small');close.type='button';close.addEventListener('click',()=>dialog.close());
-    dialog.append(close,el('h2',`${saved.title} · Jev`));for(const message of saved.messages || [])dialog.append(messageNode(message));
+    dialog.append(close,el('h2',`${String(saved.title || "Saved conversation").replace(/\bJev\b/gi,"Scout")} · Scout`));for(const message of saved.messages || [])dialog.append(messageNode(message));
     const ref=saved.context_reference;let url;
     if(ref.kind==='ensemble')url=`/forecasting?panel=forecast&ensembleForecastId=${encodeURIComponent(ref.id)}`;
     if(ref.kind==='game'||ref.kind==='saved_game')url=`/forecasting?panel=forecast&${ref.kind==='game'?'gameForecastId':'userGameForecastId'}=${encodeURIComponent(ref.id)}`;

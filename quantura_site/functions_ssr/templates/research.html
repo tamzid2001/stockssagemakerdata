@@ -50,9 +50,9 @@
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
-    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
+    <script defer src="/quantura-auth.js?v=20261006-welcome50"></script>
     <script defer src="/research-notes.js?v=20261003-concise"></script>
-    <script defer src="/app.js?v=20261003-header-trial"></script>
+    <script defer src="/app.js?v=20261006-scout"></script>
   <script defer src="/q-market.js?v=20261003-header"></script>
 <script defer src="/market-search.js?v=20261003-header"></script>
 <script defer src="/economic-data.js?v=20261003"></script>
@@ -80,7 +80,7 @@
           <div class="section-title research-intro">
             <div class="eyebrow">Data, forecasts &amp; evidence</div>
             <h1>Turn real observations into better questions.</h1>
-            <p class="small">Explore market and public databases, compare forecast ranges, and ask Jev about the saved evidence.</p>
+            <p class="small">Explore market and public databases, compare forecast ranges, and ask Scout about the saved evidence.</p>
           </div>
 
           <div
@@ -95,7 +95,7 @@
             data-rn-placeholder="true"
           ></div>
 
-          <section class="card research-jev-intro" aria-labelledby="research-jev-heading"><h2 id="research-jev-heading">Ask a better forecast question.</h2><p>Jev sits below each completed forecast. Explore the median, historical highs and lows, or source and model evidence. Add chart notes and reopen saved conversations in Requests.</p><div class="hero-actions"><a class="cta" href="/forecasting">Open Forecast</a><a class="cta secondary" href="/forecasting?search=gemini%20BTC">Search Gemini</a><a class="cta secondary" href="/forecasting?search=dukascopy%20XAUUSD">Search Dukascopy</a></div></section>
+          <section class="card research-jev-intro" aria-labelledby="research-jev-heading"><h2 id="research-jev-heading">Ask a better forecast question.</h2><p>Scout sits below each completed forecast. Explore the median, historical highs and lows, or source and model evidence. Add chart notes and reopen saved conversations in Requests.</p><div class="hero-actions"><a class="cta" href="/forecasting">Open Forecast</a><a class="cta secondary" href="/forecasting?search=gemini%20BTC">Search Gemini</a><a class="cta secondary" href="/forecasting?search=dukascopy%20XAUUSD">Search Dukascopy</a></div></section>
           <section class="card economic-explorer" id="economic-explorer" aria-labelledby="economic-heading"><h2 id="economic-heading">Economic &amp; public databases</h2><p class="small">Explore BigQuery public datasets, World Bank indicators and U.S. Treasury series. Download observations or forecast a selected series.</p><form action="/api/economic-data/search" method="get"><div class="form-grid"><div class="field"><label for="economic-provider">Database</label><select id="economic-provider" name="provider"><option value="fiscaldata">Treasury Fiscal Data</option><option value="worldbank_data360">World Bank Data360</option><option value="bigquery">BigQuery public datasets</option></select></div><div class="field"><label for="economic-query">Indicator</label><input id="economic-query" name="q" type="search" maxlength="100" placeholder="Debt, GDP, weather, dataset.table…" /></div></div><button class="cta secondary" type="submit">Find indicators</button></form><div class="hero-actions" data-economic-results></div><div data-economic-fields></div><p data-economic-status role="status" aria-live="polite">Search an economic indicator to select its series.</p><div class="hero-actions"><button type="button" class="cta secondary small" data-economic-preview>Preview history</button><button type="button" class="cta secondary small" data-economic-download disabled>Download CSV</button><a class="task-chip" data-economic-link href="https://data360.worldbank.org/en/api" target="_blank" rel="noopener" hidden>Source details</a></div><div class="table-wrap" data-economic-table></div><button type="button" class="cta" data-economic-forecast>Use in Forecast</button></section>
           <div class="research-pillars" aria-label="SageMaker Canvas forecasting workflow">
             <article class="card research-pillar">

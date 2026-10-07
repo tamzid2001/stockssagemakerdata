@@ -164,7 +164,7 @@
     download: "Download",
     csv: "Uploaded CSV",
     screener: "Screeners",
-    jev: "Jev",
+    jev: "Scout",
   };
   const getNativePlatform = () => {
     try {
@@ -15173,7 +15173,7 @@
         const id = escapeHtml(String(item?.id || ""));
         const type = normalizeMyRequestType(item?.type) || "forecast";
         const typeLabel = escapeHtml(String(MY_REQUEST_TYPE_LABELS[type] || item?.typeLabel || type));
-        const title = escapeHtml(String(item?.title || "Request").replace(/^Quantura Forecast\s*·\s*/i,"").replace(/Model Council/gi,"Jev"));
+        const title = escapeHtml(String(item?.title || "Request").replace(/^Quantura Forecast\s*·\s*/i,"").replace(/Model Council|\bJev\b/gi,"Scout"));
         const rawTicker = String(item?.input?.market_symbol || item?.ticker || item?.input?.ticker || "");
         const ticker = escapeHtml(rawTicker || "—");
         const provider = item?.input?.provider;
@@ -16245,7 +16245,7 @@
         const savedRequest = await upsertMyRequest({
 	        type: "modelCouncil",
           requestId: requestDocId,
-	        title: `${symbol} Jev response`,
+	        title: `${symbol} Scout response`,
 	        input: {
 	          ticker: symbol,
 	          question: finalPrompt,
@@ -23524,11 +23524,11 @@
   const previewSavedJevResponse = (item) => {
     const dialog = document.createElement("dialog");
     dialog.className = "ensemble-help";
-    dialog.setAttribute("aria-label", "Saved Jev response");
+    dialog.setAttribute("aria-label", "Saved Scout response");
     const close = document.createElement("button");
     close.type = "button";close.className = "cta secondary small";close.textContent = "Close";
     close.addEventListener("click", () => dialog.close());
-    const title = document.createElement("h2");title.textContent = String(item.title || "Jev response").replace(/Model Council/gi,"Jev");
+    const title = document.createElement("h2");title.textContent = String(item.title || "Scout response").replace(/Model Council|\bJev\b/gi,"Scout");
     const question = document.createElement("p");question.textContent = item.input?.question || item.input?.prompt || "";
     const answer = document.createElement("div");answer.style.whiteSpace = "pre-wrap";
     const response = item.outputsMeta?.response || item.outputsMeta?.answer || item.outputsMeta?.bodyMarkdown || item.outputsMeta?.summary;
@@ -23698,7 +23698,7 @@
         state.tickerContext.tickerQueryLastResponse = responsePayload;
         renderTickerQueryResult(responsePayload);
       }
-      if (notify) showToast("Jev request loaded.");
+      if (notify) showToast("Scout request loaded.");
       return item;
     }
 

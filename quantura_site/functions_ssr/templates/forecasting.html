@@ -55,9 +55,9 @@
     <link rel="stylesheet" href="/market-logos.css?v=20260926-logos" />
     <script defer src="/market-logos.js?v=20260926-logos"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
-    <script defer src="/quantura-auth.js?v=20261003-clerk"></script>
+    <script defer src="/quantura-auth.js?v=20261006-welcome50"></script>
     <link rel="stylesheet" href="/forecast-questions.css?v=20261006-jev3" />
-    <script defer src="/forecast-questions.js?v=20261006-jev3"></script>
+    <script defer src="/forecast-questions.js?v=20261006-scout"></script>
     <script defer src="/app.js?v=20261006-jev"></script>
     <script defer src="/q-market.js?v=20260928-intervals"></script>
     <script defer src="/q-download.js?v=20260928-intervals"></script>
@@ -176,7 +176,7 @@
                             </div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-date">Date / time column</label><select id="ensemble-csv-date"></select></div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-name">Dataset name</label><input id="ensemble-csv-name" maxlength="120" placeholder="Name your dataset" /></div>
-                            <details class="field" data-ensemble-source="series" id="ensemble-csv-preview" hidden open><summary>CSV preview</summary><p class="small muted" id="ensemble-csv-preview-note">Preview your file before forecasting. Save it to Requests to reopen later.</p><div class="table-wrap" id="ensemble-csv-preview-table"></div><button class="cta secondary small" type="button" id="ensemble-csv-save" disabled>Save to Requests</button></details><section id="ensemble-csv-questions" hidden aria-label="Jev CSV preview questions" data-ensemble-source="series"></section>
+                            <details class="field" data-ensemble-source="series" id="ensemble-csv-preview" hidden open><summary>CSV preview</summary><p class="small muted" id="ensemble-csv-preview-note">Preview your file before forecasting. Save it to Requests to reopen later.</p><div class="table-wrap" id="ensemble-csv-preview-table"></div><button class="cta secondary small" type="button" id="ensemble-csv-save" disabled>Save to Requests</button></details><section id="ensemble-csv-questions" hidden aria-label="Scout CSV preview questions" data-ensemble-source="series"></section>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-target">Numeric value column</label><select id="ensemble-csv-target"></select></div>
                             <div class="field" data-ensemble-source="series" hidden><label class="label" for="ensemble-csv-frequency">Observation interval</label><select id="ensemble-csv-frequency"><option value="1min">Minute</option><option value="5min">5 minutes</option><option value="15min">15 minutes</option><option value="30min">30 minutes</option><option value="1h">Hourly</option><option value="4h">4 hours</option><option value="1D" selected>Daily</option><option value="1W-MON">Weekly</option><option value="1MS">Monthly</option></select></div>
                             <div class="field">
@@ -367,7 +367,7 @@
                           <div id="ensemble-forecast-summary" class="small" aria-live="polite"></div>
                           <div id="ensemble-observation-status" class="small muted" role="status"></div>
                           <section id="ensemble-observed-metrics" class="forecast-quality" aria-labelledby="ensemble-quality-title"></section>
-                          <section id="ensemble-forecast-questions" hidden aria-label="Jev forecast questions"></section>
+                          <section id="ensemble-forecast-questions" hidden aria-label="Scout forecast questions"></section>
                           <div id="ensemble-result-table" class="table-wrap"></div>
                         </section>
                       </div>
@@ -575,7 +575,7 @@
           <div class="card" data-my-requests-panel id="profile-requests">
             <div class="card-head"><h3>Saved requests</h3><button class="cta secondary small" type="button" data-action="my-requests-refresh">Refresh</button></div>
             <label>Search requests<input type="search" data-my-requests-search placeholder="Name, market, date" /></label>
-            <label>Request type<select data-my-requests-type><option value="">All requests</option><option value="forecast">Forecasts</option><option value="download">Downloads</option><option value="csv">Uploaded CSVs</option><option value="jev">Jev</option></select></label>
+            <label>Request type<select data-my-requests-type><option value="">All requests</option><option value="forecast">Forecasts</option><option value="download">Downloads</option><option value="csv">Uploaded CSVs</option><option value="jev">Scout</option></select></label>
             <p class="small muted" data-my-requests-status>Sign in to load your requests.</p>
             <div class="order-list panel-output" data-my-requests-list></div>
             <div data-my-requests-pagination></div>

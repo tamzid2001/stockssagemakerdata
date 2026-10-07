@@ -32,9 +32,9 @@ See the [release notes](docs/releases/v2.1.0.md) for the complete release scope 
 
 The homepage and Research page expose BigQuery public datasets, World Bank Data360, Treasury Fiscal Data, Gemini, Dukascopy and market screening through the same search → preview → forecast flow.
 
-**Ask Jev** appears beneath completed ensembles, saved game forecasts and CSV previews. Three question cards cover Forecast, History and Evidence, with quantile-specific follow-ups. Answers distinguish observed values from forecast values and include the source, cutoff and model participants. Conversations save in Requests; high/low markers and private point notes are available on forecast charts.
+**Ask Scout** appears beneath completed ensembles, saved game forecasts and CSV previews. Three question cards cover Forecast, History and Evidence, with quantile-specific follow-ups. Answers distinguish observed values from forecast values and include the source, cutoff and model participants. Conversations save in Requests; high/low markers and private point notes are available on forecast charts.
 
-Jev makes typed routing decisions; Quantura calculates the answer's figures from authorized saved data. It does not invent strategy returns, live news or historical accuracy. [The Q&A guide](docs/jev-forecast-questions.mdx) documents the HTTP API, privacy, retries and bounded usage. The current documentation MCP allowlist remains read-only discovery; it does not automatically expose these new chat mutations.
+Scout makes typed routing decisions; Quantura calculates the answer's figures from authorized saved data. It does not invent strategy returns, live news or historical accuracy. [The Q&A guide](docs/jev-forecast-questions.mdx) documents the HTTP API, privacy, retries and bounded usage. The current documentation MCP allowlist remains read-only discovery; it does not automatically expose these new chat mutations.
 
 ## Research workflow
 
@@ -129,8 +129,8 @@ flowchart LR
     API --> Data[Provider history and verified identities]
     Data --> BigQuery[Public BigQuery tables with dry-run byte caps]
     API --> QA[Authorized saved forecast context]
-    QA --> Jev[Jev typed question routing]
-    Jev --> Facts[Computed observed and forecast facts]
+    QA --> Scout[Scout typed question routing]
+    Scout --> Facts[Computed observed and forecast facts]
     Facts --> Requests[Private conversations and chart notes]
     Requests --> State
     API --> Workers[GitHub Actions forecast/research workers]
@@ -233,7 +233,7 @@ Provider data and model checkpoints can have separate licensing and redistributi
 
 ### October 3 account and navigation updates
 
-Search is compact in the shared header; Screener is available in Terminal. Profile uses Clerk account and billing components alongside saved forecast, download, CSV and Jev requests. API documentation, OpenAPI downloads and personal API keys require a paid Pro entitlement, a server-owned enterprise grant, or verified administrator access, with private no-store responses. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
+Search is compact in the shared header; Screener is available in Terminal. Profile uses Clerk account and billing components alongside saved forecast, download, CSV and Scout requests. API documentation, OpenAPI downloads and personal API keys require a paid Pro entitlement, a server-owned enterprise grant, or verified administrator access, with private no-store responses. WELCOME50 is a native Clerk promo code for new subscribers: 50% off one paid monthly or annual billing period, after the existing 14-day trial. Pricing checkout initializes the pinned Clerk checkout flow, applies and verifies the provider discount, then opens Clerk’s payment drawer. No payment or subscription is confirmed automatically. The redemption window ends October 6, 2027 at 10:42 PM Eastern. Renewals use the regular plan price. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
 
 ### October 3 website and data release
 
@@ -247,7 +247,7 @@ Search is compact in the shared header; Screener is available in Terminal. Profi
 ### October 4 account and data updates
 
 - Clerk Account API keys are available to paid Pro/enterprise users and the verified administrator; native Clerk personal keys are verified by the API and mapped to migrated UIDs. Free trials retain website access without API keys.
-- [BigQuery public-data guide](docs/bigquery-public-data.mdx): discover tables in Jev/Search, choose date/numeric columns and exact filters, preview or download history, and forecast the same normalized snapshot. Dry runs, a 100 MiB query cap, daily budgets and request coalescing bound costs.
+- [BigQuery public-data guide](docs/bigquery-public-data.mdx): discover tables in Scout/Search, choose date/numeric columns and exact filters, preview or download history, and forecast the same normalized snapshot. Dry runs, a 100 MiB query cap, daily budgets and request coalescing bound costs.
 - Successful API reads use structured platform logs instead of Firestore audit documents. Mutations/errors remain durable; key usage timestamps and unchanged subscription writes are coalesced. This reduces write counts; it is not a measured invoice reduction.
 - Quantura's [documentation MCP](https://quantura.mintlifysite.com/mcp) is installed in local Codex. Live API tools are not exposed by that documentation server.
 - Bluesky appears at the end of footer social links. [Media publishing CLI](scripts/publish_bluesky_media.py) previews by default and requires `--publish`; credentials come from environment/Secret Manager, and a public ledger prevents duplicate publication.

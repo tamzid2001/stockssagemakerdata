@@ -57,7 +57,7 @@ Secrets belong in encrypted runtime/CI stores, never browser assets, git, logs o
 
 ## BigQuery and write reductions
 
-BigQuery public tables are searchable in Jev/Search and Research. The authenticated history service validates schema columns and exact parameterized filters, dry-runs scans, enforces a 100 MiB query cap and daily budgets, and provides normalized snapshots for preview/download/forecasts. Metadata and repeated queries use bounded caches without Firestore writes. Current revised histories are not publication-time vintages.
+BigQuery public tables are searchable in Scout/Search and Research. The authenticated history service validates schema columns and exact parameterized filters, dry-runs scans, enforces a 100 MiB query cap and daily budgets, and provides normalized snapshots for preview/download/forecasts. Metadata and repeated queries use bounded caches without Firestore writes. Current revised histories are not publication-time vintages.
 
 Successful API polling reads now use structured platform logs; mutations and failures retain durable audit documents. Key last-used updates coalesce across concurrent requests and persist at five-minute intervals. Identical Stripe subscription events avoid unchanged ledger/profile writes. Billing savings have not yet been measured on an invoice.
 

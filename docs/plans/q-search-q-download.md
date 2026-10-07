@@ -6,7 +6,7 @@ Recovery: tag `backup/pre-q-search-download-20260921` preserves pre-change code.
 Use a reviewed forward revert; never reset main or restore older databases.
 Existing CSV endpoints and stored datasets remain compatible.
 
-Scope: one Auto selector, bounded Jev ranking, paginated provider event branches,
+Scope: one Auto selector, bounded Scout ranking, paginated provider event branches,
 one snapshot-based download tab. Discovery is not exhaustive. The daily
 screener uses latest close > first P99; target is final P99.
 Audited baseline: main at `9ec9fd8`, 21 September 2026.
@@ -47,7 +47,7 @@ The resolved venue and actual data supplier remain visible as metadata.
   preview/export, live/historical routing and options controls.
 - `public/app.js`: existing forecast job submission, quote overlays and equity
   history/options handlers. Extract shared state gradually; do not rewrite it.
-- `functions_explore/src/supportChat.ts`: existing Jev typed-choice client pattern.
+- `functions_explore/src/supportChat.ts`: existing Scout typed-choice client pattern.
   Extract a reusable server-only client; preserve Q Support's fixed answers.
 - `pages/forecasting.html`, `pages/historical-data.html` and SSR templates:
   currently expose overlapping market searches and download panels.
@@ -89,24 +89,24 @@ The resolved venue and actual data supplier remain visible as metadata.
   adjustment basis. No fabricated bars, no cross-venue stitching and no hidden
   resampling from daily to minute data.
 
-### Jev's precise role
+### Scout's precise role
 
 Use TypeSafe's structured decision API, not generated prose. It exposes typed
 Choice, Noul and Score questions; it is not a market database or forecasting model.
 
 1. Exact symbols, IDs and allowlisted links take the deterministic fast path.
 2. Provider/catalog search retrieves a bounded, verified candidate set.
-3. For ambiguous natural-language queries, Jev may classify the intent and rank
+3. For ambiguous natural-language queries, Scout may classify the intent and rank
    **only those candidate IDs**, with an explicit “none/uncertain” option.
 4. Validate model, allowed choices and probability ranges before using rankings.
    Low confidence leaves multiple choices visible; it never silently selects a side.
-5. Timeout/unavailable Jev falls back to deterministic search—not GPT and not an
-   empty market list. Jev cannot create symbols, histories, prices or capabilities.
+5. Timeout/unavailable Scout falls back to deterministic search—not GPT and not an
+   empty market list. Scout cannot create symbols, histories, prices or capabilities.
 
 Reuse the server-only `TYPESAFE_API_KEY`; no browser credentials. Send only the
 query and public candidate metadata, not uploads/account records. Cache normalized
 queries/candidate revisions, cap candidate count and request volume, debounce
-typing and avoid an AI call for each keystroke. Preserve the pinned Jev model until
+typing and avoid an AI call for each keystroke. Preserve the pinned Scout model until
 a separately tested upgrade is justified. Do not imply ranking confidence is a
 market probability or a trading win rate.
 
@@ -159,10 +159,10 @@ manifest. Never combine two teams or opposing YES/NO prices into an unlabeled se
 
 ## Compatibility and delivery sequence
 
-1. Shared selection and capability tests; extract the Jev client without changing
+1. Shared selection and capability tests; extract the Scout client without changing
    Q Support. Record baseline search/download/forecast tests and responsive layout.
 2. Implement automatic Q Search over the existing providers, strict IDs and URL
-   resolution. Add optional Jev reranking behind bounded server-side behavior.
+   resolution. Add optional Scout reranking behind bounded server-side behavior.
 3. Connect the common selection to Q Forecast and verify one-model and multi-model
    requests. Models/weights remain in Advanced; no all-five-model requirement.
 4. Consolidate Q Download, preserving every supported export and provider-specific
@@ -182,7 +182,7 @@ trading workflows. The measurement retry remains an unrelated local process.
   settled event, supported URL, perpetual and option contract resolve correctly.
 - All six soccer outcome/side selections remain distinct throughout download and
   forecasting. Selection survives tab changes without stale-provider leakage.
-- Jev malformed answer, unknown ID, low confidence and timeout never fabricate a
+- Scout malformed answer, unknown ID, low confidence and timeout never fabricate a
   market or disable deterministic discovery. Secrets remain server-side.
 - Download preview and CSV/JSON agree on rows, IDs, interval, units and coverage.
 - Rapid search/selection changes, closing dropdowns and switching tabs cannot
