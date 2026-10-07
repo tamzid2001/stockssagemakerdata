@@ -139,7 +139,7 @@ export function answerForecastQuestion(context: ForecastContext, question: strin
   const named=[...question.matchAll(/\bP(\d{1,2}(?:\.\d+)?)\b/gi)].map(m=>String(Number(m[1])/100));
   if(topic==="values" && named.some(q=>p[0]?.quantiles[q]===undefined)){heading="Quantile unavailable";answer=`That quantile was not requested. This forecast contains ${Object.keys(p[0]?.quantiles || {}).map(q=>`P${Number(q)*100}`).join(", ") || "no forecast quantiles"}.`;facts.splice(0);}
   return {schema_version:"forecast_question_v1",model:JEV_MODEL,response_mode:"typed_routing_computed_facts",topic:topic && (topic!=="values" || quantile && statistic) ? topic : "clarify",category,heading,answer,facts,
-    context_hash:contextHash(context),title:context.title,warnings:context.warnings,suggestions:questionSuggestions(context),
+    context_hash:contextHash(context),title:context.title,frequency:context.frequency,warnings:context.warnings,suggestions:questionSuggestions(context),
     references:[{title:"Saved input history and forecast",input_cutoff:context.inputCutoff,generated_at:context.generatedAt,provider:context.source.provider || "user_csv",frequency:context.frequency}],
     available_topics:Object.keys(QUESTION_TOPICS).filter(t=>t!=="unsupported")};
 }

@@ -6,7 +6,7 @@
   const uuid=()=>crypto.randomUUID();
   const finite=v=>typeof v==='number'&&Number.isFinite(v);
   const format=v=>finite(v)?v.toLocaleString(undefined,{maximumFractionDigits:6}):String(v);
-  const time=v=>new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(v));
+  const time=(v,calendar=false)=>new Intl.DateTimeFormat(undefined,calendar?{dateStyle:'medium',timeZone:'UTC'}:{dateStyle:'medium',timeStyle:'short'}).format(new Date(v));
   const icon=()=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d','m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8L12 3Z M20 2v4 M18 4h4');svg.append(path);return svg;};
   async function transport(path,{body,signal,method='POST'}={}) {
     const user=window.firebase?.auth?.().currentUser;
@@ -30,15 +30,16 @@
     const question=el('h4',message.question,'jev-question');question.prepend(icon());article.append(question);
     const response=message.response || {};
     article.append(el('h5',response.heading || 'Saved response'),el('p',response.answer || 'No saved answer is available.'));
-    if(response.facts?.length){const list=el('dl','','jev-facts');for(const fact of response.facts){const row=el('div');row.append(el('dt',fact.label),el('dd',format(fact.value)));if(fact.timestamp)row.append(el('span',`${fact.kind==='forecast'?'Forecast':'Observed'} · ${time(fact.timestamp)}`,'small muted'));list.append(row);}article.append(list);}
+    if(response.facts?.length){const list=el('dl','','jev-facts');for(const fact of response.facts){const row=el('div');row.append(el('dt',fact.label),el('dd',format(fact.value)));if(fact.timestamp)row.append(el('span',`${fact.kind==='forecast'?'Forecast':'Observed'} · ${time(fact.timestamp,/^(1D|1W-MON|1MS)$/.test(response.frequency))}`,'small muted'));list.append(row);}article.append(list);}
     const details=el('details'),summary=el('summary','Sources and context');details.append(summary);
     for(const ref of response.references || [])details.append(el('p',[ref.provider,ref.frequency,ref.input_cutoff?`Input cutoff ${time(ref.input_cutoff)}`:null,ref.generated_at?`Generated ${time(ref.generated_at)}`:null].filter(Boolean).join(' · '),'small'));
     for(const warning of response.warnings || [])details.append(el('p',warning,'small'));
     details.append(el('p','Answers use saved observations and forecast values. Live quotes and strategy returns require separate evidence.','small muted'));article.append(details);return article;
   }
   function points(job) {
-    const observed=(job.history || []).filter(r=>finite(r.target)).map(r=>({series:'history',timestamp:r.timestamp,value:r.target,label:`Observed · ${time(r.timestamp)} · ${format(r.target)}`}));
-    const forecast=(job.predictions || []).flatMap(r=>Object.entries(r.quantiles || {}).filter(([q,v])=>q==='0.5'&&finite(v)).map(([q,value])=>({series:q,timestamp:r.timestamp,value,label:`P50 · ${time(r.timestamp)} · ${format(value)}`})));
+    const calendar=/^(1D|1W-MON|1MS)$/.test(job.frequency);
+    const observed=(job.history || []).filter(r=>finite(r.target)).map(r=>({series:'history',timestamp:r.timestamp,value:r.target,label:`Observed · ${time(r.timestamp,calendar)} · ${format(r.target)}`}));
+    const forecast=(job.predictions || []).flatMap(r=>Object.entries(r.quantiles || {}).filter(([q,v])=>q==='0.5'&&finite(v)).map(([q,value])=>({series:q,timestamp:r.timestamp,value,label:`P50 · ${time(r.timestamp,calendar)} · ${format(value)}`})));
     return [...observed,...forecast];
   }
   function annotationRows(state) {
