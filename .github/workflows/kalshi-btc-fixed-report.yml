@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Locked analysis tools without model downloads
-        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-analysis.lock
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-quotes.lock
       - name: Verify sizing, spread handling, receipt timing, and original accounting
         run: python -m pytest -q market_research/tests/test_btc_fixed_report.py market_research/tests/test_btc_bucket_report.py
       - name: Verify original encrypted ledgers and export aggregate entry prices
