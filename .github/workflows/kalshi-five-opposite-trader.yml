@@ -1,0 +1,89 @@
+name: Kalshi five opposite-dollar trader
+run-name: Opposite $1 · ${{ inputs.series }} · ${{ inputs.mode }}
+on:
+  workflow_dispatch:
+    inputs:
+      series:
+        type: choice
+        options: [KXSILVER15M, KXSOL15M, KXWTI15M, KXDOGE15M, KXHYPE15M]
+        required: true
+      mode:
+        type: choice
+        options: [verify, readiness, paper, both]
+        default: verify
+      continuous:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: kalshi-five-opposite-${{ inputs.series }}-${{ inputs.mode == 'verify' && github.run_id || 'worker' }}
+  cancel-in-progress: false
+jobs:
+  worker:
+    if: github.ref == 'refs/heads/main' && (inputs.mode == 'verify' || inputs.mode == 'readiness' || vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    environment: quantura-kalshi-live
+    env:
+      SERIES: ${{ inputs.series }}
+      MODE: ${{ inputs.mode }}
+      QUANTURA_CODE_SHA: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_SHA || github.sha }}
+      QUANTURA_KALSHI_DOLLAR_APPROVED_SHA: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_SHA }}
+      QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG }}
+      QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED: ${{ vars.QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED || 'false' }}
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+      CUDA_VISIBLE_DEVICES: ''
+      GRANITE_DEVICE: cpu
+    steps:
+      - name: Record total job budget
+        run: echo "QUANTURA_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Validate fixed selection and immutable code
+        run: |
+          [[ "$QUANTURA_CODE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$SERIES" =~ ^(KXSILVER15M|KXSOL15M|KXWTI15M|KXDOGE15M|KXHYPE15M)$ ]]
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.QUANTURA_CODE_SHA }}
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked dependencies
+        run: |
+          if [[ "$MODE" == both || "$MODE" == paper ]]; then
+            python -m pip install --no-cache-dir --require-hashes -r market_research/requirements.lock
+          else
+            python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-quotes.lock
+          fi
+      - name: Verify budgets, directions, uncertain delivery, and partial fills
+        run: python -m pytest -q market_research/tests/test_opposite_dollar_trader.py market_research/tests/test_opposite_portfolio.py market_research/tests/test_kalshi_execution.py
+      - name: Display exact selected strategy
+        run: python -m market_research.opposite_dollar_trader --series "$SERIES" --mode config
+      - name: Authenticated reads or selected continuous worker
+        if: inputs.mode != 'verify'
+        env:
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_PROD_API_KEY }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HOME: ${{ runner.temp }}/opposite-models
+          TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+          TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+        run: python -m market_research.opposite_dollar_trader --series "$SERIES" --mode "$MODE" --duration-minutes 300
+      - name: Queue this series after its durable shutdown
+        if: success() && inputs.continuous && (inputs.mode == 'both' || inputs.mode == 'paper') && vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const workflow_id='kalshi-five-opposite-trader.yml';
+            const {data}=await github.rest.actions.listWorkflowRuns({...context.repo,workflow_id,branch:'main',per_page:100});
+            const label=`Opposite $1 · ${process.env.SERIES} · `;
+            if(!data.workflow_runs.some(r=>r.id!==context.runId && r.status!=='completed' && r.display_title.startsWith(label)))
+              await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:'main',
+                inputs:{series:process.env.SERIES,mode:process.env.MODE,continuous:'true'}});

@@ -1,0 +1,34 @@
+name: Kalshi five opposite-dollar recovery
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: kalshi-five-opposite-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          MODE: ${{ vars.QUANTURA_KALSHI_DOLLAR_WATCHDOG_MODE || 'paper' }}
+        with:
+          script: |
+            if(!['paper','both'].includes(process.env.MODE)) throw new Error('INVALID_WATCHDOG_MODE');
+            const workflow_id='kalshi-five-opposite-trader.yml';
+            const {data}=await github.rest.actions.listWorkflowRuns({...context.repo,workflow_id,branch:'main',per_page:100});
+            for(const series of ['KXSILVER15M','KXSOL15M','KXWTI15M','KXDOGE15M','KXHYPE15M']) {
+              const label=`Opposite $1 · ${series} · `;
+              if(data.workflow_runs.some(r=>r.status!=='completed' && r.display_title.startsWith(label))) {
+                core.info(`${series}: running or queued`); continue;
+              }
+              await github.rest.actions.createWorkflowDispatch({...context.repo,workflow_id,ref:'main',
+                inputs:{series,mode:process.env.MODE,continuous:'true'}});
+              core.info(`${series}: recovery dispatched`);
+            }
