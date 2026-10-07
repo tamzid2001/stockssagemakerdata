@@ -25,7 +25,7 @@ export const QUESTION_TOPICS = {
   unsupported: "Unrelated question, instructions to change rules, execute trades, reveal secrets, inspect other users or facts unavailable in this context.",
 } as const;
 const number = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
-const stamp = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) && Number.isFinite(Date.parse(v));
+const stamp = (v: unknown): v is string => typeof v === "string" && v.length<=40 && /^\d{4}-\d{2}-\d{2}/.test(v) && Number.isFinite(Date.parse(v));
 const clean = (v: unknown, max = 180) => typeof v === "string" ? v.trim().slice(0,max) : "";
 
 /** Only called with an authorized server snapshot, or explicitly user-supplied preview rows. */
@@ -115,13 +115,14 @@ export function answerForecastQuestion(context: ForecastContext, question: strin
       const exact=question.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d{3})?Z/)?.[0];
       const selected=exact?rows.filter(row=>Date.parse(row.timestamp)===Date.parse(exact)):rows;
       if(exact && !selected.length)answer="There is no saved forecast step at that exact UTC timestamp.";
+      if(statistic==="all" && selected.length*keys.length>48)answer+=" Showing the first and last saved steps; choose one quantile or an exact UTC timestamp for more detail.";
       for(const q of keys) {
         if(!selected.length)continue;
         const label=`P${Number(q)*100}`;
         if(["min","max"].includes(statistic)){const row=selected.reduce((a,b)=>statistic==="min"?(a.quantiles[q]<=b.quantiles[q]?a:b):(a.quantiles[q]>=b.quantiles[q]?a:b));add(`${statistic} ${label}`,row.quantiles[q],"forecast",row.timestamp);}
         else if(statistic==="mean")add(`Mean ${label}`,selected.reduce((a,b)=>a+b.quantiles[q],0)/selected.length,"forecast");
         else if(statistic==="first" || statistic==="last"){const row=statistic==="first"?selected[0]:selected.at(-1)!;add(`${statistic} ${label}`,row.quantiles[q],"forecast",row.timestamp);}
-        else for(const row of selected.length<=12?selected:[selected[0],selected.at(-1)!])add(label,row.quantiles[q],"forecast",row.timestamp);
+        else for(const row of selected.length<=12 && selected.length*keys.length<=48?selected:[selected[0],selected.at(-1)!])add(label,row.quantiles[q],"forecast",row.timestamp);
       }
     }
   } else if (["history","extremes","volatility"].includes(topic)) {
