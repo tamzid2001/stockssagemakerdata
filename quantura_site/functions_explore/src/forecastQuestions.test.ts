@@ -69,6 +69,7 @@ test("completed turn retries avoid model calls and writes; owner isolation and b
  const body={context:{kind:"preview",name:"My CSV",frequency:"1D",rows:raw().history},question:"Summarize history",conversation_id:"5c71cfa6-57f8-4a69-941d-73cadfd6d263",turn_id:"e5eb1e65-881d-412a-a31b-5cf1b72a3eaf"};
  const invoke=async(path:string,request:any)=>{let payload:any,status=200;const res:any={set:()=>{},setHeader:()=>{},status:(v:number)=>{status=v;return res;},json:(v:any)=>payload=v};await routes.get(path)!(request,res);return {status,payload};};
  assert.equal((await invoke("/v1/jev/forecast-questions",{body})).status,200);assert.equal(calls,1);const before=writes();
+ const metadata=records.get(`users/owner/requests/jev__${body.conversation_id}`);assert.equal(metadata.ownerUid,"owner");assert.equal(metadata.deleted,false);assert.equal(metadata.visibility,"private");assert.ok(metadata.updatedAt instanceof Date,"request pagination requires a Firestore timestamp, not an ISO string");
  const retry=await invoke("/v1/jev/forecast-questions",{body});assert.equal(retry.status,200);assert.equal(retry.payload.meta.replayed,true);assert.equal(calls,1);assert.equal(writes(),before);
  assert.equal((await invoke("/v1/jev/forecast-questions",{body:{...body,question:"Different"}})).status,422);
  const stored=records.get(`jev_forecast_conversations/${body.conversation_id}`);stored.pending={turn_id:body.turn_id,until:Date.now()+10000};
