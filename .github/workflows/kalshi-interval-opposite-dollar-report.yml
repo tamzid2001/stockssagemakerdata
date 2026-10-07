@@ -1,0 +1,41 @@
+name: Kalshi 13 original series — opposite-dollar reports
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kalshi-original-opposite-dollar-reports
+  cancel-in-progress: false
+jobs:
+  report:
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      max-parallel: 13
+      matrix:
+        series: [KXBNB15M, KXCOPPER15M, KXDOGE15M, KXETH15M, KXGOLD15M, KXHYPE15M, KXNATGAS15M, KXNEAR15M, KXSILVER15M, KXSOL15M, KXWTI15M, KXXRP15M, KXZEC15M]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Locked analysis environment without model downloads
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-quotes.lock
+      - name: Verify original cohort, fractional sizing, and spread handling
+        run: python -m pytest -q market_research/tests/test_btc_fixed_report.py market_research/tests/test_btc_bucket_report.py
+      - name: Replay opposite original sticky + P90 signals without database writes
+        env:
+          SERIES: ${{ matrix.series }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.interval_fixed_dollar_report --series "$SERIES" --output "$RUNNER_TEMP/interval-report"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opposite-fixed-dollar-${{ matrix.series }}
+          path: ${{ runner.temp }}/interval-report
+          if-no-files-found: error
+          retention-days: 30

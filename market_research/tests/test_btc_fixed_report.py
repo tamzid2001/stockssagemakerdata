@@ -1,5 +1,6 @@
 import pytest
-from market_research.btc_fixed_report import budget_quantity, opposite_replay
+from market_research.btc_fixed_report import budget_quantity, opposite_replay, validate_cohort
+from market_research.interval_fixed_dollar_report import original_cohorts
 
 def fixture():
     market = "KXBTC15M-26SEP191600"
@@ -62,3 +63,22 @@ def test_binary_quote_integrity_is_checked():
     games[original["trades"][0]["market_id"]]["tape"][1]["ask"] = .18
     with pytest.raises(ValueError,match="BINARY_OPPOSITE_ASK_MISMATCH"):
         replay(original,games)
+
+def test_original_manifest_covers_all_thirteen_series_at_same_cutoff():
+    rows=original_cohorts()
+    assert len(rows)==13 and 'KXBTC15M' not in rows
+    assert len({r['campaign_id'] for r in rows.values()})==13
+    assert all(r['as_of']==1789832648 and r['complete'] for r in rows.values())
+
+def test_cohort_accepts_disclosed_missing_origins_but_rejects_wrong_series_or_partial():
+    report={'version':'interval_archived_minutes_p90_sticky_v2','configuration':{'series':'KXGOLD15M'},
+            'coverage':{'analyzed_markets':2,'selected_markets':2,'origin_status_counts':{'evaluated':23,'skipped_missing_history':1}},
+            'complete':True}
+    validate_cohort(report,'KXGOLD15M',2)
+    with pytest.raises(ValueError,match='EXACT_COMPLETED_COHORT_REQUIRED'):
+        validate_cohort(report,'KXBTC15M',2)
+    with pytest.raises(ValueError,match='EXACT_COMPLETED_COHORT_REQUIRED'):
+        validate_cohort(report,'KXGOLD15M',2,expected_evaluations=24)
+    report['complete']=False
+    with pytest.raises(ValueError,match='EXACT_COMPLETED_COHORT_REQUIRED'):
+        validate_cohort(report,'KXGOLD15M',2)

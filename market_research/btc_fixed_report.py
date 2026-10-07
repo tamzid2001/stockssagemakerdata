@@ -17,8 +17,8 @@ from .recovery_switch import statistics
 CAMPAIGN = "p90-bb99f9b990315428acfc2bb3"
 REPORT = "report-74c449f9d0c09a63da121bf36b528549"
 
-def game_record(campaign, ticker):
-    if not re.fullmatch(r"KXBTC15M-[A-Z0-9-]{8,100}", ticker):
+def game_record(campaign, ticker, series="KXBTC15M"):
+    if not re.fullmatch(re.escape(series)+r"-[A-Z0-9-]{8,100}", ticker):
         raise ValueError("INVALID_ORIGINAL_MARKET_ID")
     snapshot = campaign.lease.ref.collection("btc_horizon_report").document("game-"+ticker).get()
     if not snapshot.exists:
@@ -62,6 +62,8 @@ def opposite_replay(original, games, *, price_policy, include_fees, precision, m
             raise ValueError("CLOSED_FIXED_ONE_BASELINE_REQUIRED")
         ticker = source["market_id"]
         side = source["contract_id"].rsplit(":",1)[1]
+        if side not in ("yes","no") or source["contract_id"] != ticker+":"+side:
+            raise ValueError("INVALID_ORIGINAL_CONTRACT_ID")
         opposite = "no" if side == "yes" else "yes"
         at = source["fills"][0]["timestamp"]
         tape = {(r["contract_id"],r["timestamp"]):r for r in games[ticker]["tape"]}
@@ -131,11 +133,26 @@ def summarize(scenario):
             "last_entry_at": max((t["entry_at"] for t in trades), default=None),
             "open_positions": summary["open_positions"]}
 
-def load():
-    campaign = Campaign(CAMPAIGN, "fixed-one-read-only-report")
-    compact = _record(campaign, REPORT)
-    if compact["coverage"]["analyzed_markets"] != 291 or compact["coverage"]["origin_status_counts"]["evaluated"] != 3492 or not compact["complete"]:
+def validate_cohort(compact, series, expected_markets, expected_evaluations=None):
+    coverage = compact.get("coverage",{})
+    counts = coverage.get("origin_status_counts",{})
+    if (compact.get("version") != "interval_archived_minutes_p90_sticky_v2" or
+            compact.get("configuration",{}).get("series") != series or
+            coverage.get("analyzed_markets") != expected_markets or
+            coverage.get("selected_markets") != expected_markets or
+            sum(counts.values()) != expected_markets*12 or
+            (expected_evaluations is not None and counts.get("evaluated") != expected_evaluations) or
+            not compact.get("complete")):
         raise ValueError("EXACT_COMPLETED_COHORT_REQUIRED")
+
+def load(series="KXBTC15M", campaign_id=CAMPAIGN, report_key=REPORT, source_run=35487987854,
+         expected_markets=291, expected_evaluations=3492):
+    from .interval_archive_replay import SERIES
+    if series not in SERIES or type(expected_markets) is not int or not 1<=expected_markets<=1000:
+        raise ValueError("INVALID_ORIGINAL_COHORT")
+    campaign = Campaign(campaign_id, "fixed-one-read-only-report")
+    compact = _record(campaign, report_key)
+    validate_cohort(compact,series,expected_markets,expected_evaluations)
     fee = compact["fee_policy"]
     if fee.get("fee_type") not in ("quadratic","quadratic_with_maker_fees") or type(fee.get("multiplier")) not in (int,float) or not math.isfinite(fee["multiplier"]) or fee["multiplier"] < 0:
         raise ValueError("ORIGINAL_FEE_POLICY_REQUIRED")
@@ -144,17 +161,17 @@ def load():
         pointer = compact["origins"][str(origin)]["p90_sticky"]["fixed_one"]["report_key"]
         full = _record(campaign, pointer)
         for strategy in ("first_p90", "p90_sticky"):
-            rows.append({"observed_minutes": origin, "forecast_minutes": 15-origin,
+            rows.append({"series":series,"observed_minutes": origin, "forecast_minutes": 15-origin,
                          "strategy": strategy, **summarize(full[strategy]["fixed_one"])})
         baseline = full["p90_sticky"]["fixed_one"]
         for t in baseline["trades"]:
             if t["market_id"] not in games:
-                games[t["market_id"]] = game_record(campaign,t["market_id"])
+                games[t["market_id"]] = game_record(campaign,t["market_id"],series)
         for precision in ("0.0001","0.01"):
             for price_policy, include_fees in (("recorded_opposite_ask",False),("recorded_opposite_ask",True),("ideal_one_minus_original_ask",False)):
-                opposite_rows.append({"observed_minutes":origin,"forecast_minutes":15-origin,
+                opposite_rows.append({"series":series,"observed_minutes":origin,"forecast_minutes":15-origin,
                     **opposite_replay(baseline,games,price_policy=price_policy,include_fees=include_fees,precision=precision,multiplier=fee["multiplier"])})
-    return {"campaign_id": CAMPAIGN, "report_key": REPORT, "source_run": 35487987854,
+    return {"series":series,"campaign_id": campaign_id, "report_key": report_key, "source_run": source_run,
             "as_of": compact["as_of"], "coverage": compact["coverage"],
             "fee_policy": fee, "rows": rows,"opposite_fixed_dollar_rows":opposite_rows,
             "limitations": compact["limitations"]+[

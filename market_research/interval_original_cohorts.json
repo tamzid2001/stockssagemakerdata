@@ -1,0 +1,119 @@
+[
+  {
+    "campaign_id": "p90-ee4ef356820b6e5904fd7c01",
+    "report_key": "report-08bc1188810533a714648fd5931e9a04",
+    "series": "KXBNB15M",
+    "source_run": 35487991826,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  },
+  {
+    "campaign_id": "p90-102c753fd3a3eda0ac3fac72",
+    "report_key": "report-1621f11fcb5cc62cf0ebf79c4a0e0a88",
+    "series": "KXCOPPER15M",
+    "source_run": 35487982603,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 245
+  },
+  {
+    "campaign_id": "p90-e3150df8b1005a593ac89463",
+    "report_key": "report-b69c12727d65882d5c1ba667b4260bc2",
+    "series": "KXDOGE15M",
+    "source_run": 35499805946,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  },
+  {
+    "campaign_id": "p90-fdba42df5a8f6bd168926f11",
+    "report_key": "report-81b02d0783fa977bfa7f185a5d3ab760",
+    "series": "KXETH15M",
+    "source_run": 35499764402,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  },
+  {
+    "campaign_id": "p90-96b115f22296096314ff932a",
+    "report_key": "report-8832cf386e4748a3ad29fee0781777e5",
+    "series": "KXGOLD15M",
+    "source_run": 35499784699,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 234
+  },
+  {
+    "campaign_id": "p90-721bce7d8459853e73323e38",
+    "report_key": "report-29f05364bf12f8f67c55188190ab1cb9",
+    "series": "KXHYPE15M",
+    "source_run": 35526302757,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  },
+  {
+    "campaign_id": "p90-457ae1e208ab791c63d95d67",
+    "report_key": "report-dfd5be422d599a19b8d6a97fea29dad3",
+    "series": "KXNATGAS15M",
+    "source_run": 35512391017,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 245
+  },
+  {
+    "campaign_id": "p90-ecb0b896207ec313abe1376f",
+    "report_key": "report-ab2782b33386255f7bfc29b5094cea33",
+    "series": "KXNEAR15M",
+    "source_run": 35540635550,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  },
+  {
+    "campaign_id": "p90-c8b779e26bb75bdac83d1106",
+    "report_key": "report-7b324c02037dc41f90c3b8f0e1941478",
+    "series": "KXSILVER15M",
+    "source_run": 35540678148,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 245
+  },
+  {
+    "campaign_id": "p90-e381d14659b624f09bcce7f6",
+    "report_key": "report-8bde634896084a3377cf9525520a2cb2",
+    "series": "KXSOL15M",
+    "source_run": 35540626937,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  },
+  {
+    "campaign_id": "p90-4e88220cb4e69addcab77129",
+    "report_key": "report-81a83c47a030dc6bc2c0616ebbd626f0",
+    "series": "KXWTI15M",
+    "source_run": 35540634555,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 245
+  },
+  {
+    "campaign_id": "p90-4f4e7f2e87ed8b03bcebcbe7",
+    "report_key": "report-58c6646d120211cfdaf0f75df16f2b21",
+    "series": "KXXRP15M",
+    "source_run": 35571643470,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  },
+  {
+    "campaign_id": "p90-0b5787ff4e5231a2fa152248",
+    "report_key": "report-b28c2f60394978e78a625cb84c4e4288",
+    "series": "KXZEC15M",
+    "source_run": 35571675571,
+    "complete": true,
+    "as_of": 1789832648,
+    "analyzed_markets": 291
+  }
+]
