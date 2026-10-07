@@ -7,6 +7,29 @@ concurrency:
   group: kalshi-original-opposite-dollar-reports
   cancel-in-progress: false
 jobs:
+  btc_live_health:
+    if: github.ref == 'refs/heads/main' && vars.KALSHI_BTC_MINUTE_FORECAST_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-quotes.lock
+      - name: Authenticate and validate durable live forecast pairs without changing state
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.btc_minute_health --output "$RUNNER_TEMP/btc-live-health.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: btc-live-minute-health
+          path: ${{ runner.temp }}/btc-live-health.json
+          if-no-files-found: error
+          retention-days: 7
   report:
     if: github.ref == 'refs/heads/main'
     strategy:
