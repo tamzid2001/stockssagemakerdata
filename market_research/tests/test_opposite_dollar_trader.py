@@ -61,22 +61,31 @@ def test_ambiguous_or_unseen_order_never_blindly_reposts(monkeypatch):
     assert len(b.posts)==1 and j.state["entries"][TICKER]["live"]["pending"]
 
 def test_partial_fill_retries_current_price_and_only_unspent_budget(monkeypatch):
-    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:128)
+    clock=[126]
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
     t,b,j=setup();t.reconcile(TICKER,FEE,126);first=b.posts[0]
     b.orders[first["client_order_id"]]=terminal(first,"3.00","0.60")
-    b.price="0.4000";t.reconcile(TICKER,FEE,128)
+    clock[0]=128;b.price="0.4000";t.reconcile(TICKER,FEE,128)
     assert b.posts[1]["price"]=="0.6000" and b.posts[1]["count"]=="1.00"
     assert b.posts[1]["client_order_id"]!=first["client_order_id"]
     assert j.state["entries"][TICKER]["live"]["cost"]=="0.60"
 
 def test_one_second_retry_cadence_waits_for_reconciled_terminal_order(monkeypatch):
-    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:127)
+    clock=[126]
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
     t,b,j=setup();t.reconcile(TICKER,FEE,126);first=b.posts[0]
     b.orders[first["client_order_id"]]=terminal(first,"0.00","0",fee="0")
     t.reconcile(TICKER,FEE,126.5)
     assert len(b.posts)==1
-    t.reconcile(TICKER,FEE,127)
+    clock[0]=127;t.reconcile(TICKER,FEE,127)
     assert len(b.posts)==2
+
+def test_retry_interval_starts_at_actual_admission_completion(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126.8)
+    t,b,j=setup();t.reconcile(TICKER,FEE,126)
+    b.orders[b.posts[0]["client_order_id"]]=terminal(b.posts[0],"0.00","0",fee="0")
+    t.reconcile(TICKER,FEE,127.4)
+    assert len(b.posts)==1
 
 def test_market_close_stops_new_orders_even_without_a_fill(monkeypatch):
     monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:900)
@@ -143,3 +152,11 @@ def test_changed_gcs_generation_fences_stale_worker():
     j=object.__new__(CloudJournal);j.name="name";j.holder="worker";j.fence=1;j.generation=4
     j.read=lambda _:({"lease":{"holder":"worker","fence":1,"expires":10**12}},5)
     with pytest.raises(RuntimeError,match="FENCE_LOST"):j.verify()
+
+def test_shared_gate_compare_and_swap_contention_waits_without_submission():
+    from google.api_core.exceptions import PreconditionFailed
+    j=SharedJournal()
+    def conflict(*_):raise PreconditionFailed("generation changed")
+    j.write=conflict
+    with pytest.raises(RuntimeError,match="LEASE_HELD"):
+        with AccountGate(j,None):pytest.fail("Contended gate cannot admit orders")

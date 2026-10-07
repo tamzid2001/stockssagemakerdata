@@ -120,11 +120,13 @@ class AccountGate:
     """Serialize admission across all five workers; reconcile exact portfolio ownership."""
     def __init__(self,journal,broker):self.journal,self.broker=journal,broker;self.generation=None
     def __enter__(self):
+        from google.api_core.exceptions import PreconditionFailed
         name=PREFIX+self.journal.account+"/order-gate.enc"
         old,generation=self.journal.read(name)
         lease=claim_transition(old.get("lease",{}),self.journal.holder,time.time(),ttl=20)
         self.name,self.lease=name,lease
-        self.generation=self.journal.write(name,{"lease":lease},generation)
+        try:self.generation=self.journal.write(name,{"lease":lease},generation)
+        except PreconditionFailed:raise RuntimeError("LEASE_HELD") from None
         try:
             return self.admit()
         except BaseException:
@@ -261,7 +263,8 @@ class DollarTrader:
                 attempt=entry["attempt"]+1
                 intent=order_payload(ticker,entry["side"],quantity,ask,market["exchange_index"],self.config,
                                      attempt=attempt,fractional_remainder=True)
-                entry.update(attempt=attempt,last_attempt=now,pending={"intent":intent,"prepared_at":now})
+                prepared_at=time.time()
+                entry.update(attempt=attempt,last_attempt=prepared_at,pending={"intent":intent,"prepared_at":prepared_at})
                 self.journal.save();gate.verify()
                 try:
                     value=self.broker.submit(intent)
