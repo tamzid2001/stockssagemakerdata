@@ -34,3 +34,18 @@ test("forks and unknown workflow publications cannot replace the public screener
   const request:any=async()=>Response.json({artifacts:[{id:1,name:"quantura-public-perps-0",expired:false,size_in_bytes:1,workflow_run:{head_branch:"main",head_repository_id:9,repository_id:3}}]});
   await assert.rejects(new ScreenerArtifactReader(request,"o","r",cache).read("perps-0"),/not_published/);
 });
+
+test("a newer upload wins even when GitHub returns an older artifact with a larger ID first",async()=>{
+  const bytes=zip(),cache:any={get:async()=>null,set:async()=>{}};
+  const base={name:"quantura-public-perps-0",size_in_bytes:bytes.length,expired:false,workflow_run:{id:2,head_branch:"main",head_sha:"abc",repository_id:3,head_repository_id:3}};
+  let downloaded=0;
+  const request:any=async(input:any)=>{
+    const url=String(input);
+    if(url.includes("blob.core.windows.net"))return new Response(bytes);
+    if(url.endsWith("/zip")){downloaded=Number(url.split("/").at(-2));return new Response(null,{status:302,headers:{location:"https://test.blob.core.windows.net/newer"}});}
+    if(url.includes("/actions/runs/"))return Response.json({path:".github/workflows/hourly-perpetual-screener.yml",head_branch:"main",head_sha:"abc",event:"workflow_dispatch",repository:{id:3},head_repository:{id:3}});
+    return Response.json({artifacts:[{...base,id:99,created_at:"2026-10-07T14:41:00Z"},{...base,id:1,created_at:"2026-10-07T14:49:00Z"}]});
+  };
+  await new ScreenerArtifactReader(request,"o","r",cache).read("perps-0");
+  assert.equal(downloaded,1);
+});

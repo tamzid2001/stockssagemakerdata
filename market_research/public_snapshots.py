@@ -65,9 +65,11 @@ def previous(feed):
     if token:
         headers["Authorization"] = "Bearer " + token
     root = "https://api.github.com/repos/" + REPOSITORY
-    response = session.get(root + "/actions/artifacts", params={"name": "quantura-public-" + feed, "per_page": 5}, headers=headers, timeout=30)
+    response = session.get(root + "/actions/artifacts", params={"name": "quantura-public-" + feed, "per_page": 100}, headers=headers, timeout=30)
     response.raise_for_status()
-    for artifact in response.json()["artifacts"]:
+    # GitHub IDs are partitioned; sort uploads by timestamp, never numeric ID.
+    artifacts = sorted(response.json()["artifacts"], key=lambda a: (a.get("created_at", ""), a["id"]), reverse=True)
+    for artifact in artifacts:
         run = artifact.get("workflow_run", {})
         if artifact["expired"] or run.get("head_branch") != "main" or run.get("head_repository_id") != run.get("repository_id"):
             continue

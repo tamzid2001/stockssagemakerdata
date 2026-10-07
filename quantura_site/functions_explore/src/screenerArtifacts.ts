@@ -39,7 +39,8 @@ export class ScreenerArtifactReader {
       rows=rows.filter((a:any)=>!a.expired && a.name===name && a.workflow_run?.head_branch==="main" && a.workflow_run.head_repository_id===a.workflow_run.repository_id && Number.isSafeInteger(a.id) && a.size_in_bytes<=MAX_ZIP);
       await this.shared.set(key,rows,{ttl:60}).catch(()=>{});
     }
-    return rows;
+    // Artifact IDs are allocated across partitions and are not chronological.
+    return rows.sort((a:ArtifactSummary,b:ArtifactSummary)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
   }
   private checkFeed(feed:string){if(!/^(stocks|games-(kalshi|polymarket_us)-[01]|perps-[0-3])$/.test(feed))throw Error("screener_artifact_feed_invalid");}
   async read(feed:string,date?:string):Promise<PublicSnapshot>{
