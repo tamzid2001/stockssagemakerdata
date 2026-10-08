@@ -29,7 +29,7 @@ jobs:
     env:
       SERIES: ${{ inputs.series }}
       MODE: ${{ inputs.mode }}
-      QUANTURA_CODE_SHA: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_SHA || github.sha }}
+      QUANTURA_CODE_SHA: ${{ inputs.mode == 'verify' && github.sha || vars.QUANTURA_KALSHI_DOLLAR_APPROVED_SHA || github.sha }}
       QUANTURA_KALSHI_DOLLAR_APPROVED_SHA: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_SHA }}
       QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG }}
       QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED: ${{ vars.QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED || 'false' }}

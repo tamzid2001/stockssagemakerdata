@@ -17,8 +17,10 @@ from pathlib import Path
 import queue
 import re
 import signal
+import sys
 import tempfile
 import time
+import uuid
 
 from .engine import digest, stamp
 from .kalshi_execution import KalshiExecution, money, order_payload, reconciled_order
@@ -27,6 +29,70 @@ from .opposite_statistics import bootstrap, record_settlement, performance, log_
 from .store import claim_transition
 
 PREFIX = "private-research/five-opposite-trader-v1/"
+STORAGE_TIMEOUT = 3
+STORAGE_RETRY_SECONDS = 5
+WRITE_RECEIPT = "quantura-write-id"
+
+class JournalStorageUnavailable(Exception):
+    """Abort admission without letting trading-error handlers clear an intent."""
+    def __init__(self,operation,status=None):
+        super().__init__("TRADER_STORAGE_UNAVAILABLE")
+        self.operation,self.status=operation,status
+
+def storage_status(error):
+    from google.api_core.exceptions import RetryError
+    if isinstance(error,RetryError):return storage_status(error.cause)
+    status=getattr(getattr(error,"response",None),"status_code",None)
+    if status is None:status=getattr(error,"code",None)
+    return int(status) if isinstance(status,int) else None
+
+def storage_retryable(error):
+    from google.api_core.exceptions import RetryError
+    from requests.exceptions import ConnectionError,Timeout
+    return (isinstance(error,(RetryError,ConnectionError,Timeout))
+            or storage_status(error) in (408,429,500,502,503,504))
+
+def storage_retry():
+    from google.cloud.storage.retry import DEFAULT_RETRY
+    # The SDK's default 120-second retry window can exhaust a 120-second
+    # journal lease. An individual request is also bounded, including the
+    # final request which may run past the retry window.
+    return DEFAULT_RETRY.with_timeout(STORAGE_RETRY_SECONDS).with_delay(initial=.25,maximum=1,multiplier=2)
+
+def storage_call(operation,action):
+    try:return action()
+    except Exception as error:
+        if storage_retryable(error):
+            raise JournalStorageUnavailable(operation,storage_status(error)) from error
+        raise
+
+def cleanup_actions(series,actions):
+    """Close every resource; a secondary error must not replace the cause."""
+    from .btc_minute_archive import safe_failure
+    original=sys.exc_info()[1];first=None
+    for operation,action in actions:
+        try:action()
+        except Exception as error:
+            print(json.dumps({"event":"opposite_dollar_cleanup_failed","series":series,
+                "operation":operation,**safe_failure(error),
+                "primary_error_preserved":original is not None or first is not None}),flush=True)
+            if first is None:first=error
+    if original is None and first is not None:raise first
+
+def shutdown_journal(journal,broker):
+    from .btc_minute_archive import safe_failure
+    original=sys.exc_info()[1];actions=[]
+    if original is None:actions.append(("journal_release",journal.release))
+    else:
+        # No further checkpoint/unlock writes after an aborted transaction.
+        # The successor acquires the expired lease and reconciles the last
+        # durable submitting intent before it can send another order.
+        print(json.dumps({"event":"opposite_dollar_recovery_required","series":journal.config.series_ticker,
+            **safe_failure(original),"operation":getattr(original,"operation",None),
+            "upstream_status":getattr(original,"status",None),"orders_disabled":True,
+            "recovery":"watchdog_after_lease_expiry"}),flush=True)
+    actions.append(("broker_close",broker.client.close))
+    cleanup_actions(journal.config.series_ticker,actions)
 
 def approved(config, env):
     sha=env.get("QUANTURA_CODE_SHA", "")
@@ -70,7 +136,7 @@ class CloudJournal:
         observed=False
         for attempt in range(4):
             blob=self.bucket.blob(name)
-            try:blob.reload()
+            try:storage_call("snapshot_metadata",lambda:blob.reload(timeout=STORAGE_TIMEOUT,retry=storage_retry()))
             except NotFound:
                 if not observed:return {},0
             else:
@@ -78,19 +144,42 @@ class CloudJournal:
                 if blob.size>16*1024*1024:raise RuntimeError("TRADER_JOURNAL_TOO_LARGE")
                 with tempfile.TemporaryDirectory() as folder:
                     path=Path(folder)/"state.enc"
-                    try:blob.download_to_filename(path,if_generation_match=generation,checksum="auto")
+                    try:storage_call("snapshot_download",lambda:blob.download_to_filename(path,
+                        if_generation_match=generation,checksum="auto",timeout=STORAGE_TIMEOUT,retry=storage_retry()))
                     except (NotFound,PreconditionFailed):pass
                     else:return decode_catalog(path),generation
             if attempt<3:time.sleep(.05*(attempt+1))
         raise RuntimeError("TRADER_SNAPSHOT_BUSY")
 
     def write(self,name,value,generation):
+        from google.api_core.exceptions import NotFound,PreconditionFailed
         from .recovery_cloud import encode_catalog
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/"state.enc";encode_catalog(value,path)
             if path.stat().st_size>16*1024*1024:raise RuntimeError("TRADER_JOURNAL_TOO_LARGE")
             blob=self.bucket.blob(name)
-            blob.upload_from_filename(path,if_generation_match=generation,checksum="auto")
+            receipt=uuid.uuid4().hex;blob.metadata={WRITE_RECEIPT:receipt}
+            try:
+                blob.upload_from_filename(path,if_generation_match=generation,checksum="auto",
+                    timeout=STORAGE_TIMEOUT,retry=storage_retry())
+            except Exception as error:
+                if not isinstance(error,PreconditionFailed) and not storage_retryable(error):raise
+                # A server can commit an upload but lose its response. The SDK
+                # may then see 412 when replaying the same generation. Confirm
+                # OUR random receipt from fresh atomic object metadata. Never
+                # adopt a successor's generation or blindly remove the CAS.
+                observed=self.bucket.blob(name)
+                try:observed.reload(timeout=STORAGE_TIMEOUT,retry=storage_retry())
+                except Exception as confirmation_error:
+                    if not isinstance(confirmation_error,NotFound) and not storage_retryable(confirmation_error):raise
+                else:
+                    if ((observed.metadata or {}).get(WRITE_RECEIPT)==receipt
+                            and int(observed.generation)>generation):
+                        print(json.dumps({"event":"opposite_dollar_storage_ack_recovered",
+                            "series":self.config.series_ticker,"operation":"upload","orders_sent":0}),flush=True)
+                        return int(observed.generation)
+                if isinstance(error,PreconditionFailed):raise
+                raise JournalStorageUnavailable("upload",storage_status(error)) from error
             return int(blob.generation)
 
     def claim(self,wait_seconds=0):
@@ -105,13 +194,16 @@ class CloudJournal:
                 state={"version":VERSION,"config":asdict(self.config),"entries":{},"decisions":{},
                        "rows":[],"totals":{},**old,"lease":lease}
                 generation=self.write(self.name,state,generation)
-            except (PreconditionFailed,RuntimeError) as error:
+            except (PreconditionFailed,RuntimeError,JournalStorageUnavailable) as error:
                 if isinstance(error,RuntimeError) and str(error) not in ("LEASE_HELD","TRADER_SNAPSHOT_BUSY"):
                     raise
                 remaining=deadline-time.time()
-                if remaining<=0:raise RuntimeError("TRADER_STARTUP_LEASE_TIMEOUT") from error
+                if remaining<=0:
+                    if isinstance(error,JournalStorageUnavailable):raise
+                    raise RuntimeError("TRADER_STARTUP_LEASE_TIMEOUT") from error
                 if time.time()-last_log>=15:
                     print(json.dumps({"event":"opposite_dollar_lease_wait","series":self.config.series_ticker,
+                                      "reason":"storage_unavailable" if isinstance(error,JournalStorageUnavailable) else "lease_contention",
                                       "retry_seconds":min(5,remaining),"orders_sent":0}),flush=True)
                     last_log=time.time()
                 time.sleep(min(5,remaining));continue
@@ -128,12 +220,14 @@ class CloudJournal:
         lease=self.state["lease"]
         if lease["holder"]!=self.holder or lease["fence"]!=self.fence or lease["expires"]<=time.time():
             raise RuntimeError("TRADER_FENCE_LOST")
-        self.state["lease"]={**lease,"expires":time.time()+120,"updated_at":time.time()}
-        self.generation=self.write(self.name,self.state,self.generation)
+        state={**self.state,"lease":{**lease,"expires":time.time()+120,"updated_at":time.time()}}
+        generation=self.write(self.name,state,self.generation)
+        self.state,self.generation=state,generation
 
     def release(self):
-        self.verify();self.state["lease"]["expires"]=0
-        self.generation=self.write(self.name,self.state,self.generation)
+        self.verify();state={**self.state,"lease":{**self.state["lease"],"expires":0}}
+        generation=self.write(self.name,state,self.generation)
+        self.state,self.generation=state,generation
 
     def archive(self,ticker,value):
         from google.api_core.exceptions import PreconditionFailed
@@ -148,7 +242,10 @@ class CloudJournal:
         """One-time statistics migration reads only this series' private archives."""
         prefix=PREFIX+self.account+"/markets/"+self.config.series_ticker+"-"
         renewed=time.time()
-        for blob in self.bucket.list_blobs(prefix=prefix):
+        iterator=iter(self.bucket.list_blobs(prefix=prefix,timeout=STORAGE_TIMEOUT,retry=storage_retry()))
+        while True:
+            try:blob=storage_call("archive_listing",lambda:next(iterator))
+            except StopIteration:break
             if time.time()-renewed>=30:
                 self.save();renewed=time.time()
             value,_=self.read(blob.name)
@@ -170,8 +267,8 @@ class AccountGate:
         except PreconditionFailed:raise RuntimeError("LEASE_HELD") from None
         try:
             return self.admit()
-        except BaseException:
-            self.__exit__()
+        except BaseException as error:
+            self.__exit__(type(error),error,error.__traceback__)
             raise
 
     def admit(self):
@@ -210,11 +307,18 @@ class AccountGate:
         _,generation=self.journal.read(self.name)
         if generation!=self.generation or self.lease["expires"]<=time.time():
             raise RuntimeError("ACCOUNT_ORDER_GATE_LOST")
-    def __exit__(self,*_):
+    def __exit__(self,exc_type=None,error=None,traceback=None):
         from google.api_core.exceptions import PreconditionFailed
+        if isinstance(error,JournalStorageUnavailable):return
         if self.generation is not None:
             try:self.journal.write(self.name,{"lease":{**self.lease,"expires":0}},self.generation)
             except PreconditionFailed:pass  # A successor owns it; never retry an unlock against its generation.
+            except Exception as cleanup_error:
+                from .btc_minute_archive import safe_failure
+                print(json.dumps({"event":"opposite_dollar_cleanup_failed","series":self.journal.config.series_ticker,
+                    "operation":"account_gate_release",**safe_failure(cleanup_error),
+                    "primary_error_preserved":error is not None}),flush=True)
+                if error is None:raise
 
 def quantity_remaining(entry,ask):
     remaining=Decimal("1.00")-money(entry.get("cost","0"))
@@ -440,19 +544,24 @@ def run(config,mode,duration):
     from .local_store import LocalStore
     broker=DollarBroker(config,requested_live=mode in ("live","both"))
     if mode=="readiness":
-        orders,positions=broker.account()
-        limits=broker.request("GET","/account/limits")
-        journal=CloudJournal(config,broker.key_id,os.getenv("GITHUB_RUN_ID","local")+":readiness:"+config.series_ticker)
-        journal.claim()
-        try:journal.verify()
-        finally:journal.release();broker.client.close()
+        journal=None
+        try:
+            orders,positions=broker.account()
+            limits=broker.request("GET","/account/limits")
+            journal=CloudJournal(config,broker.key_id,os.getenv("GITHUB_RUN_ID","local")+":readiness:"+config.series_ticker)
+            journal.claim();journal.verify()
+        finally:
+            if journal is not None:shutdown_journal(journal,broker)
+            else:cleanup_actions(config.series_ticker,[("broker_close",broker.client.close)])
         print(json.dumps({"readiness":"ok","resting_orders":len(orders),"positions":len(positions),
                           "api_tier":limits.get("usage_tier"),"encrypted_journal":"verified",
                           "orders_sent":0,"config":asdict(config)}));return
     holder=":".join((os.getenv("GITHUB_RUN_ID","local"),os.getenv("GITHUB_RUN_ATTEMPT",str(os.getpid())),config.series_ticker))
-    journal=CloudJournal(config,broker.key_id,holder)
-    try:journal.claim(wait_seconds=180)
-    except BaseException:broker.client.close();raise
+    try:
+        journal=CloudJournal(config,broker.key_id,holder)
+        journal.claim(wait_seconds=180)
+    except BaseException:
+        cleanup_actions(config.series_ticker,[("broker_close",broker.client.close)]);raise
     trader=DollarTrader(config,broker,journal,mode)
     for decision in journal.state["decisions"].values():
         if decision.get("status")=="forecasting":decision["status"]="retry_inference"
@@ -527,7 +636,7 @@ def run(config,mode,duration):
                                 raise
                     if time.time()-last_save>=30:
                         retire_markets(journal,store,now)
-                        journal.state["health"]={"at":now,"mode":mode,"statuses":list(statuses.values()),
+                        journal.state["health"]={"at":now,"mode":mode,"code_sha":os.getenv("QUANTURA_CODE_SHA"),"statuses":list(statuses.values()),
                             "collector":store._get("checkpoints","btc_collector_health"),"orders_enabled":broker.enabled}
                         journal.save();last_save=time.time()
                     if time.time()-last_health>=60:
@@ -549,12 +658,14 @@ def run(config,mode,duration):
                         for line in log_lines(config.series_ticker,stats):print(line,flush=True)
                     time.sleep(max(0,1-(time.time()-now)))
             finally:
-                collector.stop()
-                if child and child.is_alive():child.terminate();child.join()
-                from .btc_minute_forecast_worker import rows as store_rows
-                journal.state["rows"]=store_rows(store);journal.save()
+                def stop_child():
+                    if child and child.is_alive():child.terminate();child.join()
+                cleanup_actions(config.series_ticker,[("collector_stop",collector.stop),("forecast_child_stop",stop_child)])
+                if sys.exc_info()[1] is None:
+                    from .btc_minute_forecast_worker import rows as store_rows
+                    journal.state["rows"]=store_rows(store);journal.save()
     finally:
-        journal.release();broker.client.close()
+        shutdown_journal(journal,broker)
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument("--series",choices=list(STRATEGIES),required=True)
@@ -564,6 +675,11 @@ def main():
     if not 1<=args.duration_minutes<=300:raise ValueError("INVALID_DURATION")
     if args.mode=="config":print(json.dumps({"config":asdict(config),"observed_minutes":config.history_minutes,
                 "forecast_minutes":15-config.history_minutes,"portfolio_fingerprint":portfolio_fingerprint(config.subaccount)}));return
-    run(config,args.mode,args.duration_minutes)
+    try:run(config,args.mode,args.duration_minutes)
+    except JournalStorageUnavailable as error:
+        print(json.dumps({"event":"opposite_dollar_storage_unavailable","series":config.series_ticker,
+            "error_code":str(error),"operation":error.operation,"upstream_status":error.status,
+            "orders_disabled":True,"recovery":"watchdog_after_lease_expiry"}),flush=True)
+        raise SystemExit(1) from None
 
 if __name__=="__main__":main()

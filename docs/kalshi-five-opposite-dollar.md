@@ -52,6 +52,12 @@ Hosted-runner setup and handoffs can miss opening minutes. Continuous recovery d
 
 Concurrent storage reads retry fresh metadata and a generation-matched download if another worker replaces the object between those requests. An obsolete-generation 404 is never treated as an empty journal. Repeated contention pauses admission with `TRADER_SNAPSHOT_BUSY`; ownership checks, generation-matched writes and pending order reconciliation still apply.
 
+Storage requests use a three-second request timeout and a five-second SDK retry window, rather than the SDK's default 120-second retry window, which can exhaust the journal lease. The final request can extend beyond that retry window. Each upload attaches a random receipt to its atomic object metadata. If the response is lost, fresh metadata must confirm that exact receipt before the worker adopts the committed generation. A different worker's receipt cannot acknowledge an upload; generation preconditions remain mandatory.
+
+When storage stays unavailable or a write cannot be confirmed, the worker stops new orders and exits with `TRADER_STORAGE_UNAVAILABLE`, the operation and upstream status. It stops collection/inference and closes the broker client. Aborted transactions do not perform another shutdown checkpoint or unlock, and cleanup errors cannot replace the original error. The lease expires naturally; the watchdog starts a successor that restores the durable journal and reconciles any submitted intent before another order. An outage can therefore interrupt trading, but it cannot authorize trading without durable ownership or reset the existing lifetime statistics. Uploads confirmed after a lost response log `opposite_dollar_storage_ack_recovered`.
+
+The `verify` workflow mode tests the current main commit without sending orders. Paper/live workers continue to check out the immutable approved SHA until the verified revision is approved for execution.
+
 ## cron-job.org recovery settings
 
 The built-in recovery workflow runs every five minutes. An external cron can invoke the same idempotent recovery check:
