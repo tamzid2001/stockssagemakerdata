@@ -4,7 +4,7 @@ import pytest
 
 from market_research.ftmo_dukas_data import UTC, INSTRUMENTS
 from market_research.ftmo_dukas_engine import Costs
-from market_research.ftmo_p99_engine import Candidate, KnownConversion, candidates, floor_lots, loss_per_lot, planned_levels, replay, sized_lots, trail_distance
+from market_research.ftmo_p99_engine import Candidate, KnownConversion, candidates, entry_trailing_stop, floor_lots, loss_per_lot, planned_levels, replay, sized_lots, trail_distance
 from market_research.ftmo_p99_study import MODELS, QUANTILES, aggregate, daily_sessions, forecast_day, future_sessions, plan, read_json, run_replay, selection, write_json
 from market_research.ftmo_dukas_data import digest
 
@@ -76,6 +76,29 @@ def test_trailing_distance_and_lot_weight_profiles():
     sizes = [sized_lots(100, 90, 99, 100000, [], Candidate(1, name), spec(), KnownConversion('USD', []), at,
                        Costs('test'), risk_span=20) for name in ('equal','larger_deeper','smaller_deeper')]
     assert sizes[1] < sizes[0] < sizes[2]
+
+
+def test_one_entry_trail_waits_for_full_grid_and_stays_above_lowest_fill():
+    entries = [{'entry': 666.82, 'lots': 3}]
+    assert entry_trailing_stop(entries, 2., 667.17, .01) is None
+    assert entry_trailing_stop(entries, 2., 668.81, .01) is None
+    assert entry_trailing_stop(entries, 2., 668.82, .01) == pytest.approx(666.83)
+    assert entry_trailing_stop(entries, 2., 670., .01) == pytest.approx(668.)
+
+
+def test_multi_entry_trail_uses_75_percent_span_and_mirrors_short_side():
+    entries = [{'entry': 100., 'lots': 1}, {'entry': 96., 'lots': 1}]
+    assert entry_trailing_stop(entries, 2., 98.99, .01) is None
+    assert entry_trailing_stop(entries, 2., 99., .01) == pytest.approx(96.01)
+    assert entry_trailing_stop(entries, 2., 101., .01) == pytest.approx(98.)
+    assert entry_trailing_stop(entries, 2., 97.01, .01, side='short') is None
+    assert entry_trailing_stop(entries, 2., 97., .01, side='short') == pytest.approx(99.99)
+
+
+def test_tiny_span_does_not_place_a_stop_at_or_ahead_of_the_quote():
+    entries = [{'entry': 100.01, 'lots': 1}, {'entry': 100., 'lots': 1}]
+    assert entry_trailing_stop(entries, .01, 100.01, .01) is None
+    assert entry_trailing_stop(entries, .01, 100.02, .01) == pytest.approx(100.01)
 
 
 def test_fixed_final_p01_survives_daily_forecast_update():

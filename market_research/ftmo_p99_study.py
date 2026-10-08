@@ -265,6 +265,7 @@ def run_replay(symbol, study, snapshot, sources, forecasts_root, output, *, entr
                     later = [f for f in forecasts if f.get('origin') and stamp(f['origin']) >= split]
                     validations.append(replay(symbol, rows, later, spec, conversion, split, last, chosen, costs, path, detail=True, **entry_options))
     result = {'complete': True, 'symbol': symbol, 'selected_on_development': selected,
+              'trailing_rule': 'extreme_entry_distance',
               'entry_rule': entry_rule,
               'averaging_gate': averaging_gate,
               'selection_valid': selected is not None, 'development': development, 'full_year_grid_comparison': full,
@@ -288,6 +289,7 @@ def aggregate(study, root, snapshot, output, *, entry_rule='above_p99', averagin
         report = read_json(paths[0])
         if (not report.get('complete') or report.get('symbol') != symbol
                 or report.get('entry_rule', 'above_p99') != entry_rule
+                or report.get('trailing_rule') != 'extreme_entry_distance'
                 or report.get('averaging_gate', 'p90') != averaging_gate):
             missing.append(symbol)
         else:
@@ -297,6 +299,7 @@ def aggregate(study, root, snapshot, output, *, entry_rule='above_p99', averagin
     averaging_description = ('All additions use lower grid levels; no P90 gate' if averaging_gate == 'grid'
                              else 'Latest daily first P90 gates only the first averaging buy; subsequent additions use the grid without P90')
     replay_study = {**study, 'entry_rule': entry_rule,
+                    'trailing_rule': 'extreme_entry_distance',
                     'first_predicted_p99_entry_signal': entry_rule == 'above_p99',
                     'entry_signal': signal_description, 'averaging_gate': averaging_description,
                     'averaging_gate_mode': averaging_gate,
@@ -309,7 +312,7 @@ def aggregate(study, root, snapshot, output, *, entry_rule='above_p99', averagin
              '500 completed daily candles; forecast seven asset sessions once per observed day using all five models and P01/P25/P50/P75/P90/P99. ',
              f'Entry rule: {signal_description}. Stop: FINAL P01 of that triggering forecast, fixed until exit. Risk reference: FINAL P99 − FINAL P01. ',
              f'One percent equity is shared across the complete ladder, with commissions, conservative USD conversion and seven-day adverse swap reserve. Averaging: {averaging_description}. Breach-confirmed limits are eligible from the next minute. ',
-             'Arm trailing only when net basket P&L is positive. Distance: 0.75 × highest-minus-lowest filled entry, or one grid with a single entry. No reentry until a later daily qualifying forecast. ', '',
+             'Arm trailing only when net basket P&L is positive and executable bid reaches lowest fill plus trailing distance. Distance: 0.75 × highest-minus-lowest filled entry, or one grid with a single entry. The stop stays one executable tick above the lowest fill and never loosens. No reentry until a later daily qualifying forecast. ', '',
              '| Asset | Development-selected grid/profile | Full-year net range | Worst drawdown | Basket W/L | Fresh-flat holdout net range |',
              '|---|---|---:|---:|---:|---:|']
     for r in reports:

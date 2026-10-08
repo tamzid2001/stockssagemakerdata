@@ -112,6 +112,55 @@ def test_share_ladder_averages_lower_causally_without_p90_gate():
     assert result['swap_pnl'] == 0.
 
 
+@pytest.mark.parametrize('ordering', ['low_first', 'high_first'])
+def test_small_initial_profit_does_not_prevent_later_averaging(ordering):
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    rows = [short_minute(at, 100., h=100.35),
+            short_minute(at+timedelta(minutes=1), 98., l=97.9),
+            short_minute(at+timedelta(minutes=2), 98.)]
+    result = run_share_replay(rows, [signal(at)], at, at+timedelta(days=1),
+                              Candidate(2.), detail=True, ordering=ordering)
+    assert result['closed_baskets'] == 0
+    assert result['open_entries'] == 2
+    assert result['trailing_activations'] == []
+    assert result['open_basket'][1]['at'] == rows[2]['start']
+    assert result['open_basket'][1]['entry'] < result['open_basket'][0]['entry']
+    assert result['max_reserved_stop_risk'] <= 1000.
+
+
+def test_exact_two_dollar_trigger_uses_bid_and_protects_above_initial_fill():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    f = signal(at, cutoff=670., p99=665.)
+    f['predictions'][-1].update(p01=640., p99=690.)
+    rows = [short_minute(at, 666.82, h=668.82, c=668.82),
+            short_minute(at+timedelta(minutes=1), 668.83)]
+    result = run_share_replay(rows, [f], at, at+timedelta(days=1), Candidate(2.), detail=True)
+    event, = result['trailing_activations']
+    assert event['at'] == rows[1]['start']
+    assert event['activation_threshold'] == pytest.approx(668.82)
+    assert event['executable_quote'] == pytest.approx(668.82)
+    assert event['initial_trailing_stop'] == pytest.approx(666.83)
+
+
+def test_new_stop_ratchets_up_and_requires_later_forecast_after_exit():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    rows = [short_minute(at), short_minute(at+timedelta(minutes=1), 100., h=104., c=103.),
+            short_minute(at+timedelta(minutes=2), 103., h=103.5, l=101., c=101.),
+            short_minute(at+timedelta(minutes=3), 100.)]
+    result = run_share_replay(rows, [signal(at)], at, at+timedelta(days=1), Candidate(2.), detail=True)
+    assert result['closed_baskets'] == 1 and result['open_entries'] == 0
+    assert result['entries'][0]['exits'][0]['price'] == pytest.approx(101.99)
+    assert result['baskets'][0]['reason'] == 'trailing_stop'
+
+
+def test_legacy_rule_is_explicit_and_reproduces_the_early_stop():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    rows = [short_minute(at, 100., h=100.35), short_minute(at+timedelta(minutes=1), 98.)]
+    result = run_share_replay(rows, [signal(at)], at, at+timedelta(days=1), Candidate(2.),
+                              detail=True, trailing_rule='legacy_basket_profit')
+    assert result['closed_baskets'] == 1 and result['max_ladder'] == 1
+
+
 def test_forecast_uses_only_500_completed_days_and_seven_real_future_sessions():
     day = '2026-09-25'
     cutoff = datetime(2026, 9, 25, 20, tzinfo=UTC)

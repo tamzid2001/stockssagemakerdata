@@ -53,7 +53,8 @@ def study(source, forecasts, baseline, output):
         for ordering in ('low_first', 'high_first'):
             row = run_share_replay(rows, records, first, last, Candidate(2., 'equal'),
                                    ordering=ordering, detail=True,
-                                   research_budget_multiplier=scale, account_timezone=PRAGUE)
+                                   research_budget_multiplier=scale, account_timezone=PRAGUE,
+                                   trailing_rule='legacy_basket_profit')
             results.append(row)
             if scale == 1.:
                 expected = next(r for r in original if r['ordering'] == ordering)
@@ -78,7 +79,8 @@ def study(source, forecasts, baseline, output):
         for ordering in ('low_first', 'high_first'):
             stress.append(run_share_replay(rows, records, first, last, Candidate(2., 'equal'),
                                           COSTS[1], ordering, True,
-                                          research_budget_multiplier=selected, account_timezone=PRAGUE))
+                                          research_budget_multiplier=selected, account_timezone=PRAGUE,
+                                          trailing_rule='legacy_basket_profit'))
     value = {'complete': True, 'source': identity, 'source_run': 37826329337,
              'initial_balance': 100000., 'grid': 2., 'sizing': 'equal',
              'peak_drawdown_selection_limit': 10000., 'daily_loss_selection_limit': 5000.,
@@ -90,7 +92,8 @@ def study(source, forecasts, baseline, output):
              'selection_note': 'Sizing chosen after reviewing the entire year; retrospective sensitivity, not a fresh holdout or recommended risk limit.',
              'orders_sent': 0, 'firestore_writes': 0}
     write_json(output/'results.json.gz', value)
-    lines = ['# SPY $2 equal grid: drawdown and sizing sensitivity', '',
+    lines = ['# SPY $2 equal grid: legacy drawdown and sizing sensitivity', '',
+             'Superseded trailing rule: this reproduces the old immediate-profit activation for historical comparison. It does not implement the corrected lowest-entry-plus-distance activation.', '',
              'The original 82 closed baskets each contained exactly one entry order. Multiple shares in one order are one ladder leg. Larger sizing reruns actual execution and can change share rounding, eligibility, fills and exits.', '',
              f'Arithmetic scaling to $10,000 historical equity drawdown is {multiplier:.4f}×; estimated net ${linear["net_low_usd"]:,.2f} to ${linear["net_high_usd"]:,.2f}, requiring peak exposure ${linear["peak_notional_usd"]:,.2f}. This exceeds the $100,000 cash-only account and is not an executable return estimate.', '',
              'The following replays raise the reserved ladder risk budget while leaving actual cash buying power at 1× equity. The original 1% rule applies only to multiplier 1. Larger multipliers change that rule. Account remains $100,000; $2 grid, above-first-P99 signal, fixed final P01 stop, higher/lower path sensitivity and original profitable trailing are unchanged. Daily loss uses Prague midnight. Limits reject outcomes afterward; they do not force liquidation when hit.', '',

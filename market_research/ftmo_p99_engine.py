@@ -9,6 +9,7 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import math
+from statistics import median
 
 from .ftmo_dukas_data import INSTRUMENTS, UTC, stamp
 from .ftmo_dukas_engine import Costs, PRAGUE, SERVER, adjusted_quotes, commission, swap_quote, swap_weight
@@ -45,6 +46,26 @@ def floor_lots(lots, step=.01):
 def trail_distance(entries, grid):
     prices = [e['entry'] for e in entries if e['lots'] > 0]
     return grid if len(prices) < 2 else .75 * (max(prices) - min(prices))
+
+
+def entry_trailing_stop(entries, grid, price, tick, *, side='long'):
+    """Arm after a full favorable trail distance from the extreme fill.
+
+    Long trails stay one executable tick above the lowest fill; shorts mirror
+    this below the highest fill. Stops must also be one tick behind the quote.
+    """
+    direction = 1 if side == 'long' else -1
+    prices = [e['entry'] for e in entries if e['lots'] > 0]
+    extreme = min(prices) if side == 'long' else max(prices)
+    distance = trail_distance(entries, grid)
+    if direction * (price - extreme) + tick * 1e-8 < distance:
+        return None
+    raw = price - direction * distance
+    rounded = (math.floor(raw / tick + 1e-8) if side == 'long'
+               else math.ceil(raw / tick - 1e-8)) * tick
+    entry_floor = extreme + direction * tick
+    proposed = max(rounded, entry_floor) if side == 'long' else min(rounded, entry_floor)
+    return proposed if direction * (price - proposed) >= tick * (1 - 1e-8) else None
 
 
 class KnownConversion:
@@ -134,10 +155,11 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
            ordering='low_first', initial_balance=100_000., risk_fraction=.01, detail=False, *,
            entry_quantile='p99', entry_comparison='above', averaging_gate='p90',
            quote_adjuster=adjusted_quotes, account_timezone=PRAGUE, side='long',
-           research_budget_multiplier=1.):
+           research_budget_multiplier=1., trailing_rule='extreme_entry_distance'):
     if (ordering not in ('low_first', 'high_first') or not 0 < risk_fraction <= .01
             or entry_quantile not in ('p90', 'p99') or entry_comparison not in ('above', 'below', 'any')
             or averaging_gate not in ('p90', 'grid') or side not in ('long', 'short')
+            or trailing_rule not in ('extreme_entry_distance', 'legacy_basket_profit')
             or (side == 'short' and averaging_gate != 'grid')
             or not math.isfinite(research_budget_multiplier) or research_budget_multiplier <= 0):
         raise ValueError('INVALID_REPLAY_CONFIGURATION')
@@ -161,6 +183,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
     active = []
     ledger = []
     baskets = []
+    trailing_activations = []
     current = None
     pending = None
     signal_origin = consumed_origin = None
@@ -366,9 +389,22 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             mark(px, point_at)
             if tradeable and active and equity(px, point_at) > initial_balance + sum(b['net_pnl'] for b in baskets):
                 # Basket profitability includes commissions and accrued swap.
-                peak_bid = px if peak_bid is None else (max(peak_bid, px) if side == 'long' else min(peak_bid, px))
-                proposed = stop_round(peak_bid - direction * trail_distance(active, candidate.grid))
-                trailing = proposed if trailing is None else (max(trailing, proposed) if side == 'long' else min(trailing, proposed))
+                if trailing_rule == 'legacy_basket_profit':
+                    peak_bid = px if peak_bid is None else (max(peak_bid, px) if side == 'long' else min(peak_bid, px))
+                    proposed = stop_round(peak_bid - direction * trail_distance(active, candidate.grid))
+                else:
+                    proposed = entry_trailing_stop(active, candidate.grid, px, tick, side=side)
+                if proposed is not None:
+                    if detail and trailing is None and trailing_rule != 'legacy_basket_profit':
+                        prices = [e['entry'] for e in active]
+                        extreme = min(prices) if side == 'long' else max(prices)
+                        distance = trail_distance(active, candidate.grid)
+                        trailing_activations.append({'at': point_at.isoformat(), 'basket_started_at': basket_start.isoformat(),
+                                                     'legs': len(active), 'extreme_entry': extreme,
+                                                     'activation_threshold': extreme + direction * distance,
+                                                     'executable_quote': px, 'trailing_distance': distance,
+                                                     'initial_trailing_stop': proposed})
+                    trailing = proposed if trailing is None else (max(trailing, proposed) if side == 'long' else min(trailing, proposed))
             previous_bid = px
         if tradeable and active and pending is None:
             extreme_entry = min(e['entry'] for e in active) if side == 'long' else max(e['entry'] for e in active)
@@ -431,6 +467,14 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
     if side == 'short':
         result.update(side=side, fixed_stop_not_above_entry_blocks=invalid_stop_blocked,
                       minimum_share_allocation_blocks=minimum_size_blocked)
+    if trailing_rule != 'legacy_basket_profit':
+        result.update(trailing_rule=trailing_rule,
+                      trailing_activation='basket profitable and full favorable distance from extreme entry',
+                      trailing_stop_entry_buffer_ticks=1,
+                      median_basket_hours=median(b['duration_hours'] for b in baskets) if baskets else None,
+                      median_ladder=median(b['legs'] for b in baskets) if baskets else None)
     if detail:
         result.update(entries=ledger, baskets=baskets, open_basket=active, hourly_equity=hourly_curve)
+        if trailing_rule != 'legacy_basket_profit':
+            result['trailing_activations'] = trailing_activations
     return result

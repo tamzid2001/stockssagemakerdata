@@ -43,8 +43,12 @@ by available unlevered buying power. An entry below the stop is rejected.
 
 Average only lower, with no P90 gate. An observed grid breach creates a limit
 eligible from the next observed minute. Activate trailing only when the basket
-has positive modeled net P&L. The distance is one grid for a single entry or
-75% of the highest-minus-lowest filled entry range for multiple entries.
+has positive modeled net P&L AND executable bid reaches the lowest fill plus
+the trailing distance. The distance is one grid for a single entry or 75% of
+the highest-minus-lowest filled entry range for multiple entries. A $666.82
+single entry with a $2 grid arms at $668.82 bid. Its trailing stop is floored
+one cent above the lowest fill and never loosens; the fixed P01 remains active
+before trailing arms.
 Carry positions until exit; after exit, wait for a later qualifying forecast.
 
 Grids are $0.25, $0.50, $1, $2, $5 and $10, each with equal, larger-deeper and
@@ -98,6 +102,11 @@ Use the original first-nine-month selection and fresh-flat holdout methodology;
 do not select a short profile using the completed full-year outcomes.
 
 ## Offline drawdown and sizing sensitivity
+
+This section preserves the superseded immediate-profit trailing rule for
+historical reproducibility. Its returns are not corrected-strategy results.
+Use `market_research.spy_trailing_audit` to compare corrected $1/$2 grids
+against the exactly reproduced legacy $2 baseline from frozen artifacts.
 
 `market_research.spy_drawdown_sizing` reuses the original SPY source and all
 251 saved forecasts for the $2 equal long grid. It checks source hashes and

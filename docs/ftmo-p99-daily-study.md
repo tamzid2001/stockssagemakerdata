@@ -82,10 +82,12 @@ The public FTMO endpoint does not publish minimum lot/step fields. These runs as
 2. After that averaging fill, subsequent entries need only lower grid levels. P90 no longer gates the basket.
 3. A completed minute must confirm the lower-price breach before a limit order exists. That order is eligible from the next observed minute. No retrospective fill at the low that created the order.
 4. A resting buy limit above the stop fills before the stop on a continuous descent; a gap below the stop closes the basket at the actual available bid before adding exposure.
-5. Trailing activates when basket P&L, including entry/exit commissions and accrued swaps, becomes positive.
-6. With at least two open entries, trailing distance is `0.75 × (highest fill − lowest fill)`. With one entry it is one grid. The active trail ratchets upward; it does not loosen. The more protective of the trail and fixed P01 closes the basket.
+5. Trailing requires both positive basket P&L (including entry/exit commissions and accrued swaps) and executable bid at or above `lowest fill + trailing distance`. A single $666.82 entry with a $2 grid therefore cannot arm its trail before bid reaches $668.82. The fixed final P01 remains active while trailing is unarmed.
+6. With at least two open entries, trailing distance is `0.75 × (highest fill − lowest fill)`. With one entry it is one grid. Once armed, the stop follows the favorable quote minus that distance, stays at least one executable tick above the lowest fill, and never loosens. It must remain at least one tick behind the quote; very small spans may need a larger move to form a valid stop. The more protective of the trail and fixed P01 closes the basket. Short research mirrors the rule below the highest fill.
 7. After exit, reentry requires a later daily forecast with a new above-first-P99 signal. The same origin cannot reopen the basket.
 8. Baskets carry until stop/trail. At the end of the year, open liabilities remain bid-marked, including estimated exit commission.
+
+Earlier reports used immediate positive-P&L activation and can stop a one-leg basket before its first averaging level. That behavior is retained only as the explicit `legacy_basket_profit` replay option for reproducibility. Corrected results record `trailing_rule=extreme_entry_distance`; prior returns must not be presented as results of the corrected rule.
 
 ## Grid and lot comparisons
 

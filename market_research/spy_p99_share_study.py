@@ -247,11 +247,12 @@ def assumed_quotes(row, symbol, costs):
 
 
 def run_share_replay(rows, records, first, last, candidate, costs=COSTS[0], ordering='low_first', detail=False, *,
-                     side='long', research_budget_multiplier=1., account_timezone=NY):
+                     side='long', research_budget_multiplier=1., account_timezone=NY,
+                     trailing_rule='extreme_entry_distance'):
     result = replay('SPY', rows, records, share_spec(), KnownConversion('USD', []), first, last, candidate, costs, ordering,
                     detail=detail, averaging_gate='grid', quote_adjuster=assumed_quotes,
                     account_timezone=account_timezone, side=side,
-                    research_budget_multiplier=research_budget_multiplier)
+                    research_budget_multiplier=research_budget_multiplier, trailing_rule=trailing_rule)
     rename = {'max_lots': 'max_shares', 'open_lots': 'open_shares', 'max_margin': 'max_invested_notional_usd'}
     for old, new in rename.items():
         result[new] = result.pop(old)
@@ -316,7 +317,8 @@ def run_replays(folder, forecast_root, output, *, side='long'):
                    'collateral_assumption': '100% notional reserved; short proceeds do not enlarge capacity',
                    'historical_borrow_availability_verified': False, 'stock_borrow_fees_included': False,
                    'dividend_in_lieu_included': False}
-    result = {'complete': True, 'study': replay_study, 'source': identity, 'completed_forecasts': len(ordered),
+    result = {'complete': True, 'trailing_rule': 'extreme_entry_distance',
+              'study': replay_study, 'source': identity, 'completed_forecasts': len(ordered),
               'signal_days': signal_days, 'selected_on_development': selected, 'development': development,
               'full_year_grid_comparison': full, 'selected_full_year_details': detail_results,
               'fresh_flat_holdout': holdout, 'orders_sent': 0, 'firestore_writes': 0}
@@ -327,7 +329,7 @@ def run_replays(folder, forecast_root, output, *, side='long'):
              'P01/P10/P25/P50/P75/P90/P99; Prophet, Toto, Granite, Chronos and TimesFM. Supported models supply P01/P99 without tail extrapolation.', '',
              ('Whole shares, 1% risk shared across the ladder, no borrowing. Fixed final triggering P01 stop; final P99−P01 risk reference. Average only lower, without a P90 gate.' if side == 'long' else
               'Whole short shares, 1% risk shared across the ladder. Fixed final triggering P99 stop; final P99−P01 risk reference. Average only higher. Reserve 100% gross notional; short proceeds do not enlarge capacity. Skip entry if the fixed P99 stop is not above the short fill. Historical borrow availability, borrow fees and dividend-in-lieu costs are unverified and excluded.')
-              + ' Carry positions; profitability-activated trail; wait for a later qualifying forecast after exit.', '',
+              + ' Carry positions. Trailing requires positive basket P&L and a full favorable trailing distance from the lowest long fill (highest short fill). The stop stays one tick beyond that fill and never loosens. With one entry the distance is one grid; with multiple entries it is 75% of the fill-price span. Wait for a later qualifying forecast after exit.', '',
              'Regular-session trade OHLC rounded up to cents as ask proxy; modeled bid = ask minus assumed spread (1 cent reference, 2 cents sensitivity). Dividends, regulatory fees and interest are excluded; results are price P&L, not verified broker returns.', '',
              '| Grid | Profile | Minute path | Net price P&L | Drawdown | Basket W/L | Win rate | Max ladder | Avg duration hours | Open shares |',
              '|---:|---|---|---:|---:|---|---:|---:|---:|---:|']
