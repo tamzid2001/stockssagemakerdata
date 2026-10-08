@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ApprovedNativeMinuteArchivesOnly",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::cfg-public-proper-wallaby/EURUSD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/EURUSD/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USDJPY/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USDJPY/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/GBPUSD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/GBPUSD/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/GBPJPY/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/GBPJPY/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USDCAD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USDCAD/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USA500IDXUSD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USA500IDXUSD/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USA30IDXUSD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USA30IDXUSD/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USATECHIDXUSD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/USATECHIDXUSD/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/XAUUSD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/XAUUSD/*/*/*/ASK_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/BTCUSD/*/*/*/BID_candles_min_1.bi5",
+        "arn:aws:s3:::cfg-public-proper-wallaby/BTCUSD/*/*/*/ASK_candles_min_1.bi5"
+      ]
+    }
+  ]
+}

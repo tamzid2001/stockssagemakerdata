@@ -1,0 +1,4 @@
+# Authenticated first-party Dukascopy Requester Pays archive. CRT also supports
+# the local AWS CLI login profile; Actions uses temporary OIDC credentials.
+boto3==1.43.109
+botocore[crt]==1.43.109

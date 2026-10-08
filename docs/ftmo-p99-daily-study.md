@@ -13,6 +13,26 @@ Run [FTMO daily P99 seven-session yearly grid study](../.github/workflows/ftmo-p
 - P01, P25, P50, P75, P90 and P99. Toto and TimesFM's native ranges do not include P01/P99: the supported models' tail weights renormalize without extrapolating unsupported tails.
 - Initial buy signal: the observed cutoff close is strictly above the **first** predicted P99. Entry uses the next available executable ask after measured inference latency.
 
+## Authenticated history source
+
+This study uses Dukascopy's [documented S3 bulk source](https://www.dukascopy.com/wiki/en/development/data-export/), `cfg-public-proper-wallaby` in `eu-west-1`, with authenticated Requester Pays reads. It downloads native daily **M1 candle archives**, not tick archives or the entire bucket. At most eight daily downloads per job and two asset jobs run concurrently. Minute candles are aggregated into hourly observations and daily sessions; only the replay year's minute rows are retained. This keeps warmup memory bounded and avoids the annual hourly tick-download loop.
+
+The big-endian archive records are decoded as seconds, open, close, low, high and volume, with the checked-in first-party instrument catalog's price scale. Both bid and ask are required. Flat zero-volume minutes on both sides are discarded as stale placeholders; no missing intervals are filled. Every source records object versions, ETags, compressed SHA-256 hashes, absent archive days and excluded placeholders. Frozen row hashes are checked before forecasts and replays.
+
+GitHub obtains temporary credentials through OIDC. The configured `QuanturaDukascopyHistoryReader` role permits only `s3:GetObject` on the ten approved symbols' BID/ASK minute candle files. It permits no uploads, deletions, tick downloads or bucket enumeration. Its trust is restricted to this repository's `main` branch. Local AWS credentials are never copied into GitHub or artifacts.
+
+Repository variable `DUKASCOPY_HISTORY_ROLE_ARN` selects the role. Reviewable configuration is in [the trust policy](../market_research/infra/dukascopy-history-trust.json) and [the read policy](../market_research/infra/dukascopy-history-read.json). AWS Requester Pays charges apply to these bounded reads. The provider-access job reads and validates the latest replay weekday's paired EURUSD archive before scheduling the source matrix.
+
+For local diagnostics, the downloader accepts `--profile default` after AWS CLI authentication:
+
+```sh
+python -m market_research.dukascopy_s3_source \
+  --symbol EURUSD.sim --start 2025-10-07 --end 2026-10-06 \
+  --output /tmp/ftmo-p99/EURUSD.sim --profile default
+```
+
+Install the hash-locked `market_research/requirements-dukas-s3.lock` first. Its CRT dependency supports AWS CLI login profiles locally; Actions uses OIDC credentials. The study's source wrapper additionally requires at least 500 genuine completed warmup sessions before proceeding.
+
 ## Fixed stop and equity risk
 
 The triggering forecast's **seventh/final P01** is the basket stop until exit, rounded down to the instrument's executable price tick. Later forecasts do not move it. Its **final P99 minus final P01** defines the sizing reference range:

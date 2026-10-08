@@ -11,7 +11,8 @@ from pathlib import Path
 import re
 import time
 
-from .ftmo_dukas_data import INSTRUMENTS, UTC, digest, download, load_quotes, stamp
+from .ftmo_dukas_data import INSTRUMENTS, UTC, digest, load_quotes, stamp
+from .dukascopy_s3_source import download as download_authenticated
 from .ftmo_dukas_engine import COSTS
 from .ftmo_dukas_study import MODELS, snapshot_specs
 from .ftmo_p99_engine import Candidate, KnownConversion, candidates, replay
@@ -99,27 +100,16 @@ def plan(start, end, symbols, chunk_size=21):
 
 def source(symbol, start, end, output):
     # At least 500 real daily sessions for even sparse weekday instruments.
-    download(symbol, start, end, output, warmup_days=1100)
+    download_authenticated(symbol, start, end, output, warmup_days=1100)
     hourly = load_quotes(output)
     sessions = daily_sessions(hourly, symbol)
     cutoff = datetime.combine(start, datetime.min.time(), UTC) + timedelta(hours=17)
     if len([r for r in sessions if stamp(r['timestamp']) <= cutoff]) < 500:
         raise ValueError('INSUFFICIENT_500_DAILY_SESSION_WARMUP')
-    from .ftmo_trigger_reforecast import minute_quotes
-    days = [start+timedelta(days=i) for i in range((end-start).days+2)]
-    minutes, audit = minute_quotes(symbol, days, hourly, output/'minute-cache')
-    with gzip.open(output/'minutes.jsonl.gz', 'wt') as f:
-        for row in minutes:
-            f.write(json.dumps(row, separators=(',', ':')) + '\n')
-    write_json(output/'minutes-source.json', {'symbol': symbol, 'rows_sha256': digest(minutes),
-                'paired_minutes': len(minutes), 'audit': audit, 'orders_sent': 0})
+    minute_identity = read_json(output/'minutes-source.json')
     write_json(output/'daily-sessions.json.gz', sessions)
-    # Raw minute payloads are redundant once their checksums and decoded paired
-    # observations are frozen. Keep artifacts small, without cloud database writes.
-    for path in (output/'minute-cache').glob('*.json.gz'):
-        path.unlink()
     print(json.dumps({'event': 'p99_source_complete', 'symbol': symbol, 'daily_sessions': len(sessions),
-                      'paired_minutes': len(minutes), 'orders_sent': 0}), flush=True)
+                      'paired_minutes': minute_identity['paired_minutes'], 'orders_sent': 0}), flush=True)
 
 
 def load_minutes(folder):
