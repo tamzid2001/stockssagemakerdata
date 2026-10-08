@@ -60,17 +60,28 @@ class CloudJournal:
         self.generation=0;self.state={};self.fence=None
 
     def read(self,name):
-        from google.api_core.exceptions import NotFound
+        from google.api_core.exceptions import NotFound, PreconditionFailed
         from .recovery_cloud import decode_catalog
-        blob=self.bucket.blob(name)
-        try:blob.reload()
-        except NotFound:return {},0
-        generation=int(blob.generation)
-        if blob.size>16*1024*1024:raise RuntimeError("TRADER_JOURNAL_TOO_LARGE")
-        with tempfile.TemporaryDirectory() as folder:
-            path=Path(folder)/"state.enc"
-            blob.download_to_filename(path,if_generation_match=generation,checksum="auto")
-            return decode_catalog(path),generation
+        # reload() pins this Blob to a generation. A concurrent replacement can
+        # remove that generation before its media GET, producing 404 rather than
+        # 412. Retry the whole read with a NEW Blob and fresh metadata. Never
+        # interpret a vanished observed generation as an empty durable journal.
+        observed=False
+        for attempt in range(4):
+            blob=self.bucket.blob(name)
+            try:blob.reload()
+            except NotFound:
+                if not observed:return {},0
+            else:
+                observed=True;generation=int(blob.generation)
+                if blob.size>16*1024*1024:raise RuntimeError("TRADER_JOURNAL_TOO_LARGE")
+                with tempfile.TemporaryDirectory() as folder:
+                    path=Path(folder)/"state.enc"
+                    try:blob.download_to_filename(path,if_generation_match=generation,checksum="auto")
+                    except (NotFound,PreconditionFailed):pass
+                    else:return decode_catalog(path),generation
+            if attempt<3:time.sleep(.05*(attempt+1))
+        raise RuntimeError("TRADER_SNAPSHOT_BUSY")
 
     def write(self,name,value,generation):
         from .recovery_cloud import encode_catalog
@@ -155,7 +166,7 @@ class AccountGate:
                     raise RuntimeError("ACCOUNT_POSITION_IDENTITY_UNVERIFIED")
                 filled=money(entry.get("filled","0"))
                 pending=entry.get("pending")
-                if pending:
+                if pending and pending.get("delivery_stage")!="prepared":
                     order=self.broker.find_order(pending["intent"],pending.get("order_id"))
                     if order is None:raise RuntimeError("ACCOUNT_INTENT_UNRESOLVED")
                     terminal=reconciled_order(order,pending["intent"],entry["side"])
@@ -170,8 +181,10 @@ class AccountGate:
         if generation!=self.generation or self.lease["expires"]<=time.time():
             raise RuntimeError("ACCOUNT_ORDER_GATE_LOST")
     def __exit__(self,*_):
+        from google.api_core.exceptions import PreconditionFailed
         if self.generation is not None:
-            self.journal.write(self.name,{"lease":{**self.lease,"expires":0}},self.generation)
+            try:self.journal.write(self.name,{"lease":{**self.lease,"expires":0}},self.generation)
+            except PreconditionFailed:pass  # A successor owns it; never retry an unlock against its generation.
 
 def quantity_remaining(entry,ask):
     remaining=Decimal("1.00")-money(entry.get("cost","0"))
@@ -198,7 +211,7 @@ def market_ask(market,side,now,end):
 class DollarTrader:
     def __init__(self,config,broker,journal,mode,gate_factory=AccountGate):
         self.config,self.broker,self.journal,self.mode=config,broker,journal,mode
-        self.gate_factory=gate_factory
+        self.gate_factory=gate_factory;self.stopping=False
 
     def begin(self,signal,quote,now):
         ticker=signal["market_id"]
@@ -223,6 +236,11 @@ class DollarTrader:
         for mode,entry in group.items():
             if entry["status"]=="settled":continue
             pending=entry.get("pending")
+            if pending and pending.get("delivery_stage")=="prepared":
+                # This stage cannot have sent a POST: submission first requires
+                # a durable transition to 'submitting'. Legacy intents without
+                # a stage remain uncertain and require exchange reconciliation.
+                entry["pending"]=None;self.journal.save();pending=None
             if pending:
                 order=self.broker.find_order(pending["intent"],pending.get("order_id"))
                 if order is None:continue  # Unknown POST delivery cannot authorize another order.
@@ -236,6 +254,7 @@ class DollarTrader:
             if now>=entry["market_end"]:
                 self.settle(entry,mode,market,now);continue
             if entry["status"] in ("held","entry_rejected") or now-entry["last_attempt"]<1:continue
+            if self.stopping:continue
             ask=market_ask(market,entry["side"],now,entry["market_end"])
             quantity=quantity_remaining(entry,ask)
             if quantity<=0:
@@ -264,9 +283,27 @@ class DollarTrader:
                 intent=order_payload(ticker,entry["side"],quantity,ask,market["exchange_index"],self.config,
                                      attempt=attempt,fractional_remainder=True)
                 prepared_at=time.time()
-                entry.update(attempt=attempt,last_attempt=prepared_at,pending={"intent":intent,"prepared_at":prepared_at})
-                self.journal.save();gate.verify()
+                entry.update(attempt=attempt,last_attempt=prepared_at,
+                             pending={"intent":intent,"prepared_at":prepared_at,"delivery_stage":"prepared"})
+                self.journal.save()
+                # Both admission and journal I/O can cross the market cutoff.
+                # A known failure before submit must not leave an ambiguous IOC.
                 try:
+                    gate.verify()
+                    if time.time()>=entry["market_end"]:
+                        entry.update(pending=None,status="held");self.journal.save();continue
+                    if self.stopping:
+                        entry["pending"]=None;self.journal.save();continue
+                    entry["pending"]["delivery_stage"]="submitting"
+                    self.journal.save();gate.verify()
+                    if time.time()>=entry["market_end"]:
+                        entry.update(pending=None,status="held");self.journal.save();continue
+                    if self.stopping:
+                        entry["pending"]=None;self.journal.save();continue
+                except RuntimeError:
+                    entry["pending"]=None;self.journal.save();raise
+                try:
+                    entry["last_attempt"]=time.time()
                     value=self.broker.submit(intent)
                     ack=value.get("order",value)
                     if not isinstance(ack.get("order_id"),str):raise RuntimeError("ACK_ORDER_ID_UNAVAILABLE")
@@ -275,14 +312,15 @@ class DollarTrader:
                 except RuntimeError as error:
                     code=str(error)
                     if code=="KALSHI_HTTP_429":
-                        entry["pending"]=None;entry["last_attempt"]=now+2;self.journal.save()
-                    elif code in ("KALSHI_HTTP_400","KALSHI_HTTP_401","KALSHI_HTTP_403"):
+                        entry["pending"]=None;entry["last_attempt"]=time.time()+2;self.journal.save()
+                    elif code in ("KALSHI_HTTP_400","KALSHI_HTTP_401","KALSHI_HTTP_403","KALSHI_HTTP_422"):
                         entry["pending"]=None;entry["status"]="entry_rejected";self.journal.save();raise
                     else:
                         # Persisted intent is retained across all ambiguous outcomes.
                         entry["delivery_status"]="unknown_reconcile_before_retry";self.journal.save()
 
     def settle(self,entry,mode,market,now):
+        if entry.get("status")=="settled":return
         if entry.get("pending"):return
         if market.get("status") not in ("settled","finalized") or market.get("result") not in ("yes","no"):return
         quantity=money(entry["filled"]);payout=quantity if market["result"]==entry["side"] else Decimal(0)
@@ -379,7 +417,7 @@ def run(config,mode,duration):
     stopped=False
     def stop(*_):
         nonlocal stopped
-        stopped=True
+        stopped=True;trader.stopping=True
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     deadline=min(time.time()+duration*60,float(os.getenv("QUANTURA_JOB_STARTED_AT",time.time()))+345*60)
     context=multiprocessing.get_context("spawn");child=None;result_queue=None;computing=None
@@ -450,7 +488,8 @@ def run(config,mode,duration):
                     if time.time()-last_health>=60:
                         health=store._get("checkpoints","btc_collector_health") or {}
                         print(json.dumps({"event":"opposite_dollar_heartbeat","series":config.series_ticker,
-                            "mode":mode,"at":now,"orders_enabled":broker.enabled,"error_codes":[r["error_code"] for r in statuses.values()],
+                            "mode":mode,"at":now,"code_sha":os.getenv("QUANTURA_CODE_SHA"),
+                            "orders_enabled":broker.enabled,"error_codes":[r["error_code"] for r in statuses.values()],
                             "collector_status":health.get("status","starting"),
                             "collector_error_codes":[r.get("error_code") for r in health.get("errors",[])],
                             "forecast_statuses":dict(Counter(d.get("status") for d in decisions.values())),

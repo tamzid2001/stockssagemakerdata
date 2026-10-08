@@ -16,6 +16,10 @@ The first unambiguous completed-minute bid at or above that side's P90 is latche
 
 Live entries use V2 IOC limit orders at the current price, refreshed after account admission. The worker targets a one-second reconciliation/retry cadence while the market remains open. Network delay, rate limiting and read-model delay may lengthen that cadence. Every retry follows a terminal reconciliation of the previous order, has a distinct deterministic client ID, and sizes only the unspent portion of the $1 notional budget. An unknown delivery is retained and reconciled; it cannot cause a duplicate order. Fractional quantities and dynamic `price_ranges` are validated. IOC limits can still go unfilled; retries end at market close.
 
+Durable intents distinguish `prepared` (no POST can have occurred) from `submitting` (delivery may be uncertain). Recovery may clear a prepared intent; submitting and older unstaged intents require exchange reconciliation. The worker checks lock ownership and the market cutoff again immediately before submission. Known pre-submission failures clear the unsent intent when fenced storage remains writable.
+
+A shutdown signal blocks further IOC submissions and saves the recovery buffer. A worker releasing an expired account gate cannot overwrite a successor's lease. Confirmed fills are applied once and official settlement accounting is idempotent. Heartbeats include the execution SHA so the running approved version is visible.
+
 Paper entries use observed current asks and modeled series taker fees; depth and queue priority are not execution verified. Live P&L uses authenticated terminal order cost/fees and matching account settlement records. Paper and live entries share each causal signal and keep separate accounting.
 
 ## Durable operation
@@ -25,6 +29,8 @@ Paper entries use observed current asks and modeled series taker fees; depth and
 Approval requires `QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED=true`, the exact approved execution SHA and the selected portfolio configuration fingerprint. `QUANTURA_KALSHI_DOLLAR_ENABLED=true` controls workers/handoffs; `QUANTURA_KALSHI_DOLLAR_WATCHDOG_MODE=both` selects concurrent paper and live accounting. Existing BTC/coin live gates and watchdogs remain disabled when this portfolio is enabled. The separate BTC minute research flag is disabled during replacement; its existing research archives remain available.
 
 Hosted-runner setup and handoffs can miss opening minutes. Continuous recovery does not guarantee uninterrupted exchange observation. The collector and execution loop continue while the numerical child performs inference, and official receipt times prevent historical observations being mislabeled as live.
+
+Concurrent storage reads retry fresh metadata and a generation-matched download if another worker replaces the object between those requests. An obsolete-generation 404 is never treated as an empty journal. Repeated contention pauses admission with `TRADER_SNAPSHOT_BUSY`; ownership checks, generation-matched writes and pending order reconciliation still apply.
 
 ## cron-job.org recovery settings
 

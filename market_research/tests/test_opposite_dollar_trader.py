@@ -28,6 +28,7 @@ class Broker:
     def submit(self,intent):
         # Proves durable intent is present before the exchange write.
         assert self.journal.saved[-1]["entries"][TICKER]["live"]["pending"]["intent"]==intent
+        assert self.journal.saved[-1]["entries"][TICKER]["live"]["pending"]["delivery_stage"]=="submitting"
         self.posts.append(intent);return {"order_id":"order-identifier-1234"}
     def find_order(self,intent,order_id=None):return self.orders.get(intent["client_order_id"])
     def pages(self,*_,**__):return []
@@ -160,3 +161,190 @@ def test_shared_gate_compare_and_swap_contention_waits_without_submission():
     j.write=conflict
     with pytest.raises(RuntimeError,match="LEASE_HELD"):
         with AccountGate(j,None):pytest.fail("Contended gate cannot admit orders")
+
+class ReadBlob:
+    def __init__(self,generation,payload=None,*,reload_error=None,download_error=None):
+        self.generation=generation;self.payload=payload;self.size=len(payload or b"")
+        self.reload_error=reload_error;self.download_error=download_error;self.downloads=[]
+    def reload(self):
+        if self.reload_error:raise self.reload_error
+    def download_to_filename(self,path,**kwargs):
+        self.downloads.append(kwargs)
+        if self.download_error:raise self.download_error
+        path.write_bytes(self.payload)
+
+def reading_journal(monkeypatch,blobs):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.sleep",lambda _:None)
+    class Bucket:
+        def __init__(self):self.reads=0
+        def blob(self,name):
+            index=self.reads;self.reads+=1;return blobs[index]
+    j=object.__new__(CloudJournal);j.bucket=Bucket();return j
+
+def encoded_state(monkeypatch,tmp_path,value):
+    # Exercise authenticated encrypted decoding with a test-only key.
+    from market_research.recovery_cloud import encode_catalog
+    monkeypatch.setenv("QUANTURA_RESEARCH_ARTIFACT_KEY","a"*64)
+    path=tmp_path/"snapshot.enc";encode_catalog(value,path);return path.read_bytes()
+
+@pytest.mark.parametrize("error_code",[404,412])
+def test_read_reloads_new_generation_after_concurrent_replacement(monkeypatch,tmp_path,error_code):
+    from google.api_core.exceptions import NotFound,PreconditionFailed
+    error=(NotFound if error_code==404 else PreconditionFailed)("old generation replaced")
+    value={"lease":{"holder":"other","fence":2},"entries":{"market":{"live":{"pending":{"intent":{"client_order_id":"keep-me"}}}}}}
+    blobs=[ReadBlob(4,download_error=error),ReadBlob(5,encoded_state(monkeypatch,tmp_path,value))]
+    j=reading_journal(monkeypatch,blobs)
+    assert j.read("journal")== (value,5)
+    assert j.bucket.reads==2
+    assert [b.downloads[0]["if_generation_match"] for b in blobs]==[4,5]
+
+def test_genuinely_absent_journal_can_be_created(monkeypatch):
+    from google.api_core.exceptions import NotFound
+    j=reading_journal(monkeypatch,[ReadBlob(None,reload_error=NotFound("absent"))])
+    assert j.read("journal")==({},0)
+
+def test_observed_journal_disappearance_never_erases_pending_state(monkeypatch):
+    from google.api_core.exceptions import NotFound
+    blobs=[ReadBlob(4,download_error=NotFound("obsolete generation"))]+[
+        ReadBlob(None,reload_error=NotFound("missing after observation")) for _ in range(3)]
+    j=reading_journal(monkeypatch,blobs)
+    with pytest.raises(RuntimeError,match="TRADER_SNAPSHOT_BUSY"):j.read("journal")
+    assert j.bucket.reads==4
+
+def test_continuous_generation_replacement_has_bounded_read_retries(monkeypatch):
+    from google.api_core.exceptions import PreconditionFailed
+    j=reading_journal(monkeypatch,[ReadBlob(i,download_error=PreconditionFailed("replaced")) for i in range(4)])
+    with pytest.raises(RuntimeError,match="TRADER_SNAPSHOT_BUSY"):j.read("journal")
+    assert j.bucket.reads==4
+
+def test_refreshed_snapshot_still_fences_out_the_stale_owner(monkeypatch,tmp_path):
+    from google.api_core.exceptions import NotFound
+    value={"lease":{"holder":"other","fence":2,"expires":10**12}}
+    j=reading_journal(monkeypatch,[ReadBlob(4,download_error=NotFound("replaced")),ReadBlob(5,encoded_state(monkeypatch,tmp_path,value))])
+    j.name="journal";j.holder="worker";j.fence=1;j.generation=4
+    with pytest.raises(RuntimeError,match="TRADER_FENCE_LOST"):j.verify()
+
+def test_invalid_encrypted_snapshot_is_not_retried_or_treated_as_empty(monkeypatch):
+    j=reading_journal(monkeypatch,[ReadBlob(4,b"invalid authenticated journal")])
+    with pytest.raises(ValueError,match="INVALID_CATALOG_ARCHIVE"):j.read("journal")
+    assert j.bucket.reads==1
+
+def test_snapshot_contention_cannot_submit_an_order(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    class BusyGate(Gate):
+        def __enter__(self):raise RuntimeError("TRADER_SNAPSHOT_BUSY")
+    t,b,j=setup();t.gate_factory=BusyGate
+    with pytest.raises(RuntimeError,match="TRADER_SNAPSHOT_BUSY"):t.reconcile(TICKER,FEE,126)
+    assert not b.posts and j.state["entries"][TICKER]["live"]["pending"] is None
+
+def test_known_pre_submit_gate_failure_clears_unsent_intent(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    class LostGate(Gate):
+        def verify(self):raise RuntimeError("ACCOUNT_ORDER_GATE_LOST")
+    t,b,j=setup();t.gate_factory=LostGate
+    with pytest.raises(RuntimeError,match="ACCOUNT_ORDER_GATE_LOST"):t.reconcile(TICKER,FEE,126)
+    assert not b.posts and j.state["entries"][TICKER]["live"]["pending"] is None
+    assert any(s["entries"][TICKER]["live"]["pending"] for s in j.saved)
+    assert j.saved[-1]["entries"][TICKER]["live"]["pending"] is None
+
+def test_restart_can_replace_proven_unsent_prepared_intent(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    t,b,j=setup();entry=j.state["entries"][TICKER]["live"]
+    entry.update(attempt=1,pending={"intent":order_payload(TICKER,"no",Decimal("5"),".20",2,CONFIG,attempt=1,fractional_remainder=True),"delivery_stage":"prepared"})
+    t.reconcile(TICKER,FEE,126)
+    assert len(b.posts)==1 and entry["attempt"]==2
+
+@pytest.mark.parametrize("stage",[None,"submitting"])
+def test_restart_preserves_uncertain_legacy_and_submitting_intents(monkeypatch,stage):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    t,b,j=setup();entry=j.state["entries"][TICKER]["live"]
+    pending={"intent":order_payload(TICKER,"no",Decimal("5"),".20",2,CONFIG,attempt=1,fractional_remainder=True)}
+    if stage:pending["delivery_stage"]=stage
+    entry.update(attempt=1,pending=deepcopy(pending));t.reconcile(TICKER,FEE,126)
+    assert not b.posts and entry["pending"]==pending
+
+def test_clock_crossing_market_close_during_admission_never_submits(monkeypatch):
+    clock=[126]
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
+    class ClosingGate(Gate):
+        def verify(self):clock[0]=900
+    t,b,j=setup();t.gate_factory=ClosingGate;t.reconcile(TICKER,FEE,126)
+    assert not b.posts and j.state["entries"][TICKER]["live"]["pending"] is None
+
+@pytest.mark.parametrize("code",[400,401,403,422])
+def test_definitively_rejected_ioc_is_not_left_ambiguous(monkeypatch,code):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    t,b,j=setup()
+    def reject(_):raise RuntimeError("KALSHI_HTTP_"+str(code))
+    b.submit=reject
+    with pytest.raises(RuntimeError,match="KALSHI_HTTP"):t.reconcile(TICKER,FEE,126)
+    entry=j.state["entries"][TICKER]["live"]
+    assert entry["pending"] is None and entry["status"]=="entry_rejected"
+
+def test_rate_limit_rejection_retries_after_delay_with_new_intent(monkeypatch):
+    clock=[126]
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
+    t,b,j=setup();submit=b.submit
+    def throttle(_):raise RuntimeError("KALSHI_HTTP_429")
+    b.submit=throttle;t.reconcile(TICKER,FEE,126)
+    assert j.state["entries"][TICKER]["live"]["pending"] is None
+    b.submit=submit;clock[0]=127;t.reconcile(TICKER,FEE,127)
+    assert not b.posts
+    clock[0]=130;t.reconcile(TICKER,FEE,130)
+    assert len(b.posts)==1 and j.state["entries"][TICKER]["live"]["attempt"]==2
+
+def test_actual_terminal_fill_is_applied_exactly_once_after_recovery(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    t,b,j=setup();t.reconcile(TICKER,FEE,126);intent=b.posts[0]
+    b.orders[intent["client_order_id"]]=terminal(intent,"5.00","1.00",".056")
+    recovered_j=Journal();recovered_j.state=deepcopy(j.saved[-1])
+    recovered= DollarTrader(CONFIG,b,recovered_j,"live",gate_factory=Gate)
+    recovered.reconcile(TICKER,FEE,128);recovered.reconcile(TICKER,FEE,129)
+    entry=recovered_j.state["entries"][TICKER]["live"]
+    assert (entry["filled"],entry["cost"],entry["fees"])==("5.00","1.00","0.056")
+    assert len(entry["fills"])==1 and len(b.posts)==1
+
+def test_settlement_updates_totals_exactly_once():
+    t,b,j=setup("paper");t.reconcile(TICKER,FEE,126)
+    e=j.state["entries"][TICKER]["paper"];market={"status":"settled","result":"no"}
+    t.settle(e,"paper",market,1000)
+    t.settle(e,"paper",market,1001)
+    t.reconcile(TICKER,FEE,1001)
+    assert j.state["totals"]["paper"]["trades"]==1
+    assert Decimal(j.state["totals"]["paper"]["net"])==Decimal(e["net_pnl"])
+
+def test_stop_request_during_admission_never_sends_a_new_ioc(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    t,b,j=setup()
+    class StoppingGate(Gate):
+        def verify(self):t.stopping=True
+    t.gate_factory=StoppingGate;t.reconcile(TICKER,FEE,126)
+    assert not b.posts and j.state["entries"][TICKER]["live"]["pending"] is None
+    assert j.state["entries"][TICKER]["live"]["status"]=="entering"
+
+def test_expired_gate_release_never_clears_the_successors_lease():
+    from google.api_core.exceptions import PreconditionFailed
+    j=SharedJournal();write=j.write
+    def cas(name,value,generation):
+        if generation!=j.generations.get(name,0):raise PreconditionFailed("successor owns generation")
+        return write(name,value,generation)
+    j.write=cas
+    class B:
+        def account(self):return [],[]
+    with AccountGate(j,B()) as gate:
+        successor={"lease":{"holder":"successor","fence":2,"expires":10**12}}
+        j.write(gate.name,successor,j.generations[gate.name])
+        with pytest.raises(RuntimeError,match="ACCOUNT_ORDER_GATE_LOST"):gate.verify()
+    assert j.rows[gate.name]==successor
+
+def test_live_settlement_requires_exact_authenticated_quantity_cost_and_fees():
+    t,b,j=setup();e=j.state["entries"][TICKER]["live"]
+    e.update(filled="5.00",cost="1.00",fees=".07",status="held")
+    market={"status":"settled","result":"no","exchange_index":2}
+    row={"ticker":TICKER,"exchange_index":2,"market_result":"no","no_count_fp":"5.00","yes_count_fp":"0.00",
+         "revenue_dollars":"5.00","no_total_cost_dollars":"1.00","fee_cost":".08"}
+    b.pages=lambda *_,**__: [row]
+    with pytest.raises(RuntimeError,match="SETTLEMENT_RECONCILIATION_MISMATCH"):t.settle(e,"live",market,1000)
+    assert not j.state["totals"]
+    row["fee_cost"]=".07";t.settle(e,"live",market,1001);t.settle(e,"live",market,1002)
+    assert j.state["totals"]["live"]["net"]=="3.93" and j.state["totals"]["live"]["trades"]==1
