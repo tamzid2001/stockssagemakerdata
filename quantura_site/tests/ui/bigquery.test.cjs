@@ -9,7 +9,7 @@ test('forecast selection retains database and Gemini types when the main app lis
  const dom=new JSDOM(fs.readFileSync(path.join(__dirname,'../../pages/forecasting.html'),'utf8'),{url:'https://quantura.studio/forecasting',runScripts:'outside-only'}),w=dom.window;
  w.QuanturaForecastControls=require('../../public/forecast-controls.js');
  w.ui={ensembleSourceType:w.document.getElementById('ensemble-source-type'),ensembleTicker:w.document.getElementById('ensemble-ticker')};
- w.setEnsembleStatus=()=>{};
+ w.setEnsembleStatus=()=>{};w.ensembleUiState={lastJob:null};w.stopEnsemblePolling=()=>{};
  w.fetch=async()=>({ok:true,json:async()=>({name:'Daily data',forecastable:true,time_fields:[{field:'date',label:'Date'}],values:[{field:'value',label:'Value'}],filter_fields:[],dimensions:[],frequency:'1D',url:'https://example.com'})});
  w.eval(code);w.eval(sourceSync+selectionHandler);
  for(const provider of ['bigquery','fiscaldata','worldbank_data360']){
@@ -22,8 +22,9 @@ test('forecast selection retains database and Gemini types when the main app lis
  w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:{source:'gemini',symbol:'BTCUSD'},intent:'forecast'}}));
  assert.equal(w.ui.ensembleSourceType.value,'gemini_spot');
  assert.equal(w.document.getElementById('economic-forecast-controls').hidden,true);
+ w.ensembleUiState.lastJob={sagemaker_item:{id:'archive'}};w.ensembleUiState.forecastId='archive';
  w.dispatchEvent(new w.CustomEvent('quantura:market-selected',{detail:{resource:{source:'alpaca',symbol:'AAPL'},intent:'forecast'}}));
- assert.equal(w.ui.ensembleSourceType.value,'ticker');
+ assert.equal(w.ui.ensembleSourceType.value,'ticker');assert.equal(w.ensembleUiState.lastJob,null);assert.equal(w.ensembleUiState.forecastId,'');
  assert.equal(w.document.getElementById('ensemble-ticker-session').closest('.field').hidden,false);
  dom.window.close();
 });

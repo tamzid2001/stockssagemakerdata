@@ -1,5 +1,29 @@
 # Quantura
 
+### Canvas library and forecast quality (October 7, 2026)
+
+- **[SageMaker library](https://quantura.studio/sagemaker):** 133 dated Canvas forecasts and 14 historical series, searchable by ticker and filename. Preview source CSVs, view quantiles, annotate chart points, and ask Scout. Original values are preserved; an export without a year remains a file preview.
+- **[Admin uploads](https://quantura.studio/sagemaker/admin):** verified administrator uploads auto-detect quantiles, set a ticker/name, and optionally supply model metrics with their evaluation basis. A server-side GitHub token commits the CSV and catalog atomically into `sagemaker/`; no forecast CSV is uploaded to Firestore or cloud storage. Private Scout conversations and notes continue using account storage.
+- **Immediate quality metrics:** newly requested forecasts opt into a bounded chronological holdout using existing history only. Show MAE, RMSE, sMAPE and average weighted quantile loss when computed; hide unavailable scores. Canvas scores remain explicitly admin supplied. Research and live trading workers without the policy keep their original single forecast pass.
+- **Chart scope:** actual-price overlays stop at the last prediction timestamp (including the final daily session); the chart cannot extend the requested horizon with later observations. Header search includes a CSV upload plus icon.
+
+```mermaid
+flowchart LR
+    CSV[Canvas CSV] --> Preview[Admin preview and quantile detection]
+    Preview --> Gate[Verified Clerk administrator]
+    Gate --> Commit[Atomic GitHub commit]
+    Commit --> Repo[sagemaker CSVs and catalog]
+    Repo --> Search[Search and library]
+    Search --> Chart[Forecast chart and annotations]
+    Repo --> Scout[Scout numerical questions]
+    History[Existing historical observations] --> Holdout[Chronological holdout]
+    Holdout --> Scores[Immediate historical metrics]
+    Scores --> Chart
+```
+
+Rebuild the sanitized archive catalog with `python scripts/import_sagemaker_archive.py` (requires pandas). The importer skips archive metadata, rejects unsafe paths, and excludes detected credentials. `GITHUB_SAGEMAKER_TOKEN` (repository Contents write) is preferred for admin publishing; the server can also use `GITHUB_ACTIONS_TOKEN`. Never expose either token in browser code.
+
+
 **Market data, probabilistic forecasts and reproducible strategy research.**
 
 Quantura connects stocks, FX, metals, indices, perpetual contracts and prediction markets in one research workspace. Search an instrument, inspect genuine observations, forecast a range of outcomes, and retain the evidence behind a decision.
@@ -220,6 +244,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the wider application test suite and 
 Use `./deploy.sh` after committing and validating changes. The default Vercel workflow deploys API, compatibility API, newsletter, SSR and website projects in that order from `git archive HEAD`. Uncommitted changes are not deployed. `DEPLOY_DRY_RUN=true ./deploy.sh` prints the plan without publishing.
 
 The stock screener checks hourly for the latest unpublished completed NYSE session. Exchange dates and frozen close cutoffs survive delayed Actions runs and UTC midnight. Validated public Actions artifacts publish before the completion marker; failed scans stay eligible for retry. Stock snapshots and comparison history retain fourteen calendar days; game shards retain three days; perpetual shards retain seven days. Server readers verify archive checksums, workflow provenance and schema, then share immutable caches. Public screener publication and reads make zero Firestore document writes/reads. Private saved forecasts, requests and alert delivery records remain in Firestore. Rolling JSON/CSV release assets remain available for external downloads. Perpetual catalogs are discovered hourly; unchanged daily cutoffs reuse their five-model, seven-day forecast, and new listings without enough genuine history appear without fabricated quantiles.
+
+Completed stock scans use Alpaca's consolidated historical SIP feed, with an end bound at least sixteen minutes before the request. This provides broader exchange coverage than IEX without requesting restricted live SIP data. `SCREENER_ALPACA_DATA_FEED` can explicitly override the scan feed. The scan has no Yahoo fallback; missing bars remain explicit and publication still requires 90% coverage.
 
 Publication reads the checked-in model registry directly and is checked with Python site packages disabled, so aggregation does not require the inference worker's pandas/Pydantic stack. On October 3, the recovered October 2 scan published 3,568 valid five-model forecasts out of 3,607 stocks (98.92% coverage), with 39 explicitly unavailable histories/predictions.
 

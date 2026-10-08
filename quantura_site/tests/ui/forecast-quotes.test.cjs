@@ -22,7 +22,7 @@ function setup() {
   w.eval(start+'\nwindow.start=startEnsembleObservations;');
   const resume = source.slice(source.indexOf('    const resumeQuoteOverlay ='),source.indexOf('    window.addEventListener("quantura:market-selected"',source.indexOf('    const resumeQuoteOverlay =')));
   w.eval(resume);
-  const job={forecast_id:'f',source:{type:'prediction_market'},completed_at:'2026-09-13T12:00:00Z',predictions:[]};
+  const job={forecast_id:'f',source:{type:'prediction_market'},completed_at:'2026-09-13T12:00:00Z',predictions:[{timestamp:'2026-09-13T12:05:00Z',quantiles:{'0.5':.5}}]};
   w.start(job);
   return {w,dom,timers,job,calls:()=>calls};
 }

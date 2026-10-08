@@ -10,7 +10,7 @@ test('one Q Search, one Q Download, hidden compatibility fields and upload remai
   const d=dom(),doc=d.window.document;
   assert.equal(doc.querySelectorAll('#market-search-form').length,1);assert.equal(doc.querySelectorAll('[data-panel="download"]').length,1);
   assert.equal(doc.querySelectorAll('#pm-search,#alpaca-symbol,#alpaca-options-underlying').length,0);
-  assert.equal(doc.getElementById('market-search-source').type,'hidden');assert.ok(doc.getElementById('q-upload-csv'));assert.ok(doc.getElementById('ensemble-csv-file'));
+  assert.equal(doc.getElementById('market-search-source').type,'hidden');assert.equal(doc.getElementById('q-selected-market').hidden,true);d.window.eval(source('market-search.js'));assert.ok(doc.querySelector('#market-search-form button[aria-label="Upload CSV"]')); assert.ok(doc.getElementById('ensemble-csv-file'));
   d.window.close();
 });
 test('Auto routes every instrument with immutable symbol and provider-aware request shape',()=>{

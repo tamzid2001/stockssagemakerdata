@@ -61,10 +61,6 @@ def normalize_symbol(value: Any) -> str:
     return "".join(ch for ch in text if ch.isalnum() or ch in ".-")[:16]
 
 
-def yahoo_symbol(symbol: str) -> str:
-    return normalize_symbol(symbol).replace(".", "-")
-
-
 def safe_float(value: Any) -> float | None:
     try:
         parsed = float(value)
@@ -512,6 +508,11 @@ def fetch_alpaca_histories(symbols: Sequence[str], start: str, end: str) -> dict
     base_url = str(os.getenv("ALPACA_DATA_URL") or os.getenv("ALPACA_DATA_BASE") or ALPACA_DATA_URL).strip().rstrip("/")
     output: dict[str, list[dict[str, Any]]] = {symbol: [] for symbol in symbols}
     headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret, "User-Agent": USER_AGENT}
+    feed = str(os.getenv("ALPACA_DATA_FEED") or "sip").strip()
+    # Consolidated historical SIP is available on the basic plan once data is
+    # 15 minutes old. Never request tonight's future midnight or live SIP bars.
+    requested_end = dt.datetime.fromisoformat(f"{end}T23:59:59+00:00")
+    available_end = min(requested_end, utc_now() - dt.timedelta(minutes=16))
     for batch_start in range(0, len(symbols), 100):
         batch = list(symbols[batch_start : batch_start + 100])
         page_token = ""
@@ -520,9 +521,9 @@ def fetch_alpaca_histories(symbols: Sequence[str], start: str, end: str) -> dict
                 "symbols": ",".join(batch),
                 "timeframe": "1Day",
                 "start": f"{start}T00:00:00Z",
-                "end": f"{end}T23:59:59Z",
+                "end": available_end.isoformat().replace("+00:00", "Z"),
                 "adjustment": "split",
-                "feed": str(os.getenv("ALPACA_DATA_FEED") or "iex").strip(),
+                "feed": feed,
                 "limit": 10000,
                 "sort": "asc",
             }
@@ -540,46 +541,6 @@ def fetch_alpaca_histories(symbols: Sequence[str], start: str, end: str) -> dict
             page_token = str(payload.get("next_page_token") or "")
             if not page_token:
                 break
-    return output
-
-
-def fetch_yfinance_histories(symbols: Sequence[str]) -> dict[str, list[dict[str, Any]]]:
-    import pandas as pd
-    import yfinance as yf
-
-    output: dict[str, list[dict[str, Any]]] = {symbol: [] for symbol in symbols}
-    provider_map = {yahoo_symbol(symbol): symbol for symbol in symbols}
-    provider_symbols = list(provider_map)
-    for batch_start in range(0, len(provider_symbols), 80):
-        batch = provider_symbols[batch_start : batch_start + 80]
-        frame = yf.download(
-            batch,
-            period="2y",
-            interval="1d",
-            group_by="ticker",
-            threads=True,
-            progress=False,
-            auto_adjust=False,
-            repair=True,
-            timeout=30,
-        )
-        if frame is None or frame.empty:
-            continue
-        for provider_symbol in batch:
-            canonical = provider_map[provider_symbol]
-            try:
-                if isinstance(frame.columns, pd.MultiIndex):
-                    symbol_frame = frame[provider_symbol]
-                else:
-                    symbol_frame = frame
-                close_column = "Close" if "Close" in symbol_frame.columns else "Adj Close"
-                closes = symbol_frame[close_column].dropna()
-                for timestamp, value in closes.items():
-                    normalized = normalize_bar(timestamp.isoformat(), value)
-                    if normalized:
-                        output[canonical].append(normalized)
-            except (KeyError, TypeError, AttributeError):
-                continue
     return output
 
 
@@ -708,13 +669,7 @@ def command_chunk(args: argparse.Namespace) -> int:
     as_of = dt.datetime.fromisoformat(universe["session_close"]) if universe.get("session_close") else None
     start = end - dt.timedelta(days=760)
     price_source = "alpaca_daily_bar_close"
-    provider_error = ""
-    try:
-        histories = fetch_alpaca_histories(symbols, start.isoformat(), end.isoformat())
-    except Exception as error:
-        provider_error = type(error).__name__
-        histories = fetch_yfinance_histories(symbols)
-        price_source = "yahoo_daily_bar_close_fallback"
+    histories = fetch_alpaca_histories(symbols, start.isoformat(), end.isoformat())
     market_caps = {item["ticker"]: safe_float(item.get("market_cap")) for item in chunk_items}
 
     rows: list[dict[str, Any]] = list(resumed_rows)
@@ -756,7 +711,7 @@ def command_chunk(args: argparse.Namespace) -> int:
         "chunk": args.chunk,
         "chunk_count": args.chunk_count,
         "price_source": price_source,
-        "provider_fallback_reason": provider_error,
+        "price_feed": str(os.getenv("ALPACA_DATA_FEED") or "sip").strip(),
         "runtime_seconds": round(time.monotonic() - started, 2),
         "status_counts": status_counts,
         "items": rows,
@@ -842,7 +797,7 @@ def coverage_manifest(universe: Mapping[str, Any], rows: Sequence[Mapping[str, A
         "coverage_threshold": threshold,
         "coverage_ok": coverage >= threshold,
         "runtime_seconds": round(time.monotonic() - started, 2),
-        "actual_price_definition": "Completed split-adjusted daily close for the selected NYSE session. Missing latest-session bars are reported, not replaced with an older close. Alpaca IEX is preferred; Yahoo is the fallback.",
+        "actual_price_definition": "Completed split-adjusted Alpaca daily close for the selected NYSE session, using consolidated historical SIP by default. Missing latest-session bars are reported, not replaced with an older close.",
         "forecast_methodology": "Five-model ensemble through the selected completed NYSE close; next seven NYSE sessions; 20% central weights, tails renormalized; Toto 4M; split-adjusted price basis.",
         "market_cap_convention": "Mega ≥ $200B; Large $10B–$200B; Mid $2B–$10B; Small $300M–$2B; Micro < $300M. ETFs are unclassified.",
         "earnings_source": (universe.get("earnings") or {}).get("source") or "unavailable",

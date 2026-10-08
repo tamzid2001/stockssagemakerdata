@@ -346,8 +346,7 @@ test('forecast chart focuses latest interval plus future and includes explicitly
   const dailyTraces=w.record[2][1];
   assert.equal(dailyTraces.find(t=>t.name==='Completed closes').x[0],new Date(daily.predictions[0].timestamp).toISOString());
   const minuteTrace=dailyTraces.find(t=>t.name?.includes('(provisional)'));
-  assert.equal(minuteTrace.x.length,1);assert.equal(minuteTrace.y[0],105);
-  assert.equal(minuteTrace.customdata[0],'2026-09-16T15:01:00Z');
+  assert.equal(minuteTrace,undefined); // Quotes after the final predicted day are excluded.
   assert.equal(w.record[2][2].shapes[0].x0,'2026-09-14T00:00:00.000Z');
   d.window.close();
 });

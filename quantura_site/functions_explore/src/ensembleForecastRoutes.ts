@@ -612,7 +612,7 @@ function datasetHash(rows: Array<{ timestamp: string; target: number }>, source:
 }
 
 function requestHash(workspaceId: string, sourceHash: string, configuration: JsonRecord): string {
-  return crypto.createHash("sha256").update(JSON.stringify({ workspaceId, sourceHash, configuration, registry: modelRegistry.schemaVersion, evaluation_policy: null })).digest("hex");
+  return crypto.createHash("sha256").update(JSON.stringify({ workspaceId, sourceHash, configuration, registry: modelRegistry.schemaVersion, evaluation_policy: HISTORICAL_VALIDATION_POLICY })).digest("hex");
 }
 
 export function approvedModelCheckpoints(configuration: NormalizedConfiguration): Record<ModelId, string | null> {
@@ -813,7 +813,7 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
       ...(validated.recentSignalSearch ? {recent_signal_search:validated.recentSignalSearch,selected_history:validated.selectedHistory} : {}),
       created_at: completedAt,
     });
-    const completed = {status:"completed",completed_at:completedAt,updated_at:completedAt,lease_expires_at:null,warnings:body.warnings || [],
+    const completed = {forecast_end_at:validated.predictions.at(-1)!.timestamp,status:"completed",completed_at:completedAt,updated_at:completedAt,lease_expires_at:null,warnings:body.warnings || [],
       ...(validated.recentSignalSearch ? {analysis_cutoff_at:validated.recentSignalSearch.history_cutoff_at} : {}),
       progress:{completed_models:Array.isArray(body.models)?body.models.length:0,total_models:Array.isArray(body.models)?body.models.length:0,current_model:null}};
     transaction.set(ref, completed, {merge:true});
@@ -977,11 +977,12 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
   router.get("/v1/screener/forecasts/:ticker/observations", async (req,res)=>{
     const requestId=crypto.randomUUID();
     try {
-      const {job}=await publishedSnapshot(req);const key=`screener:${job.published_screener.scan_id}:${req.params.ticker}:${Math.floor(Date.now()/60000)}`;
+      const {job,result}=await publishedSnapshot(req);const key=`screener:${job.published_screener.scan_id}:${req.params.ticker}:${Math.floor(Date.now()/60000)}`;
       let cached=observationCache.get(key);
       if(!cached || cached.until<Date.now()) {
         const overlay=job.source.type==="kalshi_perp"?kalshiPerps.history({symbol:job.source.symbol,frequency:"1h",start:Date.parse(job.input_cutoff_at),limit:500}).then(result=>result.rows.filter(row=>Date.parse(row.timestamp)>Date.parse(job.input_cutoff_at)).map(row=>({timestamp:row.timestamp,target:row.close}))):tickerOverlayRows(job.source,"1D",Date.parse(job.input_cutoff_at));
-        const value=overlay.then(rows=>({rows,observed_at:new Date().toISOString(),availability:"available"})).catch(error=>{observationCache.delete(key);throw error;});
+        const end=Date.parse(result.predictions.at(-1)?.timestamp || "")+86400_000-1;
+        const value=overlay.then(rows=>({rows:rows.filter(row=>Date.parse(row.timestamp)<=end),observed_at:new Date().toISOString(),availability:"available"})).catch(error=>{observationCache.delete(key);throw error;});
         cached={until:Date.now()+60_000,value};observationCache.set(key,cached);
         while(observationCache.size>50)observationCache.delete(observationCache.keys().next().value!);
       }
@@ -1097,7 +1098,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: normalizedRequest,
-      evaluation_policy: null,
+      evaluation_policy: HISTORICAL_VALIDATION_POLICY,
       requested_weights: configuration.requested_weights,
       effective_central_weights: configuration.effective_central_weights,
       source: materialized.source,
@@ -1166,7 +1167,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       workspace_id: workspaceId,
       api_key_id: principal.tokenId,
       request: original.request,
-      evaluation_policy: null,
+      evaluation_policy: HISTORICAL_VALIDATION_POLICY,
       requested_weights: configuration.requested_weights,
       effective_central_weights: configuration.effective_central_weights,
       source: original.source,
@@ -1176,7 +1177,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       input_timestamp_column: "timestamp",
       input_target_column: "target",
       input_timezone: original.input_timezone || "UTC",
-      request_hash: original.evaluation_policy ? crypto.createHash("sha256").update(`${original.request_hash}:forecast_only_v1`).digest("hex") : original.request_hash,
+      request_hash: requestHash(text(original.workspace_id), text(original.dataset_hash), plain(original.request)),
       registry_version: original.registry_version,
       model_checkpoints: Object.keys(checkpoints).length ? checkpoints : approvedModelCheckpoints(configuration),
       model_revisions: plain(original.model_revisions),
@@ -1272,7 +1273,15 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
         rows = await tickerOverlayRows(source, frequency, cutoff);
       } catch (error) { if (error instanceof AlpacaError && error.code === "no_data") availability = "no_new_observations"; else throw error; }
     } else availability = "immutable_dataset";
-    return { forecast_id: id, rows: rows.filter(row => Date.parse(row.timestamp) > cutoff && Date.parse(row.timestamp) <= Math.floor(Date.now()/60000)*60000), input_cutoff: new Date(cutoff).toISOString(), observed_at: new Date().toISOString(), availability, observation_frequency: source.type === "ticker" && frequency !== "1min" ? "forecast_interval_and_recent_1min" : frequency, refresh_after_seconds: 60 };
+    let lastPrediction = Date.parse(String(data.forecast_end_at || ""));
+    if(!Number.isFinite(lastPrediction)){
+      const resultSnapshot = await options.db.collection(RESULTS).doc(id).get();
+      const predictions = (resultSnapshot.data()?.predictions || []) as Array<{timestamp:string}>;
+      lastPrediction = Date.parse(predictions.at(-1)?.timestamp || "");
+    }
+    // Daily predictions are session labels; include that day's completed prices.
+    const forecastEnd = Number.isFinite(lastPrediction) ? lastPrediction + (frequency === "1D" ? 86400_000-1 : 0) : cutoff;
+    return { forecast_id: id, rows: rows.filter(row => Date.parse(row.timestamp) > cutoff && Date.parse(row.timestamp) <= Math.min(forecastEnd, Math.floor(Date.now()/60000)*60000)), input_cutoff: new Date(cutoff).toISOString(), observed_at: new Date().toISOString(), availability, observation_frequency: source.type === "ticker" && frequency !== "1min" ? "forecast_interval_and_recent_1min" : frequency, refresh_after_seconds: 60 };
     };
     const value = load().catch(error => { observationCache.delete(cacheKey); throw error; });
     observationCache.set(cacheKey, {until:Date.now()+60000,value});
@@ -1416,8 +1425,8 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     sendData(res, {
       forecast_id: ref.id,
       request: job.request,
-      // Also suppress the former policy for queued jobs claimed by older workers.
-      evaluation_policy: null,
+      // Server-controlled holdout policy; never a client configuration field.
+      evaluation_policy: HISTORICAL_VALIDATION_POLICY,
       source: job.source,
       dataset_hash: job.dataset_hash,
       model_checkpoints: job.model_checkpoints,

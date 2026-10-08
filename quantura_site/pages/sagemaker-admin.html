@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta name="color-scheme" content="light dark" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Upload Canvas forecasts | Quantura</title>
+        <meta name="description" content="Learn how Quantura connects market data, probabilistic forecasts, technical analysis, screening, and user-controlled AWS SageMaker workflows." />
+        <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="quantura about, fintech platform, market research software, forecasting platform" />
+        <link rel="canonical" href="https://quantura.studio/sagemaker/admin" />
+        <meta property="og:title" content="About Quantura" />
+        <meta property="og:description" content="Developer profile, mission, and product direction for Quantura Studio." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://quantura.studio/sagemaker/admin" />
+        <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
+    <meta property="og:site_name" content="Quantura" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="About Quantura" />
+    <meta name="twitter:description" content="Developer profile, mission, and product direction for Quantura Studio." />
+    <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
+    <meta name="twitter:url" content="https://quantura.studio/sagemaker/admin" />
+    <meta name="author" content="Quantura" />
+    <meta name="theme-color" content="#0B1526" />
+    <link rel="alternate" hreflang="en-US" href="https://quantura.studio/sagemaker/admin" />
+    <link rel="alternate" hreflang="x-default" href="https://quantura.studio/sagemaker/admin" />
+    <link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260909a" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260909a" />
+    <link rel="shortcut icon" href="/favicon.ico?v=20260909a" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260909a" />
+    <meta name="apple-mobile-web-app-title" content="Quantura" />
+    <link rel="manifest" href="/site.webmanifest?v=20260926b" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <link rel="apple-touch-startup-image" href="/assets/quantura-splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)">
+    <script src="/pwa-launch.js?v=20260926a"></script>
+    <script src="/theme-init.js?v=20260926a"></script>
+    <script defer src="/ui-runtime.js?v=20260926-support"></script>
+    <link rel="stylesheet" href="/styles.css?v=20260927-research" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-auth-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-functions-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-storage-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-remote-config-compat.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
+    <script defer src="/ga4-context.js?v=20260927a"></script>
+    <script defer src="/quantura-auth.js?v=20261006-welcome50"></script>
+    <script defer src="/app.js?v=20261006-scout"></script>
+  <script defer src="/q-market.js?v=20261003-header"></script>
+<script defer src="/market-search.js?v=20261003-header"></script>
+<script defer src="/forecast-controls.js?v=20261007-canvas"></script><script defer src="/sagemaker.js?v=20261007-canvas"></script></head>
+  <body>
+    <header class="header">
+      <div class="container nav">
+        <a class="logo" href="/" aria-label="Quantura home"><span>QUANTURA</span></a>
+        <nav class="nav-links" aria-label="Main navigation"><a href="/forecasting">Terminal</a><a href="/shop">Shop</a><a href="/blog">Blog</a></nav>
+        <section class="market-search-workspace header-market-search" aria-label="Search markets">
+<form id="market-search-form" class="market-search-form" role="search">
+<div class="field"><label class="visually-hidden" for="market-search-query">Search markets</label><input id="market-search-query" name="q" type="search" minlength="2" maxlength="2048" autocomplete="off" enterkeyhint="search" placeholder="Search markets" required /></div>
+<input id="market-search-source" type="hidden" value="auto" />
+<button class="header-search-submit" type="submit" aria-label="Search"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+</form><p id="market-search-status" class="small" role="status" aria-live="polite"></p><div id="market-search-results" class="market-search-results" role="region" aria-label="Market search results" hidden></div></section><div class="nav-actions">
+          <span id="header-user-email" class="small" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Guest</span>
+          <span id="header-user-status" class="pill">Guest</span>
+          <button class="cta secondary" id="header-auth" type="button"><i class="iconoir-log-in" aria-hidden="true"></i><span>Sign in</span></button>
+
+        </div>
+      </div>
+    </header>
+
+    <main class="container sagemaker-library"><div class="eyebrow">Administrator</div><h1>Upload a Canvas forecast</h1><p>Preview the CSV, confirm its ticker and metrics, then publish to the repository.</p><a href="/sagemaker">View library</a><p id="canvas-status" role="status" class="small muted">Sign in with your admin account to publish.</p><form id="canvas-upload-form" class="card"><div class="form-grid"><label class="label">CSV file<input id="canvas-upload-file" type="file" accept=".csv,text/csv" required /></label><label class="label">Forecast name<input id="canvas-name" maxlength="120" required /></label><label class="label">Ticker<input id="canvas-ticker" maxlength="40" required placeholder="AAPL" /></label></div><p id="canvas-detected" class="small muted"></p><div id="canvas-upload-preview" class="table-wrap"></div><details open><summary>Model metrics (optional)</summary><p class="small muted">Enter scores from the model's evaluation report.</p><div class="form-grid"><label class="label">MAE<input type="number" min="0" step="any" data-canvas-metric="mae" /></label><label class="label">RMSE<input type="number" min="0" step="any" data-canvas-metric="rmse" /></label><label class="label">sMAPE (%)<input type="number" min="0" step="any" data-canvas-metric="smape" max=200/></label><label class="label">Weighted quantile loss<input type="number" min="0" step="any" data-canvas-metric="average_wql" /></label><label class="label">MAPE (%)<input type="number" min="0" step="any" data-canvas-metric="mape" /></label><label class="label">WAPE (%)<input type="number" min="0" step="any" data-canvas-metric="wape" /></label><label class="label">MASE<input type="number" min="0" step="any" data-canvas-metric="mase" /></label></div><label class="label">Evaluation basis<input id="canvas-metrics-basis" maxlength="240" value="SageMaker Canvas · admin supplied" placeholder="Model evaluation, dataset and cutoff" /></label></details><button id="canvas-publish" type="submit" class="cta" disabled>Publish forecast</button></form></main>
+
+    <footer class="footer">
+      <div class="container footer-grid">
+        <div>
+          <div class="logo">QUANTURA</div>
+          <p class="small">Inspectable forecasts. Research you can revisit.</p>
+          <div class="footer-social" aria-label="Quantura social links">
+            <a class="social-link" href="http://www.tiktok.com/@quanturaai" target="_blank" rel="noopener noreferrer" data-analytics="social_tiktok" aria-label="TikTok">
+              <img src="/assets/social/tiktok.svg" alt="" loading="lazy" decoding="async" />
+            </a>
+            <a class="social-link" href="https://www.instagram.com/quanturaai_market_forecasts?igsh=ZTZuNW16ZmxuaHl4&utm_source=qr" target="_blank" rel="noopener noreferrer" data-analytics="social_instagram" aria-label="Instagram">
+              <img src="/assets/social/instagram.svg" alt="" loading="lazy" decoding="async" />
+            </a>
+            <a class="social-link" href="https://www.facebook.com/quanturaai/" target="_blank" rel="noopener noreferrer" data-analytics="social_facebook" aria-label="Facebook">
+              <img src="/assets/social/facebook-f.svg" alt="" loading="lazy" decoding="async" />
+            </a>
+            <a class="social-link" href="https://www.threads.com/@quanturaai_market_forecasts" target="_blank" rel="noopener noreferrer" data-analytics="social_threads" aria-label="Threads">
+              <img src="/assets/social/threads.svg" alt="" loading="lazy" decoding="async" />
+            </a>
+            <a class="social-link" href="https://www.reddit.com/r/Quantura_AI/" target="_blank" rel="noopener noreferrer" data-analytics="social_reddit" aria-label="Reddit">
+              <img src="/assets/social/reddit-alien.svg" alt="" loading="lazy" decoding="async" />
+            </a>
+            <a class="social-link" href="https://www.linkedin.com/company/quanturaai/?viewAsMember=true" target="_blank" rel="noopener noreferrer" data-analytics="social_linkedin" aria-label="LinkedIn">
+              <img src="/assets/social/linkedin-in.svg" alt="" loading="lazy" decoding="async" />
+            </a>
+          <a class="social-link" href="https://bsky.app/profile/quantura.bsky.social" target="_blank" rel="noopener noreferrer" data-analytics="social_bluesky" aria-label="Bluesky"><img src="/assets/social/bluesky.svg" alt="" loading="lazy" decoding="async" /></a></div>
+        </div>
+        <div class="small">
+          <strong>Workspace</strong>
+          <div><a href="/">Home</a></div>
+          <div><a href="/forecasting">Forecasting</a></div>
+          <div><a href="/research">Research</a></div>
+          <div><a href="/blog">Blog</a></div>
+          <div><a href="/forecasting?panel=profile">Profile</a></div>
+          <div></div>
+          <div><a href="/contact">Contact Us</a></div>
+        </div>
+        <div class="small">
+          <strong>Legal</strong>
+          <div><a href="/terms">Terms and Conditions</a></div>
+          <div><a href="/privacy">Privacy Policy</a></div>
+          <div><a href="/disclaimer">Disclaimer Policy</a></div>
+        </div>
+      </div>
+      <div class="container small" style="margin-top: 24px;">
+        © 2026 Quantura. All rights reserved.
+      </div>
+    </footer>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

@@ -22,8 +22,8 @@
   function suggestions(job) {
     const median=finite(job.predictions?.[0]?.quantiles?.['0.5']);
     return [
-      {category:job.predictions?.length?'Forecast':'Data',question:median?'How does P50 change from the last observed value to the end of this forecast?':'Summarize the observed values in this series.'},
-      {category:'History',question:'What were the observed high and low, and when did they occur?'},
+      {category:job.predictions?.length?'Forecast':'Data',question:median?(job.history?.length?'How does P50 change from the last observed value to the end of this forecast?':'How does P50 change across the forecast horizon?'):'Summarize the observed values in this series.'},
+      {category:job.history?.length?'History':'Scenarios',question:job.history?.length?'What were the observed high and low, and when did they occur?':'How does the forecast range change over the horizon?'},
       {category:'Evidence',question:job.predictions?.length?'Where did these observations come from, and what are their units?':'What data checks should I make before forecasting this uploaded series?'},
     ];
   }
@@ -41,7 +41,7 @@
   function points(job) {
     const calendar=/^(1D|1W-MON|1MS)$/.test(job.frequency);
     const observed=(job.history || []).filter(r=>finite(r.target)).map(r=>({series:'history',timestamp:r.timestamp,value:r.target,label:`Observed · ${time(r.timestamp,calendar)} · ${format(r.target)}`}));
-    const forecast=(job.predictions || []).flatMap(r=>Object.entries(r.quantiles || {}).filter(([q,v])=>q==='0.5'&&finite(v)).map(([q,value])=>({series:q,timestamp:r.timestamp,value,label:`P50 · ${time(r.timestamp,calendar)} · ${format(value)}`})));
+    const forecast=(job.predictions || []).flatMap(r=>Object.entries(r.quantiles || {}).filter(([q,v])=>finite(v)).map(([q,value])=>({series:q,timestamp:r.timestamp,value,label:`P${Number(q)*100} · ${time(r.timestamp,calendar)} · ${format(value)}`})));
     return [...observed,...forecast];
   }
   function annotationRows(state) {
@@ -67,7 +67,7 @@
     const add=el('button','Add note','cta secondary small');add.type='submit';add.disabled=true;form.append(label,select,textLabel,input,add);details.append(form);
     const list=el('ul','','jev-notes-list'),status=el('p','','small');status.setAttribute('role','status');details.append(list);
     const save=el('button','Save notes','cta secondary small');save.type='button';save.disabled=true;details.append(save,status);
-    const draw=()=>{list.replaceChildren();for(const n of state.notes){const row=el('li'),remove=el('button','Remove','task-chip');remove.type='button';remove.setAttribute('aria-label',`Remove note: ${n.text}`);remove.addEventListener('click',()=>{state.notes=state.notes.filter(note=>note.id!==n.id);save.disabled=false;draw();refreshAnnotations(state);});row.append(el('span',`${n.text} · ${n.series==='history'?'Observed':'P50'} · ${time(n.timestamp,/^(1D|1W-MON|1MS)$/.test(state.job.frequency))} · ${format(n.value)}`),remove);list.append(row);}};
+    const draw=()=>{list.replaceChildren();for(const n of state.notes){const row=el('li'),remove=el('button','Remove','task-chip');remove.type='button';remove.setAttribute('aria-label',`Remove note: ${n.text}`);remove.addEventListener('click',()=>{state.notes=state.notes.filter(note=>note.id!==n.id);save.disabled=false;draw();refreshAnnotations(state);});row.append(el('span',`${n.text} · ${n.series==='history'?'Observed':`P${Number(n.series)*100}`} · ${time(n.timestamp,/^(1D|1W-MON|1MS)$/.test(state.job.frequency))} · ${format(n.value)}`),remove);list.append(row);}};
     form.addEventListener('submit',event=>{event.preventDefault();const point=state.points[Number(select.value)];if(add.disabled||!point||!input.value.trim())return;if(state.notes.length>=20){status.textContent='Use up to 20 notes per forecast.';return;}state.notes.push({id:uuid(),text:input.value.trim(),timestamp:point.timestamp,series:point.series,value:point.value});input.value='';save.disabled=false;draw();refreshAnnotations(state);});
     save.addEventListener('click',async()=>{save.disabled=true;status.textContent='Saving notes…';try{await state.request('/api/v1/jev/annotations/save',{body:{context:state.reference,notes:state.notes.map(({id,text,timestamp,series})=>({id,text,timestamp,series}))},signal:state.controller.signal});if(state.disposed)return;status.textContent='Notes saved to your account.';}catch(error){if(state.disposed)return;save.disabled=false;status.textContent=error.message;}});
     // Do not replace existing notes if the initial account read fails.
@@ -117,6 +117,7 @@
     const dialog=el('dialog','','jev-saved-dialog'),close=el('button','Close','cta secondary small');close.type='button';close.addEventListener('click',()=>dialog.close());
     dialog.append(close,el('h2',`${String(saved.title || "Saved conversation").replace(/\bJev\b/gi,"Scout")} · Scout`));for(const message of saved.messages || [])dialog.append(messageNode(message));
     const ref=saved.context_reference;let url;
+    if(ref.kind==='sagemaker')url=`/forecasting?panel=forecast&sagemakerForecastId=${encodeURIComponent(ref.id)}`;
     if(ref.kind==='ensemble')url=`/forecasting?panel=forecast&ensembleForecastId=${encodeURIComponent(ref.id)}`;
     if(ref.kind==='game'||ref.kind==='saved_game')url=`/forecasting?panel=forecast&${ref.kind==='game'?'gameForecastId':'userGameForecastId'}=${encodeURIComponent(ref.id)}`;
     if(ref.kind==='screener')url=`/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(ref.symbol)}&screenerScan=${encodeURIComponent(ref.scan_id)}`;

@@ -11,11 +11,11 @@
     if(provider)provider.value=row.source==="dukascopy"?"dukascopy":"auto";
     if(source){source.value=row.resource_type==="economic_series"?"economic_series":row.source==="gemini"?"gemini_spot":row.contract_id?"prediction_market":row.source==="kalshi_perps"?"kalshi_perp":"ticker";source.dispatchEvent(new root.Event("change",{bubbles:true}));}
     const chip=root.document.getElementById("q-selected-market");
-    if(chip) { chip.replaceChildren(); const label=root.document.createElement("strong"); label.textContent=api.label(row); chip.append(label);
+    if(chip) { chip.hidden=false; chip.replaceChildren(); const label=root.document.createElement("strong"); label.textContent=api.label(row); chip.append(label);
       if(root.QuanturaLogos)chip.insertAdjacentHTML("afterbegin",root.QuanturaLogos.markup(row));
       const change=root.document.createElement("button");change.type="button";change.className="cta secondary small";change.textContent="Change";
       change.onclick=()=>root.document.getElementById("market-search-query")?.focus();chip.append(change);
-      const upload=root.document.createElement("button");upload.type="button";upload.className="cta secondary small";upload.textContent="Upload CSV";upload.dataset.qUpload="true";chip.append(upload);
+
     }
   });
   root.document.addEventListener("click",event=>{
@@ -23,7 +23,8 @@
     root.__quanturaSetPanel?.("forecast");
     const source=root.document.getElementById("ensemble-source-type");if(source){source.value="series";source.dispatchEvent(new root.Event("change",{bubbles:true}));}
     const chip=root.document.getElementById("q-selected-market");
-    if(chip)chip.textContent="Your CSV · choose the file and columns below. Use Search to return to a market.";
+    if(chip){chip.hidden=true;chip.replaceChildren();}
+    root.document.getElementById("ensemble-csv-file")?.click();
   });
   // Old ticker/download links still hydrate through verified provider discovery.
   if(root.document.getElementById("ensemble-source-type")){

@@ -116,6 +116,11 @@
     if(resources.user) {
       component("[data-clerk-user-button]","UserButton",{userProfileUrl:"/forecasting?panel=profile",userProfileMode:"navigation",userProfileProps:{apiKeysProps:{hide:!apiKeysAvailable}}});
       component("[data-clerk-organization-switcher]","OrganizationSwitcher",{hidePersonal:false,afterSelectOrganizationUrl:location.pathname+location.search,afterSelectPersonalUrl:location.pathname+location.search});
+      for(const host of document.querySelectorAll("[data-clerk-user-profile]")){
+        let link=host.parentElement.querySelector('[data-canvas-admin-link]');
+        if(!link){link=document.createElement('a');link.dataset.canvasAdminLink='';link.className='cta secondary small';link.href='/sagemaker/admin';link.textContent='Manage SageMaker forecasts';host.before(link);}
+        link.hidden=api.verifiedEmail!=='tamzid257@gmail.com';
+      }
       component("[data-clerk-user-profile]","UserProfile",{routing:"hash",apiKeysProps:{hide:!apiKeysAvailable}});
       if(resources.organization)component("[data-clerk-organization-profile]","OrganizationProfile",{routing:"hash",apiKeysProps:{hide:true}});
     }

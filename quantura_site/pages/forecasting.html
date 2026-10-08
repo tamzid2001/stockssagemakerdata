@@ -119,12 +119,12 @@
           </div>
 	          <section class="section studio-section" id="terminal">
 	            <div class="container">
-	              <div id="q-selected-market" class="q-selected-market" aria-live="polite">Choose a market above, or <button class="cta secondary small" type="button" id="q-upload-csv"><i class="iconoir-upload" aria-hidden="true"></i>Upload CSV</button></div>
+	              <div id="q-selected-market" class="q-selected-market" aria-live="polite" hidden></div>
 		              <div class="studio-layout is-main-hidden" data-panels data-panel-router="terminal">
 	                <div class="studio-panel">
                   <section class="panel" data-panel="forecast">
 	                    <div class="panel-header">
-	                      <h1>Forecast</h1>
+	                      <h1>Forecast</h1><a class="cta secondary small" href="/sagemaker">SageMaker library</a>
 	                      <p class="small">Choose a market, set the horizon, and run your forecast.</p>
 	                    </div>
                     <section id="game-forecast-page" class="game-forecast-page" aria-label="Saved game forecast" hidden></section>
@@ -144,7 +144,7 @@
                               <label class="label" for="ensemble-ticker">Ticker</label>
                               <input id="ensemble-ticker" name="ticker" placeholder="AAPL" autocomplete="off" />
                             </div>
-                            <div class="field" data-ensemble-source="prediction_market" hidden><span class="label">Selected team / side</span><strong id="ensemble-selected-market">Choose a market above</strong></div>
+                            <div class="field" data-ensemble-source="prediction_market" hidden><span class="label">Selected team / side</span><strong id="ensemble-selected-market">Selected market</strong></div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-market-frequency">Observed bars</label><select id="ensemble-market-frequency" name="market_frequency"><option value="1min">Minute</option><option value="5min">5 minutes</option><option value="15min">15 minutes</option><option value="30min">30 minutes</option><option value="1h">Hourly</option><option value="4h">4 hours</option><option value="1D">Daily</option><option value="1W-MON">Weekly</option><option value="1MS">Monthly</option></select></div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-phase">Game history</label><select id="ensemble-history-phase" name="history_phase"><option value="auto">Auto · in-game only after 32 min</option><option value="both">Pregame + in-game</option><option value="in_game">In-game only</option><option value="pregame">Pregame only</option></select><small class="muted">Auto uses pregame + in-game before 32 elapsed game minutes. Flat observed prices are allowed.</small></div>
                             <div class="field" data-ensemble-source="prediction_market" hidden><label class="label" for="ensemble-history-lookback">History time window</label><div class="ensemble-duration-control"><input id="ensemble-history-lookback" name="history_lookback" type="number" min="0" max="129600" step="1" value="0" aria-label="History lookback amount" /><select id="ensemble-history-lookback-unit" name="history_lookback_unit" aria-label="History lookback unit"><option value="minutes">Minutes</option><option value="hours">Hours</option><option value="days">Days</option></select></div><small class="muted">0 = no extra time restriction. In-game + 60 minutes uses only the latest hour of play.</small></div>
