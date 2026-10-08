@@ -18,7 +18,22 @@
   if(form){
     const file=document.getElementById('canvas-upload-file'),publish=document.getElementById('canvas-publish');let csv='',isAdmin=false;
     const refreshAdmin=()=>void admin().then(ok=>{isAdmin=ok;if(csv)publish.disabled=!ok;status.textContent=ok?'Admin access verified. Choose a CSV to preview.':'Sign in with your admin account to publish.';});refreshAdmin();document.addEventListener('quantura:organization',refreshAdmin);
-    file.onchange=async()=>{publish.disabled=true;csv='';const f=file.files?.[0];if(!f)return;try{if(f.size>3000000)throw Error('Choose a CSV smaller than 3 MB.');csv=await f.text();const parsed=window.QuanturaForecastControls.parseCsv(csv),headers=parsed.headers,rows=parsed.rows;const qs=headers.filter(h=>/^p\d+(?:\.\d+)?$/i.test(h)||/^(q|quantile[_ -]?)0?\.\d+$/i.test(h));if(!qs.length)throw Error('No quantile columns found. Use P01 / P10 / P50 / P90 or similar Canvas headers.');document.getElementById('canvas-name').value=f.name.replace(/\.csv$/i,'');const ticker=f.name.toUpperCase().match(/GOOGL|NVDA|NFLX|PLTR|AAPL|AMZN|MSFT|META|TSLA|SPY|QQQ|WMT|XAUUSD|BTC/);if(ticker)document.getElementById('canvas-ticker').value=ticker[0];document.getElementById('canvas-detected').textContent=`${rows.length} rows · ${qs.join(' / ')} · UTC dates`;document.getElementById('canvas-upload-preview').innerHTML=table(headers,rows.slice(0,100));publish.disabled=!isAdmin;status.textContent='Preview ready. Confirm the ticker and model metrics.';}catch(e){status.textContent=e.message;csv='';}};
+    let previewGeneration=0;
+    file.onchange=async()=>{
+      const generation=++previewGeneration;publish.disabled=true;csv='';const f=file.files?.[0];if(!f)return;
+      try{
+        if(f.size>3000000)throw Error('Choose a CSV smaller than 3 MB.');
+        const text=await f.text(),token=await window.QuanturaAuth.getToken();
+        const response=await fetch('/api/sagemaker/preview',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({csv:text}),signal:AbortSignal.timeout(30000)}),parsed=await response.json();
+        if(generation!==previewGeneration)return;
+        if(!response.ok)throw Error(parsed.error==='admin_required'?'Sign in with your admin account.':`CSV preview failed: ${parsed.error}`);
+        if(!parsed.quantiles.length)throw Error('No quantile columns found. Use P01 / P10 / P50 / P90 or similar Canvas headers.');
+        csv=text;document.getElementById('canvas-name').value=f.name.replace(/\.csv$/i,'');
+        const ticker=f.name.toUpperCase().match(/GOOGL|NVDA|NFLX|PLTR|AAPL|AMZN|MSFT|META|TSLA|SPY|QQQ|WMT|XAUUSD|BTC/);if(ticker)document.getElementById('canvas-ticker').value=ticker[0];
+        document.getElementById('canvas-detected').textContent=`${parsed.row_count} rows · ${parsed.quantiles.map(q=>'P'+q*100).join(' / ')} · ${parsed.frequency} · UTC dates`;
+        document.getElementById('canvas-upload-preview').innerHTML=table(parsed.headers,parsed.preview);publish.disabled=!isAdmin;status.textContent='Preview ready. Confirm the ticker and model metrics.';
+      }catch(e){if(generation===previewGeneration){status.textContent=e.message;csv='';}}
+    };
     form.onsubmit=async e=>{e.preventDefault();if(!csv||!isAdmin)return;publish.disabled=true;status.textContent='Publishing to the repository…';try{const metrics={};for(const input of form.querySelectorAll('[data-canvas-metric]'))if(input.value!==''){const key=input.dataset.canvasMetric,value=Number(input.value);metrics[key]=['smape','mape','wape'].includes(key)?value/100:value;}const token=await window.QuanturaAuth.getToken();const r=await fetch('/api/sagemaker',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({csv,name:document.getElementById('canvas-name').value,ticker:document.getElementById('canvas-ticker').value,metrics,metrics_basis:document.getElementById('canvas-metrics-basis').value}),signal:AbortSignal.timeout(90_000)}),d=await r.json();if(!r.ok)throw Error(d.error==='admin_required'?'Admin sign-in is required.':d.error==='canvas_github_not_configured'?'Repository publishing is not configured.':`Publish failed: ${d.error}`);status.replaceChildren(document.createTextNode('Published. '));const link=document.createElement('a');link.href=d.url;link.textContent='View forecast';status.append(link);csv='';form.reset();}catch(e){status.textContent=e.message;publish.disabled=false;}};
   }
 })();

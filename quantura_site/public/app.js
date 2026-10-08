@@ -14707,6 +14707,7 @@
     window.addEventListener("quantura:market-selected", (event) => {
       if (!event.detail?.resource) return;
       const row = event.detail.resource;
+      if(event.detail.intent==='forecast' && ensembleUiState.lastJob?.sagemaker_item){stopEnsemblePolling();ensembleUiState.forecastId='';ensembleUiState.lastJob=null;window.clearTimeout(ensembleUiState.observationTimer);window.QuanturaForecastQA?.clear();if(ui.ensembleForecastResults)ui.ensembleForecastResults.hidden=true;history.replaceState({},'',`${location.pathname}?panel=forecast`);}
       window.QuanturaMarketSelection = row;
       if (!row?.contract_id) {
         if (row?.symbol) {
@@ -14850,6 +14851,7 @@
     });
     const importCsv=detail=>{
       if(!detail || typeof detail.text!=="string" || !detail.name || Date.now()-Number(detail.at)>60000)return;
+      stopEnsemblePolling();ensembleUiState.forecastId="";ensembleUiState.lastJob=null;window.clearTimeout(ensembleUiState.observationTimer);window.QuanturaForecastQA?.clear();if(ui.ensembleForecastResults)ui.ensembleForecastResults.hidden=true;history.replaceState({},"",`${location.pathname}?panel=forecast`);
       window.__quanturaSetPanel?.("forecast");ui.ensembleSourceType.value="series";ui.ensembleSourceType.dispatchEvent(new Event("change",{bubbles:true}));
       const input=document.getElementById("ensemble-csv-file");const transfer=new DataTransfer();transfer.items.add(new File([detail.text],detail.name,{type:"text/csv"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));
     };

@@ -130,5 +130,10 @@ export function registerCanvasRoutes(router:Router,options:{db:FirebaseFirestore
   router.get('/sagemaker/admin/access',async(req,res)=>{res.set('Cache-Control','private, no-store');try{const p=await authenticatePlatformRequest(req,options);res.status(p.platformAdmin && !p.guest?200:403).json({ok:!!p.platformAdmin && !p.guest});}catch{res.status(401).json({ok:false,error:'sign_in_required'});}});
   router.get('/sagemaker',async(req,res)=>{try{const c=await canvasRepository.catalog();const q=String(req.query.q || '').toLowerCase();res.set('Cache-Control','public, max-age=30, stale-while-revalidate=60').json({ok:true,items:c.items.filter(i=>`${i.name} ${i.ticker} ${i.path}`.toLowerCase().includes(q))});}catch(e){fail(res,e);}});
   router.get('/sagemaker/:id',async(req,res)=>{try{res.set('Cache-Control','public, max-age=60').json({ok:true,...await canvasRepository.detail(req.params.id)});}catch(e){fail(res,e);}});
+  router.post('/sagemaker/preview',async(req,res)=>{res.set('Cache-Control','private, no-store');try{
+    const p=await authenticatePlatformRequest(req,options);if(p.guest||!p.platformAdmin||!['clerk_session','firebase_session'].includes(p.authMethod)){res.status(403).json({ok:false,error:'admin_required'});return;}
+    if(typeof req.body?.csv!=='string' || Buffer.byteLength(req.body.csv)>3_000_000)throw new Error('canvas_csv_too_large');
+    const {predictions,history,...preview}=parseCanvas(req.body.csv);res.json({ok:true,...preview});
+  }catch(e){fail(res,e);}});
   router.post('/sagemaker',async(req,res)=>{res.set('Cache-Control','private, no-store');try{const p=await authenticatePlatformRequest(req,options);if(p.guest||!p.platformAdmin||!['clerk_session','firebase_session'].includes(p.authMethod)){res.status(403).json({ok:false,error:'admin_required'});return;}res.json({ok:true,...await canvasRepository.publish(req.body)});}catch(e){fail(res,e);}});
 }
