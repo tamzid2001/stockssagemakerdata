@@ -237,3 +237,29 @@ def test_short_initial_entry_at_or_above_fixed_stop_is_blocked():
     r = short_replay([short_minute(at, 111.)])
     assert r['above_p99_forecast_signals'] == 1
     assert r['open_entries'] == 0 and r['risk_or_volume_blocked_entries'] == 1
+
+
+def test_research_budget_scaling_does_not_multiply_cash_buying_power():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    rows = [minute(at)]
+    baseline = run_share_replay(rows, [signal(at)], at, at+timedelta(days=1), Candidate(2.), detail=True)
+    explicit = run_share_replay(rows, [signal(at)], at, at+timedelta(days=1), Candidate(2.),
+                                detail=True, research_budget_multiplier=1.)
+    scaled = run_share_replay(rows, [signal(at)], at, at+timedelta(days=1), Candidate(2.),
+                              detail=True, research_budget_multiplier=1000.)
+    assert baseline == explicit
+    assert scaled['max_shares'] > baseline['max_shares']
+    assert scaled['open_shares'] == 1000.
+    assert scaled['open_basket'][0]['entry']*scaled['open_shares'] <= 100000.
+    assert scaled['first_margin_breach'] is None
+    assert scaled['research_budget_multiplier'] == 1000.
+    assert scaled['risk_fraction'] == 10.
+    assert scaled['base_risk_fraction'] == .01
+
+
+@pytest.mark.parametrize('multiplier', [0., -1., float('inf'), float('nan')])
+def test_invalid_research_budget_multiplier_is_rejected(multiplier):
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    with pytest.raises(ValueError, match='INVALID_REPLAY_CONFIGURATION'):
+        run_share_replay([minute(at)], [signal(at)], at, at+timedelta(days=1), Candidate(2.),
+                          research_budget_multiplier=multiplier)

@@ -246,9 +246,12 @@ def assumed_quotes(row, symbol, costs):
     return ({k: ask[k]-.01*costs.spread_factor for k in ask}, ask)
 
 
-def run_share_replay(rows, records, first, last, candidate, costs=COSTS[0], ordering='low_first', detail=False, *, side='long'):
+def run_share_replay(rows, records, first, last, candidate, costs=COSTS[0], ordering='low_first', detail=False, *,
+                     side='long', research_budget_multiplier=1., account_timezone=NY):
     result = replay('SPY', rows, records, share_spec(), KnownConversion('USD', []), first, last, candidate, costs, ordering,
-                    detail=detail, averaging_gate='grid', quote_adjuster=assumed_quotes, account_timezone=NY, side=side)
+                    detail=detail, averaging_gate='grid', quote_adjuster=assumed_quotes,
+                    account_timezone=account_timezone, side=side,
+                    research_budget_multiplier=research_budget_multiplier)
     rename = {'max_lots': 'max_shares', 'open_lots': 'open_shares', 'max_margin': 'max_invested_notional_usd'}
     for old, new in rename.items():
         result[new] = result.pop(old)

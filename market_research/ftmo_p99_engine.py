@@ -133,12 +133,18 @@ def sized_lots(price, stop, p90, equity, entries, candidate, spec, conversion, a
 def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, costs=Costs('reference_percentage_per_side'),
            ordering='low_first', initial_balance=100_000., risk_fraction=.01, detail=False, *,
            entry_quantile='p99', entry_comparison='above', averaging_gate='p90',
-           quote_adjuster=adjusted_quotes, account_timezone=PRAGUE, side='long'):
+           quote_adjuster=adjusted_quotes, account_timezone=PRAGUE, side='long',
+           research_budget_multiplier=1.):
     if (ordering not in ('low_first', 'high_first') or not 0 < risk_fraction <= .01
             or entry_quantile not in ('p90', 'p99') or entry_comparison not in ('above', 'below', 'any')
             or averaging_gate not in ('p90', 'grid') or side not in ('long', 'short')
-            or (side == 'short' and averaging_gate != 'grid')):
+            or (side == 'short' and averaging_gate != 'grid')
+            or not math.isfinite(research_budget_multiplier) or research_budget_multiplier <= 0):
         raise ValueError('INVALID_REPLAY_CONFIGURATION')
+    # Explicit offline sizing experiment. Existing workflow/API callers retain
+    # multiplier=1 and the original 1% complete-ladder ceiling. Buying power
+    # remains based on actual equity, never multiplier-inflated equity.
+    effective_risk_fraction = risk_fraction * research_budget_multiplier
     direction = 1 if side == 'long' else -1
     stop_key = 'fixed_final_p01' if side == 'long' else 'fixed_final_p99'
     def stop_round(value):
@@ -228,7 +234,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             baskets.append({'at': at.isoformat(), 'started_at': basket_start.isoformat(), 'reason': reason,
                             'legs': len(basket_legs), 'net_pnl': sum(e['net_pnl'] for e in basket_legs),
                             stop_key: stop, 'fixed_final_quantile_span': risk_span,
-                            'equity_at_entry': risk_equity, 'risk_budget_usd': risk_equity * risk_fraction,
+                            'equity_at_entry': risk_equity, 'risk_budget_usd': risk_equity * effective_risk_fraction,
                             'duration_hours': (at - basket_start).total_seconds() / 3600})
         pending = trailing = peak_bid = basket_start = signal_origin = None
         basket_legs = []
@@ -245,7 +251,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             invalid_stop_blocked += 1
             return False
         sizing_p90 = p90 if averaging_gate == 'p90' and len(basket_legs) < 2 else price + direction * candidate.grid
-        lots = sized_lots(price, stop, sizing_p90, equity(bid, at), active, candidate, spec, conversion, at, costs, risk_fraction,
+        lots = sized_lots(price, stop, sizing_p90, equity(bid, at), active, candidate, spec, conversion, at, costs, effective_risk_fraction,
                           risk_equity=risk_equity, risk_span=risk_span, side=side)
         minimum = spec.get('minimumVolume', .01)
         if lots < minimum:
@@ -417,7 +423,11 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
               'open_entries': len(active), 'open_lots': sum(e['lots'] for e in active),
               'open_age_hours': (last_at - basket_start).total_seconds() / 3600 if basket_start else None,
               'open_net_pnl': sum(e['net_pnl'] for e in basket_legs) + ending - cash,
-              'risk_fraction': risk_fraction, 'orders_sent': 0}
+              'risk_fraction': effective_risk_fraction, 'orders_sent': 0}
+    if research_budget_multiplier != 1.:
+        result.update(research_budget_multiplier=research_budget_multiplier,
+                      base_risk_fraction=risk_fraction,
+                      budget_note='Experimental planned-ladder allocation; actual buying power uses unscaled equity')
     if side == 'short':
         result.update(side=side, fixed_stop_not_above_entry_blocks=invalid_stop_blocked,
                       minimum_share_allocation_blocks=minimum_size_blocked)

@@ -96,3 +96,46 @@ This does not rerun the models or submit orders. The report distinguishes initia
 entries blocked by an invalid fixed upper stop from allocations below one share.
 Use the original first-nine-month selection and fresh-flat holdout methodology;
 do not select a short profile using the completed full-year outcomes.
+
+## Offline drawdown and sizing sensitivity
+
+`market_research.spy_drawdown_sizing` reuses the original SPY source and all
+251 saved forecasts for the $2 equal long grid. It checks source hashes and
+requires the multiplier-1 replay to reproduce every original result field.
+It does not rerun models or submit orders.
+
+```sh
+python -m market_research.spy_drawdown_sizing \
+  --source source --forecasts forecasts \
+  --baseline original-report/results.json.gz --output sizing-report
+```
+
+The original replay closed 82 baskets with 82 entry orders: every basket filled
+one purchase, with no subsequent averaging purchase. A purchase can contain
+multiple shares. The $2 grid schedules potential lower additions; an observed
+breach creates a limit that is eligible on the next observed minute. It does
+not guarantee that an additional purchase fills. Both minute paths produced
+80 trailing-stop exits and two gap-stop exits.
+
+The experiment varies the planned whole-ladder risk budget independently of
+actual account equity. Only multiplier 1 retains the original 1% budget. All
+cases keep whole shares and cash buying power capped to 1x actual equity.
+Existing workflow and API callers retain multiplier 1; this experimental
+parameter is not exposed in their configuration.
+
+Arithmetic scaling of the original trades to $10,000 historical drawdown
+suggests $11,424.46-$11,568.45 price P&L, but requires about $1.26 million peak
+gross SPY exposure. It is not executable in the $100,000 cash-only account.
+Among the tested larger-budget replays, the highest full-year worst-path profit
+was $2,420.79-$2,516.00, with $2,818.20 worst equity drawdown and $300.76 worst
+daily loss. This case used a 100% *theoretical planned-ladder budget*, constrained
+by actual cash. It changes the original 1% risk rule and is an aggressive
+retrospective sensitivity, not a recommended allocation. A two-cent spread
+reduces that case to $2,309.58-$2,403.30.
+
+The $10,000 peak drawdown ceiling, $5,000 Prague-midnight daily loss ceiling,
+$90,000 static equity floor and buying-power constraints reject cases after
+replay. They do not cause forced liquidation or stop trading. Selection uses
+the whole year and has no fresh holdout. Historical drawdown does not bound
+future losses. The original forecast calibration and cost limitations remain;
+these SPY share results cannot be transferred directly to FTMO US500 CFDs.
