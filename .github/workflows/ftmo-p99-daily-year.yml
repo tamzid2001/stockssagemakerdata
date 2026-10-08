@@ -1,0 +1,249 @@
+name: FTMO daily P99 seven-session yearly grid study
+run-name: FTMO P99 buy ladders · ${{ inputs.start_date }}–${{ inputs.end_date }}
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: First completed 18:00 UTC origin date
+        required: true
+        type: string
+        default: '2025-10-07'
+      end_date:
+        description: Last origin date; next-day 17:00 UTC must already have passed
+        required: true
+        type: string
+        default: '2026-10-06'
+      symbols:
+        description: Approved assets; all ten by default
+        required: true
+        type: string
+        default: 'EURUSD.sim,USDJPY.sim,GBPUSD.sim,GBPJPY.sim,USDCAD.sim,US500.sim,US30.sim,US100.sim,XAUUSD.sim,BTCUSD.sim'
+      resume_run_id:
+        description: Optional previous run with all sources complete; reuse frozen sources and completed forecasts
+        required: false
+        type: string
+        default: ''
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ftmo-p99-daily-${{ inputs.start_date }}-${{ inputs.end_date }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sources: ${{ steps.plan.outputs.sources }}
+      forecasts: ${{ steps.plan.outputs.forecasts }}
+      replays: ${{ steps.plan.outputs.replays }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pytest==8.4.2
+      - name: Verify fixed tail stop, shared risk, causal limits and trailing behavior
+        run: python -m pytest -q market_research/tests/test_ftmo_p99.py
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.resume_run_id != '' }}
+        with:
+          name: ftmo-p99-plan
+          path: plan/
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Freeze study and current broker specifications
+        id: plan
+        env:
+          STUDY_START: ${{ inputs.start_date }}
+          STUDY_END: ${{ inputs.end_date }}
+          STUDY_SYMBOLS: ${{ inputs.symbols }}
+        run: |
+          python -m market_research.ftmo_p99_study plan --start "$STUDY_START" --end "$STUDY_END" --symbols "$STUDY_SYMBOLS" --output plan
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          study=json.loads(Path('plan/study-plan.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              for key in ('sources','forecasts','replays'):
+                  f.write(key+'='+json.dumps({'include':study[key]},separators=(',',':'))+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ftmo-p99-plan
+          path: plan/
+          retention-days: 14
+          overwrite: true
+  source:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.plan.outputs.sources) }}
+    env:
+      SYMBOL: ${{ matrix.symbol }}
+      STUDY_START: ${{ inputs.start_date }}
+      STUDY_END: ${{ inputs.end_date }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.resume_run_id != '' }}
+        with:
+          name: ftmo-p99-source-${{ matrix.symbol }}
+          path: sources/
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download warmup H1 plus genuine paired M1 for the full replay year
+        if: ${{ inputs.resume_run_id == '' }}
+        run: python -m market_research.ftmo_p99_study source --symbol "$SYMBOL" --start "$STUDY_START" --end "$STUDY_END" --output "sources/$SYMBOL"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ftmo-p99-source-${{ matrix.symbol }}
+          path: sources/
+          retention-days: 14
+          overwrite: true
+  forecast:
+    needs: [plan, source]
+    runs-on: ${{ fromJSON(vars.ALPACA_OPTIONS_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.forecasts) }}
+    env:
+      SYMBOL: ${{ matrix.symbol }}
+      CHUNK: ${{ matrix.chunk }}
+      CHUNK_START: ${{ matrix.start }}
+      CHUNK_END: ${{ matrix.end }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      CUDA_VISIBLE_DEVICES: ''
+      GRANITE_DEVICE: cpu
+      OMP_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: market_research/requirements.lock
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-p99-source-${{ matrix.symbol }}
+          path: sources/
+      - name: Restore this shard's completed forecasts
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ftmo-p99-forecasts-${{ matrix.symbol }}-${{ matrix.chunk }}
+          merge-multiple: true
+          path: forecasts/
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install immutable CPU five-model inference dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r market_research/requirements.lock
+      - name: Forecast seven sessions from exactly 500 completed daily candles
+        env:
+          HF_HOME: ${{ runner.temp }}/ftmo-p99-model-cache
+        run: python -m market_research.ftmo_p99_study forecast --symbol "$SYMBOL" --start "$CHUNK_START" --end "$CHUNK_END" --source "sources/$SYMBOL" --output "forecasts/${SYMBOL}-c${CHUNK}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ftmo-p99-forecasts-${{ matrix.symbol }}-${{ matrix.chunk }}
+          path: forecasts/
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: ignore
+  replay:
+    if: ${{ always() && needs.plan.result == 'success' && needs.source.result == 'success' }}
+    needs: [plan, source, forecast]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.replays) }}
+    env:
+      SYMBOL: ${{ matrix.symbol }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-p99-plan
+          path: plan/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ftmo-p99-source-*
+          path: sources/
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ftmo-p99-forecasts-${{ matrix.symbol }}-*
+          path: forecasts/
+          merge-multiple: true
+      - name: Compare 18 grid/lot candidates, two minute paths and cost stress
+        run: python -m market_research.ftmo_p99_study replay --symbol "$SYMBOL" --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --sources sources --forecasts forecasts --output "replay/$SYMBOL"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ftmo-p99-replay-${{ matrix.symbol }}
+          path: replay/
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: ignore
+  report:
+    if: ${{ always() && needs.plan.result == 'success' }}
+    needs: [plan, source, forecast, replay]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ftmo-p99-plan
+          path: plan/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ftmo-p99-replay-*
+          path: research/
+          merge-multiple: true
+      - name: Publish explicit completeness, full-year outcomes and untouched holdout
+        run: python -m market_research.ftmo_p99_study aggregate --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --artifacts research --output report
+      - name: Publish readable run summary
+        if: always()
+        run: |
+          if [[ -f report/report.md ]]; then cat report/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ftmo-p99-year-report
+          path: report/
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: ignore

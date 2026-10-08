@@ -17,9 +17,18 @@ def build_future_timestamps(
     last = pd.Timestamp(last_observed)
     last = last.tz_localize("UTC") if last.tzinfo is None else last.tz_convert("UTC")
     if horizon_mode in {"trading_sessions", "calendar_days"}:
-        if calendar.upper() not in {"NYSE", "XNYS"}:
+        if calendar.upper() in {"FTMO_UTC_WEEKDAYS", "FTMO_UTC_DAILY"}:
+            # Explicit research session labels retain the 17:00 UTC cutoff.
+            # Actual source observations still decide whether an origin exists;
+            # these calendars do not assert historical broker holiday hours.
+            if horizon_mode != "trading_sessions":
+                raise ValueError("FTMO calendars require trading_sessions")
+            offset = pd.offsets.Day() if calendar.upper() == "FTMO_UTC_DAILY" else pd.offsets.BusinessDay()
+            dates = pd.date_range(start=last + offset, periods=prediction_length, freq=offset)
+        elif calendar.upper() not in {"NYSE", "XNYS"}:
             raise ValueError("trading-session horizons currently require the NYSE calendar")
-        dates = _nyse_dates(last, prediction_length, horizon_mode)
+        else:
+            dates = _nyse_dates(last, prediction_length, horizon_mode)
     elif horizon_mode == "frequency_periods":
         offset = frequency_offset(frequency)
         dates = pd.date_range(start=last + offset, periods=prediction_length, freq=offset)

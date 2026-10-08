@@ -52,10 +52,19 @@ def get_json(url: str, attempts=5):
     for attempt in range(attempts):
         try:
             with urllib.request.urlopen(request, timeout=35) as response:
+                if response.headers.get('x-amzn-waf-action') == 'challenge':
+                    raise ValueError('PROVIDER_ACCESS_CHALLENGE')
+                if response.status != 200:
+                    raise ValueError('PROVIDER_UNEXPECTED_SUCCESS_STATUS')
                 data = response.read(12_000_001)
             if len(data) > 12_000_000:
                 raise ValueError('PROVIDER_PAYLOAD_TOO_LARGE')
-            result = json.loads(data)
+            if not data:
+                raise ValueError('PROVIDER_EMPTY_RESPONSE')
+            try:
+                result = json.loads(data)
+            except (ValueError, UnicodeDecodeError):
+                raise ValueError('PROVIDER_INVALID_JSON') from None
             if not isinstance(result, dict):
                 raise ValueError('PROVIDER_OBJECT_REQUIRED')
             return result
@@ -126,12 +135,14 @@ def months(start: datetime, end: datetime):
         current = current.replace(year=current.year+1, month=1) if current.month == 12 else current.replace(month=current.month+1)
 
 
-def download(symbol: str, start: date, end: date, output: Path):
+def download(symbol: str, start: date, end: date, output: Path, *, warmup_days=90):
+    if type(warmup_days) is not int or not 90 <= warmup_days <= 1500:
+        raise ValueError('BOUNDED_WARMUP_REQUIRED')
     code = INSTRUMENTS[symbol][0]; output.mkdir(parents=True, exist_ok=True)
     metadata = get_json(BASE+'/instruments/'+code)
     if metadata.get('code') != code or not any(r.get('period') == 'HOUR' for r in metadata.get('histories', [])):
         raise ValueError('GENUINE_HOURLY_HISTORY_REQUIRED')
-    first = datetime.combine(start-timedelta(days=90), datetime.min.time(), UTC)
+    first = datetime.combine(start-timedelta(days=warmup_days), datetime.min.time(), UTC)
     last = datetime.combine(end+timedelta(days=1), datetime.min.time(), UTC)+timedelta(hours=17)
     sides = {}; audit=[]
     for side in ('BID', 'ASK'):

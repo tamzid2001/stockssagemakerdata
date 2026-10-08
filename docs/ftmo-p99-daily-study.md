@@ -1,0 +1,77 @@
+# FTMO daily P99 ladder study
+
+Run [FTMO daily P99 seven-session yearly grid study](../.github/workflows/ftmo-p99-daily-year.yml) to compare ten assets over up to 365 completed calendar days. This research workflow sends no orders and writes no Firestore documents.
+
+## Forecasts and signals
+
+- EURUSD, USDJPY, GBPUSD, GBPJPY, USDCAD, US500, US30, US100, XAUUSD and BTCUSD `.sim` instruments.
+- A separate $100,000 USD starting account for each asset. Standalone account returns are not a shared portfolio result.
+- One forecast at 18:00 UTC after an observed 18:00–17:00 UTC session finishes. The hour from 17:00 to 18:00 is outside that source session.
+- Exactly 500 genuine completed daily session candles, aggregated from paired Dukascopy hourly observations. Missing candles and holidays are not filled. Daily closes are bid/ask midpoints; source coverage remains recorded.
+- Seven future weekday sessions for FX/indices/metals; seven daily sessions for BTC. These are explicit UTC CFD session labels, not NYSE calendars or a guarantee of future broker holiday hours.
+- Prophet, Toto 2.0 4m, Granite, Chronos and TimesFM all execute, with checkpoints/revisions pinned by Quantura's registry. A failed model invalidates that origin.
+- P01, P25, P50, P75, P90 and P99. Toto and TimesFM's native ranges do not include P01/P99: the supported models' tail weights renormalize without extrapolating unsupported tails.
+- Initial buy signal: the observed cutoff close is strictly above the **first** predicted P99. Entry uses the next available executable ask after measured inference latency.
+
+## Fixed stop and equity risk
+
+The triggering forecast's **seventh/final P01** is the basket stop until exit, rounded down to the instrument's executable price tick. Later forecasts do not move it. Its **final P99 minus final P01** defines the sizing reference range:
+
+```text
+E = USD account equity immediately before the initial fill
+B = 0.01 × E                         # $1,000 on the first $100k basket
+S = triggering forecast's final P01  # fixed stop
+W = final P99 − final P01            # fixed sizing reference
+
+loss_per_lot[k] = USD(contract_size × max(entry_price[k] − S, W))
+                + entry_commission_per_lot[k]
+                + stop_exit_commission_per_lot[k]
+                + seven_day_adverse_swap_reserve_per_lot[k]
+
+remaining_budget = max(0, B − existing_entries_reserved_stop_risk)
+scale = remaining_budget / Σ(weight[k] × loss_per_lot[k])
+next_lots = floor_to_volume_step(scale × next_weight)
+```
+
+The `max()` prevents an entry above final P99 from being undersized for its larger actual loss to the stop. USD conversion uses the appropriate quoted currency and conservative conversion side. Lot quantities round **down**, are bounded by margin and broker maximum volume, and are skipped if below the assumed minimum. The entire planned ladder shares B; each entry does not receive another 1% budget.
+
+The budget stays fixed for the basket. The next basket compounds from its new account equity. Currency conversion moves, gap fills and carrying beyond the swap reserve can produce losses beyond the planned budget; reported equity includes these effects.
+
+The public FTMO endpoint does not publish minimum lot/step fields. These runs assume 0.01 minimum/step and explicitly mark execution feasibility unverified. Current advertised contract sizes, costs, leverage and maximum volumes are frozen in the plan; they are not verified historical broker specifications. Some `.sim` products launched during the replay year, so pre-launch results are counterfactual research, not a claim they were executable then.
+
+## Averaging and exits
+
+1. The first averaging buy must be at least one grid below the lowest existing fill and strictly below the latest available daily forecast's first P90. The P90 gate can make that first gap larger than one grid.
+2. After that averaging fill, subsequent entries need only lower grid levels. P90 no longer gates the basket.
+3. A completed minute must confirm the lower-price breach before a limit order exists. That order is eligible from the next observed minute. No retrospective fill at the low that created the order.
+4. A resting buy limit above the stop fills before the stop on a continuous descent; a gap below the stop closes the basket at the actual available bid before adding exposure.
+5. Trailing activates when basket P&L, including entry/exit commissions and accrued swaps, becomes positive.
+6. With at least two open entries, trailing distance is `0.75 × (highest fill − lowest fill)`. With one entry it is one grid. The active trail ratchets upward; it does not loosen. The more protective of the trail and fixed P01 closes the basket.
+7. After exit, reentry requires a later daily forecast with a new above-first-P99 signal. The same origin cannot reopen the basket.
+8. Baskets carry until stop/trail. At the end of the year, open liabilities remain bid-marked, including estimated exit commission.
+
+## Grid and lot comparisons
+
+Each asset has six prespecified grids and three profiles: equal size, larger deeper entries, and smaller deeper entries. Profile weights range from 1 to 2; they are not martingale multipliers. All share the same 1% ceiling.
+
+| Asset | Price grids |
+|---|---|
+| EURUSD, GBPUSD, USDCAD | 0.0005, 0.001, 0.002, 0.005, 0.01, 1 |
+| USDJPY, GBPJPY | 0.05, 0.1, 0.2, 0.5, 1, 2 |
+| US500, US30, US100 | 1, 5, 10, 20, 50, 100 |
+| XAUUSD | 0.25, 0.5, 1, 2, 5, 10 |
+| BTCUSD | 1, 25, 50, 100, 250, 500 |
+
+The literal $1 grid is retained for every asset; FX pip distances are included because a raw one-dollar FX move is usually an impractical ladder interval. Very dense ladders may have insufficient budget to execute even the minimum lot: those blocked entries remain visible.
+
+## Validation and reporting
+
+Genuine paired M1 bid/ask candles execute the replay. Both low-first and high-first minute OHLC paths are reported because OHLC does not reveal tick order or the simultaneity of bid/ask extrema. Model runtime delays are measured and no source data after the cutoff enters training.
+
+Candidate selection uses the first nine months only, maximizing the worse-path development net return among candidates with at least five closed baskets and no diagnosed daily, static overall or margin breach. The last quarter is then replayed from flat without selecting again. Every candidate's full-year result is preserved; an ineligible selection remains explicit.
+
+Diagnostics include the standard 2-Step $90,000 static account floor and $5,000 daily loss relative to midnight CE(S)T balance, including floating results. These are reported breaches, not simulated automatic liquidation rules. Commission and adverse spread/swap stress results accompany the selected candidate.
+
+Reports include net and percentage returns, fees, swaps, realized entry/basket W/L, win rate, longest W/L streaks, weighted average entry, duration, average/maximum ladder, maximum lots/margin, open liabilities, bid equity drawdown and daily loss.
+
+All inputs, configuration, source checksums, daily forecasts and reports are GitHub artifacts. Model jobs are split into 21-calendar-day shards. `resume_run_id` can reuse a prior run's complete source artifacts and finished forecast records while retaining the original cost snapshot. Missing forecasts prevent an optimization report. Source access challenges and malformed/empty provider responses fail explicitly; access controls are not bypassed.
