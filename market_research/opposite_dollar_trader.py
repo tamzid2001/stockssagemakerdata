@@ -467,9 +467,10 @@ def run(config,mode,duration):
                                 journal.save()
                         if decision.get("status")=="entry_wait" and ticker not in journal.state["entries"]:
                             first=decision["signal"];quote=next((r for r in minutes if r["market_id"]==ticker and r["timestamp"]==first["signal_at"]+60),None)
-                            if quote and now<=quote["timestamp"]+30:
-                                trader.begin({**first,"sticky":decision["direction"]},quote,now);decision["status"]="entered";journal.save()
-                            elif now>first["signal_at"]+90:
+                            entry_now=int(time.time())  # Other market/journal operations may have advanced the clock.
+                            if quote and quote["received_at"]<=entry_now<=quote["timestamp"]+30:
+                                trader.begin({**first,"sticky":decision["direction"]},quote,entry_now);decision["status"]="entered";journal.save()
+                            elif entry_now>first["signal_at"]+90:
                                 decision["status"]="missed_next_minute_entry";journal.save()
                     fee=store._get("checkpoints","btc_fee_policy") or {}
                     statuses={}

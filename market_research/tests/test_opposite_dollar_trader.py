@@ -348,3 +348,19 @@ def test_live_settlement_requires_exact_authenticated_quantity_cost_and_fees():
     assert not j.state["totals"]
     row["fee_cost"]=".07";t.settle(e,"live",market,1001);t.settle(e,"live",market,1002)
     assert j.state["totals"]["live"]["net"]=="3.93" and j.state["totals"]["live"]["trades"]==1
+
+def test_opposite_no_signal_buys_yes_on_yes_book(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    j=Journal();b=Broker(j);t=DollarTrader(CONFIG,b,j,"live",gate_factory=Gate)
+    signal={"market_id":TICKER,"contract_id":TICKER+":no","signal_at":60,"signal_received_at":65,"market_end":900,
+            "sticky":{"side":"no","confirmed_at":30}}
+    t.begin(signal,{"timestamp":120,"received_at":125,"timely":True},125);t.reconcile(TICKER,FEE,126)
+    assert b.posts[0]["side"]=="bid" and b.posts[0]["price"]=="0.8200" and b.posts[0]["count"]=="1.21"
+
+def test_initial_entry_deadline_uses_actual_current_time():
+    j=Journal();b=Broker(j);t=DollarTrader(CONFIG,b,j,"live",gate_factory=Gate)
+    s={"market_id":TICKER,"contract_id":TICKER+":yes","signal_at":60,"signal_received_at":65,"market_end":900,
+       "sticky":{"side":"yes","confirmed_at":30}}
+    with pytest.raises(RuntimeError,match="MISSED_OR_DUPLICATE_DOLLAR_ENTRY"):
+        t.begin(s,{"timestamp":120,"received_at":125,"timely":True},151)
+    assert not j.state["entries"] and not b.posts
