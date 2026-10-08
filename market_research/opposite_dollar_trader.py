@@ -636,7 +636,7 @@ def run(config,mode,duration):
                                 raise
                     if time.time()-last_save>=30:
                         retire_markets(journal,store,now)
-                        journal.state["health"]={"at":now,"mode":mode,"statuses":list(statuses.values()),
+                        journal.state["health"]={"at":now,"mode":mode,"code_sha":os.getenv("QUANTURA_CODE_SHA"),"statuses":list(statuses.values()),
                             "collector":store._get("checkpoints","btc_collector_health"),"orders_enabled":broker.enabled}
                         journal.save();last_save=time.time()
                     if time.time()-last_health>=60:
