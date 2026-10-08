@@ -123,7 +123,7 @@ curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
 Create an asynchronous forecast with `POST /api/v1/ensemble-forecasts`, a paid API credential and an `Idempotency-Key`; poll its status before using its output.
 
 ```bash
-npm install -g quantura-sdk
+npm install -g 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.0/quantura-sdk-1.0.0.tgz'
 quantura login
 quantura search AAPL --source alpaca
 quantura models
