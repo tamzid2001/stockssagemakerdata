@@ -199,6 +199,40 @@ def test_missing_latest_session_is_not_published_as_a_fresh_forecast(monkeypatch
     assert result["forecast_available"] is False
 
 
+def test_historical_sip_end_is_delayed_and_pagination_preserves_all_symbols(monkeypatch):
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "test-secret")
+    monkeypatch.delenv("ALPACA_DATA_FEED", raising=False)
+    now = dt.datetime.fromisoformat("2026-10-07T20:17:00+00:00")
+    monkeypatch.setattr(pipeline, "utc_now", lambda: now)
+    calls = []
+    class Response:
+        def __init__(self, payload): self.payload = payload
+        def json(self): return self.payload
+    def request(method, url, *, params, headers):
+        calls.append(dict(params))
+        return Response({"bars": {"AAPG": [{"t": "2026-10-07T04:00:00Z", "c": 15}]} , "next_page_token": "next"}) if len(calls) == 1 else Response({"bars": {"ACNB": [{"t": "2026-10-07T04:00:00Z", "c": 40}]}})
+    monkeypatch.setattr(pipeline, "request_with_retry", request)
+    result = pipeline.fetch_alpaca_histories(["AAPG", "ACNB"], "2025-01-01", "2026-10-07")
+    assert all(c["feed"] == "sip" and c["end"] == "2026-10-07T20:01:00Z" for c in calls)
+    assert calls[1]["page_token"] == "next"
+    assert result["AAPG"][0]["close"] == 15 and result["ACNB"][0]["close"] == 40
+
+
+def test_historical_sip_preserves_requested_past_end(monkeypatch):
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_SECRET_KEY", "test-secret")
+    calls = []
+    class Response:
+        def json(self): return {"bars": {}}
+    def request(*args, **kwargs):
+        calls.append(kwargs["params"])
+        return Response()
+    monkeypatch.setattr(pipeline, "request_with_retry", request)
+    pipeline.fetch_alpaca_histories(["AAPL"], "2025-01-01", "2026-01-01")
+    assert calls[0]["end"] == "2026-01-01T23:59:59Z"
+
+
 def test_quantile_position_and_distances_are_strict():
     assert pipeline.quantile_position(80, 90, 100, 110) == "below_p10"
     assert pipeline.quantile_position(95, 90, 100, 110) == "between_p10_p50"

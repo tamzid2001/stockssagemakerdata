@@ -185,7 +185,7 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
     if (!["auto", "alpaca", "dukascopy", "polymarket_us", "kalshi", "kalshi_perps", "gemini", "fiscaldata", "worldbank_data360", "bigquery", "sagemaker"].includes(requested) || !["open", "live", "any"].includes(mode)) {
       res.status(422).json({ ok: false, error: "search_filter_invalid", message: "Choose a supported source and market status." }); return;
     }
-    if (query.length < 2 && mode !== "live" && requested!=="dukascopy") {
+    if (query.length < 2 && mode !== "live" && requested!=="dukascopy" && requested!=="sagemaker") {
       res.status(400).json({ ok: false, error: "search_query_too_short", message: "Enter at least two characters." });
       return;
     }

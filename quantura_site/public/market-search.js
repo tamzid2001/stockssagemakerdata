@@ -66,7 +66,7 @@
   }
   async function search(rank=false){
     clearTimeout(timer);controller?.abort();const run=++sequence,{query,mode,source="auto"}=discoveryQuery(queryInput.value.trim());eventView=null;
-    if(query.length<2&&mode!=="live"&&source!=="dukascopy"){closeResults();status.textContent="Enter at least two characters to search markets.";return;}
+    if(query.length<2&&mode!=="live"&&source!=="dukascopy"&&source!=="sagemaker"){closeResults();status.textContent="Enter at least two characters to search markets.";return;}
     controller=new AbortController();show();results.setAttribute("aria-busy","true");status.textContent="Searching markets…";
     try{
       const link=/^https?:\/\//i.test(query);

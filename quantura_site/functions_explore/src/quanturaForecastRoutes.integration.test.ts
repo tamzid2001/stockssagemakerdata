@@ -55,7 +55,7 @@ test("Dukascopy forecast saves quote provenance, UTC close availability and prot
   process.env.QUANTURA_ENSEMBLE_WORKER_MODE="manual";
   process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM="true";
   dukascopy.history=async(input:any)=>({provider:"dukascopy",sourceRequested:"dukascopy",fallbackUsed:false,symbol:"XAU-USD",timeframe:input.timeframe,priceSide:"ask",feed:"ask",adjustment:"raw",session:"provider",exchangeTimezone:"UTC",barIntervalMinutes:input.timeframe==="1Day"?1440:60,
-    metadata:{price_scale:3,bucket_timezone:"UTC",instrument:{unit:"USD quote price"}},warnings:[],rows:Array.from({length:48},(_,i)=>({timestamp:new Date((input.start?Math.floor((Date.now()-60*86400000)/86400000)*86400000:Date.UTC(2026,0,1))+(i*(input.timeframe==="1Day"?86400000:3600000))).toISOString(),close:2600+i}))});
+    metadata:{price_scale:3,bucket_timezone:"UTC",instrument:{unit:"USD quote price"}},warnings:[],rows:Array.from({length:48},(_,i)=>({timestamp:new Date((input.start?Date.parse(input.start):Date.UTC(2026,0,1))+(i*(input.timeframe==="1Day"?86400000:input.timeframe==="1Min"?60000:3600000))).toISOString(),close:2600+i}))});
   const auth:any={verifyIdToken:async(token:string)=>({uid:token,firebase:{sign_in_provider:"anonymous"}}),getUser:async()=>({disabled:false})};
   const app=express();app.use(express.json());registerEnsembleForecastRoutes(app,{db,auth,publicOrigin:"https://quantura.studio"});const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));const base=`http://127.0.0.1:${(server.address() as any).port}`;
   try{for(const frequency of ["1Hour","1Day"]){const response=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}_${frequency}`,"Content-Type":"application/json"},body:JSON.stringify({source:{type:"ticker",provider:"dukascopy",symbol:"XAUUSD",price_side:"ask",frequency,limit:48},history_lag_minutes:180*1440,prediction_length:2,horizon_mode:"trading_sessions",calendar:"NYSE",quantiles:[.1,.5,.9],models:{prophet:{enabled:true,weight:1}}})});
@@ -63,10 +63,13 @@ test("Dukascopy forecast saves quote provenance, UTC close availability and prot
     assert.equal(job.source.provider,"dukascopy");assert.equal(job.source.price_side,"ask");assert.equal(job.source.provenance.price_scale,3);assert.equal(job.request.calendar,"NONE");assert.equal(job.request.horizon_mode,"frequency_periods");
     const rows=(await db.collection("ensemble_forecast_jobs").doc(id).collection("input_chunks").doc("0000").get()).data()!.rows;
     assert.equal(rows.length,48);assert.equal(rows[0].timestamp,frequency==="1Day"?"2026-01-02T00:00:00.000Z":"2026-01-01T01:00:00.000Z");
+    const forecastEnd=new Date(Date.parse(rows.at(-1).timestamp)+2*(frequency==="1Day"?86400000:3600000)).toISOString();
+    await db.collection("ensemble_forecast_jobs").doc(id).update({status:"completed",forecast_end_at:forecastEnd});
     const overlay=await fetch(`${base}/v1/ensemble-forecasts/${id}/observations`,{headers:{Authorization:`Bearer ${uid}_${frequency}`}});
     assert.equal(overlay.status,200);const observed=(await overlay.json()).data;
     assert.equal(observed.availability,"available","retained stock overlays are not expired by a 90-day market-window limit");
     assert.ok(observed.rows.length>0);assert.ok(observed.rows.every((row:any)=>Date.parse(row.timestamp)>Date.parse(observed.input_cutoff)));
+    assert.ok(observed.rows.every((row:any)=>Date.parse(row.timestamp)<=Date.parse(forecastEnd)+(frequency==="1Day"?86400000-1:0)),"actual prices stop at the forecast's final interval");
     assert.equal((await fetch(`${base}/v1/ensemble-forecasts/${id}/observations`,{headers:{Authorization:`Bearer other_${uid}`}})).status,403);
   }}finally{dukascopy.history=original;if(oldClaim===undefined)delete process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM;else process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM=oldClaim;if(oldMode===undefined)delete process.env.QUANTURA_ENSEMBLE_WORKER_MODE;else process.env.QUANTURA_ENSEMBLE_WORKER_MODE=oldMode;await new Promise<void>(r=>server.close(()=>r()));await firebaseApp.delete();}
 });
@@ -87,7 +90,7 @@ test("perpetual forecast uses protected durable jobs, USD closes, frequency cale
     const response=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}`,"Content-Type":"application/json"},body:JSON.stringify(request)});
     assert.equal(response.status,202,await response.clone().text());const id=(await response.json()).data.forecast_id;
     const job=(await db.collection("ensemble_forecast_jobs").doc(id).get()).data()!;
-    assert.equal(job.source.type,"kalshi_perp");assert.equal(job.source.units,"USD per underlying unit");assert.equal(job.request.calendar,"NONE");assert.notEqual(job.request.transform,"logit");assert.equal(job.input_row_count,48);assert.equal(job.evaluation_policy,null);
+    assert.equal(job.source.type,"kalshi_perp");assert.equal(job.source.units,"USD per underlying unit");assert.equal(job.request.calendar,"NONE");assert.notEqual(job.request.transform,"logit");assert.equal(job.input_row_count,48);assert.equal(job.evaluation_policy,HISTORICAL_VALIDATION_POLICY);
     assert.equal((await fetch(`${base}/v1/ensemble-forecasts/${id}/observations`,{headers:{Authorization:`Bearer another_${uid}`}})).status,403);
     const invalid=await fetch(`${base}/v1/ensemble-forecasts`,{method:"POST",headers:{Authorization:`Bearer ${uid}`,"Content-Type":"application/json"},body:JSON.stringify({...request,horizon_mode:"trading_sessions"})});
     assert.equal(invalid.status,422);
@@ -226,7 +229,7 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
       // Close each replay fixture so it does not consume another job's quota assertion.
       assert.equal((await call(`/internal/ensemble-forecasts/${job.forecast_id}/fail`,workerToken,{code:"REPLAY_TEST_FINISHED",retryable:false})).status,200);
     }
-    assert.equal((await ref.get()).data()?.evaluation_policy,null,"new requests never opt users into a holdout");
+    assert.equal((await ref.get()).data()?.evaluation_policy,HISTORICAL_VALIDATION_POLICY,"new API jobs request chronological historical validation");
     assert.equal((await ref.collection("input_chunks").doc("0000").get()).data()?.rows.length, 40);
     // A server-verified prediction-market fixture exercises the trusted two-bar
     // claim boundary, independently of upstream provider availability in CI.
@@ -235,7 +238,7 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     const claimed = await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {});
     assert.equal(claimed.status, 200, await claimed.clone().text());
     const job = (await claimed.json()).data;
-    assert.equal(job.evaluation_policy,null,"worker claims never request implicit validation, including legacy queued records");
+    assert.equal(job.evaluation_policy,HISTORICAL_VALIDATION_POLICY,"worker claims retain the server's historical validation policy");
     assert.equal(job.input.rows.length, 2); assert.equal(job.request.transform, "logit");
     assert.equal((await call(`/internal/ensemble-forecasts/${id}/claim`, workerToken, {})).status, 409);
     const result = { quantiles: [.1, .5, .9], predictions: [40, 41].map(i => ({ timestamp: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString(), quantiles: { "0.1": .2, "0.5": .4, "0.9": .6 } })), effective_weights_by_quantile: { "0.1": { prophet: 1 }, "0.5": { prophet: 1 }, "0.9": { prophet: 1 } }, models: ["prophet"], model_runs: [], transform: "logit", warnings: [], failures: [], dataset_hash: job.dataset_hash, prepared_series_hash: "fixture", result_hash: "fixture", runtime_seconds: 1, runtime: { test: true } };
@@ -260,7 +263,7 @@ test("ensemble job persists inputs, claims two-bar market history, downloads, an
     const reproduced = await call(`/v1/ensemble-forecasts/${id}/reproduce`,keys[0],{});
     assert.equal(reproduced.status,202,await reproduced.clone().text());
     const reproducedId = (await reproduced.json()).data.forecast_id;
-    assert.equal((await db.collection("ensemble_forecast_jobs").doc(reproducedId).get()).data()?.evaluation_policy,null,"reproduction never repeats the legacy holdout");
+    assert.equal((await db.collection("ensemble_forecast_jobs").doc(reproducedId).get()).data()?.evaluation_policy,HISTORICAL_VALIDATION_POLICY,"reproduction retains historical validation for the reproduced inputs");
     await member.update({ status: "removed" });
     assert.equal((await call(`/v1/ensemble-forecasts/${id}/observations`, keys[1])).status, 403);
     assert.equal((await call(`/v1/ensemble-forecasts/${id}`, keys[1])).status, 403);
