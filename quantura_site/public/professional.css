@@ -1089,20 +1089,27 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 .header .nav{gap:1rem;justify-content:flex-start}
 .header .nav-links{margin-inline-end:auto;gap:1rem;flex:0 1 auto}
-.header .header-market-search{flex:0 1 260px;min-width:170px;max-width:300px;margin:0;padding:0;border:0;background:transparent;z-index:110}
-.header .header-market-search .market-search-form{display:flex;align-items:center;gap:0;position:relative}
-.header-market-search .field{margin:0;min-width:0;width:100%}
-.header .header-market-search input[type=search]{box-sizing:border-box;width:100%;height:44px;min-height:44px;padding:0 2.8rem 0 .8rem;font-size:1rem;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
-.header .header-search-submit{position:absolute;inset-inline-end:0;top:0;width:44px;height:44px;min-height:44px;padding:0;display:grid;place-items:center;border:0;border-radius:10px;background:transparent;color:var(--ink);box-shadow:none;cursor:pointer}
-.header .header-search-submit:hover{background:var(--muted)}
+.header .header-market-search{flex:0 1 300px;min-width:220px;max-width:340px;margin:0;padding:0;border:0;background:transparent;z-index:110}
+/* Each action owns a grid column; none can cover the input or another action. */
+.header .header-market-search .market-search-form{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:4px;position:relative;box-sizing:border-box;padding:4px;border:1px solid var(--border);border-radius:16px;background:var(--card);box-shadow:0 2px 6px var(--shadow);transition:border-color .15s,box-shadow .15s}
+.header .header-market-search .market-search-form:focus-within{border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 18%,transparent)}
+.header .header-market-search .market-search-form>.field{grid-column:2;grid-row:1;margin:0;padding:0;min-width:0;width:100%}
+.header .header-market-search input[type=search]{box-sizing:border-box;width:100%;height:44px;min-height:44px;padding:0 6px;font-size:1rem;border:0!important;border-radius:0!important;background:transparent!important;color:var(--foreground);box-shadow:none!important;outline:none!important}
+.header .header-market-search :is(.header-search-submit,.header-upload-csv){position:static;inset:auto;grid-row:1;box-sizing:border-box;width:44px;height:44px;min-width:44px;min-height:44px;margin:0;padding:0;display:grid;place-items:center;border:0;border-radius:12px;box-shadow:none;cursor:pointer;touch-action:manipulation;transition:background .15s,color .15s}
+.header .header-market-search .header-upload-csv{grid-column:1;background:var(--secondary);color:var(--accent-foreground)}
+.header .header-market-search .header-upload-csv:hover{background:var(--accent)}
+.header .header-market-search .header-search-submit{grid-column:3;background:var(--primary);color:var(--primary-foreground)}
+.header .header-market-search .header-search-submit:hover{background:var(--primary-hover)}
+.header .header-market-search button:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.header .header-market-search button svg{display:block;pointer-events:none}
+.header .header-market-search input[type=hidden],.header .header-market-search [hidden]{display:none!important}
 .header .header-market-search #market-search-status{position:absolute;top:calc(100% + 6px);inset-inline-end:0;width:min(610px,calc(100vw - 2rem));box-sizing:border-box;margin:0;padding:.75rem 1rem;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);border-radius:10px 10px 0 0;display:none;z-index:120;line-height:1.4}
 .header .header-market-search.search-expanded #market-search-status{display:block}
 .header .header-market-search .market-search-results{inset-inline-start:auto;inset-inline-end:0;top:calc(100% + 3.6rem);width:min(610px,calc(100vw - 2rem));box-sizing:border-box;max-height:min(65dvh,550px);border-radius:0 0 10px 10px;z-index:120}
 .header-market-search .market-search-result-main{min-width:0;flex-wrap:wrap}
 .header-market-search .market-search-result-actions{flex-wrap:wrap}
-.header-market-search :is(button,input):focus-visible{outline:3px solid var(--primary);outline-offset:2px}
 #profile-api-docs-links[hidden],#profile-api-trial[hidden],#api-docs-content[hidden],#api-docs-gate[hidden]{display:none!important}
-@media(max-width:1100px){.header .nav{flex-wrap:wrap}.header .nav-links{gap:.75rem}.header .nav-links a{font-size:.85rem}.header .header-market-search{flex-basis:220px}.header .nav-actions{margin-inline-start:auto}}
+@media(max-width:1100px){.header .nav{flex-wrap:wrap}.header .nav-links{gap:.75rem}.header .nav-links a{font-size:.85rem}.header .header-market-search{flex-basis:260px}.header .nav-actions{margin-inline-start:auto}}
 @media(max-width:760px){.header .nav{gap:.55rem}.header .nav-links{flex:1 1 auto;overflow:auto;white-space:nowrap;order:1}.header .logo{order:0}.header .nav-actions{order:2}.header .header-market-search{order:3;flex:1 0 100%;max-width:100%;min-width:0}.header .header-market-search .market-search-results{width:100%;top:calc(100% + 4.7rem)}.header .header-market-search #market-search-status{width:100%}}
 
 /* Public databases share the market research workflow. */
@@ -1110,11 +1117,5 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 @media(max-width:900px){.q-database-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:580px){.q-database-grid{grid-template-columns:1fr}.q-database-grid>a{padding:1.2rem}}
 
 /* Canvas research library and compact header upload */
-.header-upload-csv{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border:0;border-radius:9px;background:transparent;color:inherit;cursor:pointer}.header-upload-csv:hover{background:var(--surface-2,#eef2ff)}.header-upload-csv:focus-visible{outline:2px solid #4361ee;outline-offset:2px}.sagemaker-library{padding-top:48px;padding-bottom:64px}.canvas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:24px}.canvas-grid .card{display:flex;flex-direction:column;gap:10px}.canvas-grid h2{font-size:1.1rem;margin:0}.canvas-actions{display:flex;gap:8px;flex-wrap:wrap}.sagemaker-library dialog{max-width:min(1000px,94vw);width:100%;max-height:85vh;border:1px solid #64748b;border-radius:18px;background:var(--surface,#fff);color:inherit;padding:24px}.sagemaker-library dialog::backdrop{background:rgba(0,0,0,.55)}.sagemaker-library input{max-width:100%}.sagemaker-library .table-wrap{max-height:400px;overflow:auto;margin:16px 0}html[data-theme="dark"] .sagemaker-library dialog{background:#101d31;color:#edf3fb}html[data-theme="dark"] .header-upload-csv:hover{background:#26334d}
-
-.header .header-market-search .market-search-form{display:grid;grid-template-columns:minmax(0,1fr) 40px 40px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
-.header .header-market-search input[type=search]{border:0;background:transparent;padding-inline:.8rem;min-width:0}
-.header .header-market-search .market-search-form>.field{grid-column:auto}
-.header .header-search-submit{position:static;width:40px}
-.header .header-upload-csv{width:40px;height:44px;color:var(--ink)}
+.sagemaker-library{padding-top:48px;padding-bottom:64px}.canvas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:24px}.canvas-grid .card{display:flex;flex-direction:column;gap:10px}.canvas-grid h2{font-size:1.1rem;margin:0}.canvas-actions{display:flex;gap:8px;flex-wrap:wrap}.sagemaker-library dialog{max-width:min(1000px,94vw);width:100%;max-height:85vh;border:1px solid #64748b;border-radius:18px;background:var(--surface,#fff);color:inherit;padding:24px}.sagemaker-library dialog::backdrop{background:rgba(0,0,0,.55)}.sagemaker-library input{max-width:100%}.sagemaker-library .table-wrap{max-height:400px;overflow:auto;margin:16px 0}html[data-theme="dark"] .sagemaker-library dialog{background:#101d31;color:#edf3fb}
 .sagemaker-library [hidden]{display:none!important}

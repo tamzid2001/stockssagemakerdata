@@ -89,6 +89,7 @@ const injectPublicShellAssets = (html) =>
     .replace(/\/app\.js(?:\?v=[A-Za-z0-9._-]+)?/g, `/app.min.js?v=${PUBLIC_SHELL_ASSET_VERSION}`)
     .replace(/\/(quantura-auth|q-download|q-market|market-search|forecast-controls|forecast-metrics|forecast-questions|sagemaker)\.js(?:\?v=[A-Za-z0-9._-]+)?/g, (_match, name) => `/${name}.js?v=${PUBLIC_SHELL_ASSET_VERSION}`)
     .replace(/\/styles\.css(?:\?v=[A-Za-z0-9._-]+)?/g, `/styles.min.css?v=${PUBLIC_SHELL_ASSET_VERSION}`)
+    .replace(/\/q-terminal\.css(?:\?v=[A-Za-z0-9._-]+)?/g, `/q-terminal.css?v=${PUBLIC_SHELL_ASSET_VERSION}`)
     .replace(/\/assets\/quantura-icon\.svg/g, `/favicon.svg?v=${PUBLIC_SHELL_ASSET_VERSION}`);
 
 const normalizePath = (rawPath) => {

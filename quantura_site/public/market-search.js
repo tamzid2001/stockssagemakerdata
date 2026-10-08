@@ -16,9 +16,9 @@
   workspace.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();closeResults();queryInput.focus();}});
   function setPanel(panel){if(window.__quanturaSetPanel)window.__quanturaSetPanel(panel);else window.location.href=`/forecasting?panel=${encodeURIComponent(panel)}`;}
   function eventId(row){return row.source==="polymarket_us"?row.event_slug:row.event_id;}
-  const upload=document.createElement('button');upload.type='button';upload.className='header-upload-csv';upload.setAttribute('aria-label','Upload CSV');upload.title='Upload CSV';upload.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';form.append(upload);
+  const upload=document.createElement('button');upload.type='button';upload.className='header-upload-csv';upload.setAttribute('aria-label','Upload CSV');upload.title='Upload a CSV to preview and forecast';upload.innerHTML='<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8M14 2v6h6M14 2l6 6v4M16 18h6M19 15v6"/></svg>';form.prepend(upload);
   const fileInput=document.createElement('input');fileInput.type='file';fileInput.accept='.csv,text/csv';fileInput.hidden=true;form.append(fileInput);
-  upload.addEventListener('click',()=>fileInput.click());
+  upload.addEventListener('click',()=>{closeResults();fileInput.click();});
   fileInput.addEventListener('change',async()=>{
     const file=fileInput.files?.[0];if(!file)return;
     if(file.size>3000000){status.textContent='Choose a CSV smaller than 3 MB.';fileInput.value='';return;}
