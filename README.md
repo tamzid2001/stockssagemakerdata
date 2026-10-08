@@ -58,7 +58,7 @@ The homepage and Research page expose BigQuery public datasets, World Bank Data3
 
 **Ask Scout** appears beneath completed ensembles, saved game forecasts and CSV previews. Three question cards cover Forecast, History and Evidence, with quantile-specific follow-ups. Answers distinguish observed values from forecast values and include the source, cutoff and model participants. Conversations save in Requests; high/low markers and private point notes are available on forecast charts.
 
-Scout makes typed routing decisions; Quantura calculates the answer's figures from authorized saved data. It does not invent strategy returns, live news or historical accuracy. [The Q&A guide](docs/jev-forecast-questions.mdx) documents the HTTP API, privacy, retries and bounded usage. The current documentation MCP allowlist remains read-only discovery; it does not automatically expose these new chat mutations.
+Scout makes typed routing decisions; Quantura calculates the answer's figures from authorized saved data. It does not invent strategy returns, live news or historical accuracy. [The Q&A guide](docs/jev-forecast-questions.mdx) documents the HTTP API, privacy, retries and bounded usage. The live OAuth MCP exposes Scout as an account-scoped tool; the separate documentation MCP remains a documentation service.
 
 ## Research workflow
 
@@ -112,14 +112,26 @@ Programmatic API access is available to paid Pro, enterprise and verified admini
 - [Live OpenAPI](https://quantura.studio/api/openapi.json)
 - [Authentication](docs/authentication.mdx) and [workspace permissions](docs/workspace-collaboration.mdx)
 - [Build a quantile strategy](docs/algorithmic-strategy.mdx)
-- [MCP setup and allowlist](docs/mcp.mdx)
+- [CLI, Python and npm SDKs](docs/sdk-cli.mdx)
+- [MCP connection and tools](docs/mcp.mdx)
 
 ```bash
 curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
   https://quantura.studio/api/v1/forecast/models
 ```
 
-Create an asynchronous forecast with `POST /api/v1/ensemble-forecasts`, an authorized session/key and an `Idempotency-Key`; poll its status before using its output. Strategy/backtest creation uses the HTTP API. The MCP allowlist exposes read-only discovery and capabilities when the documentation host supports API tools; check the client's actual tool list.
+Create an asynchronous forecast with `POST /api/v1/ensemble-forecasts`, a paid API credential and an `Idempotency-Key`; poll its status before using its output.
+
+```bash
+npm install -g quantura-sdk
+quantura login
+quantura search AAPL --source alpaca
+quantura models
+```
+
+[The npm package](packages/npm/README.md) includes the CLI and TypeScript declarations; [the Python package](packages/python/README.md) is distributed as a GitHub release wheel. Both use Clerk browser OAuth with PKCE and resource-bound tokens, automatic refresh, private local credentials and unchanged API response envelopes. Mutations are never automatically retried.
+
+The live MCP endpoint **`https://quantura.studio/mcp`** supports Clerk OAuth through client metadata or dynamic registration. Its seven tools cover market search, capabilities, forecast creation/read, provider history, Scout and account access. Each call rechecks paid access and resource permissions. Forecast creation and Scout save account requests; no tool places trades. The separate Mintlify endpoint provides documentation search.
 
 ## Strategy research
 
@@ -170,8 +182,13 @@ flowchart LR
     Workers -->|Research source downloads| Data
     Workers --> Artifacts[Encrypted research artifacts with retention]
     API --> Legacy[AWS SageMaker and S3 workflows]
-    MCP[MCP clients] --> Docs[Mintlify documentation server]
-    Docs -->|API tools when enabled by the host| API
+    MCP[ChatGPT and MCP clients] --> LiveMCP[Streamable HTTP MCP]
+    LiveMCP --> OAuth[Clerk OAuth with PKCE]
+    OAuth --> Entitlement
+    LiveMCP --> API
+    SDK[CLI, npm and Python SDKs] --> OAuth
+    SDK --> API
+    Docs[Mintlify documentation MCP] --> Guides[Documentation search]
 ```
 
 ### Forecast request lifecycle
@@ -282,5 +299,5 @@ Search is compact in the shared header; Screener is available in Terminal. Profi
 - Clerk Account API keys are available to paid Pro/enterprise users and the verified administrator; native Clerk personal keys are verified by the API and mapped to migrated UIDs. Free trials retain website access without API keys.
 - [BigQuery public-data guide](docs/bigquery-public-data.mdx): discover tables in Scout/Search, choose date/numeric columns and exact filters, preview or download history, and forecast the same normalized snapshot. Dry runs, a 100 MiB query cap, daily budgets and request coalescing bound costs.
 - Successful API reads use structured platform logs instead of Firestore audit documents. Mutations/errors remain durable; key usage timestamps and unchanged subscription writes are coalesced. This reduces write counts; it is not a measured invoice reduction.
-- Quantura's [documentation MCP](https://quantura.mintlifysite.com/mcp) is installed in local Codex. Live API tools are not exposed by that documentation server.
+- Quantura's live [OAuth MCP](https://quantura.studio/mcp) exposes seven account-scoped API tools. The separate [documentation MCP](https://quantura.mintlifysite.com/mcp) remains available for guides.
 - Bluesky appears at the end of footer social links. [Media publishing CLI](scripts/publish_bluesky_media.py) previews by default and requires `--publish`; credentials come from environment/Secret Manager, and a public ledger prevents duplicate publication.

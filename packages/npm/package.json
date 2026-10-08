@@ -1,0 +1,21 @@
+{
+  "name": "quantura-sdk",
+  "version": "1.0.0",
+  "description": "Quantura API client and OAuth CLI for forecasts, market history and Scout",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": { "types": "./src/index.d.ts", "import": "./src/index.js" },
+    "./oauth": { "types": "./src/oauth.d.ts", "import": "./src/oauth.js" }
+  },
+  "bin": { "quantura": "./bin/quantura.js" },
+  "files": ["src", "bin", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test test/*.test.js" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/tamzid2001/stockssagemakerdata.git", "directory": "packages/npm" },
+  "homepage": "https://quantura.studio/developers/api",
+  "keywords": ["quantura", "forecast", "mcp", "oauth", "finance", "cli"],
+  "publishConfig": { "access": "public" }
+}

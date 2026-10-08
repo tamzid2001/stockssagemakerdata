@@ -5,6 +5,10 @@ description: "Create a scoped Quantura API key, copy it once, and authenticate r
 
 # Authentication and API keys
 
+## OAuth sign-in
+
+The [Quantura CLI and SDKs](/docs/sdk-cli) and [live MCP server](/docs/mcp) support Clerk authorization-code OAuth with PKCE S256. Run `quantura login` or connect an OAuth MCP client to `https://quantura.studio/mcp`. Tokens are bound to the shared resource `https://quantura.studio`; clients pass this resource in authorization and token requests. Identity scopes are `openid profile email`, with optional `offline_access` for refresh. Current paid Pro, enterprise or administrator access and resource permissions are checked on every call. Website trials do not grant API access. No client secret is required for the public CLI client or supported dynamically registered public MCP clients.
+
 Create personal API keys through Clerk in Quantura Profile. These keys use the `ak_` prefix and are sent as bearer credentials. Existing legacy `qnt_live_` keys remain supported:
 
 ```http

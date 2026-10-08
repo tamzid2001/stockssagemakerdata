@@ -1,47 +1,68 @@
 ---
-title: "Quantura MCP"
-description: "Documentation and verified market discovery for MCP clients."
+title: "Connect ChatGPT and MCP clients"
+description: "Use Clerk OAuth to connect ChatGPT to Quantura's live search, forecasts, downloads and Scout."
 ---
 
-Connect to `https://quantura.mintlifysite.com/mcp`.
-Alternate host: `https://quantura.mintlify.app/mcp`.
+## Live Quantura MCP
 
-```json
-{"mcpServers":{"quantura":{"type":"http","url":"https://quantura.mintlifysite.com/mcp"}}}
+Server URL: **`https://quantura.studio/mcp`**
+
+Transport: stateless Streamable HTTP with JSON responses. Protocol discovery and the tool catalog are public. Every tool call requires paid Pro, enterprise or verified administrator access and checks current account and resource permissions. Trial-only accounts do not include API access.
+
+| Tool | Action |
+| --- | --- |
+| `quantura_search_markets` | Search stocks, FX, prediction markets, economic databases and SageMaker forecasts |
+| `quantura_forecast_models` | Inspect models, frequencies and minimum history |
+| `quantura_get_forecast` | Read an authorized forecast and its quantiles |
+| `quantura_create_forecast` | Create a forecast job with a required idempotency key |
+| `quantura_download_history` | Retrieve JSON provider history; follow `next_cursor` for paged requests |
+| `quantura_ask_scout` | Ask a grounded question using authorized forecast or CSV context |
+| `quantura_my_access` | Inspect current account API access |
+
+Forecast creation uses compute and saves a request; Scout saves a conversation. These actions are marked as mutations for clients to review. No tool places trades.
+
+## Connect ChatGPT
+
+1. In ChatGPT, open **Plugins → + → Add custom MCP server**. If custom MCP is unavailable, check developer mode and workspace permissions.
+2. Name it **Quantura** and enter `https://quantura.studio/mcp`.
+3. Choose **OAuth**. Select client metadata (CIMD) or dynamic registration when offered; no manually copied client secret is needed.
+4. Create and install the plugin, then sign in to your Quantura account through Clerk and approve access.
+5. Start with “Search for AAPL in Quantura and show the available forecast models.”
+
+The CLI's public OAuth client is for its loopback callback only; do not paste its client ID into ChatGPT. ChatGPT registers its own callback through CIMD or dynamic registration. Interface and workspace policy can change; see [OpenAI's current connection guide](https://developers.openai.com/api/docs/guides/custom-mcp-server).
+
+## OAuth discovery
+
+Protected-resource metadata:
+
+```text
+https://quantura.studio/.well-known/oauth-protected-resource/mcp
 ```
 
-The connected server currently supplies documentation tools:
-`search_quantura_developer`, `query_docs_filesystem_quantura_developer`, and
-`submit_feedback`. Initialization, tool discovery and documentation search were
-verified with Codex. It does not currently expose live forecast or data calls.
+The REST API and MCP share the protected resource `https://quantura.studio`. The authorization server is `https://clerk.quantura.studio`; discovery advertises PKCE S256, client metadata and dynamic registration. Clients pass the discovered resource in authorization and token requests. Quantura rejects revoked, expired or wrong-audience tokens and requires `openid profile email`. CLI clients also request `offline_access` for refresh.
 
-Quantura's OpenAPI allowlists these read-only API tools for a host that enables
-Mintlify API tools:
+Unauthenticated tool calls return HTTP 401 with a `WWW-Authenticate` metadata challenge. Valid unpaid accounts return 403 instead of prompting repeated sign-in. The transport also accepts a paid user's personal API key when a client supports securely stored bearer credentials.
 
-- `quantura_search_markets`
-- `quantura_resolve_market_link`
-- `quantura_browse_event_markets`
-- `quantura_get_search_capabilities`
-- `quantura_get_forecast_capabilities` — supported intervals, calendar boundaries and current model access
-- `quantura_get_my_access`
-- `quantura_list_workspaces`
+## Verify without credentials
 
-API tools require [Mintlify's Pro/Enterprise API-tool feature](https://mintlify.com/docs/ai/model-context-protocol) and a refreshed
-deployment. Check your client's tool list: if only documentation tools appear,
-use the HTTP API directly. The allowlist does not guarantee live availability.
+```bash
+curl https://quantura.studio/.well-known/oauth-protected-resource/mcp
+curl -X POST https://quantura.studio/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"quantura-check","version":"1.0.0"}}}'
+```
 
-Market discovery is public and rate-limited. Account tools require a Quantura
-API key in the client's secret facility and enforce current scopes/membership.
-Never put keys in the MCP URL or checked-in configuration.
+OAuth-capable clients can use:
 
-Uploaded CSV operations are excluded from discovery; their endpoints remain
-compatible. No trading, mutation or expensive forecast job is enabled as an MCP tool.
+```json
+{"mcpServers":{"quantura":{"type":"http","url":"https://quantura.studio/mcp"}}}
+```
 
-[OpenAPI source](https://quantura.studio/api/openapi.json) ·
-[Q Search](/docs/q-search) · [Q Download](/docs/q-download)
+Configuration syntax varies by client. Store credentials in the client's secret facility, never in a URL or checked-in configuration.
 
-## Strategy and interval guides
+## Documentation MCP
 
-Read [Forecast intervals](/docs/forecast-frequencies) and [Build a quantile strategy](/docs/algorithmic-strategy) through documentation search. The capability tool reads `GET /api/v1/forecast/models`; weekly/monthly and intraday aliases match the live OpenAPI schema. Forecast and backtest creation still use the authorized HTTP API.
+`https://quantura.mintlifysite.com/mcp` is the separate Mintlify documentation server. It provides documentation search and whichever read-only OpenAPI tools the host enables. Use `/mcp` on `quantura.studio` for the seven live tools above.
 
-[Historical cutoff guide](/docs/historical-forecasts) explains latest inputs, 120/180-day replays and provider retention. The HTTP forecast request separates optional website analytics metadata from inference configuration; this does not change MCP authorization or enable job mutations.
+[CLI and SDKs](/docs/sdk-cli) · [API reference](https://quantura.studio/developers/api) · [Authentication](/docs/authentication)

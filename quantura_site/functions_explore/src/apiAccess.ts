@@ -6,6 +6,7 @@ import { clerkClient, getClerkUser, type QuanturaIdentity } from "./clerkAuth";
 import { clerkSubscriptionAccess } from "./clerkBilling";
 import { rapidApiPrincipal } from "./rapidApiAuth";
 import { requirePaidApiAccess } from "./enterpriseAccess";
+import { isClerkOAuthToken, verifyQuanturaOAuth } from "./clerkOAuth";
 
 export const PLATFORM_API_SCOPES = [
   "account:read", "workspaces:read", "workspaces:write", "forecasts:read", "forecasts:write",
@@ -56,7 +57,7 @@ export type ApiPrincipal = {
   tokenName: string;
   tokenScopes: PlatformApiScope[];
   plan: PlanKey;
-  authMethod: "api_key" | "firebase_session" | "clerk_session" | "rapidapi";
+  authMethod: "api_key" | "firebase_session" | "clerk_session" | "clerk_oauth" | "rapidapi";
   clerkUserId?: string;
   organizationId?: string;
   platformAdmin?: boolean;
@@ -205,6 +206,16 @@ export async function authenticatePlatformRequest(
   if (rapid) return rapid;
   const bearer = extractBearer(req);
   if (!bearer) throw new Error("api_key_missing");
+
+  if (isClerkOAuthToken(bearer)) {
+    const {access, user, userId} = await verifyQuanturaOAuth(bearer);
+    await requirePaidApiAccess(options.db, userId, user.id);
+    return {userId, clerkUserId:user.id, tokenId:access.id, tokenName:"OAuth application",
+      tokenScopes:[...PLATFORM_API_SCOPES],
+      plan:(await userPlan(options.db,userId,user.id))==="pro"?"pro":"research",
+      authMethod:"clerk_oauth",
+      platformAdmin:await verifiedPlatformAdmin(options.auth,userId,options.adminEmails,user.id)};
+  }
 
   if(bearer.startsWith("ak_")) {
     const key=await clerkClient().apiKeys.verify(bearer).catch(()=>null);
@@ -390,7 +401,7 @@ export function authorizeWorkspaceAction(
   action: "read" | "write" | "delete"
 ): void {
   requireScope(principal, scope);
-  if (principal.authMethod === "api_key" && !planHasFeature(access.plan, "api")) {
+  if (["api_key", "clerk_oauth"].includes(principal.authMethod) && !planHasFeature(access.plan, "api")) {
     // A collaborator's personal plan must not erase legitimate read access to
     // a shared workspace. Standalone access to the token owner's workspace and
     // every state-changing API operation still require the workspace plan's
