@@ -60,8 +60,8 @@ jobs:
           else
             python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-quotes.lock
           fi
-      - name: Verify budgets, directions, uncertain delivery, and partial fills
-        run: python -m pytest -q market_research/tests/test_opposite_dollar_trader.py market_research/tests/test_opposite_portfolio.py market_research/tests/test_kalshi_execution.py
+      - name: Verify execution, recovery, and performance accounting
+        run: python -m pytest -q market_research/tests/test_opposite_dollar_trader.py market_research/tests/test_opposite_statistics.py market_research/tests/test_opposite_portfolio.py market_research/tests/test_kalshi_execution.py
       - name: Display exact selected strategy
         run: python -m market_research.opposite_dollar_trader --series "$SERIES" --mode config
       - name: Authenticated reads or selected continuous worker

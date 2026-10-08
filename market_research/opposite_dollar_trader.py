@@ -23,6 +23,7 @@ import time
 from .engine import digest, stamp
 from .kalshi_execution import KalshiExecution, money, order_payload, reconciled_order
 from .opposite_strategies import DollarConfig, STRATEGIES, VERSION, portfolio_fingerprint
+from .opposite_statistics import bootstrap, record_settlement, performance, log_lines, entry_time
 from .store import claim_transition
 
 PREFIX = "private-research/five-opposite-trader-v1/"
@@ -92,14 +93,30 @@ class CloudJournal:
             blob.upload_from_filename(path,if_generation_match=generation,checksum="auto")
             return int(blob.generation)
 
-    def claim(self):
-        old,generation=self.read(self.name)
-        if old and (old.get("version")!=VERSION or old.get("config")!=asdict(self.config)):
-            raise RuntimeError("TRADER_CONFIGURATION_CONFLICT")
-        lease=claim_transition(old.get("lease",{}),self.holder,time.time(),ttl=120)
-        self.state={"version":VERSION,"config":asdict(self.config),"entries":{},"decisions":{},
-                    "rows":[],"totals":{},**old,"lease":lease}
-        self.generation=self.write(self.name,self.state,generation);self.fence=lease["fence"]
+    def claim(self,wait_seconds=0):
+        from google.api_core.exceptions import PreconditionFailed
+        deadline=time.time()+wait_seconds;last_log=0
+        while True:
+            try:
+                old,generation=self.read(self.name)
+                if old and (old.get("version")!=VERSION or old.get("config")!=asdict(self.config)):
+                    raise RuntimeError("TRADER_CONFIGURATION_CONFLICT")
+                lease=claim_transition(old.get("lease",{}),self.holder,time.time(),ttl=120)
+                state={"version":VERSION,"config":asdict(self.config),"entries":{},"decisions":{},
+                       "rows":[],"totals":{},**old,"lease":lease}
+                generation=self.write(self.name,state,generation)
+            except (PreconditionFailed,RuntimeError) as error:
+                if isinstance(error,RuntimeError) and str(error) not in ("LEASE_HELD","TRADER_SNAPSHOT_BUSY"):
+                    raise
+                remaining=deadline-time.time()
+                if remaining<=0:raise RuntimeError("TRADER_STARTUP_LEASE_TIMEOUT") from error
+                if time.time()-last_log>=15:
+                    print(json.dumps({"event":"opposite_dollar_lease_wait","series":self.config.series_ticker,
+                                      "retry_seconds":min(5,remaining),"orders_sent":0}),flush=True)
+                    last_log=time.time()
+                time.sleep(min(5,remaining));continue
+            self.state,self.generation,self.fence=state,generation,lease["fence"]
+            return
 
     def verify(self):
         value,generation=self.read(self.name);lease=value.get("lease",{})
@@ -126,6 +143,19 @@ class CloudJournal:
             existing,generation=self.read(name)
             if digest(existing)!=checksum:raise RuntimeError("TRADER_ARCHIVE_CONFLICT")
         return {"object":name,"generation":str(generation),"content_sha256":checksum}
+
+    def archived_entries(self):
+        """One-time statistics migration reads only this series' private archives."""
+        prefix=PREFIX+self.account+"/markets/"+self.config.series_ticker+"-"
+        renewed=time.time()
+        for blob in self.bucket.list_blobs(prefix=prefix):
+            if time.time()-renewed>=30:
+                self.save();renewed=time.time()
+            value,_=self.read(blob.name)
+            ticker=value.get("ticker", "")
+            if value.get("version")!=VERSION or not ticker.startswith(self.config.series_ticker+"-"):
+                raise RuntimeError("TRADER_ARCHIVE_IDENTITY_INVALID")
+            yield ticker,value.get("entries",{})
 
 class AccountGate:
     """Serialize admission across all five workers; reconcile exact portfolio ownership."""
@@ -343,7 +373,16 @@ class DollarTrader:
         if quantity:
             totals.update(trades=totals["trades"]+1,wins=totals["wins"]+int(net>0),losses=totals["losses"]+int(net<0),
                           net=str(money(totals["net"])+net),fees=str(money(totals["fees"])+money(entry["fees"])))
+        record_settlement(self.journal.state,entry,mode,now)
         self.journal.save()
+        if quantity:
+            started,duration_source=entry_time(entry)
+            print(json.dumps({"event":"opposite_dollar_trade_settled","series":self.config.series_ticker,
+                "mode":mode,"ticker":entry["ticker"],"side":entry["side"],"contracts":str(quantity),
+                "average_entry_cents":str(money(entry["cost"])/quantity*100),
+                "entry_cost_usd":entry["cost"],"fees_usd":entry["fees"],"payout_usd":str(payout),
+                "net_pnl_usd":str(net),"won_after_fees":net>0,"result":market["result"],
+                "entry_to_confirmed_settlement_seconds":now-started,"duration_source":duration_source}),flush=True)
 
 def numerical_pair(market,n,rows,output):
     """Numerical child receives no exchange key; publication uses actual completion."""
@@ -410,8 +449,11 @@ def run(config,mode,duration):
         print(json.dumps({"readiness":"ok","resting_orders":len(orders),"positions":len(positions),
                           "api_tier":limits.get("usage_tier"),"encrypted_journal":"verified",
                           "orders_sent":0,"config":asdict(config)}));return
-    journal=CloudJournal(config,broker.key_id,os.getenv("GITHUB_RUN_ID","local")+":"+config.series_ticker)
-    journal.claim();trader=DollarTrader(config,broker,journal,mode)
+    holder=":".join((os.getenv("GITHUB_RUN_ID","local"),os.getenv("GITHUB_RUN_ATTEMPT",str(os.getpid())),config.series_ticker))
+    journal=CloudJournal(config,broker.key_id,holder)
+    try:journal.claim(wait_seconds=180)
+    except BaseException:broker.client.close();raise
+    trader=DollarTrader(config,broker,journal,mode)
     for decision in journal.state["decisions"].values():
         if decision.get("status")=="forecasting":decision["status"]="retry_inference"
     stopped=False
@@ -423,6 +465,8 @@ def run(config,mode,duration):
     context=multiprocessing.get_context("spawn");child=None;result_queue=None;computing=None
     last_save=last_health=0
     try:
+        bootstrap(journal.state,journal.archived_entries(),int(time.time()))
+        journal.save()
         with tempfile.TemporaryDirectory() as folder:
             store=LocalStore(VERSION,config.series_ticker,folder,capacity_bytes=64*1024*1024)
             with store.lock,store.db:
@@ -488,6 +532,10 @@ def run(config,mode,duration):
                         journal.save();last_save=time.time()
                     if time.time()-last_health>=60:
                         health=store._get("checkpoints","btc_collector_health") or {}
+                        stats=performance(journal.state,minutes,int(time.time()),
+                                          ("paper","live") if mode=="both" else (mode,))
+                        journal.state.setdefault("health",{})["performance"]=stats
+                        journal.save()
                         print(json.dumps({"event":"opposite_dollar_heartbeat","series":config.series_ticker,
                             "mode":mode,"at":now,"code_sha":os.getenv("QUANTURA_CODE_SHA"),
                             "orders_enabled":broker.enabled,"error_codes":[r["error_code"] for r in statuses.values()],
@@ -496,7 +544,9 @@ def run(config,mode,duration):
                             "forecast_statuses":dict(Counter(d.get("status") for d in decisions.values())),
                             "genuine_minute_receipts":len(minutes),
                             "decisions":len(decisions),"active_markets":sum(any(e["status"]!="settled" for e in g.values()) for g in journal.state["entries"].values()),
+                            "performance":stats,
                             "firestore_writes":0}),flush=True);last_health=time.time()
+                        for line in log_lines(config.series_ticker,stats):print(line,flush=True)
                     time.sleep(max(0,1-(time.time()-now)))
             finally:
                 collector.stop()

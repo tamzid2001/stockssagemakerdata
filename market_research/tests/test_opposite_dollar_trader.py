@@ -364,3 +364,28 @@ def test_initial_entry_deadline_uses_actual_current_time():
     with pytest.raises(RuntimeError,match="MISSED_OR_DUPLICATE_DOLLAR_ENTRY"):
         t.begin(s,{"timestamp":120,"received_at":125,"timely":True},151)
     assert not j.state["entries"] and not b.posts
+
+def test_startup_waits_for_the_previous_lease_without_overriding_it(monkeypatch):
+    clock=[100];saved=[]
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.sleep",lambda seconds:clock.__setitem__(0,clock[0]+seconds))
+    old={"version":VERSION,"config":asdict(CONFIG),"lease":{"holder":"previous","fence":7,"expires":111},
+         "entries":{"existing":{"live":{"pending":{"intent":"preserve"}}}}}
+    j=object.__new__(CloudJournal);j.config=CONFIG;j.holder="successor";j.name="journal"
+    j.read=lambda _: (deepcopy(old),4)
+    def write(name,value,generation):
+        assert clock[0]>=111 and generation==4
+        saved.append(deepcopy(value));return 5
+    j.write=write;j.claim(wait_seconds=20)
+    assert j.fence==8 and j.generation==5 and len(saved)==1
+    assert j.state["entries"]==old["entries"]
+
+def test_startup_wait_is_bounded_and_a_running_owner_is_never_evicted(monkeypatch):
+    clock=[100]
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.sleep",lambda seconds:clock.__setitem__(0,clock[0]+seconds))
+    j=object.__new__(CloudJournal);j.config=CONFIG;j.holder="successor";j.name="journal"
+    j.read=lambda _: ({"version":VERSION,"config":asdict(CONFIG),"lease":{"holder":"running","fence":1,"expires":999}},4)
+    j.write=lambda *_: pytest.fail("Cannot replace another owner's valid lease")
+    with pytest.raises(RuntimeError,match="STARTUP_LEASE_TIMEOUT"):j.claim(wait_seconds=12)
+    assert clock[0]==112

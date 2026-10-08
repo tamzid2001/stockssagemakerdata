@@ -20,7 +20,27 @@ Durable intents distinguish `prepared` (no POST can have occurred) from `submitt
 
 A shutdown signal blocks further IOC submissions and saves the recovery buffer. A worker releasing an expired account gate cannot overwrite a successor's lease. Confirmed fills are applied once and official settlement accounting is idempotent. Heartbeats include the execution SHA so the running approved version is visible.
 
+Startup waits up to three minutes for a canceled worker's unexpired journal lease, without overriding it. Every acquisition uses fresh metadata and a generation-matched write. Separate run attempts have separate holder identities. A worker that still owns a valid lease cannot be evicted by a replacement.
+
 Paper entries use observed current asks and modeled series taker fees; depth and queue priority are not execution verified. Live P&L uses authenticated terminal order cost/fees and matching account settlement records. Paper and live entries share each causal signal and keep separate accounting.
+
+## Per-asset performance logs
+
+Every minute, each of the five workers emits a JSON heartbeat with independent `performance.paper` and `performance.live` results, followed by a readable summary for each mode. Each filled settlement also emits `opposite_dollar_trade_settled` with its side, contracts, average fill price, cost, fees, payout, net result and duration.
+
+| Metric | Meaning |
+|---|---|
+| Closed trades, wins/losses, win rate | Filled positions with confirmed settlement; wins use net P&L after fees. Zero-fill attempts are excluded and breakevens are separate. |
+| Net/gross returns and fees | Lifetime closed-trade cash flows for that asset and mode. Live uses authenticated exchange records; paper uses the modeled fill. |
+| Return on closed entry spend | Net profit divided by cumulative closed-trade entry cost plus fees. This measures turnover, rather than account investment return. |
+| Current/maximum W/L streaks | Consecutive confirmed positive/negative net settlements. Breakevens reset both streaks. |
+| Maximum realized drawdown | Peak-to-trough decline of cumulative closed-trade net P&L, including the initial zero baseline. |
+| Sampled bid equity drawdown | Decline observed at complete minute heartbeat snapshots since statistics tracking began; includes open entry cost and fees. Historic and intraminute equity drawdown cannot be inferred from settled P&L. |
+| Average entry | Mean trade fill cost divided by contracts, in cents. A separate volume-weighted average uses total cost divided by total contracts. |
+| Duration | Paper entry receipt or first live fill confirmation to confirmed settlement. Legacy trades without fill receipts use the entry-intent timestamp, explicitly identified in `duration_sources`. |
+| Open exposure | Position count, contracts, entry cost, fees, average entry, fresh-bid unrealized P&L and pending order intents. Missing or stale marks are reported as unavailable. |
+
+At the first upgrade, immutable encrypted archives and the current journal rebuild the lifetime statistics, deduplicated by market and mode. The result must match the existing lifetime trade/net/fee totals before historical averages, streaks or drawdown are presented as complete. Missing history is labeled incomplete; known lifetime totals remain visible. Compact aggregates then persist in the same fenced journal write as settlement accounting. Worker handoffs, partial fills and duplicate settlement checks cannot reset or double-count performance. No account balance, key or credential is logged; no Firestore requests are introduced.
 
 ## Durable operation
 
