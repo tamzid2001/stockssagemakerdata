@@ -31,39 +31,61 @@ from .store import claim_transition
 PREFIX = "private-research/five-opposite-trader-v1/"
 STORAGE_TIMEOUT = 3
 STORAGE_RETRY_SECONDS = 5
+STORAGE_WRITE_ATTEMPTS = 2
+STORAGE_WRITE_BUDGET_SECONDS = 12
 WRITE_RECEIPT = "quantura-write-id"
 
 class JournalStorageUnavailable(Exception):
     """Abort admission without letting trading-error handlers clear an intent."""
-    def __init__(self,operation,status=None):
+    def __init__(self,operation,status=None,*,cause=None):
         super().__init__("TRADER_STORAGE_UNAVAILABLE")
         self.operation,self.status=operation,status
+        self.diagnostics=storage_diagnostics(cause)
+
+def storage_causes(error):
+    seen=set()
+    while error is not None and id(error) not in seen and len(seen)<8:
+        seen.add(id(error));yield error
+        nested=getattr(error,"cause",None)
+        error=nested if nested is not None else getattr(error,"__cause__",None)
 
 def storage_status(error):
+    for cause in storage_causes(error):
+        status=getattr(getattr(cause,"response",None),"status_code",None)
+        if status is None:status=getattr(cause,"code",None)
+        if isinstance(status,int):return int(status)
+    return None
+
+def storage_diagnostics(error):
     from google.api_core.exceptions import RetryError
-    if isinstance(error,RetryError):return storage_status(error.cause)
-    status=getattr(getattr(error,"response",None),"status_code",None)
-    if status is None:status=getattr(error,"code",None)
-    return int(status) if isinstance(status,int) else None
+    from requests.exceptions import ConnectionError,Timeout
+    causes=list(storage_causes(error))
+    kind="unknown"
+    if any(isinstance(c,(Timeout,TimeoutError)) for c in causes):kind="timeout"
+    elif any(isinstance(c,ConnectionError) for c in causes):kind="connection"
+    elif storage_status(error) is not None:kind="http"
+    elif any(isinstance(c,RetryError) for c in causes):kind="retry_exhausted"
+    # Class names only: provider exception text can contain URLs or credentials.
+    return {"failure_kind":kind,"upstream_error_type":type(causes[-1]).__name__ if causes else None}
 
 def storage_retryable(error):
     from google.api_core.exceptions import RetryError
     from requests.exceptions import ConnectionError,Timeout
-    return (isinstance(error,(RetryError,ConnectionError,Timeout))
+    return (isinstance(error,(RetryError,ConnectionError,Timeout,TimeoutError))
             or storage_status(error) in (408,429,500,502,503,504))
 
-def storage_retry():
+def storage_retry(timeout=STORAGE_RETRY_SECONDS):
     from google.cloud.storage.retry import DEFAULT_RETRY
     # The SDK's default 120-second retry window can exhaust a 120-second
     # journal lease. An individual request is also bounded, including the
     # final request which may run past the retry window.
-    return DEFAULT_RETRY.with_timeout(STORAGE_RETRY_SECONDS).with_delay(initial=.25,maximum=1,multiplier=2)
+    return DEFAULT_RETRY.with_timeout(timeout).with_delay(initial=.25,maximum=1,multiplier=2)
 
 def storage_call(operation,action):
     try:return action()
     except Exception as error:
         if storage_retryable(error):
-            raise JournalStorageUnavailable(operation,storage_status(error)) from error
+            raise JournalStorageUnavailable(operation,storage_status(error),cause=error) from error
         raise
 
 def cleanup_actions(series,actions):
@@ -90,6 +112,7 @@ def shutdown_journal(journal,broker):
         print(json.dumps({"event":"opposite_dollar_recovery_required","series":journal.config.series_ticker,
             **safe_failure(original),"operation":getattr(original,"operation",None),
             "upstream_status":getattr(original,"status",None),"orders_disabled":True,
+            **getattr(original,"diagnostics",{}),
             "recovery":"watchdog_after_lease_expiry"}),flush=True)
     actions.append(("broker_close",broker.client.close))
     cleanup_actions(journal.config.series_ticker,actions)
@@ -157,30 +180,47 @@ class CloudJournal:
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/"state.enc";encode_catalog(value,path)
             if path.stat().st_size>16*1024*1024:raise RuntimeError("TRADER_JOURNAL_TOO_LARGE")
-            blob=self.bucket.blob(name)
-            receipt=uuid.uuid4().hex;blob.metadata={WRITE_RECEIPT:receipt}
-            try:
-                blob.upload_from_filename(path,if_generation_match=generation,checksum="auto",
-                    timeout=STORAGE_TIMEOUT,retry=storage_retry())
-            except Exception as error:
-                if not isinstance(error,PreconditionFailed) and not storage_retryable(error):raise
-                # A server can commit an upload but lose its response. The SDK
-                # may then see 412 when replaying the same generation. Confirm
-                # OUR random receipt from fresh atomic object metadata. Never
-                # adopt a successor's generation or blindly remove the CAS.
-                observed=self.bucket.blob(name)
-                try:observed.reload(timeout=STORAGE_TIMEOUT,retry=storage_retry())
-                except Exception as confirmation_error:
-                    if not isinstance(confirmation_error,NotFound) and not storage_retryable(confirmation_error):raise
-                else:
-                    if ((observed.metadata or {}).get(WRITE_RECEIPT)==receipt
-                            and int(observed.generation)>generation):
-                        print(json.dumps({"event":"opposite_dollar_storage_ack_recovered",
-                            "series":self.config.series_ticker,"operation":"upload","orders_sent":0}),flush=True)
-                        return int(observed.generation)
-                if isinstance(error,PreconditionFailed):raise
-                raise JournalStorageUnavailable("upload",storage_status(error)) from error
-            return int(blob.generation)
+            receipt=uuid.uuid4().hex
+            deadline=time.monotonic()+STORAGE_WRITE_BUDGET_SECONDS
+            def options():
+                remaining=deadline-time.monotonic()
+                if remaining<=0:raise TimeoutError("Journal storage request budget exhausted")
+                timeout=min(STORAGE_TIMEOUT,remaining)
+                return {"timeout":timeout,"retry":storage_retry(min(STORAGE_RETRY_SECONDS,max(0,remaining-timeout)))}
+            for attempt in range(STORAGE_WRITE_ATTEMPTS):
+                # Every retry reuses the exact encrypted bytes, receipt and CAS.
+                # A late first commit can only make the retry fail its CAS; it
+                # cannot create a second state transition or overwrite a successor.
+                blob=self.bucket.blob(name);blob.metadata={WRITE_RECEIPT:receipt}
+                try:
+                    blob.upload_from_filename(path,if_generation_match=generation,checksum="auto",**options())
+                except Exception as error:
+                    if not isinstance(error,PreconditionFailed) and not storage_retryable(error):raise
+                    observed=self.bucket.blob(name);unchanged=False
+                    try:observed.reload(**options())
+                    except NotFound:unchanged=generation==0
+                    except Exception as confirmation_error:
+                        if not storage_retryable(confirmation_error):raise
+                    else:
+                        if ((observed.metadata or {}).get(WRITE_RECEIPT)==receipt
+                                and int(observed.generation)>generation):
+                            print(json.dumps({"event":"opposite_dollar_storage_ack_recovered",
+                                "series":self.config.series_ticker,"operation":"upload","orders_sent":0}),flush=True)
+                            return int(observed.generation)
+                        unchanged=int(observed.generation)==generation
+                    if isinstance(error,PreconditionFailed):raise
+                    if unchanged and attempt+1<STORAGE_WRITE_ATTEMPTS and time.monotonic()<deadline:
+                        lease=self.state.get("lease",{})
+                        if (name==self.name and generation==self.generation
+                                and lease.get("holder")==self.holder and lease.get("fence")==self.fence
+                                and lease.get("expires",0)<=time.time()):
+                            raise RuntimeError("TRADER_FENCE_LOST") from error
+                        print(json.dumps({"event":"opposite_dollar_storage_retry","series":self.config.series_ticker,
+                            "operation":"upload","attempt":attempt+2,"upstream_status":storage_status(error),
+                            **storage_diagnostics(error),"same_generation":True,"orders_sent":0}),flush=True)
+                        continue
+                    raise JournalStorageUnavailable("upload",storage_status(error),cause=error) from error
+                return int(blob.generation)
 
     def claim(self,wait_seconds=0):
         from google.api_core.exceptions import PreconditionFailed
@@ -679,6 +719,7 @@ def main():
     except JournalStorageUnavailable as error:
         print(json.dumps({"event":"opposite_dollar_storage_unavailable","series":config.series_ticker,
             "error_code":str(error),"operation":error.operation,"upstream_status":error.status,
+            **error.diagnostics,
             "orders_disabled":True,"recovery":"watchdog_after_lease_expiry"}),flush=True)
         raise SystemExit(1) from None
 

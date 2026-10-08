@@ -410,8 +410,8 @@ class UploadBucket:
             def upload_from_filename(self,path,**kwargs):
                 bucket.uploads.append(kwargs)
                 assert kwargs["if_generation_match"]==4
-                assert kwargs["timeout"]==STORAGE_TIMEOUT
-                assert kwargs["retry"].timeout==STORAGE_RETRY_SECONDS
+                assert 0<kwargs["timeout"]<=STORAGE_TIMEOUT
+                assert 0<=kwargs["retry"].timeout<=STORAGE_RETRY_SECONDS
                 if bucket.committed or bucket.foreign:
                     bucket.generation=5
                     bucket.metadata={WRITE_RECEIPT:"successor"} if bucket.foreign else deepcopy(self.metadata)
@@ -419,8 +419,8 @@ class UploadBucket:
                 if bucket.error:raise bucket.error
             def reload(self,**kwargs):
                 bucket.reloads.append(kwargs)
-                assert kwargs["timeout"]==STORAGE_TIMEOUT
-                assert kwargs["retry"].timeout==STORAGE_RETRY_SECONDS
+                assert 0<kwargs["timeout"]<=STORAGE_TIMEOUT
+                assert 0<=kwargs["retry"].timeout<=STORAGE_RETRY_SECONDS
                 if bucket.confirmation_error:raise bucket.confirmation_error
                 self.metadata,self.generation=deepcopy(bucket.metadata),bucket.generation
         return Blob()
@@ -461,6 +461,7 @@ def test_sdk_media_503_retry_error_is_logged_with_the_correct_status(monkeypatch
     media_error=InvalidResponse(response,"Request failed with status code",503)
     error=RetryError("bounded retries exhausted",media_error)
     j=uploading_journal(monkeypatch,UploadBucket(error))
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:100)
     with pytest.raises(JournalStorageUnavailable) as caught:j.write("journal",j.state,4)
     assert caught.value.status==503 and caught.value.__cause__ is error
 
@@ -631,3 +632,95 @@ def test_worker_checkpoint_outage_stops_collection_without_a_second_save_or_rele
     with pytest.raises(JournalStorageUnavailable) as caught:module.run(CONFIG,"both",1)
     assert caught.value is error
     assert calls==["claim","save","collector_start","save","collector_stop","close"]
+
+class RecoveringUploadBucket:
+    def __init__(self,*,confirmation_error=None,foreign_on_retry=False,missing=False,after_upload=None):
+        self.generation=4;self.metadata={};self.uploads=[];self.reloads=[]
+        self.confirmation_error=confirmation_error;self.foreign_on_retry=foreign_on_retry
+        self.missing=missing;self.after_upload=after_upload
+    def blob(self,name):
+        bucket=self
+        class Blob:
+            generation=None;metadata=None
+            def upload_from_filename(self,path,**kwargs):
+                from requests.exceptions import ReadTimeout
+                from google.api_core.exceptions import PreconditionFailed
+                from pathlib import Path
+                bucket.uploads.append({**kwargs,"payload":Path(path).read_bytes(),"metadata":deepcopy(self.metadata)})
+                if bucket.after_upload:bucket.after_upload()
+                if len(bucket.uploads)==1:raise ReadTimeout("secret-bearing upstream URL must never be logged")
+                if bucket.foreign_on_retry:
+                    bucket.generation=5;bucket.metadata={WRITE_RECEIPT:"other-worker"}
+                    raise PreconditionFailed("successor won the generation")
+                bucket.generation=5;bucket.metadata=deepcopy(self.metadata);self.generation=5
+            def reload(self,**kwargs):
+                from google.api_core.exceptions import NotFound
+                bucket.reloads.append(kwargs)
+                if bucket.confirmation_error:raise bucket.confirmation_error
+                if bucket.missing:raise NotFound("missing")
+                self.generation=bucket.generation;self.metadata=deepcopy(bucket.metadata)
+        return Blob()
+
+def test_short_transport_outage_retries_identical_bytes_receipt_and_generation(monkeypatch,capsys):
+    bucket=RecoveringUploadBucket();j=uploading_journal(monkeypatch,bucket)
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:100)
+    j.save()
+    assert j.generation==5 and j.state["entries"]=={"keep":"intent"}
+    assert len(bucket.uploads)==2 and len(bucket.reloads)==1
+    first,second=bucket.uploads
+    assert first["payload"]==second["payload"] and first["metadata"]==second["metadata"]
+    assert first["if_generation_match"]==second["if_generation_match"]==4
+    output=capsys.readouterr().out
+    assert '"failure_kind": "timeout"' in output and '"upstream_error_type": "ReadTimeout"' in output
+    assert "secret-bearing" not in output
+
+def test_unknown_upload_commit_cannot_authorize_a_retry(monkeypatch):
+    from requests.exceptions import ConnectionError
+    bucket=RecoveringUploadBucket(confirmation_error=ConnectionError("metadata unavailable"))
+    j=uploading_journal(monkeypatch,bucket);old=deepcopy(j.state)
+    with pytest.raises(JournalStorageUnavailable) as caught:j.write("journal",j.state,4)
+    assert len(bucket.uploads)==1 and j.state==old and j.generation==4
+    assert caught.value.status is None and caught.value.diagnostics["failure_kind"]=="timeout"
+
+def test_retry_cannot_overwrite_or_acknowledge_successor(monkeypatch):
+    from google.api_core.exceptions import PreconditionFailed
+    bucket=RecoveringUploadBucket(foreign_on_retry=True);j=uploading_journal(monkeypatch,bucket)
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:100)
+    with pytest.raises(PreconditionFailed):j.write("journal",j.state,4)
+    assert len(bucket.uploads)==2 and j.generation==4 and bucket.metadata[WRITE_RECEIPT]=="other-worker"
+
+def test_deleted_existing_object_is_not_treated_as_retryable_creation(monkeypatch):
+    bucket=RecoveringUploadBucket(missing=True);j=uploading_journal(monkeypatch,bucket)
+    with pytest.raises(JournalStorageUnavailable):j.write("journal",j.state,4)
+    assert len(bucket.uploads)==1 and j.generation==4
+
+def test_new_object_can_retry_same_create_only_precondition(monkeypatch):
+    bucket=RecoveringUploadBucket(missing=True);j=uploading_journal(monkeypatch,bucket)
+    assert j.write("archive",j.state,0)==5
+    assert len(bucket.uploads)==2 and all(r["if_generation_match"]==0 for r in bucket.uploads)
+
+def test_upload_recovery_budget_includes_confirmation_and_does_not_retry_after_expiry(monkeypatch):
+    clock=[0.0]
+    bucket=RecoveringUploadBucket(after_upload=lambda:clock.__setitem__(0,12))
+    j=uploading_journal(monkeypatch,bucket)
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.monotonic",lambda:clock[0])
+    with pytest.raises(JournalStorageUnavailable):j.write("journal",j.state,4)
+    assert len(bucket.uploads)==1 and not bucket.reloads and j.generation==4
+
+def test_retry_does_not_resurrect_expired_owner_lease(monkeypatch):
+    clock=[100]
+    bucket=RecoveringUploadBucket(after_upload=lambda:clock.__setitem__(0,221))
+    j=uploading_journal(monkeypatch,bucket)
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
+    with pytest.raises(RuntimeError,match="TRADER_FENCE_LOST"):j.save()
+    assert len(bucket.uploads)==1 and j.generation==4 and j.state["lease"]["expires"]==220
+
+def test_wrapped_timeout_has_safe_diagnostics_even_without_http_status(monkeypatch):
+    from google.api_core.exceptions import RetryError
+    from requests.exceptions import ReadTimeout
+    error=RetryError("private URL",ReadTimeout("token=do-not-log"))
+    j=uploading_journal(monkeypatch,UploadBucket(error))
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:100)
+    with pytest.raises(JournalStorageUnavailable) as caught:j.write("journal",j.state,4)
+    assert caught.value.diagnostics=={"failure_kind":"timeout","upstream_error_type":"ReadTimeout"}
+    assert caught.value.status is None
