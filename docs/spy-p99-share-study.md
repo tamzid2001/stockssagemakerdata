@@ -108,6 +108,39 @@ historical reproducibility. Its returns are not corrected-strategy results.
 Use `market_research.spy_trailing_audit` to compare corrected $1/$2 grids
 against the exactly reproduced legacy $2 baseline from frozen artifacts.
 
+```sh
+python -m market_research.spy_trailing_audit \
+  --source source --forecasts forecasts \
+  --baseline original-report/results.json.gz --output corrected-trailing
+```
+
+## One-session fixed-stop comparison
+
+This separate strategy uses the same above-first-P99 forecasts but makes one
+purchase and exits at the next predicted NYSE session close or a fixed dollar
+stop. It never averages or trails. Whole-share quantity is
+`floor(min(0.01 * equity / stop_distance, equity / entry_ask))`; unlike a ladder,
+it reserves no risk for future entries. Gap losses can exceed the planned stop
+risk. Results from these two sizing formulas must be compared with their actual
+exposure and drawdown.
+
+```sh
+python -m market_research.spy_one_day_stops \
+  --source source --forecasts forecasts --output one-session-stops
+```
+
+The fixed-stop candidates are $0.25, $0.50, $1, $2, $3, $5, $7.50, $10, $15,
+$20, $30 and $50. Choose the stop on the original first nine months and then
+validate it on the final quarter from a fresh flat account. Both minute paths
+and selected-case spread sensitivity remain visible. A separately labeled
+median-trend filter and six take-profit distances test holding-time tradeoffs;
+they are exploratory comparisons, not claims of a guaranteed improvement.
+Reports include mean/median duration, W/L, equity/daily drawdown, all candidate
+results, one-share controls and source-calibration counts. Exits use executable
+minute proxies rather than treating the model's P99 label as a win probability.
+
+### Legacy sizing audit
+
 `market_research.spy_drawdown_sizing` reuses the original SPY source and all
 251 saved forecasts for the $2 equal long grid. It checks source hashes and
 requires the multiplier-1 replay to reproduce every original result field.

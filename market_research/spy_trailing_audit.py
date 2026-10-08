@@ -91,6 +91,7 @@ def study(source, forecasts, baseline, output):
     fields = ('grid', 'ordering', 'costs', 'net_pnl', 'return_pct', 'closed_baskets', 'basket_wins',
               'basket_losses', 'basket_win_rate', 'max_equity_drawdown', 'max_daily_loss',
               'average_ladder', 'max_ladder', 'closed_entries', 'average_basket_hours',
+              'median_basket_hours',
               'max_win_streak', 'max_loss_streak', 'max_shares', 'open_entries', 'open_net_pnl')
     with (output/'summary.csv').open('w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
@@ -104,10 +105,10 @@ def study(source, forecasts, baseline, output):
              'Execution: October 7, 2025–October 7, 2026; 251 frozen daily forecasts through October 6, 2026. Starting equity $100,000; whole shares; 1% equity risk shared across each complete ladder.', '',
              'The old audit correctly described the old code, but that code activated trailing too early for the intended rule. Both original $2 reference results were reproduced exactly before applying the correction.', '',
              'Corrected activation: basket P&L must be positive AND executable bid must reach the lowest filled entry plus trailing distance. One entry uses the grid; multiple entries use 75% of highest-minus-lowest fill. The trail is favorable bid peak minus the distance, floored one cent above the lowest fill, and never loosens. The fixed triggering final P01 protects the basket before activation. No change to the above-first-P99 entry signal, risk formula, lower-only additions or next-minute limit eligibility.', '',
-             '| Grid | Spread proxy | Minute path | Net price P&L | W/L | Win rate | Equity DD | Daily loss | Avg/max legs | Avg hours | Max W/L streak | Open legs |',
-             '|---:|---:|---|---:|---|---:|---:|---:|---|---:|---|---:|']
+             '| Grid | Spread proxy | Minute path | Net price P&L | W/L | Win rate | Equity DD | Daily loss | Avg/max legs | Mean/median hours | Max W/L streak | Open legs |',
+             '|---:|---:|---|---:|---|---:|---:|---:|---|---|---|---:|']
     for r in results:
-        lines.append(f"| ${r['grid']:g} | {int(round(COSTS[0].spread_factor if r['costs']==COSTS[0].name else COSTS[1].spread_factor))}¢ | {r['ordering']} | ${r['net_pnl']:,.2f} | {r['basket_wins']}/{r['basket_losses']} | {100*r['basket_win_rate']:.2f}% | ${r['max_equity_drawdown']:,.2f} | ${r['max_daily_loss']:,.2f} | {r['average_ladder']:.2f}/{r['max_ladder']} | {r['average_basket_hours']:.2f} | {r['max_win_streak']}/{r['max_loss_streak']} | {r['open_entries']} |")
+        lines.append(f"| ${r['grid']:g} | {int(round(COSTS[0].spread_factor if r['costs']==COSTS[0].name else COSTS[1].spread_factor))}¢ | {r['ordering']} | ${r['net_pnl']:,.2f} | {r['basket_wins']}/{r['basket_losses']} | {100*r['basket_win_rate']:.2f}% | ${r['max_equity_drawdown']:,.2f} | ${r['max_daily_loss']:,.2f} | {r['average_ladder']:.2f}/{r['max_ladder']} | {r['average_basket_hours']:.2f}/{r['median_basket_hours']:.2f} | {r['max_win_streak']}/{r['max_loss_streak']} | {r['open_entries']} |")
     lines += ['', '## Averaging verification', '']
     for r in results[:]:
         if r['costs'] != COSTS[0].name:
