@@ -46,7 +46,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --disable-pip-version-check pytest==8.4.2
       - name: Verify fixed tail stop, shared risk, causal limits and trailing behavior
-        run: python -m pytest -q market_research/tests/test_ftmo_p99.py
+        run: python -m pytest -q market_research/tests/test_ftmo_p99.py market_research/tests/test_dukascopy_s3_source.py
       - uses: actions/download-artifact@v4
         if: ${{ inputs.resume_run_id != '' }}
         with:
@@ -80,6 +80,9 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -87,20 +90,40 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Install pinned authenticated source dependencies
+        if: ${{ inputs.resume_run_id == '' }}
+        run: python -m pip install --disable-pip-version-check --require-hashes -r market_research/requirements-dukas-s3.lock
+      - name: Assume archive-only role using temporary GitHub credentials
+        if: ${{ inputs.resume_run_id == '' }}
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.DUKASCOPY_HISTORY_ROLE_ARN }}
+          aws-region: eu-west-1
+          allowed-account-ids: '321652031670'
+          role-session-name: quantura-dukas-preflight-${{ github.run_id }}
+          role-duration-seconds: 7200
       - name: Verify first-party source access before the expensive matrix
         if: ${{ inputs.resume_run_id == '' }}
+        env:
+          STUDY_END: ${{ inputs.end_date }}
         run: |
           python - <<'PY'
-          from market_research.ftmo_dukas_data import BASE,get_json
-          metadata=get_json(BASE+'/instruments/EUR-USD',attempts=1)
-          if metadata.get('code')!='EUR-USD':
-              raise ValueError('PROVIDER_INSTRUMENT_MISMATCH')
-          print('Dukascopy instrument access verified; no model jobs started yet.')
+          import json,os
+          from datetime import date,timedelta
+          from market_research.dukascopy_s3_source import verify_access
+          probe=date.fromisoformat(os.environ['STUDY_END'])+timedelta(days=1)
+          while probe.weekday()>=5:
+              probe-=timedelta(days=1)
+          print(json.dumps(verify_access(probe)))
           PY
   source:
     needs: [plan, provider-access]
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -117,6 +140,18 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Install pinned authenticated source dependencies
+        if: ${{ inputs.resume_run_id == '' }}
+        run: python -m pip install --disable-pip-version-check --require-hashes -r market_research/requirements-dukas-s3.lock
+      - name: Assume archive-only role using temporary GitHub credentials
+        if: ${{ inputs.resume_run_id == '' }}
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.DUKASCOPY_HISTORY_ROLE_ARN }}
+          aws-region: eu-west-1
+          allowed-account-ids: '321652031670'
+          role-session-name: quantura-dukas-source-${{ github.run_id }}
+          role-duration-seconds: 7200
       - uses: actions/download-artifact@v4
         if: ${{ inputs.resume_run_id != '' }}
         with:

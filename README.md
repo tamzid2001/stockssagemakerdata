@@ -131,7 +131,7 @@ Dedicated repository workers cover those studies:
 - [Mega-cap year study](.github/workflows/megacap-p01-year.yml): one six-hour forecast and a shared replay methodology across stocks.
 - [FTMO-style yearly matrix](docs/ftmo-dukas-hourly-study.md): ten assets, separate P01 long / P99 short ladders, bid/ask costs, commissions, swaps and carried liabilities.
 - [Triggered reforecast workflow](.github/workflows/ftmo-trigger-reforecast.yml): eight FX/index assets, real minute triggers, completed-hour context and a remaining-session forecast.
-- [Daily P99 buy-ladder study](docs/ftmo-p99-daily-study.md): ten FTMO assets, 500 daily candles, seven-session five-model forecasts, a fixed final-P01 stop, final P99–P01 risk sizing, causal minute limits and grid/trailing comparisons on $100k accounts.
+- [Daily P99 buy-ladder study](docs/ftmo-p99-daily-study.md): ten FTMO assets, 500 daily candles, seven-session five-model forecasts, a fixed final-P01 stop, final P99–P01 risk sizing, causal minute limits and grid/trailing comparisons on $100k accounts. History uses authenticated Dukascopy native minute archives and a restricted GitHub OIDC read role; inputs and results remain in GitHub artifacts.
 
 A high closed-basket win rate can coexist with losing positions left open. Reports must include floating P&L, ladder size, duration, costs and drawdown. Optimization on the development period is not evidence of future returns or a prop-firm challenge pass. Legacy Kalshi coin workflows are **paper only** and disabled; see the [operating policy](docs/kalshi-coin-paper-only.md).
 
