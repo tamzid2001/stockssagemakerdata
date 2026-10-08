@@ -272,7 +272,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
       license: { name: "Quantura API Terms", url: `${origin}/terms` },
     },
     servers: [{ url: `${origin}/api/v1` }],
-    security: [{ bearerAuth: [] }],
+    security: [{ bearerAuth: [] }, { clerkOAuth: ["openid", "profile", "email"] }],
     tags: [
       { name: "Access", description: "Identity, token scopes, plans, and effective workspace access." },
       { name: "Workspaces", description: "Resources are authorized against current membership on every request." },
@@ -627,7 +627,11 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
     },
     components: {
       securitySchemes: {
-        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "Quantura API key" },
+        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "Clerk personal API key or legacy Quantura key" },
+        clerkOAuth: { type: "oauth2", description: "Clerk authorization code with PKCE S256. Pass resource=https://quantura.studio on authorization and token requests. Paid Pro, enterprise or verified administrator API access is required.", flows: { authorizationCode: {
+          authorizationUrl: "https://clerk.quantura.studio/oauth/authorize", tokenUrl: "https://clerk.quantura.studio/oauth/token",
+          refreshUrl: "https://clerk.quantura.studio/oauth/token", scopes: {openid:"Identify the Quantura account",profile:"Resolve the account profile",email:"Verify account email",offline_access:"Refresh access after expiry"},
+        } } },
       },
       schemas: {
         BacktestStrategy: QUANTILE_STRATEGY_SCHEMA,

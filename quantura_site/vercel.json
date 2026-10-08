@@ -50,6 +50,9 @@
     { "source": "/u/:path*", "destination": "/forecasting?panel=profile", "permanent": true }
   ],
   "rewrites": [
+    {"source":"/mcp","destination":"https://quantura-api.vercel.app/mcp"},
+    {"source":"/.well-known/oauth-protected-resource","destination":"https://quantura-api.vercel.app/.well-known/oauth-protected-resource"},
+    {"source":"/.well-known/oauth-protected-resource/mcp","destination":"https://quantura-api.vercel.app/.well-known/oauth-protected-resource/mcp"},
     {"source":"/sagemaker","destination":"https://quantura-ssr.vercel.app/sagemaker"},
     {"source":"/sagemaker/:path*","destination":"https://quantura-ssr.vercel.app/sagemaker/:path*"},
     { "source": "/api/callable/:path*", "destination": "https://quantura-legacy-api.vercel.app/api/callable/:path*" },

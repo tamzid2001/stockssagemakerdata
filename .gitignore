@@ -32,3 +32,6 @@ quantura_site/public/styles.min.css
 # Runner-local historical research and encrypted exports are never source code.
 .research-output/
 *.qra.enc
+
+# Local Python environments must not enter Git or deployment archives.
+/.venv*/
