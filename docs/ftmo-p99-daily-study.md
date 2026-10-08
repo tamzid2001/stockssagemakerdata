@@ -15,6 +15,23 @@ Run [FTMO daily P99 seven-session yearly grid study](../.github/workflows/ftmo-p
 
 ## Authenticated history source
 
+### Replaying other entry rules
+
+The workflow accepts `entry_rule=above_p99` (the original), `above_p90`,
+`below_p99`, or `daily_buy`. The last option starts a basket at the first
+executable ask after each completed daily forecast whenever flat; it has no
+cutoff-price quantile condition. After closing, it waits for a later forecast.
+`averaging_gate=grid` removes the first-add P90 condition, so every addition
+uses a lower grid level. The fixed final triggering P01 stop and final
+P99−P01 risk reference remain unchanged. Entries at or below the fixed stop
+and entries below the risk-sized minimum lot are rejected.
+
+Set `replay_only=true` and a completed `resume_run_id` to reuse its frozen
+plan, broker snapshot, source prices and model forecasts. This skips provider
+downloads and model inference. Each replay records the entry and averaging
+rules; aggregation rejects results from a different rule. The original
+forecast artifacts are not altered or uploaded again.
+
 This study uses Dukascopy's [documented S3 bulk source](https://www.dukascopy.com/wiki/en/development/data-export/), `cfg-public-proper-wallaby` in `eu-west-1`, with authenticated Requester Pays reads. It downloads native daily **M1 candle archives**, not tick archives or the entire bucket. At most eight daily downloads per job and two asset jobs run concurrently. Minute candles are aggregated into hourly observations and daily sessions; only the replay year's minute rows are retained. This keeps warmup memory bounded and avoids the annual hourly tick-download loop.
 
 The big-endian archive records are decoded as seconds, open, close, low, high and volume, with the checked-in first-party instrument catalog's price scale. Both bid and ask are required. Flat zero-volume minutes on both sides are discarded as stale placeholders; no missing intervals are filled. Every source records object versions, ETags, compressed SHA-256 hashes, absent archive days and excluded placeholders. Frozen row hashes are checked before forecasts and replays.

@@ -128,8 +128,11 @@ def sized_lots(price, stop, p90, equity, entries, candidate, spec, conversion, a
 
 
 def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, costs=Costs('reference_percentage_per_side'),
-           ordering='low_first', initial_balance=100_000., risk_fraction=.01, detail=False):
-    if ordering not in ('low_first', 'high_first') or not 0 < risk_fraction <= .01:
+           ordering='low_first', initial_balance=100_000., risk_fraction=.01, detail=False, *,
+           entry_quantile='p99', entry_comparison='above', averaging_gate='p90'):
+    if (ordering not in ('low_first', 'high_first') or not 0 < risk_fraction <= .01
+            or entry_quantile not in ('p90', 'p99') or entry_comparison not in ('above', 'below', 'any')
+            or averaging_gate not in ('p90', 'grid')):
         raise ValueError('INVALID_REPLAY_CONFIGURATION')
     forecasts = sorted([f for f in forecasts if f['status'] == 'completed'], key=lambda f: f['earliest_actionable_at'])
     events = [(stamp(f['earliest_actionable_at']), f) for f in forecasts]
@@ -222,7 +225,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             stop = math.floor(tail['p01'] / tick + 1e-8) * tick
             risk_span = tail['p99'] - tail['p01']
             risk_equity = equity(bid, at)
-        sizing_p90 = p90 if len(basket_legs) < 2 else price + candidate.grid
+        sizing_p90 = p90 if averaging_gate == 'p90' and len(basket_legs) < 2 else price + candidate.grid
         lots = sized_lots(price, stop, sizing_p90, equity(bid, at), active, candidate, spec, conversion, at, costs, risk_fraction,
                           risk_equity=risk_equity, risk_span=risk_span)
         minimum = spec.get('minimumVolume', .01)
@@ -275,7 +278,11 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
                 p90 = current['predictions'][0]['p90']
             if not active:
                 stop = math.floor(current['predictions'][-1]['p01'] / tick + 1e-8) * tick
-            signal_origin = current['origin'] if current['cutoff_close'] > current['predictions'][0]['p99'] else None
+            threshold = current['predictions'][0][entry_quantile]
+            qualifies = (True if entry_comparison == 'any' else
+                         current['cutoff_close'] > threshold if entry_comparison == 'above' else
+                         current['cutoff_close'] < threshold)
+            signal_origin = current['origin'] if qualifies else None
             if signal_origin:
                 signals += 1
         if not current:
@@ -302,7 +309,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
                 blocked += 1
         if tradeable and active and pending is not None and at >= pending['eligible_at']:
             limit = pending['price']
-            if ask['o'] <= limit and (len(basket_legs) >= 2 or ask['o'] < p90) and ask['o'] > stop:
+            if ask['o'] <= limit and (averaging_gate == 'grid' or len(basket_legs) >= 2 or ask['o'] < p90) and ask['o'] > stop:
                 if not fill(ask['o'], bid['o'], at):
                     pending = None
                     blocked += 1
@@ -316,7 +323,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
                 # On a continuous descending segment an already-resting buy
                 # limit above the stop is reached BEFORE that stop. A gap open
                 # is different: the stop was handled before any new addition.
-                if pending is not None and field != 'o' and ask[field] <= pending['price'] and (len(basket_legs) >= 2 or pending['price'] < p90):
+                if pending is not None and field != 'o' and ask[field] <= pending['price'] and (averaging_gate == 'grid' or len(basket_legs) >= 2 or pending['price'] < p90):
                     spread = max(0., ask[field] - bid[field])
                     limit_bid = pending['price'] - spread
                     if limit_bid > threshold and previous_bid > threshold:
@@ -339,11 +346,11 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             previous_bid = px
         if tradeable and active and pending is None:
             lowest = min(e['entry'] for e in active)
-            gate = min(lowest - candidate.grid, p90 - tick) if len(basket_legs) < 2 else lowest - candidate.grid
+            gate = min(lowest - candidate.grid, p90 - tick) if averaging_gate == 'p90' and len(basket_legs) < 2 else lowest - candidate.grid
             level = math.floor(gate / tick + 1e-8) * tick
             # Breach knowledge is available only at minute completion. Never fill
             # the same historical low used to create this order.
-            if stop < level and (len(basket_legs) >= 2 or level < p90) and ask['l'] <= level:
+            if stop < level and (averaging_gate == 'grid' or len(basket_legs) >= 2 or level < p90) and ask['l'] <= level:
                 pending = {'price': level, 'eligible_at': end, 'observed_at': end}
         value = mark(bid['c'], end)
         key = end.replace(minute=0, second=0, microsecond=0)
@@ -381,7 +388,11 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
               'max_lots': max_lots, 'max_margin': max_margin, 'max_reserved_stop_risk': max_risk,
               'fees': fees, 'swap_pnl': swaps, 'fixed_final_p01_stop': stop, 'fixed_final_quantile_span': risk_span,
               'cancelled_limits': cancelled,
-              'risk_or_volume_blocked_entries': blocked, 'above_p99_forecast_signals': signals,
+              'risk_or_volume_blocked_entries': blocked,
+              ('daily_buy_forecast_signals' if entry_comparison == 'any' else f'{entry_comparison}_{entry_quantile}_forecast_signals'): signals,
+              'entry_signal_quantile': entry_quantile,
+              'entry_signal_comparison': entry_comparison,
+              'averaging_gate': averaging_gate,
               'open_entries': len(active), 'open_lots': sum(e['lots'] for e in active),
               'open_age_hours': (last_at - basket_start).total_seconds() / 3600 if basket_start else None,
               'open_net_pnl': sum(e['net_pnl'] for e in basket_legs) + ending - cash,
