@@ -1,3 +1,4 @@
+import {searchCanvas} from "./sagemakerLibrary";
 import {economicClient} from "./economicData";
 import {geminiMarketClient} from "./geminiMarketData";
 import type { Request, Router } from "express";
@@ -23,6 +24,7 @@ export function searchClientAddress(req: Pick<Request,"headers"|"ip"|"socket">, 
 }
 
 export const PROVIDER_CAPABILITIES = {
+  sagemaker:{label:"SageMaker Canvas",assetClasses:["saved_forecast"],search:true,history:true,forecasting:["saved_forecast"],granularities:FORECAST_FREQUENCIES,redistributionStatus:"owner_published"},
   bigquery:{label:"BigQuery public datasets",assetClasses:["economic_series"],search:true,history:true,forecasting:["economic_series"],granularities:["1h","1D","1W-MON","1MS"],redistributionStatus:"dataset_license"},
   worldbank_data360: {label:"World Bank Data360",assetClasses:["economic_series"],search:true,history:true,forecasting:["economic_series"],granularities:["1D","1ME","1QE-DEC","1YE-DEC"],redistributionStatus:"indicator_license"},
   fiscaldata: {label:"Treasury Fiscal Data",assetClasses:["economic_series"],search:true,history:true,forecasting:["economic_series"],granularities:["1D","1ME","1QE-DEC"],redistributionStatus:"open_data"},
@@ -180,7 +182,7 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
     const requested = text(req.query.source || "auto", 40).toLowerCase();
     const mode = text(req.query.mode || "open", 20);
     const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
-    if (!["auto", "alpaca", "dukascopy", "polymarket_us", "kalshi", "kalshi_perps", "gemini", "fiscaldata", "worldbank_data360", "bigquery"].includes(requested) || !["open", "live", "any"].includes(mode)) {
+    if (!["auto", "alpaca", "dukascopy", "polymarket_us", "kalshi", "kalshi_perps", "gemini", "fiscaldata", "worldbank_data360", "bigquery", "sagemaker"].includes(requested) || !["open", "live", "any"].includes(mode)) {
       res.status(422).json({ ok: false, error: "search_filter_invalid", message: "Choose a supported source and market status." }); return;
     }
     if (query.length < 2 && mode !== "live" && requested!=="dukascopy") {
@@ -190,6 +192,7 @@ export function registerMarketSearchRoutes(router: Router, options: {db?:Firebas
     const groups: Record<string, JsonRecord[]> = {};
     const errors: Record<string, string> = {};
     const tasks: Array<Promise<void>> = [];
+    if(mode!=="live" && ["auto","sagemaker"].includes(requested))tasks.push(searchCanvas(query,limit).then(rows=>{groups.sagemaker=rows;}).catch(()=>{errors.sagemaker="temporarily_unavailable";}));
     if(mode!=="live" && ["fiscaldata","worldbank_data360","bigquery"].includes(requested))tasks.push(economicClient.search(requested,query,limit).then(result=>{
       groups[requested]=result.results.map((row:any)=>({resource_type:"economic_series",resource_id:requested+":"+row.id,symbol:row.id,name:row.name,asset_class:"economic_series",source:requested,exchange:requested==="fiscaldata"?"U.S. Treasury":requested==="bigquery"?"BigQuery public datasets":"World Bank Data360",history_available:true,forecast_available:row.forecast_available!==false,
         economic_source:row.bigquery_source||{type:"economic_series",provider:requested,...(requested==="fiscaldata"?{series_id:row.id}:{dataset_id:row.dataset_id,indicator_id:row.indicator_id})}}));

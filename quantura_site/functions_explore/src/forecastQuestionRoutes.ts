@@ -1,3 +1,4 @@
+import {canvasRepository} from "./sagemakerLibrary";
 import { createHash, randomUUID } from "node:crypto";
 import type { Router, Response } from "express";
 import type admin from "firebase-admin";
@@ -8,11 +9,11 @@ import { publicGameForecast } from "./gameForecasts";
 import { askForecastQuestion, contextHash, normalizeQuestionContext, parseForecastQuestion, type ForecastContext } from "./forecastQuestions";
 
 type Options = {db:FirebaseFirestore.Firestore;auth:admin.auth.Auth;adminEmails?:readonly string[];ask?:typeof askForecastQuestion};
-type Reference = {kind:"ensemble"|"screener"|"game"|"saved_game"|"preview";id?:string;symbol?:string;scan_id?:string;name?:string;frequency?:string;rows?:Array<{timestamp:string;target:number}>};
+type Reference = {kind:"ensemble"|"screener"|"game"|"saved_game"|"preview"|"sagemaker";id?:string;symbol?:string;scan_id?:string;name?:string;frequency?:string;rows?:Array<{timestamp:string;target:number}>};
 const uuid=(v:unknown):v is string=>typeof v==="string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(v);
 export function parseContextReference(raw:any): Reference {
   if(!raw || typeof raw!=="object" || Array.isArray(raw))throw new Error("question_reference_invalid");
-  const keys:Record<string,string[]>={ensemble:["kind","id"],screener:["kind","symbol","scan_id"],game:["kind","id"],saved_game:["kind","id"],preview:["kind","name","frequency","rows"]};
+  const keys:Record<string,string[]>={sagemaker:["kind","id"],ensemble:["kind","id"],screener:["kind","symbol","scan_id"],game:["kind","id"],saved_game:["kind","id"],preview:["kind","name","frequency","rows"]};
   if(!keys[raw.kind] || Object.keys(raw).some(k=>!keys[raw.kind].includes(k)))throw new Error("question_reference_invalid");
   if(raw.kind==="preview"){
     if(typeof raw.name!=="string" || !raw.name.trim() || raw.name.length>120 || typeof raw.frequency!=="string" || raw.frequency.length>40 || !Array.isArray(raw.rows) || raw.rows.length<2 || raw.rows.length>500)throw new Error("question_reference_invalid");
@@ -28,6 +29,7 @@ export function parseContextReference(raw:any): Reference {
 export async function loadQuestionContext(db:FirebaseFirestore.Firestore, principal:ApiPrincipal, reference:Reference):Promise<ForecastContext> {
   requireScope(principal,"forecasts:read");
   if(principal.guest)throw new Error("question_sign_in_required");
+  if(reference.kind==="sagemaker"){const detail=await canvasRepository.detail(reference.id!);if(!detail.job)throw new Error("question_context_invalid");return normalizeQuestionContext(detail.job);}
   if(reference.kind==="preview")return normalizeQuestionContext({title:reference.name,history:reference.rows,frequency:reference.frequency,source:{type:"csv_preview",provider:"user_csv"}});
   if(reference.kind==="screener"){
     const s=await loadPublishedForecast(db,reference.symbol!,reference.scan_id!);validateWorkerResult(s.result,s.job);

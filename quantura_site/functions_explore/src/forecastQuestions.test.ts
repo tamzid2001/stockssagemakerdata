@@ -83,3 +83,11 @@ test("OpenAPI exposes scoped Q&A and notes without enabling new MCP mutations",(
  assert.notEqual(doc.paths["/jev/forecast-questions"].post["x-mint"]?.mcp?.enabled,true);
  assert.ok(doc.components.schemas.JevForecastContext.oneOf.some((s:any)=>s.properties.kind.const==="preview"));
 });
+test('prediction-only Canvas exports support median questions and all quantile annotations without inventing history',()=>{
+ const context=normalizeQuestionContext({...raw(),history:[],source:{type:'sagemaker',provider:'sagemaker_canvas',symbol:'EX'},ml_metrics:{metrics:{rmse:2},origin:'admin_supplied',basis:'Canvas evaluation'}});
+ assert.equal(context.inputCutoff,null);const median=answerForecastQuestion(context,'P50 change?',decision('median'));assert.equal(median.facts.find(f=>f.label==='P50 horizon change')?.value,3);assert.ok(!median.facts.some(f=>f.kind==='observed'));
+ assert.match(answerForecastQuestion(context,'Historical low?',decision('extremes')).answer,/not included/);
+ assert.match(answerForecastQuestion(context,'Accuracy?',decision('validation')).answer,/administrator/);
+ assert.equal(parseContextReference({kind:'sagemaker',id:'a'.repeat(64)}).kind,'sagemaker');
+ assert.equal(validateNotes([{id:'ec88d86c-5a21-4a3e-95d1-b71cacff9d70',text:'Tail scenario',timestamp:'2026-10-05T00:00:00Z',series:'0.99'}],context)[0].value,150);
+});

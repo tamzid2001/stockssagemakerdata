@@ -57,41 +57,27 @@
       prospective:summarize(prospective,levels),retrospective:summarize(retrospective,levels)};
   }
 
+  function availableReports(job,now=Date.now()) {
+    const result=[],validation=job.historical_validation;
+    if(validation?.status==='completed' && validation.metrics)result.push({metrics:validation.metrics,title:'Historical validation',description:`${validation.metrics.count} held-out observations`});
+    if(job.ml_metrics?.metrics)result.push({metrics:job.ml_metrics.metrics,title:'Model quality',description:job.ml_metrics.basis || 'Admin supplied metrics'});
+    const observed=compute(job,now);
+    if(observed.prospective.count)result.push({metrics:observed.prospective,title:'Observed outcomes',description:`${observed.prospective.count} completed observations`});
+    return result.filter(report=>['mae','rmse','smape','average_wql','mape','wape','mase'].some(k=>finite(report.metrics[k])));
+  }
   function render(host, job) {
     if (!host) return;
-    const report = compute(job), doc = host.ownerDocument;
-    const openDetails = [...host.querySelectorAll("details")].map(el=>el.open);
-    const oldButtons = [...host.querySelectorAll("button")];
-    const expandedHelp = oldButtons.map(el=>el.getAttribute("aria-expanded")==="true");
-    const focusedHelp = oldButtons.indexOf(doc.activeElement);
-    const element = (tag,text,className) => {const el=doc.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
-    const format = (value, percent = false) => finite(value) ? (percent ? `${(100*value).toFixed(2)}%` : new Intl.NumberFormat(undefined,{maximumSignificantDigits:5}).format(value)) : "—";
-    const cards = [
-      ["MAE","mae",false,"Mean absolute difference between predicted P50 and the actual completed price at the same time. It cannot be measured before that price exists."],
-      ["RMSE","rmse",false,"Root mean squared P50 error; larger misses count more. It requires completed prices after publication."],
-      ["sMAPE","smape",true,"Symmetric percentage error between P50 and completed prices after publication. Near-zero values can make it unstable."],
-      ["Weighted quantile loss","average_wql",false,"Average quantile error against completed prices after publication. It cannot be inferred from the forecast distribution alone."],
-    ];
-    const section = (metrics, title, description) => {
-      const box=element("section",undefined,"forecast-metrics-section");box.append(element("h4",title));
-      box.append(element("p",`${description || `${metrics.count} / ${report.expected} timestamp-matched completed outcomes · ${metrics.point_count} P50 comparisons`}${metrics.count && metrics.count<30 ? " · Small outcome sample." : ""}`,"small muted"));
-      const grid=element("dl",undefined,"forecast-metrics-grid");
-      for(const [name,key,percent,help] of cards){const cell=element("div"),term=element("dt",name),hint=element("button","ⓘ","forecast-metric-help");hint.type="button";hint.title=help;hint.setAttribute("aria-label",`${name}: ${help}`);hint.addEventListener("click",()=>{hint.nextElementSibling.hidden=!hint.nextElementSibling.hidden;hint.setAttribute("aria-expanded",String(!hint.nextElementSibling.hidden));});hint.setAttribute("aria-expanded","false");const explanation=element("p",help,"small muted");explanation.hidden=true;term.append(hint,explanation);cell.append(term,element("dd",format(metrics[key],percent)));grid.append(cell);}box.append(grid);
-      if(metrics.count && !metrics.point_count) box.append(element("p","P50 was not requested, so the three point-error metrics are undefined. Weighted quantile loss uses the requested quantiles.","small muted"));
-      if(metrics.count && metrics.average_wql === null) box.append(element("p","Weighted quantile loss is undefined when matched actual values are all zero.","small muted"));
-      return box;
-    };
-    const fragment=doc.createDocumentFragment(),heading=element("h3","Forecast quality");heading.id="ensemble-quality-title";fragment.append(heading);
-    if(report.prospective.count) {
-      fragment.append(section(report.prospective,"Observed after this forecast was published"));
-    } else {
-      fragment.append(section({count:0,point_count:0},"This forecast",
-        "No completed post-publication prices match the prediction timestamps yet. MAE, RMSE, sMAPE and weighted quantile loss require actual outcomes; a forecast alone cannot produce honest error scores. No historical validation or second model run is performed."));
+    const reports=availableReports(job),doc=host.ownerDocument;
+    host.hidden=!reports.length;host.replaceChildren();
+    const el=(tag,text,cls)=>{const node=doc.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
+    const fields=[['MAE','mae',false],['RMSE','rmse',false],['sMAPE','smape',true],['Weighted quantile loss','average_wql',false],['MAPE','mape',true],['WAPE','wape',true],['MASE','mase',false]];
+    for(const report of reports){
+      const section=el('section',undefined,'forecast-metrics-section');section.append(el('h4',report.title),el('p',report.description,'small muted'));
+      const grid=el('dl',undefined,'forecast-metrics-grid');
+      for(const [label,key,percent] of fields){const value=report.metrics[key];if(!finite(value))continue;const cell=el('div');cell.append(el('dt',label),el('dd',percent?`${(100*value).toFixed(2)}%`:new Intl.NumberFormat(undefined,{maximumSignificantDigits:5}).format(value)));grid.append(cell);}
+      section.append(grid);host.append(section);
     }
-    host.replaceChildren(fragment);
-    [...host.querySelectorAll("details")].forEach((el,i)=>{el.open=Boolean(openDetails[i]);});
-    [...host.querySelectorAll("button")].forEach((el,i)=>{if(expandedHelp[i]){el.setAttribute("aria-expanded","true");el.nextElementSibling.hidden=false;}if(i===focusedHelp)el.focus({preventScroll:true});});
   }
-  const api = Object.freeze({compute,render});
+  const api = Object.freeze({compute,render,availableReports});
   if(typeof module!=="undefined" && module.exports)module.exports=api;else root.QuanturaForecastMetrics=api;
 })(typeof window === "undefined" ? globalThis : window);

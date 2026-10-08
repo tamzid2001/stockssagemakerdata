@@ -1,0 +1,3315 @@
+{
+  "schema_version": "sagemaker_catalog_v1",
+  "items": [
+    {
+      "id": "32f390dfb92297483c80b2487e5adcbc0b133a9ce9829413394334471a22a77e",
+      "path": "sagemaker/archive/pltr282.csv",
+      "aliases": [],
+      "name": "pltr282",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 28,
+      "start_at": "2026-08-22T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "60e17aa0c6aa707e19c8df16896b277669ca78403474b6400f71ba77e94b1994",
+      "path": "sagemaker/archive/july11spy.csv",
+      "aliases": [],
+      "name": "july11spy",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 11,
+      "start_at": "2026-06-30T00:00:00Z",
+      "end_at": "2026-07-10T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3b1abd994d0b2fcc33bd2062112942d6ade0cf2f1da19dbb77c771cc7ae417bd",
+      "path": "sagemaker/archive/pltr3299.csv",
+      "aliases": [],
+      "name": "pltr3299",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 32,
+      "start_at": "2026-08-18T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "aa335945c3ce7ca98123b43d1a2d6cc7eae024b6b3144f42ee02560360ab06d1",
+      "path": "sagemaker/archive/pltr1499.csv",
+      "aliases": [],
+      "name": "pltr1499",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 14,
+      "start_at": "2026-08-08T00:00:00Z",
+      "end_at": "2026-08-21T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3317a78be9b92ec59b18e6dd48f9b51a5d204990f896dd0007ea2a3988901562",
+      "path": "sagemaker/archive/nvda94.csv",
+      "aliases": [],
+      "name": "nvda94",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 94,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "53ccd66131abd4d72473c4e0a941f356a9a553e3bdf56b4be2a0d9b0b7bcf5d8",
+      "path": "sagemaker/archive/nvda16q.csv",
+      "aliases": [],
+      "name": "nvda16q",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 16,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2026-07-02T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "24ce549f46687706e39a557fc9ec830250e55793d9ab3ef0571dacdfb1f5dbce",
+      "path": "sagemaker/archive/spyjuly24th.csv",
+      "aliases": [],
+      "name": "spyjuly24th",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 14,
+      "start_at": "2026-07-11T00:00:00Z",
+      "end_at": "2026-07-24T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "d631b519743bdc3fd52ef22202f3ec465fa3448cab1495cd7192911cf1e24eda",
+      "path": "sagemaker/archive/spyjuly16.csv",
+      "aliases": [],
+      "name": "spyjuly16",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 16,
+      "start_at": "2026-06-25T00:00:00Z",
+      "end_at": "2026-07-10T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "910d5e34117679c2d83cb9f7a6538425672d674f794ad8d67ab73a164203a0df",
+      "path": "sagemaker/archive/wmt23.csv",
+      "aliases": [],
+      "name": "wmt23",
+      "ticker": "WMT",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 23,
+      "start_at": "2026-08-06T00:00:00Z",
+      "end_at": "2026-08-28T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "c914a0fa2f8eace7a42dcca49a2978d77a82ca030057f4d4fe1f4a983748c21d",
+      "path": "sagemaker/archive/nflx442918.csv",
+      "aliases": [],
+      "name": "nflx442918",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 44,
+      "start_at": "2026-08-06T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "a9ef03c100e65890791d4e7d730993148ddc58002321f161156ecba01a09fb02",
+      "path": "sagemaker/archive/spyjuly15.csv",
+      "aliases": [],
+      "name": "spyjuly15",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 15,
+      "start_at": "2026-07-03T00:00:00Z",
+      "end_at": "2026-07-17T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "2d2c57d187b4f2c4a22d91bfd416af1d073b8e9c765b3e8a6870f97c4b87cf90",
+      "path": "sagemaker/archive/pltr0821.csv",
+      "aliases": [],
+      "name": "pltr0821",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 14,
+      "start_at": "2026-08-08T00:00:00Z",
+      "end_at": "2026-08-21T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "6a1581ebe72ab54ff0fde983eb9e8c67119160b68513439ca407b5f48cffd62a",
+      "path": "sagemaker/archive/pltr8212.csv",
+      "aliases": [],
+      "name": "pltr8212",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 14,
+      "start_at": "2026-08-08T00:00:00Z",
+      "end_at": "2026-08-21T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "effa60412be10f33159db34e63d8b4ddd52a01fa6695ee151f2752da9e2653cd",
+      "path": "sagemaker/archive/pltr32992.csv",
+      "aliases": [],
+      "name": "pltr32992",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 32,
+      "start_at": "2026-08-18T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3f5c34e745d8ad0aee1d0d42cdcb0c29150730c9be6453cf338008728f0ffd67",
+      "path": "sagemaker/archive/pltr8213.csv",
+      "aliases": [],
+      "name": "pltr8213",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 14,
+      "start_at": "2026-08-08T00:00:00Z",
+      "end_at": "2026-08-21T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "6341b88bbe728b6471df615ae1778ef1585e93a80b7d296e14e7d76df7284345",
+      "path": "sagemaker/archive/pltr28.csv",
+      "aliases": [],
+      "name": "pltr28",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 28,
+      "start_at": "2026-08-22T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "b5b128f8db5b8b0d647b2db398773aa1c82b3e4529cc805d205bb7f2a679fd8e",
+      "path": "sagemaker/archive/nflx44.csv",
+      "aliases": [],
+      "name": "nflx44",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 44,
+      "start_at": "2026-08-06T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "ebe75a016e05b17a7eb0d465d325efd89837d4f38c01ea487f42b0f3941e10da",
+      "path": "sagemaker/archive/April/googl362.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/googl362.csv"
+      ],
+      "name": "googl362",
+      "ticker": "GOOGL",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 36,
+      "start_at": "2026-03-20T00:00:00Z",
+      "end_at": "2026-04-24T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f3dd9fe9de1f6cbaff866cd8b7b94e1e752e9cfa15348e9143409fc2311757b0",
+      "path": "sagemaker/archive/April/SPY_1900-01-01_2026-03-20.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/SPY_1900-01-01_2026-03-20.csv"
+      ],
+      "name": "SPY_1900-01-01_2026-03-20",
+      "ticker": "SPY",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 8340,
+      "start_at": "1993-01-29T00:00:00Z",
+      "end_at": "2026-03-18T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "64e14ceb3ea3c4360e7ba739b60a656f785621ced378db0d436f65b2260b079c",
+      "path": "sagemaker/archive/April/single_prediction_resultspltr90(2).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/single_prediction_resultspltr90(2).csv",
+        "sagemaker/archive/stockspredictions/PLTR/single_prediction_resultspltr90(2).csv"
+      ],
+      "name": "single_prediction_resultspltr90(2)",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 90,
+      "start_at": "2026-01-09T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "95b75f9d58d0bad94fa25eb62533f70d73e4cd7f4c516611f41353385c278a57",
+      "path": "sagemaker/archive/April/googl36.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/googl36.csv",
+        "sagemaker/archive/stockspredictions/GOOGL/googl36.csv"
+      ],
+      "name": "googl36",
+      "ticker": "GOOGL",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 36,
+      "start_at": "2026-03-20T00:00:00Z",
+      "end_at": "2026-04-24T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f0c6d1337d32eaa63006d49fac372587d2e63b2e3825db5c426d941db682f351",
+      "path": "sagemaker/archive/April/nvda83.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/nvda83.csv"
+      ],
+      "name": "nvda83",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 8,
+      "start_at": "2026-03-17T00:00:00Z",
+      "end_at": "2026-03-24T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "885c1d3eb910032c3a7bad06b14901f7b7137659364feddb5adf0a11808a3c2a",
+      "path": "sagemaker/archive/April/nvda8(2).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/nvda8(2).csv"
+      ],
+      "name": "nvda8(2)",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 8,
+      "start_at": "2026-03-17T00:00:00Z",
+      "end_at": "2026-03-24T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "132a5db76aa7a47aad61fc54b84baee1cca7e9488fa9c9908a1ae96d0ffa1bca",
+      "path": "sagemaker/archive/April/single_prediction_resultspltr27.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/single_prediction_resultspltr27.csv"
+      ],
+      "name": "single_prediction_resultspltr27",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 27,
+      "start_at": "2026-03-13T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "bf067b7caec4f94be4e87d5e439453ffd732aec2eed8a72fbbcd3123bd14fa22",
+      "path": "sagemaker/archive/April/1770784092105_single_prediction_results (6).csv",
+      "aliases": [
+        "sagemaker/archive/April/sagemaker clutter/single_prediction_results (6).csv",
+        "sagemaker/archive/Stock Predictions/April/1770784092105_single_prediction_results (6).csv",
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results (6).csv"
+      ],
+      "name": "1770784092105_single_prediction_results (6)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 51,
+      "start_at": "2026-01-03T00:00:00Z",
+      "end_at": "2026-02-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "d96231328f678b9768fc78022b28e6ac15d5670a9ca62efda6b0dfa0bdbdaa8c",
+      "path": "sagemaker/archive/April/pltr162.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/pltr162.csv"
+      ],
+      "name": "pltr162",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-03-24T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "25106d486bb8ed71d558634056202a2bf291148f3409c0502ed9a440757dcbea",
+      "path": "sagemaker/archive/April/signal.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/signal.csv"
+      ],
+      "name": "signal",
+      "ticker": "",
+      "kind": "file",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 1297,
+      "start_at": null,
+      "end_at": null,
+      "metrics": null,
+      "warnings": [
+        "This export is RTF, not a CSV table."
+      ]
+    },
+    {
+      "id": "9c3ff3e429f47cc14064d00d03f4429a1860817da8e217764a207567ebd43340",
+      "path": "sagemaker/archive/April/msft162.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/msft162.csv"
+      ],
+      "name": "msft162",
+      "ticker": "MSFT",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-03-26T00:00:00Z",
+      "end_at": "2026-04-10T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3a2074bf8dec212dc2de9998b2ce8034e81098315ed9a6dcbfd93014a20e8530",
+      "path": "sagemaker/archive/April/msft163.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/msft163.csv"
+      ],
+      "name": "msft163",
+      "ticker": "MSFT",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-03-26T00:00:00Z",
+      "end_at": "2026-04-10T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "5986b0c9fdb5dbb7e2a7ced96c4f99ed01fbb05eaf1b46de1115217d7aea0b0f",
+      "path": "sagemaker/archive/April/pltr163.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/pltr163.csv"
+      ],
+      "name": "pltr163",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-03-24T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "540a8a69befa194da1a51bc672cd4601e27f8a344405fc898558380b52a3249b",
+      "path": "sagemaker/archive/April/single_prediction_resultsspy0623.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/single_prediction_resultsspy0623.csv"
+      ],
+      "name": "single_prediction_resultsspy0623",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 103,
+      "start_at": "2026-03-13T00:00:00Z",
+      "end_at": "2026-06-23T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "a71a38a17640dc95f7943f8315889765772bd2427b26bc7a9d32adeb593a7d3d",
+      "path": "sagemaker/archive/April/pltr164.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/pltr164.csv"
+      ],
+      "name": "pltr164",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-03-24T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3e77914dedac8c551a306c5333a96063ee07cc375af71962ab1a7c7e097b6911",
+      "path": "sagemaker/archive/April/msftpredictions.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/msftpredictions.csv"
+      ],
+      "name": "msftpredictions",
+      "ticker": "MSFT",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-03-26T00:00:00Z",
+      "end_at": "2026-04-10T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "88be30210ca5abdd9bb7605d56d978048fe72ae2edcf2abdc1b760391f2843c9",
+      "path": "sagemaker/archive/April/combined_screening_results.csv",
+      "aliases": [
+        "sagemaker/archive/April/combined_screening_results 2.csv",
+        "sagemaker/archive/Stock Predictions/April/combined_screening_results.csv",
+        "sagemaker/archive/Stock Predictions/April/combined_screening_results 2.csv"
+      ],
+      "name": "combined_screening_results",
+      "ticker": "",
+      "kind": "table",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 10,
+      "start_at": null,
+      "end_at": null,
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "7aaf9cdf4445b4e986e8e6675681b95c0797f302038f9065b96a1f3ab10de36b",
+      "path": "sagemaker/archive/April/single_prediction_resultspltr02242.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/single_prediction_resultspltr02242.csv"
+      ],
+      "name": "single_prediction_resultspltr02242",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 32,
+      "start_at": "2026-02-24T00:00:00Z",
+      "end_at": "2026-03-27T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "af010cb577bb54440c772f34bf14c002ce763f8cd6b5bf7969b95061bc9e0236",
+      "path": "sagemaker/archive/April/pltr16.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/pltr16.csv"
+      ],
+      "name": "pltr16",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-03-24T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "0c697d7da09d935e89ec090113d9ff1f99e5fca94b8c07da3311386faa1ff5f1",
+      "path": "sagemaker/archive/April/single_prediction_resultspltr100.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/single_prediction_resultspltr100.csv"
+      ],
+      "name": "single_prediction_resultspltr100",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 32,
+      "start_at": "2026-02-24T00:00:00Z",
+      "end_at": "2026-03-27T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "a9602e0d75cfef6563a97eb31a2fff32bffebf0a6502d8d46c40043d8a03de6d",
+      "path": "sagemaker/archive/April/nvda8.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/nvda8.csv"
+      ],
+      "name": "nvda8",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 8,
+      "start_at": "2026-03-17T00:00:00Z",
+      "end_at": "2026-03-24T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "01f0f867ed068efe81ea7fff9c9acc1b3ad79c26391ec6b81bb71b5f45338d14",
+      "path": "sagemaker/archive/predictions july/nvda500.csv",
+      "aliases": [],
+      "name": "nvda500",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 500,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2027-10-29T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "432dbc975f53b7ddff7bdf49db0a3c49873c6df3bbf057ad4ec7d0249487a154",
+      "path": "sagemaker/archive/predictions july/spy16.csv",
+      "aliases": [],
+      "name": "spy16",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 16,
+      "start_at": "2026-06-03T00:00:00Z",
+      "end_at": "2026-06-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "55b47c976f383da63bf9ab9aa57170a25f9d968ede380ceec331f9c523bf45d3",
+      "path": "sagemaker/archive/predictions july/nvda16standard.csv",
+      "aliases": [],
+      "name": "nvda16standard",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 16,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2026-07-02T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "9573d62187a1b833da29c879792859a51a484ba772565227e70b18adbe6dea63",
+      "path": "sagemaker/archive/predictions july/BTC-USD_2026-06-14_2026-07-01.csv",
+      "aliases": [],
+      "name": "BTC-USD_2026-06-14_2026-07-01",
+      "ticker": "BTC-USD",
+      "kind": "history",
+      "frequency": "1h",
+      "quantiles": [],
+      "row_count": 408,
+      "start_at": "2026-06-14T00:00:00Z",
+      "end_at": "2026-06-30T23:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "87033eb9eb2ac127b9ee9e46639ac335207b86aeb03f199e767b515ce49d1fde",
+      "path": "sagemaker/archive/predictions july/nvda94.csv",
+      "aliases": [],
+      "name": "nvda94",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 94,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "9c4a4fbcc80de3893fec70b555747636a70c5c67ec81ccec982df48e3a21f8aa",
+      "path": "sagemaker/archive/predictions july/single_prediction_results.csv",
+      "aliases": [],
+      "name": "single_prediction_results",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 3,
+      "start_at": "2026-06-24T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "42ea730a0c24d2af28b0c00733e2929c97017956ee84c4a9883737e155e4e6e8",
+      "path": "sagemaker/archive/predictions july/nflx38.csv",
+      "aliases": [],
+      "name": "nflx38",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 38,
+      "start_at": "2026-06-24T00:00:00Z",
+      "end_at": "2026-07-31T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "18f5285748da61c40628de81faa11a09da034e4138e73159cb69aab7046afb16",
+      "path": "sagemaker/archive/predictions july/NFLX_2024-02-01_2026-07-01.csv",
+      "aliases": [],
+      "name": "NFLX_2024-02-01_2026-07-01",
+      "ticker": "NFLX",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 604,
+      "start_at": "2024-02-01T00:00:00Z",
+      "end_at": "2026-06-30T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "03f1d9331a9620d326526fa4625c0339b79992153c27cd0ca6df60f7fbd05b1c",
+      "path": "sagemaker/archive/predictions july/nvda942.csv",
+      "aliases": [],
+      "name": "nvda942",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 94,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "7401257df653d38a3894d5d5d489e5449d07e118f2ca38ac16becdcc501b43a0",
+      "path": "sagemaker/archive/predictions july/NFLX_2023-06-01_2026-06-24.csv",
+      "aliases": [],
+      "name": "NFLX_2023-06-01_2026-06-24",
+      "ticker": "NFLX",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 767,
+      "start_at": "2023-06-01T00:00:00Z",
+      "end_at": "2026-06-23T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "f80e505f36aa11dc88901281ac43d2847842b9b6aaccc83fd425a1d2a7e00d80",
+      "path": "sagemaker/archive/predictions july/spy92.csv",
+      "aliases": [],
+      "name": "spy92",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 9,
+      "start_at": "2026-06-18T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "282e57d827e987db49b726207b7236a69dd3a74aba7457846c9a4139f42c80cc",
+      "path": "sagemaker/archive/predictions july/nvda5002.csv",
+      "aliases": [],
+      "name": "nvda5002",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 500,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2027-10-29T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "10be778106b728e53b57a43fecf2c1340ba9d206d4812eceb8f76da9a5d63b11",
+      "path": "sagemaker/archive/predictions july/nflx24.csv",
+      "aliases": [],
+      "name": "nflx24",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 24,
+      "start_at": "2026-06-24T00:00:00Z",
+      "end_at": "2026-07-17T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "d290b5979cd62c3dd5e796cbc500a76711031411ce348e9b757d3cc29ce6bf48",
+      "path": "sagemaker/archive/predictions july/nflx242.csv",
+      "aliases": [],
+      "name": "nflx242",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 24,
+      "start_at": "2026-06-24T00:00:00Z",
+      "end_at": "2026-07-17T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f49e5081d954a267a7074b3bcec74abdd5db7eea3cfb4979b9ebfd9fdf5493d5",
+      "path": "sagemaker/archive/predictions july/spy10july.csv",
+      "aliases": [],
+      "name": "spy10july",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 10,
+      "start_at": "2026-07-01T00:00:00Z",
+      "end_at": "2026-07-10T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "e5f89f257a0b42d09bee7189269c64e3c5eda74c4c7895ec7ed574859d71ecec",
+      "path": "sagemaker/archive/predictions july/spy9.csv",
+      "aliases": [],
+      "name": "spy9",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 9,
+      "start_at": "2026-06-18T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "4e08a6fa76c6d9f2f859a16ebaaae6147ada9d35ed3ef577fd7d49825e7abcde",
+      "path": "sagemaker/archive/predictions july/sp93.csv",
+      "aliases": [],
+      "name": "sp93",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 9,
+      "start_at": "2026-06-18T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "6e84924507083a7f93b31b81b216494db79eb60bd323cee98e68c2db7e4875b1",
+      "path": "sagemaker/archive/predictions july/nvda16standard2.csv",
+      "aliases": [],
+      "name": "nvda16standard2",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 16,
+      "start_at": "2026-06-17T00:00:00Z",
+      "end_at": "2026-07-02T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "74cbc50efe7212d98e05c440384895c9de4bf13732f325d368b951e84c94e782",
+      "path": "sagemaker/archive/predictions july/SPY_2024-02-01_2026-07-01.csv",
+      "aliases": [],
+      "name": "SPY_2024-02-01_2026-07-01",
+      "ticker": "SPY",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 604,
+      "start_at": "2024-02-01T00:00:00Z",
+      "end_at": "2026-06-30T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "7848ae62f04c9298338f10364b97b9f864cb900aa474dfe326809af63dfbd43f",
+      "path": "sagemaker/archive/predictions july/single_prediction_resultspltr100.csv",
+      "aliases": [],
+      "name": "single_prediction_resultspltr100",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 32,
+      "start_at": "2026-02-24T00:00:00Z",
+      "end_at": "2026-03-27T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "07c209317b1f79cbe23f38203889a1c5dafe4b826f5c90407ff4f2c6f84f3f39",
+      "path": "sagemaker/archive/predictions july/nflx382.csv",
+      "aliases": [],
+      "name": "nflx382",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 38,
+      "start_at": "2026-06-24T00:00:00Z",
+      "end_at": "2026-07-31T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "56392bdc5d4698cfa1f3d368028d4bf5b48484d4e5e7db4365d0e2643c4074a6",
+      "path": "sagemaker/archive/predictions july/spy162.csv",
+      "aliases": [],
+      "name": "spy162",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 16,
+      "start_at": "2026-06-03T00:00:00Z",
+      "end_at": "2026-06-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "4cacb30026a59b42276a7192bf360e3dedc46b8c26ae3df9c58fc4c217941652",
+      "path": "sagemaker/archive/June/pltrq2.csv",
+      "aliases": [
+        "sagemaker/archive/June/pltrquick.csv"
+      ],
+      "name": "pltrq2",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 29,
+      "start_at": "2026-05-29T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "2c14dd596b564524fff6ee3841207b30ccb9848443d5543d10e3bb7356a3e6c6",
+      "path": "sagemaker/archive/June/nflx43993.csv",
+      "aliases": [],
+      "name": "nflx43993",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 43,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3abf8c9bfcc5be948640bcb011a60924b73e28aa94910e9b87bcab630f73d221",
+      "path": "sagemaker/archive/June/nflx43992.csv",
+      "aliases": [],
+      "name": "nflx43992",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 43,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "46c418a77af091dbb746aef3936d49eef076691a927323b4584f86aff4627360",
+      "path": "sagemaker/archive/June/nflx2019.csv",
+      "aliases": [],
+      "name": "nflx2019",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 29,
+      "start_at": "2019-02-01T00:00:00Z",
+      "end_at": "2019-03-01T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "9657b7347963018e6edb97cae731dd8c810c48093a780d5b1c314c1aca44c18b",
+      "path": "sagemaker/archive/June/amd29.csv",
+      "aliases": [],
+      "name": "amd29",
+      "ticker": "AMD",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 29,
+      "start_at": "2026-05-29T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "b060258297821dd22d20482cacf467b8eb0b39ac7033b0fd0dd630b7173c7108",
+      "path": "sagemaker/archive/June/gcf1.csv",
+      "aliases": [
+        "sagemaker/archive/June/gcf11.csv"
+      ],
+      "name": "gcf1",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 1,
+      "start_at": "2026-05-29T00:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "97d281b4d45f92af98e8f1fa806fb44eeab7419a49c242d30e016ce8292f42d2",
+      "path": "sagemaker/archive/June/nvda142.csv",
+      "aliases": [],
+      "name": "nvda142",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 14,
+      "start_at": "2026-06-05T00:00:00Z",
+      "end_at": "2026-06-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "78973ea101663244ee0d26a0ad372d4fdfc9d59f7e0aefc88c5aebe47ab5d601",
+      "path": "sagemaker/archive/June/nflx4399.csv",
+      "aliases": [],
+      "name": "nflx4399",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 43,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "48733efa8b823161628f349698ae69c89b9191bf48b41b290cea61b7501e85c2",
+      "path": "sagemaker/archive/June/gcf111.csv",
+      "aliases": [],
+      "name": "gcf111",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 1,
+      "start_at": "2026-05-29T00:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "37c1d12cc8c8bf08c6257927b4836236124ef1305214a277f69ea3f981592844",
+      "path": "sagemaker/archive/June/xh1.csv",
+      "aliases": [],
+      "name": "xh1",
+      "ticker": "",
+      "kind": "file",
+      "frequency": "1h",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 23,
+      "start_at": null,
+      "end_at": null,
+      "metrics": null,
+      "warnings": [
+        "The export omits the year from its timestamps; choose a year before using it as a dated forecast."
+      ]
+    },
+    {
+      "id": "15b2cea7b3aac48ab596c8ed12ed5083ea85398029cfe9297dc4e3bbef431d0a",
+      "path": "sagemaker/archive/June/xauusd_sagemaker_hourly.csv",
+      "aliases": [],
+      "name": "xauusd_sagemaker_hourly",
+      "ticker": "XAUUSD",
+      "kind": "history",
+      "frequency": "1h",
+      "quantiles": [],
+      "row_count": 693,
+      "start_at": "2026-04-16T19:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "d364e98f6fcd52ad56efa9cc67e302ba087f8198787fd2b97e8b6fdd326f6a4c",
+      "path": "sagemaker/archive/June/nflx43.csv",
+      "aliases": [],
+      "name": "nflx43",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 43,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "45d651eb19011be93a7528223ced32bd626596d2be5ee2749cca9f0134287026",
+      "path": "sagemaker/archive/June/xauusd_sagemaker_hourly (1).csv",
+      "aliases": [],
+      "name": "xauusd_sagemaker_hourly (1)",
+      "ticker": "XAUUSD",
+      "kind": "history",
+      "frequency": "1h",
+      "quantiles": [],
+      "row_count": 693,
+      "start_at": "2026-04-16T19:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "5e0af0220b302a855c3b17a18a859ade6db8506f4a29417eabec7306829443d0",
+      "path": "sagemaker/archive/June/nvda14.csv",
+      "aliases": [],
+      "name": "nvda14",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 14,
+      "start_at": "2026-06-05T00:00:00Z",
+      "end_at": "2026-06-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "6fdc6e325951c58333d237a1835270fc633dcab16fb498326434a051dd89e362",
+      "path": "sagemaker/archive/June/pltr.csv",
+      "aliases": [],
+      "name": "pltr",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 29,
+      "start_at": "2026-05-29T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "c16d9df64b038a79f6fc95f4b5f9527715ef5e4ff1ca0ac33e5e0b798c3308ef",
+      "path": "sagemaker/archive/June/nflx433.csv",
+      "aliases": [],
+      "name": "nflx433",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 43,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "03835b9814c7189daef068f8a6d0565dd2d961ca4bcd8b3283379b0f62c61653",
+      "path": "sagemaker/archive/June/nflx432.csv",
+      "aliases": [],
+      "name": "nflx432",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 43,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-06-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "5f2570d5706b7fe6fcdd737381f1ba94de08f65a48928b5cf8a8752f1f175203",
+      "path": "sagemaker/archive/MAY/pltr23.csv",
+      "aliases": [],
+      "name": "pltr23",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 23,
+      "start_at": "2026-04-30T00:00:00Z",
+      "end_at": "2026-05-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f9ba76f89604184da04e050503d88d45ddda8aaa873cae76e6c70905a8b74820",
+      "path": "sagemaker/archive/MAY/nflx15.csv",
+      "aliases": [],
+      "name": "nflx15",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 15,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "25139d03afa4aaa09af97797105833f6e0845d59d939479aeb7be0a23dcc5c45",
+      "path": "sagemaker/archive/MAY/pltr93.csv",
+      "aliases": [],
+      "name": "pltr93",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 9,
+      "start_at": "2026-05-14T00:00:00Z",
+      "end_at": "2026-05-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "bcf576fabf3996397f633c71e54eb757f8d0665d7e73ad4e0d800b0112cdd226",
+      "path": "sagemaker/archive/MAY/pltr92.csv",
+      "aliases": [],
+      "name": "pltr92",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 9,
+      "start_at": "2026-05-14T00:00:00Z",
+      "end_at": "2026-05-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "ffa40558e4ef749ad8f039ab98f6daaf571a2f77651dce281529adc6ee2b6ad0",
+      "path": "sagemaker/archive/MAY/pltr9.csv",
+      "aliases": [],
+      "name": "pltr9",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 9,
+      "start_at": "2026-05-14T00:00:00Z",
+      "end_at": "2026-05-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "b9e46caf828590bafc204afa6c3743849a43f600c01720ab0d46918db4b9c288",
+      "path": "sagemaker/archive/MAY/pltr232.csv",
+      "aliases": [],
+      "name": "pltr232",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 23,
+      "start_at": "2026-04-30T00:00:00Z",
+      "end_at": "2026-05-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "377cf9634d378ef3fa749e1ab7030d53f31254cada4461d2a488f01136e37a65",
+      "path": "sagemaker/archive/MAY/nflx24.csv",
+      "aliases": [],
+      "name": "nflx24",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 24,
+      "start_at": "2026-05-06T00:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "ba7a6ca7b0bddf43ec2284931f4a528954d9d3326b6ee89b860d12ddacb44dfb",
+      "path": "sagemaker/archive/MAY/nflx242.csv",
+      "aliases": [],
+      "name": "nflx242",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 24,
+      "start_at": "2026-05-06T00:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "e66ab65d12a1595d37c80b2b3bb54bfe091ec41024040a64f1fb6d5862b1f4cc",
+      "path": "sagemaker/archive/MAY/nflx243.csv",
+      "aliases": [],
+      "name": "nflx243",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 24,
+      "start_at": "2026-05-06T00:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "b829c3190565d12db0d40a7ce0b14baea539c929e2b83dd8b4d3f9ecb8f3ac04",
+      "path": "sagemaker/archive/MAY/nflx152.csv",
+      "aliases": [],
+      "name": "nflx152",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 15,
+      "start_at": "2026-05-15T00:00:00Z",
+      "end_at": "2026-05-29T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "af8e8237af93595fb608cf8594bef643a0abe3345fd595e568091d93dc8268b0",
+      "path": "sagemaker/archive/MAY/orcl92.csv",
+      "aliases": [],
+      "name": "orcl92",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 9,
+      "start_at": "2026-05-14T00:00:00Z",
+      "end_at": "2026-05-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "42821e781acbaac64047a8867ebb586a9a0fcc517ca93b6e61b064e1ca27cbc0",
+      "path": "sagemaker/archive/MAY/orcl9.csv",
+      "aliases": [],
+      "name": "orcl9",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 9,
+      "start_at": "2026-05-14T00:00:00Z",
+      "end_at": "2026-05-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "ab050df67b7d170f00cf6d4e3856d8bfd26cdcb0803a3e2b8ad876e5104c8130",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_resultsnvdanew copy.csv",
+      "aliases": [
+        "sagemaker/archive/Sagemakercanvas/single_prediction_resultsnvdanew.csv"
+      ],
+      "name": "single_prediction_resultsnvdanew copy",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 235,
+      "start_at": "2025-08-02T00:00:00Z",
+      "end_at": "2026-03-24T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "0f073043cc83222d2d61c74a9e728532688469a71ce7825a22c978ff56824c51",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_resultsGOOG.csv",
+      "aliases": [],
+      "name": "single_prediction_resultsGOOG",
+      "ticker": "GOOG",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 500,
+      "start_at": "2025-10-08T00:00:00Z",
+      "end_at": "2027-02-19T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3723b992e70339e9990ed8b8beb23043492864280fb2a9a68da0fd02d38c39c4",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_resultsaapl.csv",
+      "aliases": [],
+      "name": "single_prediction_resultsaapl",
+      "ticker": "AAPL",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 500,
+      "start_at": "2025-07-17T00:00:00Z",
+      "end_at": "2026-11-28T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "8a5fb1ccbbda8eaf5d372f968b5b5de6018af432fd581db28e898cee8533e904",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_results copy.csv",
+      "aliases": [
+        "sagemaker/archive/Sagemakercanvas/single_prediction_resultsAAPL copy.csv"
+      ],
+      "name": "single_prediction_results copy",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 238,
+      "start_at": "2025-08-16T00:00:00Z",
+      "end_at": "2026-04-10T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "88aa9216506667f9aa5201b39ccbf620af152f822c8d5e2eeeded98f923b97fe",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_results.csv",
+      "aliases": [],
+      "name": "single_prediction_results",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 30,
+      "start_at": "2025-06-27T00:00:00Z",
+      "end_at": "2025-07-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f566f30798bb36b1c75cd4895601a914f0f9ff7cf83b368513b913687478dfb5",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_resultsSPX500.csv",
+      "aliases": [],
+      "name": "single_prediction_resultsSPX500",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 500,
+      "start_at": "2025-08-14T00:00:00Z",
+      "end_at": "2026-12-26T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "ad87f9f9f776711fd98ab381ec0add5679ec25723ceb5cb0c8fd73e52e0c36e1",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_results (2)nvda.csv",
+      "aliases": [],
+      "name": "single_prediction_results (2)nvda",
+      "ticker": "NVDA",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 138,
+      "start_at": "2025-07-08T00:00:00Z",
+      "end_at": "2025-11-22T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "fa5de94477c08f4dc1b08aa56de58be6c489bbab42ec04201e846d40cd695a13",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_resultsspy.csv",
+      "aliases": [],
+      "name": "single_prediction_resultsspy",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 326,
+      "start_at": "2025-08-02T00:00:00Z",
+      "end_at": "2026-06-23T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "5ce24667350884571d867ce4042823366f148c351549941149b5f9bde5244d4c",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_resultsAMZN.csv",
+      "aliases": [],
+      "name": "single_prediction_resultsAMZN",
+      "ticker": "AMZN",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 500,
+      "start_at": "2025-08-19T00:00:00Z",
+      "end_at": "2026-12-31T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "9fafe83596f9c8de74699a0ae23a436a9db61c3106db92d08d28da3e03ef47cb",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_resultsWMT.csv",
+      "aliases": [],
+      "name": "single_prediction_resultsWMT",
+      "ticker": "WMT",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 500,
+      "start_at": "2025-10-08T00:00:00Z",
+      "end_at": "2027-02-19T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "39ede7df25e3d3fb9d150206b24e1789b66d45c0f1b20d5c76d7137c38a2f042",
+      "path": "sagemaker/archive/Sagemakercanvas/single_prediction_results (2)pltr.csv",
+      "aliases": [],
+      "name": "single_prediction_results (2)pltr",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.25,
+        0.5,
+        0.75,
+        0.9
+      ],
+      "row_count": 435,
+      "start_at": "2025-07-10T00:00:00Z",
+      "end_at": "2026-09-17T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "02becdb85651c9771aaa10bdbd23cebc09367be4ef77f912af29da85fc0d32de",
+      "path": "sagemaker/archive/NFLX091826/nflx918.csv",
+      "aliases": [],
+      "name": "nflx918",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 114,
+      "start_at": "2026-05-28T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "603671af5da482b093577f80840dd1fe0d0fb96c6871e6247dd982bbd104eeeb",
+      "path": "sagemaker/archive/NFLX091826/nflx2312.csv",
+      "aliases": [],
+      "name": "nflx2312",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 231,
+      "start_at": "2026-01-31T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "ebb579b1f9be08a0e16964e14712d13e4e718b2a1d494ff9a108e752cc46b44e",
+      "path": "sagemaker/archive/NFLX091826/nflx231.csv",
+      "aliases": [],
+      "name": "nflx231",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 231,
+      "start_at": "2026-01-31T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "838e016cd428ea6e2c0d53fa8a2cb59101926eff0f5ebb89a585f33cc5cb1716",
+      "path": "sagemaker/archive/NFLX091826/nflx9182.csv",
+      "aliases": [],
+      "name": "nflx9182",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 114,
+      "start_at": "2026-05-28T00:00:00Z",
+      "end_at": "2026-09-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "7c35eb0b591d4280e990c01ba49680856200b8060fe3b71a87035c0ed855eae2",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results (5).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results (5).csv"
+      ],
+      "name": "single_prediction_results (5)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 20,
+      "start_at": "2026-02-06T00:00:00Z",
+      "end_at": "2026-02-25T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "14c0de9644c4ab26ab746dd8d33782f8b6c5501d33c03b965f7109e8b99e81c1",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results (4).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results (4).csv"
+      ],
+      "name": "single_prediction_results (4)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 23,
+      "start_at": "2026-02-03T00:00:00Z",
+      "end_at": "2026-02-25T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "1900a95265761732acd1f1039634ba24b8e8de8ad485bbcfb6747bc05238bebe",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results (3).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results (3).csv"
+      ],
+      "name": "single_prediction_results (3)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 23,
+      "start_at": "2026-02-03T00:00:00Z",
+      "end_at": "2026-02-25T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "bb47db866cbe1b1744bb79ca13c96478f1cd31fa231a991250382883d67167d8",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_resultspltr225.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_resultspltr225.csv"
+      ],
+      "name": "single_prediction_resultspltr225",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 51,
+      "start_at": "2026-01-06T00:00:00Z",
+      "end_at": "2026-02-25T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "32f1038dc69e0d79c8230cc3258ee4c197afe072a31703d45e786bfc844b3546",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results.csv"
+      ],
+      "name": "single_prediction_results",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 65,
+      "start_at": "2026-02-03T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "099a4a7d61bcbbb0b5f8ef5e24e7dc8317b2a60c996b3970f4ef7ce64fcdb2c6",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results (2).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results (2).csv"
+      ],
+      "name": "single_prediction_results (2)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 65,
+      "start_at": "2026-02-03T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "006a8d7a341e400cfa77262e1a2775ceeae5f66d61f946c5095219706ca894ab",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_resultsspy210.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_resultsspy210.csv"
+      ],
+      "name": "single_prediction_resultsspy210",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 308,
+      "start_at": "2026-02-10T00:00:00Z",
+      "end_at": "2026-12-14T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "4fa62a824e3f8ffaa4c5422f95045e7c1cd4a0f3a6ed26d86104df609b61bc9c",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results (1).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results (1).csv"
+      ],
+      "name": "single_prediction_results (1)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 65,
+      "start_at": "2026-02-03T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "4c4e94da337b15abf8eea37cc3b6242b475b322839cce23cb59c5e564301621a",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results210(2).csv",
+      "aliases": [
+        "sagemaker/archive/April/sagemaker clutter/hhh.csv",
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results210(2).csv",
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/hhh.csv"
+      ],
+      "name": "single_prediction_results210(2)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 308,
+      "start_at": "2026-02-10T00:00:00Z",
+      "end_at": "2026-12-14T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3a4e28195b5def25a9f90cd598d263174aa986280f3b6997b45e5f67367fdcf4",
+      "path": "sagemaker/archive/April/sagemaker clutter/pltr212.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/pltr212.csv"
+      ],
+      "name": "pltr212",
+      "ticker": "PLTR",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 212,
+      "start_at": "2025-07-29T00:00:00Z",
+      "end_at": "2026-02-25T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "481624b7757a5eaf58e3a8e40d904149c55a5dcd2582d2874cb4da2393d49ccb",
+      "path": "sagemaker/archive/April/sagemaker clutter/single_prediction_results (7).csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/April/sagemaker clutter/single_prediction_results (7).csv"
+      ],
+      "name": "single_prediction_results (7)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 51,
+      "start_at": "2026-01-06T00:00:00Z",
+      "end_at": "2026-02-25T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "7dfa352bf1d0ce1f0bc6743e777cffa9c93b22ebf200ffd038fdc8ec1ff362c2",
+      "path": "sagemaker/archive/Stock Predictions/April/msft255.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/NFLX/msft255.csv"
+      ],
+      "name": "msft255",
+      "ticker": "MSFT",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 255,
+      "start_at": "2026-04-08T00:00:00Z",
+      "end_at": "2026-12-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "8abc86141706e70c0b429b6f20e5e15c70935b7354f4a29e70df604bf821c65a",
+      "path": "sagemaker/archive/Stock Predictions/April/googl25.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/GOOGL/googl25.csv"
+      ],
+      "name": "googl25",
+      "ticker": "GOOGL",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 25,
+      "start_at": "2026-04-14T00:00:00Z",
+      "end_at": "2026-05-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "19b6256ae01bd4e81f0f9682c07e9c7df1778637ef1f4b0be705ba067fcc9ee8",
+      "path": "sagemaker/archive/Stock Predictions/April/msft2552.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/NFLX/msft2552.csv"
+      ],
+      "name": "msft2552",
+      "ticker": "MSFT",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 255,
+      "start_at": "2026-04-08T00:00:00Z",
+      "end_at": "2026-12-18T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "cea0aa8164864d2a87ac95c2b977f1d7f3208299e618b6d40778f6d7954fb5a6",
+      "path": "sagemaker/archive/Stock Predictions/April/spy222.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy222.csv"
+      ],
+      "name": "spy222",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 22,
+      "start_at": "2026-04-09T00:00:00Z",
+      "end_at": "2026-04-30T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "2d836d8fdee8d7b1b870aeb3012a0f3352a9b06f3a7e85f3cdf9bfef9d82924e",
+      "path": "sagemaker/archive/Stock Predictions/April/spy6.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy6.csv"
+      ],
+      "name": "spy6",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 7,
+      "start_at": "2026-04-10T00:00:00Z",
+      "end_at": "2026-04-16T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f3f796b2ae76e00643ccb391717339125f6fd6920e9099e7244bf4ae85c5826a",
+      "path": "sagemaker/archive/Stock Predictions/April/spy802.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy802.csv"
+      ],
+      "name": "spy802",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 80,
+      "start_at": "2026-02-10T00:00:00Z",
+      "end_at": "2026-04-30T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "b1c24eb388311672f759c96d0c338d30edb61c370aae8bbceb28b96b2134bf2b",
+      "path": "sagemaker/archive/Stock Predictions/April/spy16.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy16.csv"
+      ],
+      "name": "spy16",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-04-23T00:00:00Z",
+      "end_at": "2026-05-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "8aab6861736383bbccdadd11a777362b936b052b79ec12588a79ea34e9fbfb6f",
+      "path": "sagemaker/archive/Stock Predictions/April/spy252.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy252.csv"
+      ],
+      "name": "spy252",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 25,
+      "start_at": "2026-04-14T00:00:00Z",
+      "end_at": "2026-05-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "58b46f87fffa9e946f0b55bdcb182b09868d6873dbe08478b79a2dfb5d7adfe9",
+      "path": "sagemaker/archive/Stock Predictions/April/single_prediction_results.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/single_prediction_results.csv"
+      ],
+      "name": "single_prediction_results",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 30,
+      "start_at": "2026-04-08T00:00:00Z",
+      "end_at": "2026-05-07T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "07ba77eed3e7e244440a41fb4b8839667c11b01ed893b6c113401622d59e7ca3",
+      "path": "sagemaker/archive/Stock Predictions/April/spy63.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy63.csv"
+      ],
+      "name": "spy63",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 7,
+      "start_at": "2026-04-10T00:00:00Z",
+      "end_at": "2026-04-16T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "6062241a1d821ae02af4dbb22e5634ce7a0a8269ccb8d30be9540739f5fa7212",
+      "path": "sagemaker/archive/Stock Predictions/April/spy62.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy62.csv"
+      ],
+      "name": "spy62",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 7,
+      "start_at": "2026-04-10T00:00:00Z",
+      "end_at": "2026-04-16T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "2934ce474b925003fe74b8c87047159c7d6d3d7a8e7915cac20feed5d0ab86b2",
+      "path": "sagemaker/archive/Stock Predictions/April/amzn6.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/amzn6.csv"
+      ],
+      "name": "amzn6",
+      "ticker": "AMZN",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 7,
+      "start_at": "2026-04-10T00:00:00Z",
+      "end_at": "2026-04-16T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "20580647a2237f4377442d5dcb1de409e0c4c734593233e1df84f8c8bb03f98c",
+      "path": "sagemaker/archive/Stock Predictions/April/single_prediction_results (1).csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/single_prediction_results (1).csv"
+      ],
+      "name": "single_prediction_results (1)",
+      "ticker": "",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 30,
+      "start_at": "2026-04-08T00:00:00Z",
+      "end_at": "2026-05-07T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "ae4d83bc4a519654ef2f24898cd0b2a498cff660b5b7aac48017fa3d0b78f3b3",
+      "path": "sagemaker/archive/Stock Predictions/April/googl252.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/GOOGL/googl252.csv"
+      ],
+      "name": "googl252",
+      "ticker": "GOOGL",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 25,
+      "start_at": "2026-04-14T00:00:00Z",
+      "end_at": "2026-05-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "3b6e68e3cfe7a6e19536968b22e1b60d3fffeccf0f65f872aa9d85eaef1ad4d1",
+      "path": "sagemaker/archive/Stock Predictions/April/spy80.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy80.csv"
+      ],
+      "name": "spy80",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 80,
+      "start_at": "2026-02-10T00:00:00Z",
+      "end_at": "2026-04-30T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f3e9373659bfc89cb3482cd555798db2887083d80576db670bbfd7ed02613f44",
+      "path": "sagemaker/archive/Stock Predictions/April/spy96.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy96.csv"
+      ],
+      "name": "spy96",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 96,
+      "start_at": "2026-02-10T00:00:00Z",
+      "end_at": "2026-05-16T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "4e68a381811ae5b0728948868d2e8aaeccf86e482e83d305da4d7470fc190a6e",
+      "path": "sagemaker/archive/Stock Predictions/April/spy27.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy27.csv"
+      ],
+      "name": "spy27",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 37,
+      "start_at": "2026-04-09T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "a7b7ccdf7f73bd156c69044f4747374bfdb459c7d135db54f559f6627c4274e6",
+      "path": "sagemaker/archive/Stock Predictions/April/spy25.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy25.csv"
+      ],
+      "name": "spy25",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 25,
+      "start_at": "2026-04-14T00:00:00Z",
+      "end_at": "2026-05-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "8aea45d9a6f3bfacdcec12e78940047355e8c3975387f5f29a772fa0213d92a7",
+      "path": "sagemaker/archive/Stock Predictions/April/spy22.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy22.csv"
+      ],
+      "name": "spy22",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 22,
+      "start_at": "2026-04-09T00:00:00Z",
+      "end_at": "2026-04-30T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "5bc5d4574bbebbc6c05e1d6028bd2cd1451100478604eb01ffaa4818812e871a",
+      "path": "sagemaker/archive/Stock Predictions/April/spy162.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy162.csv"
+      ],
+      "name": "spy162",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-04-23T00:00:00Z",
+      "end_at": "2026-05-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "9fb2e3f618d1896818cfd5e8989d74eb9bcdce0e78345927f1fe43132f2cb407",
+      "path": "sagemaker/archive/Stock Predictions/April/googl16.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/GOOGL/googl16.csv"
+      ],
+      "name": "googl16",
+      "ticker": "GOOGL",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 16,
+      "start_at": "2026-04-23T00:00:00Z",
+      "end_at": "2026-05-08T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "5e24220422f45ddf58516786e604503934eb39a26fac2a7469066bbe92d82010",
+      "path": "sagemaker/archive/Stock Predictions/April/spy37.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/SPY/spy37.csv"
+      ],
+      "name": "spy37",
+      "ticker": "SPY",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 37,
+      "start_at": "2026-04-09T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "f05abccaff1d37b432051f9baa1c5603c43da3670b2d147bda73b62ca716b843",
+      "path": "sagemaker/archive/Stock Predictions/NFLX/nflx74.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/NFLX/nflx74.csv"
+      ],
+      "name": "nflx74",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 74,
+      "start_at": "2026-03-03T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "48bad75bc0abd25d1b58fac36cd1c680210878a169f171daa92ffd5121f12785",
+      "path": "sagemaker/archive/Stock Predictions/NFLX/nflx18.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/NFLX/nflx18.csv"
+      ],
+      "name": "nflx18",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 18,
+      "start_at": "2026-04-28T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "170b6591117487b6060a01d92ecd70e9263827610daae1851dfa230dc6d0b0fe",
+      "path": "sagemaker/archive/Stock Predictions/NFLX/nflx185.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/NFLX/nflx185.csv"
+      ],
+      "name": "nflx185",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 18,
+      "start_at": "2026-04-28T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "6b333cb8a543d25f62050a512a3c496e23c51285a5a1e58d1d96cc0aabef4b78",
+      "path": "sagemaker/archive/Stock Predictions/NFLX/nflx184.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/NFLX/nflx184.csv"
+      ],
+      "name": "nflx184",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 18,
+      "start_at": "2026-04-28T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "11425fa361686f8e7441a753f1de4009817a43fa792fe4188a113fa831b062f0",
+      "path": "sagemaker/archive/Stock Predictions/NFLX/nflx742.csv",
+      "aliases": [
+        "sagemaker/archive/stockspredictions/NFLX/nflx742.csv"
+      ],
+      "name": "nflx742",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.01,
+        0.1,
+        0.5,
+        0.9,
+        0.99
+      ],
+      "row_count": 74,
+      "start_at": "2026-03-03T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "a0375996ad4e0acd54430e96f0219af17d0c82e975edf0ab1c8309183e007016",
+      "path": "sagemaker/archive/Stock Predictions/NFLX/nflx183.csv",
+      "aliases": [
+        "sagemaker/archive/Stock Predictions/NFLX/nflx182.csv",
+        "sagemaker/archive/stockspredictions/NFLX/nflx183.csv",
+        "sagemaker/archive/stockspredictions/NFLX/nflx182.csv"
+      ],
+      "name": "nflx183",
+      "ticker": "NFLX",
+      "kind": "forecast",
+      "frequency": "1D",
+      "quantiles": [
+        0.1,
+        0.5,
+        0.9
+      ],
+      "row_count": 18,
+      "start_at": "2026-04-28T00:00:00Z",
+      "end_at": "2026-05-15T00:00:00Z",
+      "metrics": null,
+      "warnings": [
+        "Source includes negative predictions; original values are preserved."
+      ]
+    },
+    {
+      "id": "a00c6d3c8e2349a76b8b32a47f2460f8f55f81ee3c202a39d0b492c8e10da360",
+      "path": "sagemaker/archive/stockspredictions/SPY/SPY_1900-01-01_2026-04-10.csv",
+      "aliases": [],
+      "name": "SPY_1900-01-01_2026-04-10",
+      "ticker": "SPY",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 8355,
+      "start_at": "1993-01-29T00:00:00Z",
+      "end_at": "2026-04-09T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "d0ff5296032bb95dc4b8def60ce4369d74218f217841250794f885cbd32dd46d",
+      "path": "sagemaker/archive/stockspredictions/SPY/SPY_1900-01-01_2026-04-14.csv",
+      "aliases": [],
+      "name": "SPY_1900-01-01_2026-04-14",
+      "ticker": "SPY",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 8357,
+      "start_at": "1993-01-29T00:00:00Z",
+      "end_at": "2026-04-13T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "8210065344e2329ec2da432ff921f2859efeaba004d97a049e177b8372a91f96",
+      "path": "sagemaker/archive/stockspredictions/SPY/SPY_1900-01-01_2026-02-10.csv",
+      "aliases": [],
+      "name": "SPY_1900-01-01_2026-02-10",
+      "ticker": "SPY",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 8314,
+      "start_at": "1993-01-29T00:00:00Z",
+      "end_at": "2026-02-09T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "7ea17f5b2a3c488713f266c93083a413bd2189989d471358b94a4c876c7fd92a",
+      "path": "sagemaker/archive/stockspredictions/SPY/SPY_1900-01-01_2026-04-09.csv",
+      "aliases": [],
+      "name": "SPY_1900-01-01_2026-04-09",
+      "ticker": "SPY",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 8354,
+      "start_at": "1993-01-29T00:00:00Z",
+      "end_at": "2026-04-08T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "f5fdc836b3a070055626f19b2c471468afa5c7fc16fc5d3d1cfcc1f8045bdc33",
+      "path": "sagemaker/archive/stockspredictions/SPY/SPY_1900-01-01_2026-04-23.csv",
+      "aliases": [],
+      "name": "SPY_1900-01-01_2026-04-23",
+      "ticker": "SPY",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 8364,
+      "start_at": "1993-01-29T00:00:00Z",
+      "end_at": "2026-04-22T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "b851ebb526c576d867f4edeec63fe2c3cae7d7a14d9f1c553c55bd3285cc56b9",
+      "path": "sagemaker/archive/stockspredictions/GOOGL/GOOGL_1900-01-01_2026-04-23.csv",
+      "aliases": [],
+      "name": "GOOGL_1900-01-01_2026-04-23",
+      "ticker": "GOOGL",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 5453,
+      "start_at": "2004-08-19T00:00:00Z",
+      "end_at": "2026-04-22T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    },
+    {
+      "id": "ca708853ada2c270d9177b63de77c2a567a729106659db9c4c8d149c86450b7a",
+      "path": "sagemaker/archive/stockspredictions/GOOGL/GOOGL_1900-01-01_2026-04-14.csv",
+      "aliases": [],
+      "name": "GOOGL_1900-01-01_2026-04-14",
+      "ticker": "GOOGL",
+      "kind": "history",
+      "frequency": "1D",
+      "quantiles": [],
+      "row_count": 5446,
+      "start_at": "2004-08-19T00:00:00Z",
+      "end_at": "2026-04-13T00:00:00Z",
+      "metrics": null,
+      "warnings": []
+    }
+  ]
+}

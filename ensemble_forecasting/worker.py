@@ -136,6 +136,7 @@ def _recent_signal_search(
             "request": single_request,
             "input": {**source, "rows": history},
         }
+        candidate_job.pop("evaluation_policy", None)  # evaluate only the selected cutoff
         candidate = execute_job(
             candidate_job,
             progress=progress,
@@ -174,6 +175,13 @@ def _recent_signal_search(
     }
     # Firestore result documents stay bounded; the count still proves which
     # prefix was used, while the chart receives the most recent 500 inputs.
+    from .evaluation import HISTORICAL_VALIDATION_POLICY, evaluate_history
+    if job.get("evaluation_policy") == HISTORICAL_VALIDATION_POLICY:
+        selected_job = {**dict(job), "request": single_request, "input": {**source, "rows": selected_history}}
+        validation_series = prepare_series(selected_history, timestamp_column="timestamp", target_column="target",
+            frequency=single_request.get("frequency", "1D"), transform=single_request.get("transform", "auto"), minimum_rows=model_minimum)
+        selected["historical_validation"] = evaluate_history(selected_job, validation_series,
+            ForecastRequest.from_dict(single_request), execute=execute_job, progress=progress, mock=mock)
     selected["selected_history"] = selected_history[-500:]
     selected["runtime_seconds"] = time.monotonic() - total_started
     selected["warnings"] = list(selected.get("warnings") or []) + [
@@ -345,9 +353,14 @@ def execute_job(
             "model_runs": model_runs,
         }
     )
-    # A forecast job runs only the requested horizon. Historical validation is
-    # an explicit offline operation, never a second inference pass here (even
-    # when an older queued record carries an evaluation_policy).
+    # Website jobs opt into one bounded holdout using past observations only.
+    # Research/trading callers without this server policy keep a single pass.
+    from .evaluation import HISTORICAL_VALIDATION_POLICY, evaluate_history
+    if job.get("evaluation_policy") == HISTORICAL_VALIDATION_POLICY and not single_point_research:
+        result["historical_validation"] = evaluate_history(
+            job, series, request, execute=execute_job, progress=progress, mock=mock
+        )
+        result["runtime_seconds"] = time.monotonic() - total_started
     digest = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
     result["result_hash"] = digest
     progress(

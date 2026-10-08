@@ -50,6 +50,8 @@
     { "source": "/u/:path*", "destination": "/forecasting?panel=profile", "permanent": true }
   ],
   "rewrites": [
+    {"source":"/sagemaker","destination":"https://quantura-ssr.vercel.app/sagemaker"},
+    {"source":"/sagemaker/:path*","destination":"https://quantura-ssr.vercel.app/sagemaker/:path*"},
     { "source": "/api/callable/:path*", "destination": "https://quantura-legacy-api.vercel.app/api/callable/:path*" },
     { "source": "/api/auth/exchange", "destination": "https://quantura-legacy-api.vercel.app/api/auth/exchange" },
     { "source": "/api/auth/exchange-native-id-token", "destination": "https://quantura-legacy-api.vercel.app/api/auth/exchange-native-id-token" },

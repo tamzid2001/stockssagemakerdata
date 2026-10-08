@@ -7,7 +7,7 @@
   const workspace=form.closest(".market-search-workspace")||form.parentElement;
   const resources=new Map(),cache=new Map();let timer,controller,sequence=0,eventView=null,lastGroups={},lastErrors={};
   const escapeHtml=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
-  const providerLabel=s=>({gemini:"Gemini",fiscaldata:"Treasury Fiscal Data",worldbank_data360:"World Bank Data360",bigquery:"BigQuery",alpaca:"Alpaca",dukascopy:"Dukascopy",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
+  const providerLabel=s=>({sagemaker:"SageMaker Canvas",gemini:"Gemini",fiscaldata:"Treasury Fiscal Data",worldbank_data360:"World Bank Data360",bigquery:"BigQuery",alpaca:"Alpaca",dukascopy:"Dukascopy",polymarket_us:"Polymarket US",kalshi:"Kalshi",kalshi_perps:"Kalshi Perpetuals"})[s]||s;
   queryInput.setAttribute("aria-controls","market-search-results");queryInput.setAttribute("aria-describedby","market-search-status");queryInput.setAttribute("aria-expanded","false");queryInput.maxLength=2048;
   function closeResults(){clearTimeout(timer);controller?.abort();controller=null;++sequence;results.hidden=true;results.removeAttribute("aria-busy");queryInput.setAttribute("aria-expanded","false");workspace.classList.remove("search-expanded");}
   const outside=e=>{if(!workspace.contains(e.target))closeResults();};
@@ -16,8 +16,21 @@
   workspace.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();closeResults();queryInput.focus();}});
   function setPanel(panel){if(window.__quanturaSetPanel)window.__quanturaSetPanel(panel);else window.location.href=`/forecasting?panel=${encodeURIComponent(panel)}`;}
   function eventId(row){return row.source==="polymarket_us"?row.event_slug:row.event_id;}
+  const upload=document.createElement('button');upload.type='button';upload.className='header-upload-csv';upload.setAttribute('aria-label','Upload CSV');upload.title='Upload CSV';upload.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';form.append(upload);
+  const fileInput=document.createElement('input');fileInput.type='file';fileInput.accept='.csv,text/csv';fileInput.hidden=true;form.append(fileInput);
+  upload.addEventListener('click',()=>fileInput.click());
+  fileInput.addEventListener('change',async()=>{
+    const file=fileInput.files?.[0];if(!file)return;
+    if(file.size>3000000){status.textContent='Choose a CSV smaller than 3 MB.';fileInput.value='';return;}
+    const detail={name:file.name,text:await file.text(),at:Date.now()};
+    if(document.getElementById('ensemble-csv-file'))window.dispatchEvent(new CustomEvent('quantura:csv-upload',{detail}));
+    else {try{sessionStorage.setItem('quantura_pending_csv',JSON.stringify(detail));location.assign('/forecasting?panel=forecast');}catch{status.textContent='Unable to preview this file. Open Forecast and try again.';}}
+    fileInput.value='';
+  });
   function card(row){
-    resources.set(row.resource_id,row);const prediction=row.resource_type==="prediction_market_contract";
+    resources.set(row.resource_id,row);
+    if(row.source==='sagemaker')return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}"><div><strong>${escapeHtml(row.symbol)} · ${escapeHtml(row.name)}</strong><p class="small muted">SageMaker Canvas · ${(row.quantiles||[]).map(q=>'P'+Number(q)*100).join(' / ')}</p></div><a class="cta small" href="${escapeHtml(row.forecast_available?row.forecast_url:'/sagemaker?file='+row.id)}">${row.forecast_available?'View forecast':'Preview data'}</a></article>`;
+    const prediction=row.resource_type==="prediction_market_contract";
     const forecast=row.forecast_available&&!['closed','settled'].includes(row.status);
     return `<article class="market-search-result" data-market-resource="${escapeHtml(row.resource_id)}"><div class="market-search-result-main">${window.QuanturaLogos?.markup(row)||""}<div class="market-search-result-symbol">${escapeHtml(prediction?row.outcome||row.side:row.symbol)}</div><div><strong>${escapeHtml(row.market_title||row.name||row.symbol)}</strong><div class="small muted">${escapeHtml([prediction?row.contract?.eventTitle:null,row.symbol,providerLabel(row.source),row.exchange,row.market_group,row.side,row.timing||row.status,row.unit].filter(Boolean).join(" · "))}</div></div></div><div class="market-search-result-actions">
       ${forecast?`<button class="cta small" type="button" data-market-action="${prediction?'prediction-forecast':'forecast'}">Forecast</button>`:""}
@@ -41,6 +54,8 @@
   if(initialSearch && initialSearch.length<=2048){queryInput.value=initialSearch;void search();}
   function discoveryQuery(raw){
     if(/^https?:\/\//i.test(raw))return {query:raw,mode:"open",source:"auto"};
+    const canvas=raw.match(/^(sagemaker|canvas)\s*:?\s*/i);
+    if(canvas)return {query:raw.slice(canvas[0].length).trim(),mode:"open",source:"sagemaker"};
     const economic=raw.match(/^(world\s*bank|data360|worlddata|fiscal(?:\s*data)?|treasury|gemini|big\s*query)\s*:?\s*/i);
     if(economic)return {query:raw.slice(economic[0].length).trim(),mode:"open",source:/^(world|data360)/i.test(economic[1])?"worldbank_data360":/^gemini/i.test(economic[1])?"gemini":/^big/i.test(economic[1])?"bigquery":"fiscaldata"};
     if(/^dukascopy\b/i.test(raw))return {query:raw.replace(/^dukascopy\s*:?\s*/i,"").trim(),mode:"open",source:"dukascopy"};

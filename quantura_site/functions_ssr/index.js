@@ -159,6 +159,8 @@ const resolveTemplate = (pathname) => {
   ]);
   if (dashboardAliases.has(route)) return "dashboard.html";
 
+  if (route === "/sagemaker") return "sagemaker.html";
+  if (route === "/sagemaker/admin") return "sagemaker-admin.html";
   if (route === "/screener") return "screener.html";
   if (["/developers/api", "/docs/api", "/developers-api"].includes(route)) return "developers-api.html";
   if (route === "/research") return "research.html";

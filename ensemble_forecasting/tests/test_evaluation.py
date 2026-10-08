@@ -9,17 +9,7 @@ from ensemble_forecasting.schemas import ForecastRequest
 from ensemble_forecasting.adapters.mock import MockAdapter
 
 
-def execute_job(data, **kwargs):
-    """Test-only explicit offline evaluation, not the production job lifecycle."""
-    result = forecast_only(data, **kwargs)
-    if data.get("evaluation_policy") == HISTORICAL_VALIDATION_POLICY:
-        series = prepare_series(data["input"]["rows"], timestamp_column="timestamp", target_column="target",
-                                frequency=data["input"]["frequency"], transform=data["request"]["transform"],
-                                minimum_rows=kwargs.get("minimum_history_rows", 40))
-        result["historical_validation"] = evaluate_history(
-            data, series, ForecastRequest.from_dict(data["request"]), execute=forecast_only,
-            progress=kwargs.get("progress", lambda _: None), mock=kwargs.get("mock", False))
-    return result
+execute_job = forecast_only
 
 
 def test_public_worker_never_runs_implicit_validation_even_for_legacy_job(monkeypatch):
@@ -33,6 +23,7 @@ def test_public_worker_never_runs_implicit_validation_even_for_legacy_job(monkey
     data = job()
     data["request"]["models"] = {name: {"enabled": True, "weight": .2} for name in ("prophet", "toto", "granite", "chronos", "timesfm")}
     progress = []
+    data.pop("evaluation_policy")
     result = forecast_only(data, progress=progress.append)
     assert calls == ["prophet", "toto", "granite", "chronos", "timesfm"]
     assert "historical_validation" not in result

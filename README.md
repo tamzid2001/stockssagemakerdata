@@ -1,5 +1,29 @@
 # Quantura
 
+### Canvas library and forecast quality (October 7, 2026)
+
+- **[SageMaker library](https://quantura.studio/sagemaker):** 133 dated Canvas forecasts and 14 historical series, searchable by ticker and filename. Preview source CSVs, view quantiles, annotate chart points, and ask Scout. Original values are preserved; an export without a year remains a file preview.
+- **[Admin uploads](https://quantura.studio/sagemaker/admin):** verified administrator uploads auto-detect quantiles, set a ticker/name, and optionally supply model metrics with their evaluation basis. A server-side GitHub token commits the CSV and catalog atomically into `sagemaker/`; no forecast CSV is uploaded to Firestore or cloud storage. Private Scout conversations and notes continue using account storage.
+- **Immediate quality metrics:** newly requested forecasts opt into a bounded chronological holdout using existing history only. Show MAE, RMSE, sMAPE and average weighted quantile loss when computed; hide unavailable scores. Canvas scores remain explicitly admin supplied. Research and live trading workers without the policy keep their original single forecast pass.
+- **Chart scope:** actual-price overlays stop at the last prediction timestamp (including the final daily session); the chart cannot extend the requested horizon with later observations. Header search includes a CSV upload plus icon.
+
+```mermaid
+flowchart LR
+    CSV[Canvas CSV] --> Preview[Admin preview and quantile detection]
+    Preview --> Gate[Verified Clerk administrator]
+    Gate --> Commit[Atomic GitHub commit]
+    Commit --> Repo[sagemaker CSVs and catalog]
+    Repo --> Search[Search and library]
+    Search --> Chart[Forecast chart and annotations]
+    Repo --> Scout[Scout numerical questions]
+    History[Existing historical observations] --> Holdout[Chronological holdout]
+    Holdout --> Scores[Immediate historical metrics]
+    Scores --> Chart
+```
+
+Rebuild the sanitized archive catalog with `python scripts/import_sagemaker_archive.py` (requires pandas). The importer skips archive metadata, rejects unsafe paths, and excludes detected credentials. `GITHUB_SAGEMAKER_TOKEN` (repository Contents write) is preferred for admin publishing; the server can also use `GITHUB_ACTIONS_TOKEN`. Never expose either token in browser code.
+
+
 **Market data, probabilistic forecasts and reproducible strategy research.**
 
 Quantura connects stocks, FX, metals, indices, perpetual contracts and prediction markets in one research workspace. Search an instrument, inspect genuine observations, forecast a range of outcomes, and retain the evidence behind a decision.

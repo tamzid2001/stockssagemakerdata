@@ -14164,7 +14164,7 @@
     const inputHistory = job.history || [];
     const plotTimestamp = row => window.QuanturaForecastControls.stockChartTimestamp(row, job);
     if (inputHistory.length) traces.unshift({ type:"scatter",mode:"lines+markers",x:inputHistory.map(plotTimestamp),y:inputHistory.map(r=>r.target),name:"Input history",line:{width:1.5,color:"#64748b"},marker:{size:3},connectgaps:false });
-    const observed = job.observations || [];
+    const observed = window.QuanturaForecastControls.forecastObservations(job);
     const overlayGroups = source.type === "ticker" && job.frequency !== "1min"
       ? [{rows:observed.filter(r => r.interval !== "1min"),name:"Completed closes"}, {rows:observed.filter(r => r.interval === "1min"),name:"Minute close (provisional)"}]
       : [{rows:observed,name:"Observed prices"}];
@@ -14247,7 +14247,7 @@
         if (refreshButton) { refreshButton.disabled = true; label.textContent = "Updating quotes…"; refreshButton.setAttribute("aria-busy", "true"); }
           const response = await apiRequestJson(job.published_screener ? screenerForecastEndpoint(job,"/observations") : `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/observations`, { headers: { "Cache-Control": "no-cache" } });
           if (!current() || ensembleUiState.busy) return;
-          job.observations = response.data.rows || [];
+          job.observations = window.QuanturaForecastControls.forecastObservations({...job, observations:response.data.rows || []});
           renderEnsembleLiveQuote(job);
           const replay = job.source?.analysis_mode === "historical_replay";
           if (ui.ensembleObservationStatus) ui.ensembleObservationStatus.textContent = `Actual-price overlay: ${job.observations.length} observed bars after input cutoff. ${replay ? "Some outcomes were already known when this replay was generated. " : ""}Updated ${ensembleLocalTime(response.data.observed_at)}. Refreshes once per minute; the forecast remains unchanged.`;
@@ -14279,12 +14279,13 @@
     if (!ui.ensembleForecastResults) return;
     if (!Array.isArray(job.history)) job = (await apiRequestJson(`/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}`)).data;
     setEnsembleBusy(false);
+    for(const id of ["ensemble-save-profile","ensemble-refresh-latest","ensemble-copy-config","ensemble-run-again"]){const control=document.getElementById(id);if(control)control.hidden=Boolean(job.sagemaker_item);}
     ensembleUiState.lastJob = job;
     window.QuanturaForecastMetrics?.render(ui.ensembleObservedMetrics,job);
     const statusButton = document.getElementById("ensemble-check-status");
     if (statusButton) statusButton.hidden = true;
     if (ui.ensembleRunAgain) {
-      ui.ensembleRunAgain.disabled = Boolean(job.published_screener);
+      ui.ensembleRunAgain.disabled = Boolean(job.published_screener || job.sagemaker_item);
       ui.ensembleRunAgain.title = job.published_screener ? "Save this published forecast to your requests before reproducing its immutable input." : "Reproduce the saved input and configuration";
     }
     const otherSide = document.getElementById("ensemble-other-side");
@@ -14325,11 +14326,11 @@
       ui.ensembleResultTable.innerHTML = `<table class="data-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
     }
     const base = `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/download`;
-    if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = job.published_screener ? `${screenerForecastEndpoint(job)}&format=csv` : `${base}?format=csv`;
-    if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = job.published_screener ? `${screenerForecastEndpoint(job)}&format=json` : `${base}?format=json`;
+    if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = job.sagemaker_item ? job.sagemaker_item.download_url : job.published_screener ? `${screenerForecastEndpoint(job)}&format=csv` : `${base}?format=csv`;
+    if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = job.sagemaker_item ? `/api/sagemaker/${job.forecast_id}` : job.published_screener ? `${screenerForecastEndpoint(job)}&format=json` : `${base}?format=json`;
     const visibleWarnings = [...new Set([...(job.source?.warnings || []), ...(job.warnings || [])])].filter(warning => !/logit|epsilon|inverse-logit|transformed space/i.test(warning));
-    if (job.source?.analysis_mode === "historical_replay") visibleWarnings.unshift(`Historical replay: input cutoff ${ensembleLocalTime(job.source.requested_input_cutoff_at)}. Generated now, not published before the overlaid outcomes.`);
-    setEnsembleStatus(`Forecast complete. ${visibleWarnings.join(" ")}`, "success");
+
+    setEnsembleStatus("", "success");
     if (ui.ensembleSummary) {
       ui.ensembleSummary.hidden = false;
       const summary = ensembleDistributionSummary(job);
@@ -14337,16 +14338,16 @@
       const latest = summary.price === undefined ? "" : `Latest downloaded input: ${format(summary.price)} at ${ensembleChartTime(summary.timestamp,ensembleTimeZone())}; closest to the end-of-horizon ${ensembleQuantileLabel(summary.nearest)}. `;
       const implied = summary.probabilityHigher === null || summary.probabilityHigher === undefined ? "" : `Interpolating the forecast distribution suggests approximately ${Math.round(100*summary.probabilityHigher)}% probability of finishing above that input quote over ${ensembleHorizonLabel(job)}. This is model-implied, not a validated win rate or chance of profit. `;
       const searchNote=job.recent_signal_search?`${job.recent_signal_search.cutoffs_examined} cutoffs examined from ${job.input_row_count} downloaded observations; ${job.recent_signal_search.history_row_count||job.history?.length||0} observations were eligible at the selected cutoff. `:`${job.input_row_count||job.history?.length||0} observations downloaded before inference. `;
-      ui.ensembleSummary.innerHTML = `<p>${escapeHtml(latest+implied)}</p><p class="muted">${escapeHtml(searchNote)}Missing intervals are not fabricated. The vertical marker separates the selected input history from forecast.</p><div class="table-wrap"><table class="data-table"><caption>Average of each forecast column across ${predictions.length} future steps</caption><thead><tr>${quantiles.map(q=>`<th>${escapeHtml(ensembleQuantileLabel(q))}</th>`).join("")}</tr></thead><tbody><tr>${quantiles.map(q=>`<td>${escapeHtml(format(summary.averages[ensembleQuantileKey(q)]))}</td>`).join("")}</tr></tbody></table></div>`;
+      ui.ensembleSummary.innerHTML = `<div class="table-wrap"><table class="data-table"><caption>Average of each forecast column across ${predictions.length} future steps</caption><thead><tr>${quantiles.map(q=>`<th>${escapeHtml(ensembleQuantileLabel(q))}</th>`).join("")}</tr></thead><tbody><tr>${quantiles.map(q=>`<td>${escapeHtml(format(summary.averages[ensembleQuantileKey(q)]))}</td>`).join("")}</tr></tbody></table></div>`;
     }
     await renderEnsembleChart(job);
     renderEnsembleLiveQuote(job);
     window.QuanturaForecastQA?.attach(document.getElementById("ensemble-forecast-questions"), {
       job, chart: ui.ensembleForecastChart,
-      reference: job.published_screener ? {kind:"screener",symbol:job.published_screener.ticker,scan_id:job.published_screener.scan_id} : {kind:"ensemble",id:job.forecast_id},
+      reference: job.sagemaker_item ? {kind:"sagemaker",id:job.forecast_id} : job.published_screener ? {kind:"screener",symbol:job.published_screener.ticker,scan_id:job.published_screener.scan_id} : {kind:"ensemble",id:job.forecast_id},
     });
     const identity = ensembleMarketIdentity(job);
-    if (!job.published_screener) await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
+    if (!job.published_screener && !job.sagemaker_item) await upsertMyRequest({ type: "forecast", requestId: `ensemble__${job.forecast_id}`, title: identity.title, input: { panel: "forecast", ticker: identity.symbol, market_symbol: identity.symbol, provider: job.source?.provider, outcome: job.source?.outcome, side: job.source?.side }, outputsMeta: { status: "completed", summary: ensembleHorizonLabel(job) }, sourceRef: { collection: "ensemble_forecast_jobs", id: job.forecast_id } }).catch(() => undefined);
     startEnsembleObservations(job);
   };
 
@@ -14496,7 +14497,7 @@
   };
 
   const downloadEnsembleResult = async (url) => {
-    const headers = await buildApiAuthHeaders();
+    const headers = new URL(url,location.href).origin===location.origin ? await buildApiAuthHeaders() : {};
     const response = await fetch(url, { headers, credentials: "same-origin" });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -14821,6 +14822,7 @@
     ui.ensembleShareLink?.addEventListener("click", async () => {
       if (!ensembleUiState.forecastId) return;
       try {
+        if(ensembleUiState.lastJob?.sagemaker_item){await navigator.clipboard.writeText(`${window.location.origin}/forecasting?panel=forecast&sagemakerForecastId=${encodeURIComponent(ensembleUiState.forecastId)}`);showToast("Forecast link copied.");return;}
         const published=ensembleUiState.lastJob?.published_screener;
         if(published) {
           await navigator.clipboard.writeText(`${window.location.origin}/forecasting?panel=forecast&screenerTicker=${encodeURIComponent(published.ticker)}&screenerScan=${encodeURIComponent(published.scan_id)}`);
@@ -14846,6 +14848,21 @@
         await fetchMyRequestsList({ force: true }); renderMyRequestsPanels();
       } catch (error) { setEnsembleBusy(false); setEnsembleStatus(error.message || "Unable to refresh history.", "error"); }
     });
+    const importCsv=detail=>{
+      if(!detail || typeof detail.text!=="string" || !detail.name || Date.now()-Number(detail.at)>60000)return;
+      window.__quanturaSetPanel?.("forecast");ui.ensembleSourceType.value="series";ui.ensembleSourceType.dispatchEvent(new Event("change",{bubbles:true}));
+      const input=document.getElementById("ensemble-csv-file");const transfer=new DataTransfer();transfer.items.add(new File([detail.text],detail.name,{type:"text/csv"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));
+    };
+    window.addEventListener("quantura:csv-upload",event=>importCsv(event.detail));
+    try{const pending=JSON.parse(sessionStorage.getItem("quantura_pending_csv") || "null");sessionStorage.removeItem("quantura_pending_csv");if(pending)importCsv(pending);}catch{}
+    const canvasId=String(getQueryParam("sagemakerForecastId") || "").trim();
+    if(/^[a-f0-9]{64}$/.test(canvasId)){
+      const generation=ensembleUiState.pollGeneration;
+      setEnsembleStatus("Loading forecast…","working");
+      fetch(`/api/sagemaker/${canvasId}`).then(async response=>{const payload=await response.json();if(!response.ok || !payload.job?.predictions?.length)throw new Error("This file contains history, not a forecast. Preview it in the SageMaker library.");return {...payload.job,sagemaker_item:{...payload.item,download_url:`https://raw.githubusercontent.com/tamzid2001/stockssagemakerdata/main/${payload.item.path.split('/').map(encodeURIComponent).join('/')}`},prediction_length:payload.job.predictions.length,horizon_mode:"frequency_periods",status:"completed"};})
+        .then(async job=>{if(generation!==ensembleUiState.pollGeneration)return;ensembleUiState.forecastId=job.forecast_id;await renderCompletedEnsemble(job);})
+        .catch(error=>{if(generation===ensembleUiState.pollGeneration)setEnsembleStatus(error.message,"error");});
+    }
     const forecastId = String(getQueryParam("ensembleForecastId") || "").trim();
     if (!forecastId && getQueryParam("marketSource") === "kalshi_perps") {
       ui.ensembleSourceType.value = "kalshi_perp";

@@ -1,3 +1,4 @@
+import {registerCanvasRoutes} from "./sagemakerLibrary";
 import cors from "cors";
 import express, { Request, Response } from "express";
 import helmet from "helmet";
@@ -734,6 +735,7 @@ registerSupportChatRoutes(ROUTES, {
   db, auth, publicOrigin: PUBLIC_ORIGIN,
 });
 registerForecastQuestionRoutes(ROUTES,{db,auth,adminEmails:[ADMIN_EMAIL]});
+registerCanvasRoutes(ROUTES,{db,auth,adminEmails:[ADMIN_EMAIL]});
 registerKalshiPerpsRoutes(ROUTES);
 
 // Retired public-social and currency endpoints. Keep an explicit response for

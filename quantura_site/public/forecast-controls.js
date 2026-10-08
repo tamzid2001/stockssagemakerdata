@@ -121,9 +121,17 @@
     return {status: "observed", timestamp, quoteTimestamp, price, prospective,
       timing: `First predicted ${intervalLabel} after downloaded history${prospective ? "" : " · retrospective comparison, not a backdated live entry"}`};
   }
+  function forecastObservations(job) {
+    const end=Date.parse(job.predictions?.at(-1)?.timestamp);
+    if(!Number.isFinite(end))return [];
+    return (job.observations || []).filter(row=>{
+      const time=Date.parse(stockChartTimestamp(row,job));
+      return Number.isFinite(time) && time<=end;
+    });
+  }
   function forecastChartRange(job) {
     const lastInput=Date.parse(stockChartTimestamp(job.history?.at(-1) || {},job));
-    const candidates=[lastInput,...(job.observations || []).map(row=>Date.parse(stockChartTimestamp(row,job)))].filter(Number.isFinite);
+    const candidates=[lastInput,...forecastObservations(job).map(row=>Date.parse(stockChartTimestamp(row,job)))].filter(Number.isFinite);
     const latest=candidates.length ? Math.max(...candidates) : Date.parse(job.predictions?.[0]?.timestamp);
     const end=Math.max(latest,Date.parse(job.predictions?.at(-1)?.timestamp));
     if(!Number.isFinite(latest)||!Number.isFinite(end))return null;
@@ -170,7 +178,7 @@
   function exchangeDateBreaks(job) {
     const calendar=job.chart_calendar;
     if(job.source?.type!=="ticker" || job.frequency!=="1D" || calendar?.exchange!=="NYSE")return [];
-    const times=[...(job.history || []).map(r=>stockChartTimestamp(r,job)),...(job.predictions || []).map(r=>r.timestamp),...(job.observations || []).map(r=>stockChartTimestamp(r,job))].map(Date.parse).filter(Number.isFinite);
+    const times=[...(job.history || []).map(r=>stockChartTimestamp(r,job)),...(job.predictions || []).map(r=>r.timestamp),...forecastObservations(job).map(r=>stockChartTimestamp(r,job))].map(Date.parse).filter(Number.isFinite);
     if(!times.length)return [];
     const start=Math.min(...times),end=Math.max(...times);
     if(start<Date.parse(calendar.start)||end>=Date.parse(calendar.end)+86400_000)return [];
@@ -210,7 +218,7 @@
     }
     return {type: "prediction_market", ...settings, provider, symbol, contract_id: contractId};
   }
-  const helpers = Object.freeze({ frequencyMeta, durationBars, predictionMarketSource, localValue, localInstant, cutoffInstant, normalizeWeightsTwoDecimals, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
+  const helpers = Object.freeze({ frequencyMeta, durationBars, predictionMarketSource, localValue, localInstant, cutoffInstant, normalizeWeightsTwoDecimals, stockChartTimestamp, parseCsv, csvSeries, firstRowObservation, forecastObservations, forecastChartRange, chartInstant, visibleForecastYRange, exchangeDateBreaks });
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   else root.QuanturaForecastControls = helpers;
 })(typeof window === "undefined" ? globalThis : window);

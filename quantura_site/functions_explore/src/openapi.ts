@@ -765,7 +765,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
         },
         HistoricalForecastValidation: {
           type: "object", required: ["policy", "method", "status", "metrics"],
-          description: "Optional legacy historical-validation summary preserved on older results. New forecast requests and reproductions do not run a holdout or delay completion for metrics. These legacy scores describe a separate forecast, not the requested future predictions.",
+          description: "Forecast jobs include one chronological holdout of up to 30 existing observations when enough history is available. No future observations are needed. These scores describe historical validation of the selected models, separate from the requested future predictions. A failed or insufficient holdout does not fail the forecast.",
           properties: {
             policy: {const:"chronological_holdout_v1"}, method:{const:"chronological_holdout"},
             status:{type:"string",enum:["completed","insufficient_history","no_matching_outcomes","failed"]},
