@@ -76,8 +76,29 @@ jobs:
           path: plan/
           retention-days: 14
           overwrite: true
-  source:
+  provider-access:
     needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify first-party source access before the expensive matrix
+        if: ${{ inputs.resume_run_id == '' }}
+        run: |
+          python - <<'PY'
+          from market_research.ftmo_dukas_data import BASE,get_json
+          metadata=get_json(BASE+'/instruments/EUR-USD',attempts=1)
+          if metadata.get('code')!='EUR-USD':
+              raise ValueError('PROVIDER_INSTRUMENT_MISMATCH')
+          print('Dukascopy instrument access verified; no model jobs started yet.')
+          PY
+  source:
+    needs: [plan, provider-access]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
