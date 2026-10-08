@@ -1,0 +1,40 @@
+name: Kalshi opposite-entry price audit (read-only)
+on:
+  workflow_dispatch:
+    inputs:
+      series:
+        type: choice
+        options: [all, KXSILVER15M, KXSOL15M, KXWTI15M, KXDOGE15M, KXHYPE15M]
+        default: all
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: quantura-kalshi-live
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install locked read dependencies
+        run: python -m pip install --no-cache-dir --require-hashes -r market_research/requirements-quotes.lock
+      - name: Verify read-only attribution
+        run: python -m pytest -q market_research/tests/test_opposite_entry_audit.py
+      - name: Inspect encrypted signal and fill evidence without trading credentials
+        env:
+          SERIES: ${{ inputs.series }}
+          SUBACCOUNT: ${{ vars.QUANTURA_KALSHI_SUBACCOUNT || '0' }}
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_PROD_API_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
+        run: python -m market_research.opposite_entry_audit --series "$SERIES" --subaccount "$SUBACCOUNT" --output "$RUNNER_TEMP/entry-audit.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quantura-entry-price-audit
+          path: ${{ runner.temp }}/entry-audit.json
+          retention-days: 3
