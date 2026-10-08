@@ -15,6 +15,23 @@ Run [FTMO daily P99 seven-session yearly grid study](../.github/workflows/ftmo-p
 
 ## Authenticated history source
 
+### Replaying other entry rules
+
+The workflow accepts `entry_rule=above_p99` (the original), `above_p90`,
+`below_p99`, or `daily_buy`. The last option starts a basket at the first
+executable ask after each completed daily forecast whenever flat; it has no
+cutoff-price quantile condition. After closing, it waits for a later forecast.
+`averaging_gate=grid` removes the first-add P90 condition, so every addition
+uses a lower grid level. The fixed final triggering P01 stop and final
+P99−P01 risk reference remain unchanged. Entries at or below the fixed stop
+and entries below the risk-sized minimum lot are rejected.
+
+Set `replay_only=true` and a completed `resume_run_id` to reuse its frozen
+plan, broker snapshot, source prices and model forecasts. This skips provider
+downloads and model inference. Each replay records the entry and averaging
+rules; aggregation rejects results from a different rule. The original
+forecast artifacts are not altered or uploaded again.
+
 This study uses Dukascopy's [documented S3 bulk source](https://www.dukascopy.com/wiki/en/development/data-export/), `cfg-public-proper-wallaby` in `eu-west-1`, with authenticated Requester Pays reads. It downloads native daily **M1 candle archives**, not tick archives or the entire bucket. At most eight daily downloads per job and two asset jobs run concurrently. Minute candles are aggregated into hourly observations and daily sessions; only the replay year's minute rows are retained. This keeps warmup memory bounded and avoids the annual hourly tick-download loop.
 
 The big-endian archive records are decoded as seconds, open, close, low, high and volume, with the checked-in first-party instrument catalog's price scale. Both bid and ask are required. Flat zero-volume minutes on both sides are discarded as stale placeholders; no missing intervals are filled. Every source records object versions, ETags, compressed SHA-256 hashes, absent archive days and excluded placeholders. Frozen row hashes are checked before forecasts and replays.
@@ -65,10 +82,12 @@ The public FTMO endpoint does not publish minimum lot/step fields. These runs as
 2. After that averaging fill, subsequent entries need only lower grid levels. P90 no longer gates the basket.
 3. A completed minute must confirm the lower-price breach before a limit order exists. That order is eligible from the next observed minute. No retrospective fill at the low that created the order.
 4. A resting buy limit above the stop fills before the stop on a continuous descent; a gap below the stop closes the basket at the actual available bid before adding exposure.
-5. Trailing activates when basket P&L, including entry/exit commissions and accrued swaps, becomes positive.
-6. With at least two open entries, trailing distance is `0.75 × (highest fill − lowest fill)`. With one entry it is one grid. The active trail ratchets upward; it does not loosen. The more protective of the trail and fixed P01 closes the basket.
+5. Trailing requires both positive basket P&L (including entry/exit commissions and accrued swaps) and executable bid at or above `lowest fill + trailing distance`. A single $666.82 entry with a $2 grid therefore cannot arm its trail before bid reaches $668.82. The fixed final P01 remains active while trailing is unarmed.
+6. With at least two open entries, trailing distance is `0.75 × (highest fill − lowest fill)`. With one entry it is one grid. Once armed, the stop follows the favorable quote minus that distance, stays at least one executable tick above the lowest fill, and never loosens. It must remain at least one tick behind the quote; very small spans may need a larger move to form a valid stop. The more protective of the trail and fixed P01 closes the basket. Short research mirrors the rule below the highest fill.
 7. After exit, reentry requires a later daily forecast with a new above-first-P99 signal. The same origin cannot reopen the basket.
 8. Baskets carry until stop/trail. At the end of the year, open liabilities remain bid-marked, including estimated exit commission.
+
+Earlier reports used immediate positive-P&L activation and can stop a one-leg basket before its first averaging level. That behavior is retained only as the explicit `legacy_basket_profit` replay option for reproducibility. Corrected results record `trailing_rule=extreme_entry_distance`; prior returns must not be presented as results of the corrected rule.
 
 ## Grid and lot comparisons
 

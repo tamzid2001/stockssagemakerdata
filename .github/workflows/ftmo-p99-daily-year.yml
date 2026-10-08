@@ -1,5 +1,5 @@
 name: FTMO daily P99 seven-session yearly grid study
-run-name: FTMO P99 buy ladders · ${{ inputs.start_date }}–${{ inputs.end_date }}
+run-name: ${{ inputs.spy_shares && 'SPY Alpaca above P99 shares' || format('FTMO {0} buy ladders', inputs.entry_rule || 'above_p99') }} · ${{ inputs.start_date }}–${{ inputs.end_date }}
 on:
   workflow_dispatch:
     inputs:
@@ -23,14 +23,51 @@ on:
         required: false
         type: string
         default: ''
+      entry_rule:
+        description: Initial cutoff-close comparison; fixed final P01 stop and final P99-P01 risk stay unchanged
+        required: true
+        type: choice
+        options: [above_p99, above_p90, below_p99, daily_buy]
+        default: above_p99
+      averaging_gate:
+        description: Gate the first addition below P90, or use lower grid levels from the first addition
+        required: true
+        type: choice
+        options: [p90, grid]
+        default: p90
+      replay_only:
+        description: Reuse complete source and forecast artifacts from resume_run_id without downloading provider history or running models
+        required: false
+        type: boolean
+        default: false
+      spy_shares:
+        description: Run the separate Alpaca SPY share study with the above-P99 gate and seven quantiles
+        required: false
+        type: boolean
+        default: false
+      stock_feed:
+        description: Historical Alpaca feed for the separate SPY study
+        required: false
+        type: choice
+        options: [sip, iex]
+        default: sip
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: ftmo-p99-daily-${{ inputs.start_date }}-${{ inputs.end_date }}
+  group: ftmo-p99-daily-${{ inputs.entry_rule || 'above_p99' }}-${{ inputs.start_date }}-${{ inputs.end_date }}
   cancel-in-progress: false
 jobs:
+  spy-shares:
+    if: ${{ inputs.spy_shares }}
+    uses: ./.github/workflows/spy-p99-share-year.yml
+    with:
+      start_date: ${{ inputs.start_date }}
+      end_date: ${{ inputs.end_date }}
+      feed: ${{ inputs.stock_feed || 'sip' }}
+    secrets: inherit
   plan:
+    if: ${{ !inputs.spy_shares }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -60,7 +97,13 @@ jobs:
           STUDY_START: ${{ inputs.start_date }}
           STUDY_END: ${{ inputs.end_date }}
           STUDY_SYMBOLS: ${{ inputs.symbols }}
+          REPLAY_ONLY: ${{ inputs.replay_only }}
+          SOURCE_RUN_ID: ${{ inputs.resume_run_id }}
         run: |
+          if [[ "$REPLAY_ONLY" == "true" && ! "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo 'Replay-only requires a positive frozen source run ID.'
+            exit 1
+          fi
           python -m market_research.ftmo_p99_study plan --start "$STUDY_START" --end "$STUDY_END" --symbols "$STUDY_SYMBOLS" --output plan
           python - <<'PY'
           import json,os
@@ -77,6 +120,7 @@ jobs:
           retention-days: 14
           overwrite: true
   provider-access:
+    if: ${{ !inputs.replay_only }}
     needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -117,6 +161,7 @@ jobs:
           print(json.dumps(verify_access(probe)))
           PY
   source:
+    if: ${{ !inputs.replay_only }}
     needs: [plan, provider-access]
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -169,6 +214,7 @@ jobs:
           retention-days: 14
           overwrite: true
   forecast:
+    if: ${{ !inputs.replay_only }}
     needs: [plan, source]
     runs-on: ${{ fromJSON(vars.ALPACA_OPTIONS_RUNNER_LABELS || '["ubuntu-latest"]') }}
     timeout-minutes: 300
@@ -226,7 +272,7 @@ jobs:
           overwrite: true
           if-no-files-found: ignore
   replay:
-    if: ${{ always() && needs.plan.result == 'success' && needs.source.result == 'success' }}
+    if: ${{ always() && needs.plan.result == 'success' && (needs.source.result == 'success' || (inputs.replay_only && inputs.resume_run_id != '')) }}
     needs: [plan, source, forecast]
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -236,6 +282,8 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.replays) }}
     env:
       SYMBOL: ${{ matrix.symbol }}
+      ENTRY_RULE: ${{ inputs.entry_rule || 'above_p99' }}
+      AVERAGING_GATE: ${{ inputs.averaging_gate || 'p90' }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v6
@@ -250,16 +298,27 @@ jobs:
           path: plan/
       - uses: actions/download-artifact@v4
         with:
-          pattern: ftmo-p99-source-*
+          name: ftmo-p99-source-${{ matrix.symbol }}
           path: sources/
-          merge-multiple: true
+          run-id: ${{ inputs.replay_only && inputs.resume_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download causal USDJPY conversion source for GBPJPY
+        if: ${{ matrix.symbol == 'GBPJPY.sim' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ftmo-p99-source-USDJPY.sim
+          path: sources/
+          run-id: ${{ inputs.replay_only && inputs.resume_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@v4
         with:
           pattern: ftmo-p99-forecasts-${{ matrix.symbol }}-*
           path: forecasts/
           merge-multiple: true
+          run-id: ${{ inputs.replay_only && inputs.resume_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Compare 18 grid/lot candidates, two minute paths and cost stress
-        run: python -m market_research.ftmo_p99_study replay --symbol "$SYMBOL" --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --sources sources --forecasts forecasts --output "replay/$SYMBOL"
+        run: python -m market_research.ftmo_p99_study replay --symbol "$SYMBOL" --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --sources sources --forecasts forecasts --output "replay/$SYMBOL" --entry-rule "$ENTRY_RULE" --averaging-gate "$AVERAGING_GATE"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -290,7 +349,11 @@ jobs:
           path: research/
           merge-multiple: true
       - name: Publish explicit completeness, full-year outcomes and untouched holdout
-        run: python -m market_research.ftmo_p99_study aggregate --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --artifacts research --output report
+        env:
+          ENTRY_RULE: ${{ inputs.entry_rule || 'above_p99' }}
+          AVERAGING_GATE: ${{ inputs.averaging_gate || 'p90' }}
+          SOURCE_RUN_ID: ${{ inputs.resume_run_id || github.run_id }}
+        run: python -m market_research.ftmo_p99_study aggregate --study plan/study-plan.json --specs plan/ftmo-cost-snapshot.json --artifacts research --output report --entry-rule "$ENTRY_RULE" --averaging-gate "$AVERAGING_GATE" --source-run-id "$SOURCE_RUN_ID"
       - name: Publish readable run summary
         if: always()
         run: |

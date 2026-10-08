@@ -18,6 +18,8 @@ from .ftmo_dukas_study import MODELS, snapshot_specs
 from .ftmo_p99_engine import Candidate, KnownConversion, candidates, replay
 
 QUANTILES = (.01, .25, .50, .75, .90, .99)
+ENTRY_RULES = {'above_p99': ('above', 'p99'), 'above_p90': ('above', 'p90'), 'below_p99': ('below', 'p99'),
+               'daily_buy': ('any', 'p99')}
 
 
 def write_json(path, value):
@@ -223,13 +225,17 @@ def selection(results):
     return max(eligible)[1] if eligible else None
 
 
-def run_replay(symbol, study, snapshot, sources, forecasts_root, output):
+def run_replay(symbol, study, snapshot, sources, forecasts_root, output, *, entry_rule='above_p99', averaging_gate='p90'):
+    comparison, quantile = ENTRY_RULES[entry_rule]
+    entry_options = {'entry_quantile': quantile, 'entry_comparison': comparison, 'averaging_gate': averaging_gate}
     identity = read_json(sources/symbol/'source.json')
     forecasts = read_forecasts(forecasts_root, symbol, study, identity['rows_sha256'])
     rows = load_minutes(sources/symbol)
     spec = snapshot['specifications'][symbol]
     currency = spec['profitCurrency']
-    conversion = KnownConversion(currency, load_minutes(sources/('USDJPY.sim' if currency=='JPY' else 'USDCAD.sim')) if currency!='USD' else [])
+    conversion_symbol = 'USDJPY.sim' if currency == 'JPY' else 'USDCAD.sim'
+    conversion_rows = (rows if conversion_symbol == symbol else load_minutes(sources/conversion_symbol)) if currency != 'USD' else []
+    conversion = KnownConversion(currency, conversion_rows)
     first = datetime.combine(date.fromisoformat(study['start']), datetime.min.time(), UTC)+timedelta(hours=18)
     last = datetime.combine(date.fromisoformat(study['end'])+timedelta(days=1), datetime.min.time(), UTC)+timedelta(hours=17)
     split = datetime.combine(date.fromisoformat(study['development_end_exclusive']), datetime.min.time(), UTC)+timedelta(hours=18)
@@ -239,10 +245,13 @@ def run_replay(symbol, study, snapshot, sources, forecasts_root, output):
     for raw in study['candidates'][symbol]:
         candidate = Candidate(**raw)
         for path in ('low_first', 'high_first'):
-            development.append(replay(symbol, rows, forecasts, spec, conversion, first, min(split, last), candidate, ordering=path))
-            full.append(replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, ordering=path))
+            development.append(replay(symbol, rows, forecasts, spec, conversion, first, min(split, last), candidate, ordering=path, **entry_options))
+            full.append(replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, ordering=path, **entry_options))
         print(json.dumps({'event': 'p99_grid_replay', 'symbol': symbol, 'candidate': candidate.name,
-                          'full_year_worst_path_net': min(r['net_pnl'] for r in full[-2:])}), flush=True)
+                          'entry_rule': entry_rule,
+                          'full_year_worst_path_net': min(r['net_pnl'] for r in full[-2:]),
+                          'closed_baskets': [r['closed_baskets'] for r in full[-2:]],
+                          'worst_drawdown': max(r['max_equity_drawdown'] for r in full[-2:])}), flush=True)
     selected = selection(development)
     chosen = next((Candidate(**r) for r in study['candidates'][symbol] if Candidate(**r).name==selected), None)
     validations = []
@@ -250,12 +259,15 @@ def run_replay(symbol, study, snapshot, sources, forecasts_root, output):
     if chosen:
         for costs in (COSTS[0], COSTS[2]):
             for path in ('low_first', 'high_first'):
-                details.append(replay(symbol, rows, forecasts, spec, conversion, first, last, chosen, costs, path, detail=True))
+                details.append(replay(symbol, rows, forecasts, spec, conversion, first, last, chosen, costs, path, detail=True, **entry_options))
                 if split < last:
                     # Earlier forecasts must not initialize a fresh-flat holdout.
                     later = [f for f in forecasts if f.get('origin') and stamp(f['origin']) >= split]
-                    validations.append(replay(symbol, rows, later, spec, conversion, split, last, chosen, costs, path, detail=True))
+                    validations.append(replay(symbol, rows, later, spec, conversion, split, last, chosen, costs, path, detail=True, **entry_options))
     result = {'complete': True, 'symbol': symbol, 'selected_on_development': selected,
+              'trailing_rule': 'extreme_entry_distance',
+              'entry_rule': entry_rule,
+              'averaging_gate': averaging_gate,
               'selection_valid': selected is not None, 'development': development, 'full_year_grid_comparison': full,
               'selected_full_year_details': details, 'fresh_flat_holdout': validations,
               'completed_forecasts': sum(f['status']=='completed' for f in forecasts),
@@ -265,7 +277,8 @@ def run_replay(symbol, study, snapshot, sources, forecasts_root, output):
     write_json(output/'report.json.gz', result)
 
 
-def aggregate(study, root, snapshot, output):
+def aggregate(study, root, snapshot, output, *, entry_rule='above_p99', averaging_gate='p90', source_run_id=None):
+    comparison, quantile = ENTRY_RULES[entry_rule]
     reports = []
     missing = []
     for symbol in study['symbols']:
@@ -274,18 +287,32 @@ def aggregate(study, root, snapshot, output):
             missing.append(symbol)
             continue
         report = read_json(paths[0])
-        if not report.get('complete') or report.get('symbol') != symbol:
+        if (not report.get('complete') or report.get('symbol') != symbol
+                or report.get('entry_rule', 'above_p99') != entry_rule
+                or report.get('trailing_rule') != 'extreme_entry_distance'
+                or report.get('averaging_gate', 'p90') != averaging_gate):
             missing.append(symbol)
         else:
             reports.append(report)
+    signal_description = ('Start a buy basket after each daily forecast when flat' if comparison == 'any'
+                          else f'cutoff close strictly {comparison} FIRST predicted {quantile.upper()}')
+    averaging_description = ('All additions use lower grid levels; no P90 gate' if averaging_gate == 'grid'
+                             else 'Latest daily first P90 gates only the first averaging buy; subsequent additions use the grid without P90')
+    replay_study = {**study, 'entry_rule': entry_rule,
+                    'trailing_rule': 'extreme_entry_distance',
+                    'first_predicted_p99_entry_signal': entry_rule == 'above_p99',
+                    'entry_signal': signal_description, 'averaging_gate': averaging_description,
+                    'averaging_gate_mode': averaging_gate,
+                    'source_run_id': source_run_id}
     write_json(output/'results.json.gz', {'complete': not missing, 'missing_assets': missing,
-               'study': study, 'current_cost_snapshot': snapshot, 'reports': reports})
-    lines = ['# FTMO daily P99 buy-ladder yearly backtest', '',
+               'study': replay_study, 'current_cost_snapshot': snapshot, 'reports': reports})
+    title = 'daily buy' if comparison == 'any' else f'daily {comparison} {quantile.upper()}'
+    lines = [f'# FTMO {title} ladder yearly backtest', '',
              f"Origins: {study['start']} through {study['end']}; $100,000 standalone account per asset. Complete: {not missing}.", '',
              '500 completed daily candles; forecast seven asset sessions once per observed day using all five models and P01/P25/P50/P75/P90/P99. ',
-             'Entry signal: cutoff close above FIRST predicted P99. Stop: FINAL P01 of that triggering forecast, fixed until exit. Risk reference: FINAL P99 − FINAL P01. ',
-             'One percent equity is shared across the complete ladder, with commissions, conservative USD conversion and seven-day adverse swap reserve. The first averaging buy requires latest daily P90; after that fill, additions use only lower grid levels. Breach-confirmed limits are eligible from the next minute. ',
-             'Arm trailing only when net basket P&L is positive. Distance: 0.75 × highest-minus-lowest filled entry, or one grid with a single entry. No reentry until a later daily above-P99 forecast. ', '',
+             f'Entry rule: {signal_description}. Stop: FINAL P01 of that triggering forecast, fixed until exit. Risk reference: FINAL P99 − FINAL P01. ',
+             f'One percent equity is shared across the complete ladder, with commissions, conservative USD conversion and seven-day adverse swap reserve. Averaging: {averaging_description}. Breach-confirmed limits are eligible from the next minute. ',
+             'Arm trailing only when net basket P&L is positive and executable bid reaches lowest fill plus trailing distance. Distance: 0.75 × highest-minus-lowest filled entry, or one grid with a single entry. The stop stays one executable tick above the lowest fill and never loosens. No reentry until a later daily qualifying forecast. ', '',
              '| Asset | Development-selected grid/profile | Full-year net range | Worst drawdown | Basket W/L | Fresh-flat holdout net range |',
              '|---|---|---:|---:|---:|---:|']
     for r in reports:
@@ -298,6 +325,7 @@ def aggregate(study, root, snapshot, output):
                      + (f"${max(x['max_equity_drawdown'] for x in ref):,.2f} | {worst['basket_wins']}/{worst['basket_losses']}" if worst else '— | —')
                      + f" | {pnl(later)} |")
     lines.extend(['', 'These standalone returns cannot be added into one shared $100k account. Grids are chosen on the first nine months; the final quarter starts flat without reoptimization. All candidates remain in results.json.gz.', '',
+                  f'Entry-rule comparison: {entry_rule}. Frozen source/forecast run: {source_run_id or "this run"}. Forecast values, source prices and broker specifications are reused without alteration.', '',
                   'Costs use a current FTMO specification snapshot and cost stress cases, not verified historical spreads/swaps. Public volume steps/minimums are unavailable; 0.01-lot steps are a research assumption. ',
                   'Both minute OHLC path orders are reported; they do not prove tick-exact execution. Bid/ask extrema can occur at different instants. Gaps, currency moves and future swaps can exceed a planned stop budget. ',
                   'All five models run, but bounded-native Toto/TimesFM do not support P01/P99: those tails renormalize the supported Prophet/Granite/Chronos contributions; no invented tail extrapolation. ',
@@ -317,6 +345,9 @@ def main():
     parser.add_argument('--end', type=date.fromisoformat)
     parser.add_argument('--symbol', choices=INSTRUMENTS)
     parser.add_argument('--symbols', default=','.join(INSTRUMENTS))
+    parser.add_argument('--entry-rule', choices=ENTRY_RULES, default='above_p99')
+    parser.add_argument('--averaging-gate', choices=('p90', 'grid'), default='p90')
+    parser.add_argument('--source-run-id', type=int)
     for name in ('source', 'sources', 'forecasts', 'study', 'specs', 'artifacts', 'output'):
         parser.add_argument('--'+name, type=Path)
     args = parser.parse_args()
@@ -336,9 +367,9 @@ def main():
     elif args.command == 'forecast':
         run_forecasts(args.symbol, args.start, args.end, args.source, args.output)
     elif args.command == 'replay':
-        run_replay(args.symbol, read_json(args.study), read_json(args.specs), args.sources, args.forecasts, args.output)
+        run_replay(args.symbol, read_json(args.study), read_json(args.specs), args.sources, args.forecasts, args.output, entry_rule=args.entry_rule, averaging_gate=args.averaging_gate)
     else:
-        aggregate(read_json(args.study), args.artifacts, read_json(args.specs), args.output)
+        aggregate(read_json(args.study), args.artifacts, read_json(args.specs), args.output, entry_rule=args.entry_rule, averaging_gate=args.averaging_gate, source_run_id=args.source_run_id)
 
 
 if __name__ == '__main__':

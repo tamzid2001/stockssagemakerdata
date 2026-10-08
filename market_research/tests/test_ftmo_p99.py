@@ -4,8 +4,9 @@ import pytest
 
 from market_research.ftmo_dukas_data import UTC, INSTRUMENTS
 from market_research.ftmo_dukas_engine import Costs
-from market_research.ftmo_p99_engine import Candidate, KnownConversion, candidates, floor_lots, loss_per_lot, planned_levels, replay, sized_lots, trail_distance
-from market_research.ftmo_p99_study import MODELS, QUANTILES, daily_sessions, forecast_day, future_sessions, plan, selection
+from market_research.ftmo_p99_engine import Candidate, KnownConversion, candidates, entry_trailing_stop, floor_lots, loss_per_lot, planned_levels, replay, sized_lots, trail_distance
+from market_research.ftmo_p99_study import MODELS, QUANTILES, aggregate, daily_sessions, forecast_day, future_sessions, plan, read_json, run_replay, selection, write_json
+from market_research.ftmo_dukas_data import digest
 
 
 def spec(**changes):
@@ -77,6 +78,29 @@ def test_trailing_distance_and_lot_weight_profiles():
     assert sizes[1] < sizes[0] < sizes[2]
 
 
+def test_one_entry_trail_waits_for_full_grid_and_stays_above_lowest_fill():
+    entries = [{'entry': 666.82, 'lots': 3}]
+    assert entry_trailing_stop(entries, 2., 667.17, .01) is None
+    assert entry_trailing_stop(entries, 2., 668.81, .01) is None
+    assert entry_trailing_stop(entries, 2., 668.82, .01) == pytest.approx(666.83)
+    assert entry_trailing_stop(entries, 2., 670., .01) == pytest.approx(668.)
+
+
+def test_multi_entry_trail_uses_75_percent_span_and_mirrors_short_side():
+    entries = [{'entry': 100., 'lots': 1}, {'entry': 96., 'lots': 1}]
+    assert entry_trailing_stop(entries, 2., 98.99, .01) is None
+    assert entry_trailing_stop(entries, 2., 99., .01) == pytest.approx(96.01)
+    assert entry_trailing_stop(entries, 2., 101., .01) == pytest.approx(98.)
+    assert entry_trailing_stop(entries, 2., 97.01, .01, side='short') is None
+    assert entry_trailing_stop(entries, 2., 97., .01, side='short') == pytest.approx(99.99)
+
+
+def test_tiny_span_does_not_place_a_stop_at_or_ahead_of_the_quote():
+    entries = [{'entry': 100.01, 'lots': 1}, {'entry': 100., 'lots': 1}]
+    assert entry_trailing_stop(entries, .01, 100.01, .01) is None
+    assert entry_trailing_stop(entries, .01, 100.02, .01) == pytest.approx(100.01)
+
+
 def test_fixed_final_p01_survives_daily_forecast_update():
     at = datetime(2026, 9, 21, 18, tzinfo=UTC)
     rows = [quote(at+timedelta(minutes=1), 100), quote(at+timedelta(days=1, minutes=1), 96),
@@ -85,6 +109,132 @@ def test_fixed_final_p01_survives_daily_forecast_update():
     assert result['closed_baskets'] == 0
     assert result['fixed_final_p01_stop'] == 90
     assert result['fixed_final_quantile_span'] == 20
+
+
+@pytest.mark.parametrize('cutoff,expected', [(98., 0), (99., 0), (100., 1)])
+def test_p90_entry_is_strict_and_preserves_final_p99_risk_span(cutoff, expected):
+    at = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    rows = [quote(at+timedelta(minutes=1), 100)]
+    forecasts = [forecast(at, p90=99., p99=105., final_p01=90., final_p99=110., cutoff=cutoff)]
+    default = simulate(rows, forecasts)
+    assert default['above_p99_forecast_signals'] == 0
+    result = simulate(rows, forecasts, entry_quantile='p90')
+    assert result['above_p90_forecast_signals'] == expected
+    assert result['open_entries'] == expected
+    assert result['entry_signal_quantile'] == 'p90'
+    assert result['fixed_final_p01_stop'] == 90.
+    if expected:
+        assert result['fixed_final_quantile_span'] == 20.
+        assert result['max_reserved_stop_risk'] <= 1000.
+
+
+def test_unsupported_entry_quantile_rejected():
+    with pytest.raises(ValueError, match='INVALID_REPLAY_CONFIGURATION'):
+        simulate([], [], entry_quantile='p50')
+
+
+@pytest.mark.parametrize('cutoff,expected', [(104., 1), (105., 0), (106., 0)])
+def test_below_p99_is_strict_and_preserves_fixed_tail_stop_and_risk(cutoff, expected):
+    at = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    rows = [quote(at+timedelta(minutes=1), 100)]
+    forecasts = [forecast(at, p90=99., p99=105., final_p01=90., final_p99=110., cutoff=cutoff)]
+    result = simulate(rows, forecasts, entry_comparison='below')
+    assert result['below_p99_forecast_signals'] == expected
+    assert result['open_entries'] == expected
+    assert result['entry_signal_comparison'] == 'below'
+    if expected:
+        assert result['fixed_final_p01_stop'] == 90.
+        assert result['fixed_final_quantile_span'] == 20.
+        assert result['max_reserved_stop_risk'] <= 1000.
+
+
+def test_below_p99_does_not_reenter_until_a_later_forecast_after_exit():
+    at = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    rows = [quote(at+timedelta(minutes=1), 100), quote(at+timedelta(minutes=2), 80),
+            quote(at+timedelta(minutes=3), 100), quote(at+timedelta(days=1, minutes=1), 100)]
+    forecasts = [forecast(at, p99=105., cutoff=101.),
+                 forecast(at+timedelta(days=1), p99=105., cutoff=101.)]
+    result = simulate(rows, forecasts, entry_comparison='below')
+    assert result['closed_baskets'] == 1
+    assert result['open_entries'] == 1
+    assert result['open_basket'][0]['at'] == (at+timedelta(days=1, minutes=1)).isoformat()
+
+
+def test_below_p99_entry_below_fixed_stop_is_blocked():
+    at = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    result = simulate([quote(at+timedelta(minutes=1), 80)],
+                      [forecast(at, p99=105., cutoff=101.)], entry_comparison='below')
+    assert result['below_p99_forecast_signals'] == 1
+    assert result['open_entries'] == 0
+    assert result['risk_or_volume_blocked_entries'] == 1
+
+
+def test_unsupported_entry_comparison_rejected():
+    with pytest.raises(ValueError, match='INVALID_REPLAY_CONFIGURATION'):
+        simulate([], [], entry_comparison='at_or_below')
+
+
+@pytest.mark.parametrize('rule,signal_count', [('above_p99', 0), ('above_p90', 2), ('below_p99', 2), ('daily_buy', 2)])
+def test_artifact_replay_and_report_preserve_selected_entry_rule(tmp_path, rule, signal_count):
+    import gzip
+    import json
+    at = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    symbol = 'US500.sim'
+    rows = [quote(at+timedelta(minutes=1), 100), quote(at+timedelta(minutes=2), 80),
+            quote(at+timedelta(days=1, minutes=1), 100)]
+    source = tmp_path/'sources'/symbol
+    write_json(source/'source.json', {'symbol': symbol, 'rows_sha256': 'frozen-hourly-identity'})
+    write_json(source/'minutes-source.json', {'rows_sha256': digest(rows)})
+    with gzip.open(source/'minutes.jsonl.gz', 'wt') as f:
+        for row in rows:
+            f.write(json.dumps(row)+'\n')
+    days = ['2026-09-21', '2026-09-22']
+    study = {'start': days[0], 'end': days[1], 'days': days, 'symbols': [symbol],
+             'development_end_exclusive': days[1], 'candidates': {symbol: [{'grid': 1., 'sizing': 'equal'}]}}
+    for i, day in enumerate(days):
+        record = {**forecast(at+timedelta(days=i), p99=105., cutoff=101.),
+                  'symbol': symbol, 'day': day, 'source_rows_sha256': 'frozen-hourly-identity'}
+        write_json(tmp_path/'forecasts'/f'{symbol}-c0'/(day+'.json.gz'), record)
+    snapshot = {'specifications': {symbol: spec()}}
+    output = tmp_path/'replay'/symbol
+    run_replay(symbol, study, snapshot, tmp_path/'sources', tmp_path/'forecasts', output, entry_rule=rule)
+    report = read_json(output/'report.json.gz')
+    assert report['entry_rule'] == rule
+    assert all(r[rule+'_forecast_signals'] == signal_count for r in report['full_year_grid_comparison'])
+    aggregate(study, tmp_path/'replay', snapshot, tmp_path/'report', entry_rule=rule, source_run_id=123)
+    combined = read_json(tmp_path/'report'/'results.json.gz')
+    assert combined['complete'] and combined['study']['entry_rule'] == rule
+    assert combined['study']['source_run_id'] == 123
+    if rule != 'above_p99':
+        assert not combined['study']['first_predicted_p99_entry_signal']
+        with pytest.raises(ValueError, match='INCOMPLETE_TEN_ASSET_STUDY'):
+            aggregate(study, tmp_path/'replay', snapshot, tmp_path/'mismatched', entry_rule='above_p99')
+
+
+@pytest.mark.parametrize('cutoff', [50., 99., 110.])
+def test_daily_buy_ignores_cutoff_quantile_comparison(cutoff):
+    at = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    result = simulate([quote(at+timedelta(minutes=1), 100)],
+                      [forecast(at, cutoff=cutoff)], entry_comparison='any', averaging_gate='grid')
+    assert result['daily_buy_forecast_signals'] == 1
+    assert result['open_entries'] == 1
+    assert result['max_reserved_stop_risk'] <= 1000.
+
+
+def test_grid_only_first_average_does_not_wait_for_p90():
+    at = datetime(2026, 9, 21, 18, tzinfo=UTC)
+    rows = [quote(at+timedelta(minutes=1), 100),
+            quote(at+timedelta(minutes=2), 99., h=100., l=98.5, c=99.),
+            quote(at+timedelta(minutes=3), 99.)]
+    forecasts = [forecast(at, p90=98.)]
+    gated = simulate(rows, forecasts, entry_comparison='any')
+    grid = simulate(rows, forecasts, entry_comparison='any', averaging_gate='grid')
+    assert gated['open_entries'] == 1
+    assert grid['open_entries'] == 2
+    assert grid['open_basket'][1]['at'] == (at+timedelta(minutes=3)).isoformat()
+    assert grid['open_basket'][1]['entry'] < grid['open_basket'][0]['entry']
+    assert grid['averaging_gate'] == 'grid'
+    assert grid['max_reserved_stop_risk'] <= 1000.
 
 
 def test_breach_limit_cannot_fill_in_its_creation_minute():
