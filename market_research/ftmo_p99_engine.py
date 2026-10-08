@@ -129,7 +129,8 @@ def sized_lots(price, stop, p90, equity, entries, candidate, spec, conversion, a
 
 def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, costs=Costs('reference_percentage_per_side'),
            ordering='low_first', initial_balance=100_000., risk_fraction=.01, detail=False, *,
-           entry_quantile='p99', entry_comparison='above', averaging_gate='p90'):
+           entry_quantile='p99', entry_comparison='above', averaging_gate='p90',
+           quote_adjuster=adjusted_quotes, account_timezone=PRAGUE):
     if (ordering not in ('low_first', 'high_first') or not 0 < risk_fraction <= .01
             or entry_quantile not in ('p90', 'p99') or entry_comparison not in ('above', 'below', 'any')
             or averaging_gate not in ('p90', 'grid')):
@@ -169,7 +170,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
     def mark(bid, at):
         nonlocal peak_equity, max_dd, max_daily, daily_base, daily_key
         nonlocal first_daily_breach, first_total_breach, first_margin_breach, max_margin, max_lots
-        key = at.astimezone(PRAGUE).date()
+        key = at.astimezone(account_timezone).date()
         # Daily balance reset, not peak equity: floating P&L is included in equity.
         if key != daily_key:
             daily_key = key
@@ -261,7 +262,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
                 hourly_curve.append({'at': end.isoformat(), 'equity': cash, 'cash': cash, 'lots': 0.})
                 hour_key = key
             continue
-        bid, ask = adjusted_quotes(row, symbol, costs)
+        bid, ask = quote_adjuster(row, symbol, costs)
         bid = {k: math.floor(v / tick + 1e-8) * tick for k, v in bid.items()}
         ask = {k: math.ceil(v / tick - 1e-8) * tick for k, v in ask.items()}
         tradeable = minute_tradeable(at, spec)

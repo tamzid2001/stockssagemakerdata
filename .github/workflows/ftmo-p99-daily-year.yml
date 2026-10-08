@@ -1,5 +1,5 @@
 name: FTMO daily P99 seven-session yearly grid study
-run-name: FTMO ${{ inputs.entry_rule || 'above_p99' }} buy ladders · ${{ inputs.start_date }}–${{ inputs.end_date }}
+run-name: ${{ inputs.spy_shares && 'SPY Alpaca above P99 shares' || format('FTMO {0} buy ladders', inputs.entry_rule || 'above_p99') }} · ${{ inputs.start_date }}–${{ inputs.end_date }}
 on:
   workflow_dispatch:
     inputs:
@@ -40,6 +40,17 @@ on:
         required: false
         type: boolean
         default: false
+      spy_shares:
+        description: Run the separate Alpaca SPY share study with the above-P99 gate and seven quantiles
+        required: false
+        type: boolean
+        default: false
+      stock_feed:
+        description: Historical Alpaca feed for the separate SPY study
+        required: false
+        type: choice
+        options: [sip, iex]
+        default: sip
 permissions:
   contents: read
   actions: read
@@ -47,7 +58,16 @@ concurrency:
   group: ftmo-p99-daily-${{ inputs.entry_rule || 'above_p99' }}-${{ inputs.start_date }}-${{ inputs.end_date }}
   cancel-in-progress: false
 jobs:
+  spy-shares:
+    if: ${{ inputs.spy_shares }}
+    uses: ./.github/workflows/spy-p99-share-year.yml
+    with:
+      start_date: ${{ inputs.start_date }}
+      end_date: ${{ inputs.end_date }}
+      feed: ${{ inputs.stock_feed || 'sip' }}
+    secrets: inherit
   plan:
+    if: ${{ !inputs.spy_shares }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:

@@ -1,0 +1,161 @@
+name: SPY Alpaca daily P99 share-ladder yearly backtest
+run-name: SPY above P99 · seven sessions · ${{ inputs.start_date }}–${{ inputs.end_date }}
+on:
+  workflow_call:
+    inputs:
+      start_date:
+        required: true
+        type: string
+      end_date:
+        required: true
+        type: string
+      feed:
+        required: false
+        type: string
+        default: sip
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: First completed daily forecast origin; 365-day origin range required
+        required: true
+        type: string
+        default: '2025-10-07'
+      end_date:
+        description: Last forecast origin; the following session must already be completed
+        required: true
+        type: string
+        default: '2026-10-06'
+      feed:
+        description: Alpaca historical stock feed; no automatic substitution
+        required: true
+        type: choice
+        options: [sip, iex]
+        default: sip
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: spy-p99-shares-${{ inputs.start_date }}-${{ inputs.end_date }}-${{ inputs.feed }}
+  cancel-in-progress: false
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      forecasts: ${{ steps.matrix.outputs.forecasts }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pytest==8.4.2
+      - name: Verify whole-share risk, strict P99 gate, calendar, causal additions and data pagination
+        run: python -m pytest -q market_research/tests/test_spy_p99_share_study.py market_research/tests/test_ftmo_p99.py
+      - name: Freeze Alpaca daily history, exchange calendar and regular-session minute bars
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          STUDY_START: ${{ inputs.start_date }}
+          STUDY_END: ${{ inputs.end_date }}
+          STOCK_FEED: ${{ inputs.feed }}
+          PYTHONUNBUFFERED: '1'
+        run: python -m market_research.spy_p99_share_study source --start "$STUDY_START" --end "$STUDY_END" --feed "$STOCK_FEED" --output source
+      - name: Set bounded daily forecast shards
+        id: matrix
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          study=json.loads(Path('source/study-plan.json').read_text())
+          matrix={'include':[{'chunk':row['chunk']} for row in study['forecasts']]}
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('forecasts='+json.dumps(matrix,separators=(',',':'))+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spy-p99-share-source
+          path: source/
+          retention-days: 14
+          overwrite: true
+  forecast:
+    needs: source
+    runs-on: ${{ fromJSON(vars.ALPACA_OPTIONS_RUNNER_LABELS || '["ubuntu-latest"]') }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.source.outputs.forecasts) }}
+    env:
+      CHUNK: ${{ matrix.chunk }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      CUDA_VISIBLE_DEVICES: ''
+      GRANITE_DEVICE: cpu
+      OMP_NUM_THREADS: '2'
+      TOKENIZERS_PARALLELISM: 'false'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: market_research/requirements.lock
+      - uses: actions/download-artifact@v4
+        with:
+          name: spy-p99-share-source
+          path: source/
+      - name: Install pinned CPU five-model inference environment
+        run: python -m pip install --disable-pip-version-check --require-hashes -r market_research/requirements.lock
+      - name: Run all five models for seven sessions from exactly 500 prior daily candles
+        env:
+          HF_HOME: ${{ runner.temp }}/spy-p99-share-model-cache
+        run: python -m market_research.spy_p99_share_study forecast --source source --chunk "$CHUNK" --output "forecasts/chunk-$CHUNK"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spy-p99-share-forecasts-${{ matrix.chunk }}
+          path: forecasts/
+          retention-days: 14
+          overwrite: true
+          if-no-files-found: ignore
+  replay:
+    if: ${{ always() && needs.source.result == 'success' }}
+    needs: [source, forecast]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: spy-p99-share-source
+          path: source/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: spy-p99-share-forecasts-*
+          path: forecasts/
+          merge-multiple: true
+      - name: Compare 18 grids and share profiles under both minute OHLC paths
+        run: python -m market_research.spy_p99_share_study replay --source source --forecasts forecasts --output report
+      - name: Publish yearly report
+        if: always()
+        run: |
+          if [[ -f report/report.md ]]; then cat report/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spy-p99-share-year-report
+          path: report/
+          retention-days: 30
+          overwrite: true
+          if-no-files-found: ignore
