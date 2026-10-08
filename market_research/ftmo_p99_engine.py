@@ -1,4 +1,4 @@
-"""Buy-only, equity-risk-sized research replay. This module cannot place orders.
+"""Directional equity-risk-sized research replay. This module cannot place orders.
 
 Minute OHLC cannot identify tick order: both low-first and high-first paths are
 reported. Limit orders observed during a minute become eligible next minute.
@@ -74,39 +74,42 @@ def minute_tradeable(at, spec):
     return any(a <= minute and minute + 1 <= b for a, b in spec['weekly_minutes'])
 
 
-def loss_per_lot(entry, stop, spec, conversion, at, costs, risk_span=0.):
-    """USD loss from ask fill to bid stop plus both fees and seven-day swap reserve."""
-    price_loss = -conversion.usd(-max(0., entry - stop, risk_span) * spec['contractSize'], at)
+def loss_per_lot(entry, stop, spec, conversion, at, costs, risk_span=0., *, side='long'):
+    """USD loss to the directional stop, both fees and seven-day swap reserve."""
+    direction = 1 if side == 'long' else -1
+    price_loss = -conversion.usd(-max(0., direction * (entry - stop), risk_span) * spec['contractSize'], at)
     fees = commission(spec, 1., entry, costs) + commission(spec, 1., max(stop, 1e-12), costs)
-    swap = swap_quote(spec, 'long', 1., entry, 7, costs)
+    swap = swap_quote(spec, side, 1., entry, 7, costs)
     return price_loss + fees + max(0., -conversion.usd(swap, at))
 
 
-def planned_levels(entry, stop, p90, grid, tick):
-    """The first entry is immediate; additions must be below P90 and above P01."""
+def planned_levels(entry, stop, p90, grid, tick, *, side='long'):
+    """Immediate entry and adverse grid levels strictly inside the fixed stop."""
     if not all(math.isfinite(v) and v > 0 for v in (entry, stop, p90, grid, tick)):
         raise ValueError('INVALID_RISK_PLAN_PRICE')
-    if entry <= stop:
+    direction = 1 if side == 'long' else -1
+    if direction * (entry - stop) <= 0:
         return []
-    skip = max(1, math.floor((entry - p90) / grid) + 1)
-    first_add = entry - skip * grid
-    n = max(0, math.ceil((first_add - stop) / grid - 1e-10))
+    skip = max(1, math.floor(direction * (entry - p90) / grid) + 1)
+    first_add = entry - direction * skip * grid
+    n = max(0, math.ceil(direction * (first_add - stop) / grid - 1e-10))
     if n > 50_000:
         raise ValueError('GRID_HAS_TOO_MANY_PLANNED_LEVELS')
-    return [entry] + [first_add - i * grid for i in range(n) if first_add - i * grid > stop + tick / 2]
+    return [entry] + [first_add - direction * i * grid for i in range(n)
+                      if direction * (first_add - direction * i * grid - stop) > tick / 2]
 
 
 def sized_lots(price, stop, p90, equity, entries, candidate, spec, conversion, at, costs, risk_fraction=.01,
-               *, risk_equity=None, risk_span=0.):
+               *, risk_equity=None, risk_span=0., side='long'):
     """Reserve the whole remaining ladder within 1% equity, rounding DOWN to lot step.
 
     scale = (risk_budget - existing_stop_risk) / sum(weight[k] * USD_loss_per_lot[k]).
     lots[k] = floor_to_step(scale * weight[k]); this returns the next entry size.
     """
-    levels = planned_levels(price, stop, p90, candidate.grid, 10 ** -spec['digits'])
+    levels = planned_levels(price, stop, p90, candidate.grid, 10 ** -spec['digits'], side=side)
     if not levels or equity <= 0:
         return 0.
-    risk = sum(e['lots'] * loss_per_lot(e['entry'], stop, spec, conversion, at, costs, risk_span) for e in entries)
+    risk = sum(e['lots'] * loss_per_lot(e['entry'], stop, spec, conversion, at, costs, risk_span, side=side) for e in entries)
     available = max(0., (equity if risk_equity is None else risk_equity) * risk_fraction - risk)
     count = len(levels)
     def weight(i):
@@ -115,7 +118,7 @@ def sized_lots(price, stop, p90, equity, entries, candidate, spec, conversion, a
     if candidate.sizing not in ('equal', 'larger_deeper', 'smaller_deeper'):
         raise ValueError('UNSUPPORTED_LOT_PROFILE')
     weights = [weight(i) for i in range(count)]
-    denominator = sum(w * loss_per_lot(p, stop, spec, conversion, at, costs, risk_span) for p, w in zip(levels, weights))
+    denominator = sum(w * loss_per_lot(p, stop, spec, conversion, at, costs, risk_span, side=side) for p, w in zip(levels, weights))
     if denominator <= 0:
         return 0.
     scale = min(available / denominator,
@@ -130,11 +133,21 @@ def sized_lots(price, stop, p90, equity, entries, candidate, spec, conversion, a
 def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, costs=Costs('reference_percentage_per_side'),
            ordering='low_first', initial_balance=100_000., risk_fraction=.01, detail=False, *,
            entry_quantile='p99', entry_comparison='above', averaging_gate='p90',
-           quote_adjuster=adjusted_quotes, account_timezone=PRAGUE):
+           quote_adjuster=adjusted_quotes, account_timezone=PRAGUE, side='long'):
     if (ordering not in ('low_first', 'high_first') or not 0 < risk_fraction <= .01
             or entry_quantile not in ('p90', 'p99') or entry_comparison not in ('above', 'below', 'any')
-            or averaging_gate not in ('p90', 'grid')):
+            or averaging_gate not in ('p90', 'grid') or side not in ('long', 'short')
+            or (side == 'short' and averaging_gate != 'grid')):
         raise ValueError('INVALID_REPLAY_CONFIGURATION')
+    direction = 1 if side == 'long' else -1
+    stop_key = 'fixed_final_p01' if side == 'long' else 'fixed_final_p99'
+    def stop_round(value):
+        return (math.floor(value / tick + 1e-8) if side == 'long'
+                else math.ceil(value / tick - 1e-8)) * tick
+    def protective_stop():
+        if trailing is None:
+            return stop
+        return max(stop, trailing) if side == 'long' else min(stop, trailing)
     forecasts = sorted([f for f in forecasts if f['status'] == 'completed'], key=lambda f: f['earliest_actionable_at'])
     events = [(stamp(f['earliest_actionable_at']), f) for f in forecasts]
     index = 0
@@ -157,15 +170,16 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
     daily_key = None
     first_daily_breach = first_total_breach = first_margin_breach = None
     cancelled = blocked = signals = 0
+    invalid_stop_blocked = minimum_size_blocked = 0
     hourly_curve = []
     hour_key = None
     last_bid = last_at = None
     tick = 10 ** -spec['digits']
     rolled = None
 
-    def equity(bid, at):
-        return cash + sum(conversion.usd((bid - e['entry']) * e['lots'] * spec['contractSize'], at)
-                          - commission(spec, e['lots'], bid, costs) for e in active)
+    def equity(close_price, at):
+        return cash + sum(conversion.usd(direction * (close_price - e['entry']) * e['lots'] * spec['contractSize'], at)
+                          - commission(spec, e['lots'], close_price, costs) for e in active)
 
     def mark(bid, at):
         nonlocal peak_equity, max_dd, max_daily, daily_base, daily_key
@@ -191,17 +205,17 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             first_margin_breach = at.isoformat()
         return value
 
-    def close_quantity(leg, qty, bid, at, reason):
+    def close_quantity(leg, qty, close_price, at, reason):
         nonlocal cash, fees
         qty = min(qty, leg['lots'])
-        fee = commission(spec, qty, bid, costs)
-        pnl = conversion.usd((bid - leg['entry']) * qty * spec['contractSize'], at) - fee
+        fee = commission(spec, qty, close_price, costs)
+        pnl = conversion.usd(direction * (close_price - leg['entry']) * qty * spec['contractSize'], at) - fee
         cash += pnl
         fees += fee
         leg['net_pnl'] += pnl
         leg['lots'] = round(leg['lots'] - qty, 8)
         if detail:
-            leg['exits'].append({'at': at.isoformat(), 'price': bid, 'lots': qty, 'reason': reason, 'net_pnl': pnl})
+            leg['exits'].append({'at': at.isoformat(), 'price': close_price, 'lots': qty, 'reason': reason, 'net_pnl': pnl})
         if leg['lots'] <= 1e-8:
             active.remove(leg)
             ledger.append({**leg, 'exit_at': at.isoformat(), 'duration_hours': (at - stamp(leg['at'])).total_seconds() / 3600})
@@ -213,7 +227,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
                 close_quantity(leg, leg['lots'], bid, at, reason)
             baskets.append({'at': at.isoformat(), 'started_at': basket_start.isoformat(), 'reason': reason,
                             'legs': len(basket_legs), 'net_pnl': sum(e['net_pnl'] for e in basket_legs),
-                            'fixed_final_p01': stop, 'fixed_final_quantile_span': risk_span,
+                            stop_key: stop, 'fixed_final_quantile_span': risk_span,
                             'equity_at_entry': risk_equity, 'risk_budget_usd': risk_equity * risk_fraction,
                             'duration_hours': (at - basket_start).total_seconds() / 3600})
         pending = trailing = peak_bid = basket_start = signal_origin = None
@@ -221,16 +235,21 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
 
     def fill(price, bid, at):
         nonlocal fees, cash, basket_start, pending, max_risk, stop, risk_equity, risk_span
+        nonlocal invalid_stop_blocked, minimum_size_blocked
         if not active:
             tail = current['predictions'][-1]
-            stop = math.floor(tail['p01'] / tick + 1e-8) * tick
+            stop = stop_round(tail['p01' if side == 'long' else 'p99'])
             risk_span = tail['p99'] - tail['p01']
             risk_equity = equity(bid, at)
-        sizing_p90 = p90 if averaging_gate == 'p90' and len(basket_legs) < 2 else price + candidate.grid
+        if direction * (price - stop) <= 0:
+            invalid_stop_blocked += 1
+            return False
+        sizing_p90 = p90 if averaging_gate == 'p90' and len(basket_legs) < 2 else price + direction * candidate.grid
         lots = sized_lots(price, stop, sizing_p90, equity(bid, at), active, candidate, spec, conversion, at, costs, risk_fraction,
-                          risk_equity=risk_equity, risk_span=risk_span)
+                          risk_equity=risk_equity, risk_span=risk_span, side=side)
         minimum = spec.get('minimumVolume', .01)
         if lots < minimum:
+            minimum_size_blocked += 1
             return False
         fee = commission(spec, lots, price, costs)
         fees += fee
@@ -242,7 +261,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
         if basket_start is None:
             basket_start = at
         pending = None
-        risk = sum(e['lots'] * loss_per_lot(e['entry'], stop, spec, conversion, at, costs, risk_span) for e in active)
+        risk = sum(e['lots'] * loss_per_lot(e['entry'], stop, spec, conversion, at, costs, risk_span, side=side) for e in active)
         max_risk = max(max_risk, risk)
         return True
 
@@ -265,10 +284,10 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
         bid, ask = quote_adjuster(row, symbol, costs)
         bid = {k: math.floor(v / tick + 1e-8) * tick for k, v in bid.items()}
         ask = {k: math.ceil(v / tick - 1e-8) * tick for k, v in ask.items()}
+        close_quotes, entry_quotes = (bid, ask) if side == 'long' else (ask, bid)
         tradeable = minute_tradeable(at, spec)
-        mark(bid['o'], at)
-        # Refresh P90 after inference. An active basket retains its triggering
-        # forecast's FINAL P01 stop and FINAL P99-P01 risk span throughout.
+        mark(close_quotes['o'], at)
+        # Active baskets retain their triggering final directional tail stop.
         while index < len(events) and events[index][0] <= at:
             _, current = events[index]
             index += 1
@@ -278,7 +297,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             if len(basket_legs) < 2:
                 p90 = current['predictions'][0]['p90']
             if not active:
-                stop = math.floor(current['predictions'][-1]['p01'] / tick + 1e-8) * tick
+                stop = stop_round(current['predictions'][-1]['p01' if side == 'long' else 'p99'])
             threshold = current['predictions'][0][entry_quantile]
             qualifies = (True if entry_comparison == 'any' else
                          current['cutoff_close'] > threshold if entry_comparison == 'above' else
@@ -287,7 +306,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             if signal_origin:
                 signals += 1
         if not current:
-            last_bid, last_at = bid['c'], end
+            last_bid, last_at = close_quotes['c'], end
             continue
         # Swap is charged at the first observed quote after each server midnight,
         # including intervening dates. It applies only to already-held positions.
@@ -296,69 +315,70 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
             d = rolled
             while d < server_day:
                 for leg in active:
-                    charge = conversion.usd(swap_quote(spec, 'long', leg['lots'], bid['o'], swap_weight(symbol, d, costs), costs), at)
+                    charge = conversion.usd(swap_quote(spec, side, leg['lots'], close_quotes['o'], swap_weight(symbol, d, costs), costs), at)
                     cash += charge
                     swaps += charge
                     leg['net_pnl'] += charge
                 d += timedelta(days=1)
         rolled = server_day
-        if tradeable and active and bid['o'] <= max(stop, trailing if trailing is not None else stop):
-            finish(bid['o'], at, 'gap_stop')
+        if tradeable and active and direction * (close_quotes['o'] - protective_stop()) <= 0:
+            finish(close_quotes['o'], at, 'gap_stop')
         if tradeable and not active and signal_origin and signal_origin != consumed_origin:
             consumed_origin = signal_origin
-            if not fill(ask['o'], bid['o'], at):
+            if not fill(entry_quotes['o'], close_quotes['o'], at):
                 blocked += 1
         if tradeable and active and pending is not None and at >= pending['eligible_at']:
             limit = pending['price']
-            if ask['o'] <= limit and (averaging_gate == 'grid' or len(basket_legs) >= 2 or ask['o'] < p90) and ask['o'] > stop:
-                if not fill(ask['o'], bid['o'], at):
+            if direction * (entry_quotes['o'] - limit) <= 0 and (averaging_gate == 'grid' or len(basket_legs) >= 2 or entry_quotes['o'] < p90) and direction * (entry_quotes['o'] - stop) > 0:
+                if not fill(entry_quotes['o'], close_quotes['o'], at):
                     pending = None
                     blocked += 1
         path = ('o', 'l', 'h', 'c') if ordering == 'low_first' else ('o', 'h', 'l', 'c')
-        previous_bid = bid['o']
+        previous_bid = close_quotes['o']
         for field in path:
-            px = bid[field]
+            px = close_quotes[field]
             point_at = at if field == 'o' else end
             if tradeable and active:
-                threshold = max(stop, trailing if trailing is not None else stop)
+                threshold = protective_stop()
                 # On a continuous descending segment an already-resting buy
                 # limit above the stop is reached BEFORE that stop. A gap open
                 # is different: the stop was handled before any new addition.
-                if pending is not None and field != 'o' and ask[field] <= pending['price'] and (averaging_gate == 'grid' or len(basket_legs) >= 2 or pending['price'] < p90):
-                    spread = max(0., ask[field] - bid[field])
-                    limit_bid = pending['price'] - spread
-                    if limit_bid > threshold and previous_bid > threshold:
+                if pending is not None and field != 'o' and direction * (entry_quotes[field] - pending['price']) <= 0 and (averaging_gate == 'grid' or len(basket_legs) >= 2 or pending['price'] < p90):
+                    spread = max(0., direction * (entry_quotes[field] - close_quotes[field]))
+                    limit_bid = pending['price'] - direction * spread
+                    if direction * (limit_bid - threshold) > 0 and direction * (previous_bid - threshold) > 0:
                         price = pending['price']
                         mark(limit_bid, point_at)
                         if not fill(price, limit_bid, point_at):
                             pending = None
                             blocked += 1
-                if px <= threshold:
+                if direction * (px - threshold) <= 0:
                     # Continuous path stop fills at the stop; opens/gaps use actual bid.
-                    exit_price = px if field == 'o' or previous_bid <= threshold else threshold
+                    exit_price = px if field == 'o' or direction * (previous_bid - threshold) <= 0 else threshold
                     mark(exit_price, point_at)
-                    finish(exit_price, point_at, 'trailing_stop' if trailing is not None and trailing >= stop else 'p01_stop')
+                    finish(exit_price, point_at, 'trailing_stop' if trailing is not None and direction * (trailing - stop) >= 0 else ('p01_stop' if side == 'long' else 'p99_stop'))
             mark(px, point_at)
             if tradeable and active and equity(px, point_at) > initial_balance + sum(b['net_pnl'] for b in baskets):
                 # Basket profitability includes commissions and accrued swap.
-                peak_bid = px if peak_bid is None else max(peak_bid, px)
-                proposed = math.floor((peak_bid - trail_distance(active, candidate.grid)) / tick + 1e-8) * tick
-                trailing = proposed if trailing is None else max(trailing, proposed)
+                peak_bid = px if peak_bid is None else (max(peak_bid, px) if side == 'long' else min(peak_bid, px))
+                proposed = stop_round(peak_bid - direction * trail_distance(active, candidate.grid))
+                trailing = proposed if trailing is None else (max(trailing, proposed) if side == 'long' else min(trailing, proposed))
             previous_bid = px
         if tradeable and active and pending is None:
-            lowest = min(e['entry'] for e in active)
-            gate = min(lowest - candidate.grid, p90 - tick) if averaging_gate == 'p90' and len(basket_legs) < 2 else lowest - candidate.grid
-            level = math.floor(gate / tick + 1e-8) * tick
+            extreme_entry = min(e['entry'] for e in active) if side == 'long' else max(e['entry'] for e in active)
+            gate = min(extreme_entry - candidate.grid, p90 - tick) if averaging_gate == 'p90' and len(basket_legs) < 2 else extreme_entry - direction * candidate.grid
+            level = stop_round(gate)
             # Breach knowledge is available only at minute completion. Never fill
             # the same historical low used to create this order.
-            if stop < level and (averaging_gate == 'grid' or len(basket_legs) >= 2 or level < p90) and ask['l'] <= level:
+            adverse_field = 'l' if side == 'long' else 'h'
+            if direction * (level - stop) > 0 and (averaging_gate == 'grid' or len(basket_legs) >= 2 or level < p90) and direction * (entry_quotes[adverse_field] - level) <= 0:
                 pending = {'price': level, 'eligible_at': end, 'observed_at': end}
-        value = mark(bid['c'], end)
+        value = mark(close_quotes['c'], end)
         key = end.replace(minute=0, second=0, microsecond=0)
         if detail and key != hour_key:
             hourly_curve.append({'at': end.isoformat(), 'equity': value, 'cash': cash, 'lots': sum(e['lots'] for e in active)})
             hour_key = key
-        last_bid, last_at = bid['c'], end
+        last_bid, last_at = close_quotes['c'], end
     if last_bid is None:
         raise ValueError('NO_MINUTE_OBSERVATIONS_IN_PERIOD')
     ending = equity(last_bid, last_at)
@@ -387,7 +407,7 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
               'max_daily_loss': max_daily, 'first_daily_breach': first_daily_breach,
               'first_total_breach': first_total_breach, 'first_margin_breach': first_margin_breach,
               'max_lots': max_lots, 'max_margin': max_margin, 'max_reserved_stop_risk': max_risk,
-              'fees': fees, 'swap_pnl': swaps, 'fixed_final_p01_stop': stop, 'fixed_final_quantile_span': risk_span,
+              'fees': fees, 'swap_pnl': swaps, stop_key+'_stop': stop, 'fixed_final_quantile_span': risk_span,
               'cancelled_limits': cancelled,
               'risk_or_volume_blocked_entries': blocked,
               ('daily_buy_forecast_signals' if entry_comparison == 'any' else f'{entry_comparison}_{entry_quantile}_forecast_signals'): signals,
@@ -398,6 +418,9 @@ def replay(symbol, rows, forecasts, spec, conversion, first, last, candidate, co
               'open_age_hours': (last_at - basket_start).total_seconds() / 3600 if basket_start else None,
               'open_net_pnl': sum(e['net_pnl'] for e in basket_legs) + ending - cash,
               'risk_fraction': risk_fraction, 'orders_sent': 0}
+    if side == 'short':
+        result.update(side=side, fixed_stop_not_above_entry_blocks=invalid_stop_blocked,
+                      minimum_share_allocation_blocks=minimum_size_blocked)
     if detail:
         result.update(entries=ledger, baskets=baskets, open_basket=active, hourly_equity=hourly_curve)
     return result

@@ -67,3 +67,32 @@ duration, minimum-share rejections and marked open positions. Missing model
 origins prevent a complete report. Source and forecast identities are checked
 before replay. Data and results use GitHub artifacts; there are no Firestore
 writes, brokerage orders or connections to the live traders.
+
+## Sell-only comparison with frozen forecasts
+
+The replay CLI accepts `--side short`. Keep the **same above-first-P99 signal**,
+sell whole shares at the modeled bid, and cover at the modeled ask. The fixed
+stop is the triggering forecast's **final P99**, rounded upward to cents;
+the final P99-minus-P01 width still sizes the entire 1% basket budget. Reject
+entry when the fixed stop is at or below the sell price. Average only higher,
+using the same causal next-minute limit rule. A profitable short's trail follows
+the lowest cover ask plus one grid, or 75% of the filled-entry range for multiple
+legs; it only ratchets downward. Both physical OHLC path orders are replayed.
+
+Reserve 100% gross notional as collateral, with no extra capacity from short-sale
+proceeds. Historical availability to borrow, locate/borrow fees and dividend
+payments owed by short sellers are not established by the saved bars. This is
+a hypothetical short price-P&L comparison, not a broker execution claim. See
+Alpaca's [short-selling documentation](https://docs.alpaca.markets/us/docs/margin-and-short-selling).
+
+Download the source and all forecast artifacts from run `37826329337`, then:
+
+```sh
+python -m market_research.spy_p99_share_study replay \
+  --side short --source source --forecasts forecasts --output short-report
+```
+
+This does not rerun the models or submit orders. The report distinguishes initial
+entries blocked by an invalid fixed upper stop from allocations below one share.
+Use the original first-nine-month selection and fresh-flat holdout methodology;
+do not select a short profile using the completed full-year outcomes.

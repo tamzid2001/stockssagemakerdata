@@ -246,14 +246,18 @@ def assumed_quotes(row, symbol, costs):
     return ({k: ask[k]-.01*costs.spread_factor for k in ask}, ask)
 
 
-def run_share_replay(rows, records, first, last, candidate, costs=COSTS[0], ordering='low_first', detail=False):
+def run_share_replay(rows, records, first, last, candidate, costs=COSTS[0], ordering='low_first', detail=False, *, side='long'):
     result = replay('SPY', rows, records, share_spec(), KnownConversion('USD', []), first, last, candidate, costs, ordering,
-                    detail=detail, averaging_gate='grid', quote_adjuster=assumed_quotes, account_timezone=NY)
+                    detail=detail, averaging_gate='grid', quote_adjuster=assumed_quotes, account_timezone=NY, side=side)
     rename = {'max_lots': 'max_shares', 'open_lots': 'open_shares', 'max_margin': 'max_invested_notional_usd'}
     for old, new in rename.items():
         result[new] = result.pop(old)
     result.update(quantity_unit='whole shares', dividends_included=False, regulatory_fees_included=False,
                   historical_spread_verified=False, brokerage_orders_sent=0)
+    if side == 'short':
+        result.update(historical_borrow_availability_verified=False, stock_borrow_fees_included=False,
+                      dividend_in_lieu_included=False,
+                      collateral_assumption='100% notional reserved; short proceeds do not enlarge capacity')
     if detail:
         for leg in result['entries']+result['open_basket']:
             leg['shares'], leg['initial_shares'] = leg.pop('lots'), leg.pop('initial_lots')
@@ -264,7 +268,7 @@ def run_share_replay(rows, records, first, last, candidate, costs=COSTS[0], orde
     return result
 
 
-def run_replays(folder, forecast_root, output):
+def run_replays(folder, forecast_root, output, *, side='long'):
     study, identity = read_json(folder/'study-plan.json'), read_json(folder/'source.json')
     records = {}
     for path in forecast_root.rglob('????-??-??.json.gz'):
@@ -289,8 +293,8 @@ def run_replays(folder, forecast_root, output):
     for raw in study['candidates']:
         candidate = Candidate(**raw)
         for path in ('low_first', 'high_first'):
-            development.append(run_share_replay(rows, ordered, first, split, candidate, ordering=path))
-            full.append(run_share_replay(rows, ordered, first, last, candidate, ordering=path))
+            development.append(run_share_replay(rows, ordered, first, split, candidate, ordering=path, side=side))
+            full.append(run_share_replay(rows, ordered, first, last, candidate, ordering=path, side=side))
         print(json.dumps({'event': 'spy_share_grid_replay', 'candidate': candidate.name,
                           'net_range': [r['net_pnl'] for r in full[-2:]],
                           'closed_baskets': [r['closed_baskets'] for r in full[-2:]]}), flush=True)
@@ -301,19 +305,26 @@ def run_replays(folder, forecast_root, output):
         later = [r for r in ordered if stamp(r['origin']) >= split]
         for cost in COSTS:
             for path in ('low_first', 'high_first'):
-                detail_results.append(run_share_replay(rows, ordered, first, last, candidate, cost, path, True))
-                holdout.append(run_share_replay(rows, later, split, last, candidate, cost, path, True))
+                detail_results.append(run_share_replay(rows, ordered, first, last, candidate, cost, path, True, side=side))
+                holdout.append(run_share_replay(rows, later, split,last, candidate, cost, path, True, side=side))
     signal_days = [r['day'] for r in ordered if r['cutoff_close'] > r['predictions'][0]['p99']]
-    result = {'complete': True, 'study': study, 'source': identity, 'completed_forecasts': len(ordered),
+    replay_study = study if side == 'long' else {**study, 'side': 'short',
+                   'averaging_gate': 'higher grid only; no quantile gate', 'stop': 'fixed final triggering P99',
+                   'collateral_assumption': '100% notional reserved; short proceeds do not enlarge capacity',
+                   'historical_borrow_availability_verified': False, 'stock_borrow_fees_included': False,
+                   'dividend_in_lieu_included': False}
+    result = {'complete': True, 'study': replay_study, 'source': identity, 'completed_forecasts': len(ordered),
               'signal_days': signal_days, 'selected_on_development': selected, 'development': development,
               'full_year_grid_comparison': full, 'selected_full_year_details': detail_results,
               'fresh_flat_holdout': holdout, 'orders_sent': 0, 'firestore_writes': 0}
     write_json(output/'results.json.gz', result)
-    lines = ['# SPY Alpaca above-P99 yearly share-ladder backtest', '',
+    lines = [f'# SPY Alpaca above-P99 yearly {side} share-ladder backtest', '',
              f"Forecast origins: {study['start']} through {study['end']}; $100,000 account; exactly 500 prior daily bars; seven-session forecasts.", '',
              f"Completed forecasts: {len(ordered)}. Cutoff close above first predicted P99: {len(signal_days)} day(s). Development-selected configuration: {selected or 'none eligible'}.", '',
              'P01/P10/P25/P50/P75/P90/P99; Prophet, Toto, Granite, Chronos and TimesFM. Supported models supply P01/P99 without tail extrapolation.', '',
-             'Whole shares, 1% risk shared across the ladder, no borrowing. Fixed final triggering P01 stop; final P99−P01 risk reference. Average only lower, without a P90 gate. Carry positions; profitability-activated trail; wait for a later qualifying forecast after exit.', '',
+             ('Whole shares, 1% risk shared across the ladder, no borrowing. Fixed final triggering P01 stop; final P99−P01 risk reference. Average only lower, without a P90 gate.' if side == 'long' else
+              'Whole short shares, 1% risk shared across the ladder. Fixed final triggering P99 stop; final P99−P01 risk reference. Average only higher. Reserve 100% gross notional; short proceeds do not enlarge capacity. Skip entry if the fixed P99 stop is not above the short fill. Historical borrow availability, borrow fees and dividend-in-lieu costs are unverified and excluded.')
+              + ' Carry positions; profitability-activated trail; wait for a later qualifying forecast after exit.', '',
              'Regular-session trade OHLC rounded up to cents as ask proxy; modeled bid = ask minus assumed spread (1 cent reference, 2 cents sensitivity). Dividends, regulatory fees and interest are excluded; results are price P&L, not verified broker returns.', '',
              '| Grid | Profile | Minute path | Net price P&L | Drawdown | Basket W/L | Win rate | Max ladder | Avg duration hours | Open shares |',
              '|---:|---|---|---:|---:|---|---:|---:|---:|---:|']
@@ -331,6 +342,7 @@ def main():
     parser.add_argument('--start', type=date.fromisoformat, default=date(2025, 10, 7))
     parser.add_argument('--end', type=date.fromisoformat, default=date(2026, 10, 6))
     parser.add_argument('--feed', choices=('sip', 'iex'), default='sip')
+    parser.add_argument('--side', choices=('long', 'short'), default='long')
     parser.add_argument('--source', type=Path)
     parser.add_argument('--forecasts', type=Path)
     parser.add_argument('--output', type=Path, required=True)
@@ -341,7 +353,7 @@ def main():
     elif args.command == 'forecast':
         forecasts(args.source, args.output, args.chunk)
     else:
-        run_replays(args.source, args.forecasts, args.output)
+        run_replays(args.source, args.forecasts, args.output, side=args.side)
 
 
 if __name__ == '__main__':

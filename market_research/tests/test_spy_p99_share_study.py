@@ -146,3 +146,94 @@ def test_five_models_are_required_even_if_four_return_predictions():
         return {'model_runs': [{'model': m, 'status': 'completed'} for m in MODELS[:-1]], 'predictions': []}
     with pytest.raises(ValueError, match='FIVE_REAL_COMPLETED_MODELS_REQUIRED'):
         forecast_day(sessions, [], '2026-09-25', execute)
+
+
+def short_minute(at, o=100., h=None, l=None, c=None):
+    values = {'o': o, 'h': o if h is None else h, 'l': o if l is None else l,
+              'c': o if c is None else c}
+    return {'start': at.isoformat(), 'end': (at+timedelta(minutes=1)).isoformat(),
+            'bid': values, 'ask': dict(values)}
+
+
+def short_replay(rows, forecasts=None, grid=1., **kwargs):
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    return run_share_replay(rows, forecasts or [signal(at)], at, at+timedelta(days=5),
+                            Candidate(grid), detail=True, side='short', **kwargs)
+
+
+def test_short_sells_bid_marks_and_covers_ask_with_whole_share_risk():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    r = short_replay([short_minute(at), short_minute(at+timedelta(minutes=1), 99.5)], grid=2.)
+    entry = r['open_basket'][0]
+    assert entry['entry'] == pytest.approx(99.99)
+    assert r['open_net_pnl'] == pytest.approx((99.99-99.5)*entry['shares'])
+    assert entry['shares'].is_integer() and entry['shares'] >= 1
+    assert r['fixed_final_p99_stop'] == 110.
+    assert r['fixed_final_quantile_span'] == 20.
+    assert r['max_reserved_stop_risk'] <= 1000.
+    assert r['stock_borrow_fees_included'] is False
+
+
+@pytest.mark.parametrize('cutoff,expected', [(98., 0), (99., 0), (100., 1)])
+def test_short_retains_same_strict_above_first_p99_gate(cutoff, expected):
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    r = short_replay([short_minute(at)], [signal(at, cutoff=cutoff)])
+    assert r['above_p99_forecast_signals'] == expected
+    assert r['open_entries'] == expected
+
+
+def test_short_averages_higher_only_after_completed_breach_and_next_minute():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    r = short_replay([short_minute(at), short_minute(at+timedelta(minutes=1), 100.5, h=102.),
+                      short_minute(at+timedelta(minutes=2), 101.)])
+    assert r['open_entries'] == 2
+    assert r['open_basket'][1]['at'] == (at+timedelta(minutes=2)).isoformat()
+    assert r['open_basket'][1]['entry'] == pytest.approx(100.99)
+    assert r['open_basket'][1]['entry'] > r['open_basket'][0]['entry']
+    assert r['max_reserved_stop_risk'] <= 1000.
+
+
+def test_short_gap_stop_covers_actual_ask_before_pending_addition():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    r = short_replay([short_minute(at), short_minute(at+timedelta(minutes=1), 101., h=102.),
+                      short_minute(at+timedelta(minutes=2), 111.)])
+    assert r['closed_entries'] == 1 and r['max_ladder'] == 1
+    assert r['entries'][0]['exits'][0]['price'] == 111.
+    assert r['baskets'][0]['reason'] == 'gap_stop'
+    assert r['net_pnl'] < 0 and r['open_entries'] == 0
+
+
+def test_short_resting_sell_limit_fills_before_continuous_upper_stop():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    r = short_replay([short_minute(at), short_minute(at+timedelta(minutes=1), 101., h=102.),
+                      short_minute(at+timedelta(minutes=2), 100., h=112., c=111.)])
+    assert r['closed_entries'] == 2 and r['max_ladder'] == 2
+    assert all(e['exits'][0]['price'] == 110. for e in r['entries'])
+    assert r['baskets'][0]['reason'] == 'p99_stop'
+
+
+@pytest.mark.parametrize('ordering', ['low_first', 'high_first'])
+def test_short_profitable_trail_falls_and_covers_on_rebound_no_same_signal_reentry(ordering):
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    r = short_replay([short_minute(at), short_minute(at+timedelta(minutes=1), 100., l=97., c=98.),
+                      short_minute(at+timedelta(minutes=2), 100.)], ordering=ordering)
+    assert r['closed_baskets'] == 1 and r['open_entries'] == 0
+    assert r['baskets'][0]['reason'] == 'trailing_stop'
+    assert r['entries'][0]['exits'][0]['price'] == 98.
+    assert r['net_pnl'] > 0
+
+
+def test_short_fixed_final_p99_is_not_replaced_by_later_forecast():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    later = signal(at+timedelta(days=1), cutoff=98.)
+    later['predictions'][-1]['p99'] = 101.
+    r = short_replay([short_minute(at), short_minute(at+timedelta(days=1), 102.)],
+                     [signal(at), later])
+    assert r['closed_baskets'] == 0 and r['fixed_final_p99_stop'] == 110.
+
+
+def test_short_initial_entry_at_or_above_fixed_stop_is_blocked():
+    at = datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+    r = short_replay([short_minute(at, 111.)])
+    assert r['above_p99_forecast_signals'] == 1
+    assert r['open_entries'] == 0 and r['risk_or_volume_blocked_entries'] == 1
