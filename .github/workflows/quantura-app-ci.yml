@@ -21,6 +21,9 @@ on:
       - "requirements-forecast-intelligence-service.txt"
       - ".gitignore"
       - "quantura_site/**"
+      - "packages/**"
+      - "docs/**"
+      - "docs.json"
       - "README.md"
       - "SECURITY.md"
       - "TROUBLESHOOTING.md"
@@ -50,6 +53,9 @@ on:
       - "requirements-forecast-intelligence-service.txt"
       - ".gitignore"
       - "quantura_site/**"
+      - "packages/**"
+      - "docs/**"
+      - "docs.json"
       - "README.md"
       - "SECURITY.md"
       - "TROUBLESHOOTING.md"
@@ -108,6 +114,14 @@ jobs:
       - name: Build Quantura web bundle
         run: |
           npm run build --prefix quantura_site
+
+      - name: Validate npm and Python SDKs
+        run: |
+          npm test --prefix packages/npm
+          PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
+          python -m pip install build
+          python -m build packages/python --outdir /tmp/quantura-sdk-dist
+          npm pack ./packages/npm --pack-destination /tmp/quantura-sdk-dist
 
       - name: Build and test Explore backend
         run: |

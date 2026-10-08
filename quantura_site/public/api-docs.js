@@ -5,13 +5,13 @@
   let sequence=0;
   firebase.auth().onAuthStateChanged(async user=>{
     const run=++sequence;host.replaceChildren();host.hidden=true;gate.hidden=false;
-    if(!user || user.isAnonymous){status.textContent="Sign in with an enterprise account to open your API documentation.";return;}
-    status.textContent="Checking your enterprise access…";
+    if(!user || user.isAnonymous){status.textContent="Sign in with paid Pro, enterprise or administrator access to open your API documentation.";return;}
+    status.textContent="Checking your API access…";
     try{
       const token=await (window.QuanturaAuth?.getToken(user) ?? user.getIdToken());
       const response=await fetch("/api/shop/api-docs",{headers:{Authorization:`Bearer ${token}`,Accept:"application/json"},cache:"no-store"});
       const payload=await response.json();if(run!==sequence)return;
-      if(!response.ok)throw Error(payload.message || "API documentation requires an enterprise agreement.");
+      if(!response.ok)throw Error(payload.message || "API documentation requires paid Pro or enterprise access.");
       // This markup is the server-owned documentation, never provider input.
       host.innerHTML=payload.data.html;host.hidden=false;gate.hidden=true;status.textContent="";
       const script=document.createElement("script");script.src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.37.0";

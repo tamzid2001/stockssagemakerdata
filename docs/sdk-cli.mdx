@@ -1,0 +1,102 @@
+---
+title: "CLI, Python and npm"
+description: "Sign in with OAuth and use Quantura market search, forecasts, downloads and Scout."
+---
+
+## Install and sign in
+
+API access requires paid Pro, enterprise or verified administrator access. The 14-day website trial does not include API access.
+
+```bash
+npm install -g 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.0/quantura-sdk-1.0.0.tgz'
+quantura login
+quantura whoami
+quantura search AAPL --source alpaca
+quantura models
+```
+
+Python 3.10+ uses the release wheel:
+
+```bash
+python -m pip install 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.0/quantura_sdk-1.0.0-py3-none-any.whl'
+python -m quantura_sdk login
+```
+
+Node 20+ and Python share the private credential file `~/.config/quantura/credentials.json`. Choose one CLI per environment, or use `python -m quantura_sdk`. Browser sign-in uses your Quantura Google or email/password account through Clerk. PKCE S256, state and issuer checks protect the callback at `http://127.0.0.1:8766/callback`. `quantura login --no-browser` prints the sign-in URL. Tokens refresh automatically; `quantura logout` revokes the grant and removes local credentials.
+
+For unattended integrations, use a personal key from Profile → Account settings → API keys and the server environment variable `QUANTURA_API_KEY`. Credentials are never command-line arguments.
+
+## Clients
+
+```javascript
+import { Quantura } from 'quantura-sdk';
+import { accessToken } from 'quantura-sdk/oauth'; // Node only
+
+const q = new Quantura({ token: accessToken });
+const results = await q.search('AAPL', { source: 'alpaca' });
+const capabilities = await q.models();
+```
+
+```python
+from quantura_sdk import Quantura
+from quantura_sdk.oauth import access_token
+
+q = Quantura(access_token)
+results = q.search("AAPL", source="alpaca")
+capabilities = q.models()
+```
+
+Without an explicit token, clients read `QUANTURA_API_KEY` or `QUANTURA_ACCESS_TOKEN`. Responses retain the server's `data` and `meta` envelopes. npm includes TypeScript declarations; Python includes its typing marker. Both clients have no runtime dependencies.
+
+## Create, poll and download
+
+Inspect capabilities before selecting models or intervals. Save the request in `request.json`:
+
+```json
+{
+  "source": {"type": "ticker", "provider": "alpaca", "symbol": "AAPL", "frequency": "1Day", "limit": 500, "field": "close"},
+  "prediction_length": 7,
+  "horizon_mode": "trading_sessions",
+  "quantiles": [0.01, 0.10, 0.25, 0.50, 0.75, 0.90, 0.99],
+  "models": {"prophet": {"enabled": true, "weight": 1}},
+  "failure_policy": "renormalize"
+}
+```
+
+```bash
+quantura forecast --file request.json --key aapl-daily-001
+quantura get FORECAST_ID --wait
+quantura download FORECAST_ID --output forecast.csv
+```
+
+```python
+created = q.create_forecast(request, idempotency_key="aapl-daily-001")
+forecast_id = created["data"]["forecast_id"]
+completed = q.wait_for_forecast(forecast_id)
+```
+
+The npm equivalents are `createForecast`, `waitForForecast` and `downloadForecast`. Preserve an explicit idempotency key when retrying after an uncertain transport failure. Clients never automatically retry job creation. Poll the returned ID instead of submitting another forecast. Cutoff fields such as `history_lag_minutes` are preserved; [historical forecasts](/docs/historical-forecasts) explain provider availability.
+
+## Paged Dukascopy downloads
+
+```python
+request = {"source": "dukascopy", "symbol": "XAUUSD", "timeframe": "1Hour", "price_side": "bid", "start": "2025-10-08", "end": "2026-10-07"}
+for page in q.history_pages(request):
+    print(page)
+```
+
+The npm equivalent is `for await (const page of q.historyPages(request))`. The iterator follows `next_cursor`, preserves settings and rejects cursor loops. CLI `history --file history.json --all-pages --output pages.json` saves page envelopes. Rows are not silently filled, resampled or flattened.
+
+## Ask Scout
+
+```python
+answer = q.ask_scout({"kind": "ensemble", "id": forecast_id}, "Where is the widest forecast range?")
+```
+
+Use `q.askScout` in npm. Scout grounds structured answers in authorized forecast, game, CSV preview or SageMaker context. Questions save a conversation/request in your account. See [context and response schemas](/docs/jev-forecast-questions).
+
+## Errors and authorization
+
+Clients expose safe error codes, HTTP status and request references. HTTPS is required outside loopback development; redirects are refused. OAuth credentials are bound to Quantura. Every request checks current identity, paid access, scopes and workspace permissions. These clients do not place trades.
+
+[Connect ChatGPT through MCP](/docs/mcp) · [npm release package](https://github.com/tamzid2001/stockssagemakerdata/releases/tag/quantura-sdk-v1.0.0) · [Python release](https://github.com/tamzid2001/stockssagemakerdata/releases/tag/quantura-sdk-v1.0.0)

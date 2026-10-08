@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quantura-sdk"
+version = "1.0.0"
+description = "Quantura Python API client and OAuth CLI for forecasts, history and Scout"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Quantura"}]
+keywords = ["quantura", "forecast", "mcp", "oauth", "finance"]
+
+[project.urls]
+Homepage = "https://quantura.studio/developers/api"
+Repository = "https://github.com/tamzid2001/stockssagemakerdata"
+
+[project.scripts]
+quantura = "quantura_sdk.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quantura_sdk"]

@@ -19,6 +19,7 @@ import { registerPolymarketMlbRoutes } from "./polymarketMlb";
 import { registerPredictionMarketDataRoutes } from "./predictionMarketData";
 import { registerQuanturaForecastRoutes, runForecastLifecycleJob } from "./quanturaForecastRoutes";
 import { registerPlatformApiRoutes } from "./platformApiRoutes";
+import { registerQuanturaMcpRoutes } from "./quanturaMcp";
 import { registerBacktestRoutes } from "./backtestRoutes";
 import { registerSupportChatRoutes } from "./supportChat";
 import { registerForecastQuestionRoutes } from "./forecastQuestionRoutes";
@@ -679,6 +680,7 @@ const RESEND_API_KEY = asString(process.env.RESEND_API_KEY).trim();
 
 registerFiscalDataRoutes(ROUTES, { db });
 registerClerkAuthRoutes(ROUTES, db, legacyAuth);
+registerQuanturaMcpRoutes(ROUTES,{authenticate:req=>authenticatePlatformRequest(req,{db,auth,adminEmails:[ADMIN_EMAIL]})});
 registerTikTokRoutes(ROUTES,{db,authenticate:req=>authenticatePlatformRequest(req,{db,auth,adminEmails:["tamzid257@gmail.com"]})});
 registerEconomicDataRoutes(ROUTES,undefined,{authenticate:req=>authenticatePlatformRequest(req,{db,auth,adminEmails:[ADMIN_EMAIL]})});
 registerGeminiMarketRoutes(ROUTES);
@@ -690,7 +692,7 @@ const enterpriseDataRoutes = express.Router();
 enterpriseDataRoutes.use(["/market-search", "/market-data", "/economic-data"], async (req, res, next) => {
   try {
     const principal = await authenticatePlatformRequest(req, { db, auth });
-    if (!["api_key", "rapidapi"].includes(principal.authMethod)) await requirePaidApiAccess(db, principal.userId, principal.clerkUserId);
+    if (!["api_key", "rapidapi", "clerk_oauth"].includes(principal.authMethod)) await requirePaidApiAccess(db, principal.userId, principal.clerkUserId);
     requireScope(principal, "market_data:read");
     next();
   } catch {
