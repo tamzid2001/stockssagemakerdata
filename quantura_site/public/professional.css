@@ -1114,6 +1114,7 @@ input[type="checkbox"], input[type="radio"] { width: 16px; height: 16px; min-wid
 
 .header .header-market-search .market-search-form{display:grid;grid-template-columns:minmax(0,1fr) 40px 40px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .header .header-market-search input[type=search]{border:0;background:transparent;padding-inline:.8rem;min-width:0}
+.header .header-market-search .market-search-form>.field{grid-column:auto}
 .header .header-search-submit{position:static;width:40px}
 .header .header-upload-csv{width:40px;height:44px;color:var(--ink)}
 .sagemaker-library [hidden]{display:none!important}
