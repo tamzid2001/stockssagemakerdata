@@ -1,7 +1,10 @@
 from copy import deepcopy
 from decimal import Decimal
+from types import SimpleNamespace
 import pytest
-from market_research.opposite_dollar_trader import DollarTrader, AccountGate, CloudJournal, PREFIX, complete_context, quantity_remaining, approved, market_ask
+from market_research.opposite_dollar_trader import (DollarTrader, AccountGate, CloudJournal, PREFIX,
+    complete_context, quantity_remaining, approved, market_ask, JournalStorageUnavailable,
+    STORAGE_TIMEOUT, STORAGE_RETRY_SECONDS, WRITE_RECEIPT, cleanup_actions, shutdown_journal)
 from market_research.opposite_strategies import DollarConfig, STRATEGIES, VERSION, portfolio_fingerprint
 from dataclasses import asdict
 from market_research.kalshi_execution import order_payload
@@ -166,10 +169,14 @@ class ReadBlob:
     def __init__(self,generation,payload=None,*,reload_error=None,download_error=None):
         self.generation=generation;self.payload=payload;self.size=len(payload or b"")
         self.reload_error=reload_error;self.download_error=download_error;self.downloads=[]
-    def reload(self):
+    def reload(self,**kwargs):
+        assert kwargs["timeout"]==STORAGE_TIMEOUT
+        assert kwargs["retry"].timeout==STORAGE_RETRY_SECONDS
         if self.reload_error:raise self.reload_error
     def download_to_filename(self,path,**kwargs):
         self.downloads.append(kwargs)
+        assert kwargs["timeout"]==STORAGE_TIMEOUT
+        assert kwargs["retry"].timeout==STORAGE_RETRY_SECONDS
         if self.download_error:raise self.download_error
         path.write_bytes(self.payload)
 
@@ -389,3 +396,238 @@ def test_startup_wait_is_bounded_and_a_running_owner_is_never_evicted(monkeypatc
     j.write=lambda *_: pytest.fail("Cannot replace another owner's valid lease")
     with pytest.raises(RuntimeError,match="STARTUP_LEASE_TIMEOUT"):j.claim(wait_seconds=12)
     assert clock[0]==112
+
+class UploadBucket:
+    """Fault injection: server commit and the response are separate events."""
+    def __init__(self,error=None,*,committed=False,foreign=False,confirmation_error=None):
+        self.error,self.committed,self.foreign=error,committed,foreign
+        self.confirmation_error=confirmation_error
+        self.generation=4;self.metadata={};self.uploads=[];self.reloads=[]
+    def blob(self,name):
+        bucket=self
+        class Blob:
+            generation=None;metadata=None
+            def upload_from_filename(self,path,**kwargs):
+                bucket.uploads.append(kwargs)
+                assert kwargs["if_generation_match"]==4
+                assert kwargs["timeout"]==STORAGE_TIMEOUT
+                assert kwargs["retry"].timeout==STORAGE_RETRY_SECONDS
+                if bucket.committed or bucket.foreign:
+                    bucket.generation=5
+                    bucket.metadata={WRITE_RECEIPT:"successor"} if bucket.foreign else deepcopy(self.metadata)
+                    self.generation=5
+                if bucket.error:raise bucket.error
+            def reload(self,**kwargs):
+                bucket.reloads.append(kwargs)
+                assert kwargs["timeout"]==STORAGE_TIMEOUT
+                assert kwargs["retry"].timeout==STORAGE_RETRY_SECONDS
+                if bucket.confirmation_error:raise bucket.confirmation_error
+                self.metadata,self.generation=deepcopy(bucket.metadata),bucket.generation
+        return Blob()
+
+def uploading_journal(monkeypatch,bucket):
+    monkeypatch.setenv("QUANTURA_RESEARCH_ARTIFACT_KEY","a"*64)
+    j=object.__new__(CloudJournal);j.bucket=bucket;j.config=CONFIG
+    j.name="journal";j.holder="worker";j.fence=1;j.generation=4
+    j.state={"lease":{"holder":"worker","fence":1,"expires":220},"entries":{"keep":"intent"}}
+    return j
+
+@pytest.mark.parametrize("status",[503,412])
+def test_lost_upload_response_recovers_only_its_own_committed_receipt(monkeypatch,status,capsys):
+    from google.api_core.exceptions import ServiceUnavailable,PreconditionFailed
+    error=(ServiceUnavailable if status==503 else PreconditionFailed)("response lost after commit")
+    bucket=UploadBucket(error,committed=True);j=uploading_journal(monkeypatch,bucket)
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:100)
+    j.save()
+    assert j.generation==5 and j.state["lease"]["expires"]==220
+    assert j.state["entries"]=={"keep":"intent"}
+    assert len(bucket.uploads)==1 and len(bucket.reloads)==1
+    assert "opposite_dollar_storage_ack_recovered" in capsys.readouterr().out
+
+def test_uncommitted_upload_outage_never_advances_generation_or_local_lease(monkeypatch):
+    from google.api_core.exceptions import RetryError,ServiceUnavailable
+    error=RetryError("bounded retries exhausted",ServiceUnavailable("503"))
+    bucket=UploadBucket(error);j=uploading_journal(monkeypatch,bucket);old=deepcopy(j.state)
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:150)
+    with pytest.raises(JournalStorageUnavailable,match="TRADER_STORAGE_UNAVAILABLE") as caught:j.save()
+    assert caught.value.status==503 and caught.value.operation=="upload" and caught.value.__cause__ is error
+    assert j.state==old and j.generation==4 and bucket.uploads[0]["if_generation_match"]==4
+
+def test_sdk_media_503_retry_error_is_logged_with_the_correct_status(monkeypatch):
+    from google.api_core.exceptions import RetryError
+    from google.cloud.storage.exceptions import InvalidResponse
+    from requests import Response
+    response=Response();response.status_code=503
+    media_error=InvalidResponse(response,"Request failed with status code",503)
+    error=RetryError("bounded retries exhausted",media_error)
+    j=uploading_journal(monkeypatch,UploadBucket(error))
+    with pytest.raises(JournalStorageUnavailable) as caught:j.write("journal",j.state,4)
+    assert caught.value.status==503 and caught.value.__cause__ is error
+
+def test_upload_confirmation_outage_preserves_the_original_failure(monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable,GatewayTimeout
+    error=ServiceUnavailable("upload unavailable")
+    bucket=UploadBucket(error,committed=True,confirmation_error=GatewayTimeout("metadata unavailable"))
+    j=uploading_journal(monkeypatch,bucket)
+    with pytest.raises(JournalStorageUnavailable) as caught:j.write("journal",j.state,4)
+    assert caught.value.__cause__ is error and caught.value.status==503 and j.generation==4
+
+def test_other_owners_generation_cannot_acknowledge_this_upload(monkeypatch):
+    from google.api_core.exceptions import PreconditionFailed
+    error=PreconditionFailed("a successor won the CAS")
+    bucket=UploadBucket(error,foreign=True);j=uploading_journal(monkeypatch,bucket)
+    with pytest.raises(PreconditionFailed) as caught:j.write("journal",j.state,4)
+    assert caught.value is error and j.generation==4
+    assert bucket.metadata=={WRITE_RECEIPT:"successor"} and len(bucket.uploads)==1
+
+def test_permission_failure_is_not_retried_or_confirmed_as_a_commit(monkeypatch):
+    from google.api_core.exceptions import Forbidden
+    bucket=UploadBucket(Forbidden("not authorized"));j=uploading_journal(monkeypatch,bucket)
+    with pytest.raises(Forbidden):j.write("journal",j.state,4)
+    assert len(bucket.uploads)==1 and not bucket.reloads
+
+def test_expired_local_lease_cannot_be_resurrected_by_save(monkeypatch):
+    bucket=UploadBucket();j=uploading_journal(monkeypatch,bucket)
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:221)
+    with pytest.raises(RuntimeError,match="TRADER_FENCE_LOST"):j.save()
+    assert not bucket.uploads and j.generation==4 and j.state["lease"]["expires"]==220
+
+def test_metadata_outage_is_not_mistaken_for_a_missing_journal(monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+    j=reading_journal(monkeypatch,[ReadBlob(None,reload_error=ServiceUnavailable("503"))])
+    with pytest.raises(JournalStorageUnavailable) as caught:j.read("journal")
+    assert caught.value.operation=="snapshot_metadata" and caught.value.status==503
+
+def test_download_outage_cannot_authorize_a_replacement_empty_journal(monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+    j=reading_journal(monkeypatch,[ReadBlob(4,download_error=ServiceUnavailable("503"))])
+    with pytest.raises(JournalStorageUnavailable) as caught:j.read("journal")
+    assert caught.value.operation=="snapshot_download" and caught.value.status==503
+
+def test_failed_checkpoint_before_submission_never_posts(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    t,b,j=setup()
+    def outage():raise JournalStorageUnavailable("upload",503)
+    j.save=outage
+    with pytest.raises(JournalStorageUnavailable):t.reconcile(TICKER,FEE,126)
+    assert not b.posts and j.saved[-1]["entries"][TICKER]["live"]["pending"] is None
+
+def test_checkpoint_outage_after_post_preserves_intent_and_recovers_fill_once(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    t,b,j=setup();save=j.save
+    def outage_after_ack():
+        pending=j.state["entries"][TICKER]["live"]["pending"]
+        if pending and pending.get("order_id"):raise JournalStorageUnavailable("upload",503)
+        save()
+    j.save=outage_after_ack
+    with pytest.raises(JournalStorageUnavailable):t.reconcile(TICKER,FEE,126)
+    assert len(b.posts)==1
+    durable=j.saved[-1]["entries"][TICKER]["live"]["pending"]
+    assert durable["delivery_stage"]=="submitting" and "order_id" not in durable
+    b.orders[b.posts[0]["client_order_id"]]=terminal(b.posts[0],"5.00","1.00",".07")
+    recovered_j=Journal();recovered_j.state=deepcopy(j.saved[-1])
+    recovered=DollarTrader(CONFIG,b,recovered_j,"live",gate_factory=Gate)
+    recovered.reconcile(TICKER,FEE,128);recovered.reconcile(TICKER,FEE,129)
+    entry=recovered_j.state["entries"][TICKER]["live"]
+    assert (entry["filled"],entry["cost"],entry["fees"])==("5.00","1.00","0.07")
+    assert len(entry["fills"])==1 and len(b.posts)==1
+
+def test_storage_failure_in_account_admission_skips_unlock_and_preserves_cause(monkeypatch):
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:126)
+    j=SharedJournal();calls=[];write=j.write
+    def tracked_write(*args):calls.append(args);return write(*args)
+    j.write=tracked_write
+    error=JournalStorageUnavailable("snapshot_metadata",503)
+    def unavailable():raise error
+    j.verify=unavailable
+    with pytest.raises(JournalStorageUnavailable) as caught:
+        with AccountGate(j,None):pytest.fail("Storage failure cannot admit an order")
+    assert caught.value is error and len(calls)==1
+    assert j.rows[PREFIX+j.account+"/order-gate.enc"]["lease"]["expires"]==146
+
+def test_gate_unlock_failure_cannot_replace_a_primary_admission_error(monkeypatch):
+    from google.api_core.exceptions import ServiceUnavailable
+    j=SharedJournal();write=j.write;calls=[]
+    def unavailable_unlock(name,value,generation):
+        calls.append(name)
+        if len(calls)>1:raise ServiceUnavailable("503 during cleanup")
+        return write(name,value,generation)
+    j.write=unavailable_unlock
+    class B:
+        def account(self):return [],[{"ticker":"OTHER","position_fp":"1.00"}]
+    with pytest.raises(RuntimeError,match="ACCOUNT_POSITION_UNVERIFIED"):
+        with AccountGate(j,B()):pass
+    assert len(calls)==2
+
+def test_aborted_shutdown_skips_storage_writes_and_closes_client(capsys):
+    calls=[];error=JournalStorageUnavailable("upload",503)
+    j=SimpleNamespace(config=CONFIG,release=lambda:calls.append("release"))
+    b=SimpleNamespace(client=SimpleNamespace(close=lambda:calls.append("close")))
+    with pytest.raises(JournalStorageUnavailable) as caught:
+        try:raise error
+        finally:shutdown_journal(j,b)
+    assert caught.value is error and calls==["close"]
+    assert '"upstream_status": 503' in capsys.readouterr().out
+
+def test_normal_shutdown_still_closes_client_when_release_fails():
+    calls=[];error=JournalStorageUnavailable("upload",503)
+    def release():calls.append("release");raise error
+    j=SimpleNamespace(config=CONFIG,release=release)
+    b=SimpleNamespace(client=SimpleNamespace(close=lambda:calls.append("close")))
+    with pytest.raises(JournalStorageUnavailable) as caught:shutdown_journal(j,b)
+    assert caught.value is error and calls==["release","close"]
+
+def test_cleanup_runs_all_actions_without_masking_the_original_error():
+    calls=[];error=JournalStorageUnavailable("upload",503)
+    def stop():calls.append("stop");raise RuntimeError("CLEANUP_ERROR")
+    with pytest.raises(JournalStorageUnavailable) as caught:
+        try:raise error
+        finally:cleanup_actions(CONFIG.series_ticker,[("stop",stop),("close",lambda:calls.append("close"))])
+    assert caught.value is error and calls==["stop","close"]
+
+def test_startup_retries_storage_recovery_without_losing_existing_orders(monkeypatch):
+    clock=[100];calls=[]
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.time",lambda:clock[0])
+    monkeypatch.setattr("market_research.opposite_dollar_trader.time.sleep",lambda seconds:clock.__setitem__(0,clock[0]+seconds))
+    old={"version":VERSION,"config":asdict(CONFIG),"lease":{"holder":"previous","fence":7,"expires":99},
+         "entries":{"existing":{"live":{"pending":{"delivery_stage":"submitting","intent":"preserve"}}}}}
+    j=object.__new__(CloudJournal);j.config=CONFIG;j.holder="successor";j.name="journal"
+    def recovering_read(_):
+        calls.append("read")
+        if len(calls)==1:raise JournalStorageUnavailable("snapshot_metadata",503)
+        return deepcopy(old),4
+    j.read=recovering_read;j.write=lambda *_:5
+    j.claim(wait_seconds=20)
+    assert j.fence==8 and j.generation==5 and j.state["entries"]==old["entries"] and clock[0]==105
+
+def test_worker_checkpoint_outage_stops_collection_without_a_second_save_or_release(monkeypatch):
+    import market_research.opposite_dollar_trader as module
+    import market_research.btc_minute_archive as archive
+    import market_research.interval_markets as markets
+    calls=[];error=JournalStorageUnavailable("upload",503)
+    class J:
+        config=CONFIG
+        state={"entries":{},"decisions":{},"totals":{},"rows":[]}
+        def __init__(self,*_):self.saves=0
+        def claim(self,**_):calls.append("claim")
+        def archived_entries(self):return []
+        def save(self):
+            self.saves+=1;calls.append("save")
+            if self.saves==2:raise error
+        def release(self):calls.append("release")
+    class Collector:
+        def __init__(self,*_):pass
+        def start(self):calls.append("collector_start")
+        def stop(self):calls.append("collector_stop")
+    broker=SimpleNamespace(key_id="test-only",enabled=True,client=SimpleNamespace(close=lambda:calls.append("close")))
+    monkeypatch.setattr(module,"DollarBroker",lambda *_,**__:broker)
+    monkeypatch.setattr(module,"CloudJournal",J)
+    monkeypatch.setattr(module,"bootstrap",lambda *_,**__:None)
+    monkeypatch.setattr(module.time,"time",lambda:100)
+    monkeypatch.setattr(module.signal,"signal",lambda *args:None)
+    monkeypatch.setattr(archive,"MinuteCollector",Collector)
+    monkeypatch.setattr(markets,"KalshiIntervalProvider",lambda *_,**__:None)
+    monkeypatch.delenv("QUANTURA_JOB_STARTED_AT",raising=False)
+    with pytest.raises(JournalStorageUnavailable) as caught:module.run(CONFIG,"both",1)
+    assert caught.value is error
+    assert calls==["claim","save","collector_start","save","collector_stop","close"]
