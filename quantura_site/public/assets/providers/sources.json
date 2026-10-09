@@ -1,0 +1,44 @@
+[
+  {
+    "file": "huggingface.svg",
+    "source": "https://huggingface.co/front/assets/huggingface_logo-noborder.svg",
+    "bytes": 4634,
+    "type": "image/svg+xml"
+  },
+  {
+    "file": "worldbank.png",
+    "source": "https://data360.worldbank.org/favicon.ico?v=1.1",
+    "bytes": 6018,
+    "type": "image/png"
+  },
+  {
+    "file": "treasury.png",
+    "source": "https://fiscaldata.treasury.gov/icons/icon-96x96.png",
+    "bytes": 13632,
+    "type": "image/png"
+  },
+  {
+    "file": "gemini.png",
+    "source": "https://www.gemini.com/favicon-96x96.png",
+    "bytes": 5101,
+    "type": "image/png"
+  },
+  {
+    "file": "dukascopy.png",
+    "source": "https://www.dukascopy.com/media/static/favicons/Regular/ios/favicon_ios_72x72.png",
+    "bytes": 23597,
+    "type": "image/png"
+  },
+  {
+    "file": "alpaca.svg",
+    "source": "https://files.alpaca.markets/webassets/favicon.svg",
+    "bytes": 1542,
+    "type": "image/svg+xml"
+  },
+  {
+    "file": "bigquery.png",
+    "source": "https://www.gstatic.com/cloud/images/navigation/bigquery.png",
+    "bytes": 13450,
+    "type": "image/png"
+  }
+]

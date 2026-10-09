@@ -59,7 +59,7 @@ test('both Pro cycles use one Clerk pricing component for the signed-in account'
  assert.equal(w.document.querySelector('[data-clerk-pricing]').hidden,false);d.window.close();
 });
 
-test('API keys use server eligibility, stay hidden for free/trial and on access errors, and appear for paid/admin accounts',async()=>{
+test('API keys use server eligibility, stay hidden for ineligible accounts/errors, and appear for Pro trials/subscribers',async()=>{
  for(const options of [{apiKeys:false},{apiKeys:true},{apiKeys:true,accessFails:true}]){
   const {d,w,calls}=setup(options);await w.QuanturaAuth.ready;
   assert.equal(calls.profiles[0].apiKeysProps.hide,!options.apiKeys||options.accessFails===true);

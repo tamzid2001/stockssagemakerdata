@@ -1,6 +1,6 @@
 # Quantura Python SDK and CLI
 
-Market search, probabilistic forecasts, provider history and Scout. Python 3.10 or newer; no runtime dependencies. API access requires paid Pro, enterprise or verified administrator access.
+Market search, probabilistic forecasts, provider history and Scout. Python 3.10 or newer; no runtime dependencies. API access requires Pro (including an active 14-day trial), enterprise or verified administrator access.
 
 ## Install
 

@@ -320,16 +320,14 @@ app.get("/api/shop/subscription-access",async (req,res)=>{
   const apiAccess=await hasApiAccess(db,principal.uid,principal.clerk_user_id);
   const admin=current?.subscription_status==="admin";
   const effective=admin?current!:access;
-  res.json({data:{...effective,admin,pro_available:effective.docs_available,api_keys_available:admin||apiAccess||(effective.docs_available&&["active","canceled"].includes(effective.subscription_status)&&!effective.trial_ends_at),docs_available:apiAccess}});
+  res.json({data:{...effective,admin,pro_available:effective.docs_available,api_keys_available:apiAccess,docs_available:apiAccess}});
 });
 
 app.get("/api/shop/api-docs",async (req,res)=>{
   if(!applyCheckoutCors(req,res)){res.status(403).json({error:"origin_not_allowed"});return;}
   res.set("Cache-Control","private, no-store");
   const principal=await billingIdentity(req,res);if(!principal)return;
-  const value=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
-  const current=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
-  if(!await hasApiAccess(db,principal.uid,principal.clerk_user_id)){res.status(403).json({error:"paid_api_required",message:"API documentation requires a paid Pro plan or enterprise agreement."});return;}
+  if(!await hasApiAccess(db,principal.uid,principal.clerk_user_id)){res.status(403).json({error:"paid_api_required",message:"API documentation requires an active Pro subscription, Pro trial, or enterprise agreement."});return;}
   res.json({data:documentation});
 });
 

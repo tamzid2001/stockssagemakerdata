@@ -881,7 +881,7 @@
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
-    sidebar_screener: ['[data-panel-target="screener"] span', 'a[href="/screener"] span'],
+    sidebar_screener: ['[data-panel-target="screener"] span', 'nav a[href="/screener"] span'],
     panel_forecast_title: ['[data-panel="forecast"] > .panel-header h2'],
     panel_forecast_subtitle: ['[data-panel="forecast"] > .panel-header p.small'],
     panel_market_headlines_title: ['[data-panel="market-headlines"] .panel-header h2'],

@@ -13,7 +13,7 @@ export function addEconomicOpenapi(document: any) {
   document.components.schemas.GeminiSpotSource=gemini;
   document.components.schemas.EnsembleForecastRequest.allOf[1].properties.source.oneOf.push({$ref:"#/components/schemas/EconomicSeriesSource"},{$ref:"#/components/schemas/GeminiSpotSource"});
   const response={description:"Provider-verified result, with source metadata and any coverage warnings.",content:{"application/json":{schema:{type:"object",required:["ok"],properties:{ok:{type:"boolean"}}}}}};
-  const errors={"403":{description:"Active paid Pro, enterprise or administrator API credential required."},"422":{description:"Invalid source, dimensions, dates, or history selection."},"502":{description:"Provider temporarily unavailable."}};
+  const errors={"403":{description:"Active Pro (including an active 14-day trial), enterprise or administrator API credential required."},"422":{description:"Invalid source, dimensions, dates, or history selection."},"502":{description:"Provider temporarily unavailable."}};
   document.paths["/economic-data/search"]={get:{operationId:"searchEconomicSeries",summary:"Search BigQuery public tables, Treasury Fiscal Data or World Bank Data360 indicators",tags:["Economic data"],security:[{bearerAuth:[]}],parameters:[
     {name:"provider",in:"query",schema:{type:"string",enum:["fiscaldata","worldbank_data360","bigquery"],default:"fiscaldata"}},
     {name:"q",in:"query",schema:{type:"string",maxLength:100}}, {name:"limit",in:"query",schema:{type:"integer",minimum:1,maximum:20,default:10}}, {name:"offset",in:"query",schema:{type:"integer",minimum:0,maximum:100000,default:0}}],responses:{"200":response,...errors}}};

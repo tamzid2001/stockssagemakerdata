@@ -697,7 +697,7 @@ enterpriseDataRoutes.use(["/market-search", "/market-data", "/economic-data"], a
     next();
   } catch {
     res.set("Cache-Control", "private, no-store");
-    res.status(403).json({ error: "paid_api_required", message: "Use a paid Pro or enterprise API credential." });
+    res.status(403).json({ error: "paid_api_required", message: "Use an active Pro subscription, Pro trial, or enterprise API credential." });
   }
 });
 registerMarketDataRoutes(enterpriseDataRoutes);

@@ -47,7 +47,7 @@ Quantura connects stocks, FX, metals, indices, perpetual contracts and predictio
 ## What's new in v2.2.0
 
 - **Clerk accounts:** Google and email/password sign-in, account and organization components, verified sessions across the Node and retained Python APIs, and a compatibility bridge for existing private data.
-- **Paid API access:** active paid Pro subscriptions, enterprise grants and the verified administrator can use Clerk API keys and the authenticated OpenAPI reference. Trials cover website features.
+- **Paid API access:** active Pro (including an active 14-day trial) subscriptions, enterprise grants and the verified administrator can use Clerk API keys and the authenticated OpenAPI reference. Active 14-day Pro trials include API keys and MCP access.
 - **Verified data sources:** Alpaca replaces Yahoo in public search and downloads; Gemini crypto and prediction-market discovery, World Bank Data360 and Treasury Fiscal Data add real observations with explicit coverage limits.
 - **Website updates:** shorter Research copy, a founder letter, company logos, and Previous blog, Next blog and Copy shareable link controls on all 78 posts, with distinct Unsplash images.
 - **CSV preview:** inspect rows and name an uploaded series before submitting a forecast.
@@ -120,7 +120,7 @@ The checked-in Dukascopy snapshot contains 1,504 instruments; the service refres
 
 ## API and MCP
 
-Programmatic API access is available to paid Pro, enterprise and verified administrator accounts. The 14-day Pro trial covers the website research workflow; API access begins when the subscription is paid. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
+Programmatic API access is available to Pro (including an active 14-day trial), enterprise and verified administrator accounts. The 14-day Pro trial includes the website, API keys, API calls, and MCP server until its verified expiry. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
 
 - [Developer overview](https://quantura.studio/developers/api)
 - [Live OpenAPI](https://quantura.studio/api/openapi.json)
@@ -145,7 +145,7 @@ quantura models
 
 [The npm package](packages/npm/README.md) includes the CLI and TypeScript declarations; [the Python package](packages/python/README.md) is distributed as a GitHub release wheel. Both use Clerk browser OAuth with PKCE and resource-bound tokens, automatic refresh, private local credentials and unchanged API response envelopes. Mutations are never automatically retried.
 
-The live MCP endpoint **`https://quantura.studio/mcp`** supports Clerk OAuth through client metadata or dynamic registration. Its eight tools cover market search, capabilities, forecast creation/read, provider history, Scout, forecast receipt verification and account access. Each call rechecks paid access and resource permissions. Forecast creation and Scout save account requests; no tool places trades. The separate Mintlify endpoint provides documentation search.
+The live MCP endpoint **`https://quantura.studio/mcp`** supports Clerk OAuth through client metadata or dynamic registration. Its eight tools cover market search, capabilities, forecast creation/read, provider history, Scout, forecast receipt verification and account access. Each call rechecks current Pro subscription/trial access and resource permissions. Forecast creation and Scout save account requests; no tool places trades. The separate Mintlify endpoint provides documentation search.
 
 ## Strategy research
 
@@ -179,7 +179,7 @@ flowchart LR
     API --> Identity[Clerk verified sessions]
     Identity --> Bridge[Compatibility credential for data SDKs]
     Bridge --> State
-    API --> Entitlement[Paid Pro subscription / enterprise grant / verified admin]
+    API --> Entitlement[Pro (including an active 14-day trial) subscription / enterprise grant / verified admin]
     API <--> State[Private requests in Firestore and private storage]
     API --> Public[Verified GitHub Actions public screener artifacts]
     Workers --> Public
@@ -301,7 +301,7 @@ Provider data and model checkpoints can have separate licensing and redistributi
 
 ### October 3 account and navigation updates
 
-Search is compact in the shared header; Screener is available in Terminal. Profile uses Clerk account and billing components alongside saved forecast, download, CSV and Scout requests. API documentation, OpenAPI downloads and personal API keys require a paid Pro entitlement, a server-owned enterprise grant, or verified administrator access, with private no-store responses. WELCOME50 is a native Clerk promo code for new subscribers: 50% off one paid monthly or annual billing period, after the existing 14-day trial. Pricing checkout initializes the pinned Clerk checkout flow, applies and verifies the provider discount, then opens Clerk’s payment drawer. No payment or subscription is confirmed automatically. The redemption window ends October 6, 2027 at 10:42 PM Eastern. Renewals use the regular plan price. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
+Search is compact in the shared header; Screener is available in Terminal. Profile uses Clerk account and billing components alongside saved forecast, download, CSV and Scout requests. API documentation, OpenAPI downloads and personal API keys require a Pro (including an active 14-day trial) entitlement, a server-owned enterprise grant, or verified administrator access, with private no-store responses. WELCOME50 is a native Clerk promo code for new subscribers: 50% off one paid monthly or annual billing period, after the existing 14-day trial. Pricing checkout initializes the pinned Clerk checkout flow, applies and verifies the provider discount, then opens Clerk’s payment drawer. No payment or subscription is confirmed automatically. The redemption window ends October 6, 2027 at 10:42 PM Eastern. Renewals use the regular plan price. The enterprise contact dialog uses an inline close icon, Escape, and click-outside dismissal. Dukascopy forecast materialization requests the latest eligible N genuine observations before its cutoff instead of expanding into a full date-range export.
 
 ### October 3 website and data release
 
@@ -314,7 +314,7 @@ Search is compact in the shared header; Screener is available in Terminal. Profi
 
 ### October 4 account and data updates
 
-- Clerk Account API keys are available to paid Pro/enterprise users and the verified administrator; native Clerk personal keys are verified by the API and mapped to migrated UIDs. Free trials retain website access without API keys.
+- Clerk Account API keys are available to Pro (including an active 14-day trial)/enterprise users and the verified administrator; native Clerk personal keys are verified by the API and mapped to migrated UIDs. Active 14-day Pro trials include website, API-key and MCP access.
 - [BigQuery public-data guide](docs/bigquery-public-data.mdx): discover tables in Scout/Search, choose date/numeric columns and exact filters, preview or download history, and forecast the same normalized snapshot. Dry runs, a 100 MiB query cap, daily budgets and request coalescing bound costs.
 - Successful API reads use structured platform logs instead of Firestore audit documents. Mutations/errors remain durable; key usage timestamps and unchanged subscription writes are coalesced. This reduces write counts; it is not a measured invoice reduction.
 - Quantura's live [OAuth MCP](https://quantura.studio/mcp) exposes seven account-scoped API tools. The separate [documentation MCP](https://quantura.mintlifysite.com/mcp) remains available for guides.

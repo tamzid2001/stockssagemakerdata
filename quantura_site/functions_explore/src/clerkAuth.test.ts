@@ -6,20 +6,23 @@ const {privateKey,publicKey}=generateKeyPairSync("rsa",{modulusLength:2048});
 const previous={key:process.env.CLERK_JWT_KEY,secret:process.env.CLERK_SECRET_KEY,fetch:globalThis.fetch};
 process.env.CLERK_JWT_KEY=publicKey.export({type:"spki",format:"pem"}).toString();
 process.env.CLERK_SECRET_KEY="sk_test_unit_test_only";
-let member=true,legacyCalls=0,keyRevoked=false,keySubject="user_KeyAdmin";
+let member=true,legacyCalls=0,keyRevoked=false,keySubject="user_KeyAdmin",billingTrialEnd:number|undefined;
 globalThis.fetch=async(input:any)=>{
   const url=String(input.url||input);
   assert.match(url,/^https:\/\/api\.clerk\.com\/(?:v1\/|api_keys\/)/);
   if(url.includes("/api_keys/verify"))return Response.json({object:"api_key",id:"ak_Test",type:"api_key",name:"Account key",subject:keySubject,scopes:["forecasts:read"],revoked:keyRevoked,expired:false,expiration:null,created_by:"user_KeyAdmin",created_at:Date.now(),updated_at:Date.now()});
   if(url.includes("/users/user_KeyAdmin"))return Response.json({object:"user",id:"user_KeyAdmin",external_id:"legacy_admin",primary_email_address_id:"email_admin",email_addresses:[{object:"email_address",id:"email_admin",email_address:"tamzid257@gmail.com",linked_to:[],verification:{status:"verified"}}],phone_numbers:[],web3_wallets:[],external_accounts:[],public_metadata:{},private_metadata:{},unsafe_metadata:{},banned:false,locked:false});
-  if(url.includes("/users/user_TestMigration"))return Response.json({object:"user",id:"user_TestMigration",external_id:"legacy_uid",first_name:"Test",last_name:null,primary_email_address_id:"email_test",email_addresses:[{object:"email_address",id:"email_test",email_address:"test@example.com",linked_to:[],verification:{status:"verified"}}],phone_numbers:[],web3_wallets:[],external_accounts:[],public_metadata:{admin:true},private_metadata:{},unsafe_metadata:{uid:"victim"},banned:false,locked:false});
+  if(url.includes("/users/user_TestMigration") && !url.includes("/billing/"))return Response.json({object:"user",id:"user_TestMigration",external_id:"legacy_uid",first_name:"Test",last_name:null,primary_email_address_id:"email_test",email_addresses:[{object:"email_address",id:"email_test",email_address:"test@example.com",linked_to:[],verification:{status:"verified"}}],phone_numbers:[],web3_wallets:[],external_accounts:[],public_metadata:{admin:true},private_metadata:{},unsafe_metadata:{uid:"victim"},banned:false,locked:false});
   if(url.includes("/organizations/org_TestTeam/memberships"))return Response.json({data:member?[{object:"organization_membership",id:"orgmem_test",role:"org:member",organization:{object:"organization",id:"org_TestTeam",name:"Team",slug:"team",created_by:"user_Other",public_metadata:{},private_metadata:{}},public_user_data:{user_id:"user_TestMigration",identifier:"test@example.com"},public_metadata:{},private_metadata:{}}]:[],total_count:member?1:0});
-  if(url.includes("/billing/subscription"))return Response.json({errors:[]},{status:404});
+  if(url.includes("/billing/subscription")) {
+    if(billingTrialEnd!==undefined && url.includes("user_TestMigration"))return Response.json({object:"commerce_subscription",id:"sub_Trial",status:"active",subscription_items:[{object:"commerce_subscription_item",id:"item_Trial",status:"active",period_start:Date.now()-5000,period_end:billingTrialEnd,is_free_trial:true,plan:{id:"plan_Pro",slug:"pro",name:"Pro",features:[]}}]});
+    return Response.json({errors:[]},{status:404});
+  }
   throw Error("Unexpected network request in auth test");
 };
 const {CLERK_ISSUER,createQuanturaAuth,isClerkToken}:typeof import("./clerkAuth")=require("./clerkAuth");
 const {resolveWorkspaceAccess,verifiedPlatformAdmin,authenticatePlatformRequest}:typeof import("./apiAccess")=require("./apiAccess");
-const {subscriptionEntitlements}:typeof import("./clerkBilling")=require("./clerkBilling");
+const {subscriptionEntitlements,invalidateClerkBilling}:typeof import("./clerkBilling")=require("./clerkBilling");
 after(()=>{
   if(previous.key===undefined)delete process.env.CLERK_JWT_KEY;else process.env.CLERK_JWT_KEY=previous.key;
   if(previous.secret===undefined)delete process.env.CLERK_SECRET_KEY;else process.env.CLERK_SECRET_KEY=previous.secret;
@@ -75,4 +78,17 @@ test("native Clerk personal keys resolve the migrated administrator, enforce sco
  const key=await authenticatePlatformRequest(req,options);assert.equal(key.userId,"legacy_admin");assert.equal(key.platformAdmin,true);assert.equal(key.plan,"pro");assert.deepEqual(key.tokenScopes,["forecasts:read"]);
  keyRevoked=true;await assert.rejects(authenticatePlatformRequest(req,options),/revoked/);keyRevoked=false;
  keySubject="org_Organization";await assert.rejects(authenticatePlatformRequest(req,options),/api_key_invalid/);keySubject="user_KeyAdmin";
+});
+
+test("a regular user's Clerk API key works during Pro trial and stops working when its period expires",async()=>{
+ const options={db:{collection:()=>({doc:()=>({get:async()=>({data:()=>undefined})})})} as any,auth:{} as any,adminEmails:["tamzid257@gmail.com"]};
+ const req={headers:{authorization:"Bearer ak_unit_test_secret"}} as any;
+ try {
+  keySubject="user_TestMigration";billingTrialEnd=Date.now()+86400000;invalidateClerkBilling(keySubject);
+  const principal=await authenticatePlatformRequest(req,options);
+  assert.equal(principal.userId,"legacy_uid");assert.equal(principal.plan,"pro");assert.equal(principal.platformAdmin,false);
+  assert.deepEqual(principal.tokenScopes,["forecasts:read"]);
+  billingTrialEnd=Date.now()-1;invalidateClerkBilling(keySubject);
+  await assert.rejects(authenticatePlatformRequest(req,options),/paid_api_required/);
+ }finally {invalidateClerkBilling("user_TestMigration");keySubject="user_KeyAdmin";billingTrialEnd=undefined;}
 });
