@@ -7,7 +7,7 @@ description: "Use Clerk OAuth to connect ChatGPT to Quantura's live search, fore
 
 Server URL: **`https://quantura.studio/mcp`**
 
-Transport: stateless Streamable HTTP with JSON responses. Protocol discovery and the tool catalog are public. Every tool call requires Pro (including an active 14-day trial), enterprise or verified administrator access and checks current account and resource permissions. Active 14-day Pro trials include API and MCP access.
+Transport: stateless Streamable HTTP with JSON responses. Protocol discovery and the tool catalog are public. Every tool call requires pay-as-you-go or Pro (including an active 14-day trial), enterprise or verified administrator access and checks current account and resource permissions. Active 14-day trials include API and MCP access.
 
 | Tool | Action |
 | --- | --- |
@@ -68,3 +68,7 @@ Configuration syntax varies by client. Store credentials in the client's secret 
 `https://quantura.mintlifysite.com/mcp` is the separate Mintlify documentation server. It provides documentation search and whichever read-only OpenAPI tools the host enables. Use `/mcp` on `quantura.studio` for the eight live tools above.
 
 [CLI and SDKs](/docs/sdk-cli) · [API reference](https://quantura.studio/developers/api) · [Authentication](/docs/authentication)
+
+## Forecast usage billing
+
+New pay-as-you-go accounts pay $0.50 per successfully completed custom ensemble forecast. MCP forecast creation uses the same completion ledger as the website and HTTP API. Trial runs, cache hits, result reads, history downloads, and Scout questions are not metered. Keep a stable idempotency key when retrying forecast creation. Manage usage and your monthly budget on [Pricing](https://quantura.studio/pricing). Existing Pro subscribers keep their flat-rate plan.

@@ -94,6 +94,7 @@ import {
   renderForecastAgentMarkdown,
 } from "./forecastAnalysis";
 export { shopApi } from "./shopApi";
+import {getStripeClient} from "./shopApi";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require("adm-zip");
 
@@ -722,6 +723,7 @@ registerEnsembleForecastRoutes(ROUTES, {
   adminEmails: [ADMIN_EMAIL.toLowerCase()],
   publicOrigin: PUBLIC_ORIGIN,
   vbaseApiKey: () => resolveRuntimeSecretValue("vbase", ["VBASE_API_KEY"], ["VBASE_API_KEY"]),
+  stripe:getStripeClient,
 });
 // Register concrete dataset routes before the generic catalog
 // `/v1/datasets/:datasetId` route so Express cannot shadow trajectory/release

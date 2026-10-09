@@ -7,7 +7,8 @@ export function subscriptionEntitlements(subscription: Pick<BillingSubscription,
     && ["active", "canceled"].includes(item.status)
     && item.periodStart <= now && Number(item.periodEnd) > now);
   return { plan: item ? "pro" : "free", docs_available: Boolean(item),
-    can_trial: subscription?.eligibleForFreeTrial === true,
+    can_trial: !subscription || subscription.eligibleForFreeTrial === true,
+    has_previous_subscription:Boolean(subscription?.subscriptionItems.some(item=>["pro","pro_org"].includes(item.plan?.slug||""))),
     access_ends_at:item?.periodEnd?new Date(item.periodEnd).toISOString():null,
     trial_ends_at: item?.isFreeTrial ? new Date(item.periodEnd!).toISOString() : null,
     subscription_status: item ? item.isFreeTrial ? "trialing" : item.status : "none", billing_provider: "clerk" };

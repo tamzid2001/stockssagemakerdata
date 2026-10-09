@@ -4,21 +4,21 @@
     <meta name="color-scheme" content="light dark" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quantura Pro Pricing | Forecasting & Research</title>
-        <meta name="description" content="Quantura Pro: $199.99 monthly or $1,999.92 yearly. Forecasts, market screening, historical data, and API and MCP access, including the 14-day free trial." />
+    <title>Quantura Pricing | Pay as You Go & Pro</title>
+        <meta name="description" content="Pay $0.50 per completed forecast or choose unlimited daily forecasts with Pro. Both include a 14-day trial with API and MCP." />
         <meta name="robots" content="index, follow" />
-    <meta name="keywords" content="Quantura Pro pricing, forecast subscription, enterprise market research" />
+    <meta name="keywords" content="Quantura pay as you go pricing, metered forecasts, enterprise market research" />
         <link rel="canonical" href="https://quantura.studio/pricing" />
-        <meta property="og:title" content="Quantura Pro Pricing" />
-        <meta property="og:description" content="One Pro plan: $199.99 monthly or $1,999.92 annually. Forecasts, market screening, historical data, and saved research." />
+        <meta property="og:title" content="Quantura Pricing" />
+        <meta property="og:description" content="Pay $0.50 per completed forecast or choose monthly/yearly Pro. Both include a 14-day free trial." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://quantura.studio/pricing" />
         <meta property="og:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta property="og:site_name" content="Quantura" />
     <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Quantura Pro Pricing" />
-    <meta name="twitter:description" content="One Pro plan: $199.99 monthly or $1,999.92 annually. Forecasts, market screening, historical data, and saved research." />
+    <meta name="twitter:title" content="Quantura Pricing" />
+    <meta name="twitter:description" content="Pay $0.50 per completed forecast or choose monthly/yearly Pro. Both include a 14-day free trial." />
     <meta name="twitter:image" content="https://quantura.studio/assets/quantura-social.png?v=20260909a" />
     <meta name="twitter:url" content="https://quantura.studio/pricing" />
     <meta name="author" content="Quantura" />
@@ -50,9 +50,9 @@
 	    <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics-compat.js"></script>
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
 	    <script defer src="/ga4-context.js?v=20260927a"></script>
-    <script defer src="/pricing.js?v=20261006-welcome50"></script>
-    <link rel="stylesheet" href="/pricing.css?v=20261006-welcome50" />
-    <script defer src="/quantura-auth.js?v=20261006-welcome50"></script>
+    <script defer src="/pricing.js?v=20261009-metered"></script>
+    <link rel="stylesheet" href="/pricing.css?v=20261009-metered" />
+    <script defer src="/quantura-auth.js?v=20261009-metered"></script>
     <script defer src="/app.js?v=20261009-pro-trial"></script>
   <script defer src="/q-market.js?v=20261003-header"></script>
 <script defer src="/market-search.js?v=20261003-header"></script>
@@ -75,59 +75,74 @@
     </header>
 <main class="pricing-main">
   <section class="container pricing-promo" data-promo-banner data-promo-expires="2027-10-07T02:42:00Z" aria-labelledby="pricing-promo-title">
-    <div><p class="eyebrow">WELCOME TO QUANTURA</p><h2 id="pricing-promo-title">50% off your first paid month or year.</h2><p>New members · Monthly and yearly Pro · 14-day free trial included</p></div>
+    <div><p class="eyebrow">WELCOME TO QUANTURA</p><h2 id="pricing-promo-title">50% off your first paid billing period.</h2><p>New members · Pro or pay as you go · 14-day free trial included</p></div>
     <div class="pricing-promo-code"><button type="button" data-promo-copy aria-label="Copy promo code WELCOME50"><span>Promo code</span><strong>WELCOME50</strong><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/></svg></button><p>Applied automatically at eligible checkout.</p><span class="visually-hidden" data-promo-copy-status role="status" aria-live="polite"></span></div>
   </section>
   <section class="pricing-intro container" aria-labelledby="pricing-title">
-    <p class="eyebrow">QUANTURA PRO</p>
-    <h1 id="pricing-title">One plan.<br>A clearer view of markets.</h1>
-    <p>From market data to forecast ranges. Everything you need to build a repeatable research workflow.</p>
-    <div class="pricing-billing" id="pricing-billing-toggle" role="group" aria-label="Billing period">
-      <button type="button" data-billing-cycle="monthly" aria-pressed="true">Monthly</button>
-      <button type="button" data-billing-cycle="yearly" aria-pressed="false">Yearly <span>Save $399.96</span></button>
-    </div>
+    <p class="eyebrow">PAY AS YOU GO</p>
+    <h1 id="pricing-title">Pay for forecasts.<br>Keep the whole workflow.</h1>
+    <p>Choose pay as you go or unlimited daily forecasts with Pro. Both include a 14-day trial with API and MCP.</p>
   </section>
-  <section class="container pricing-plan-section" aria-label="Pro subscription">
-    <article class="pro-plan" data-pricing-plan-card>
-      <div class="pro-plan-banner"><i class="iconoir-graph-up" aria-hidden="true"></i> The complete Quantura research workflow</div>
+  <section class="container pricing-plan-section" aria-label="Usage-based plan">
+    <article class="pro-plan" data-metered-plan-card>
+      <div class="pro-plan-banner"><img src="/assets/logo.png" width="24" height="24" alt="" /> Quantura · The complete research workflow</div>
       <div class="pro-plan-grid">
         <div class="pro-plan-summary">
-          <span class="pro-label">Pro</span>
-          <h2><span data-pricing-price>$199.99/mo</span></h2>
-          <p class="pro-cycle-copy" data-pricing-cycle-copy>Pay yearly for $1,999.92. Save $399.96.</p>
+          <span class="pro-label">Pay as you go</span>
+          <h2><span>$0.50</span></h2>
+          <p class="pro-cycle-copy">per completed custom ensemble forecast<br>No base fee · Billed monthly</p>
           <p>For investors, analysts, and developers who want an inspectable view of what could happen next.</p>
-          <div class="purchase-panel" data-purchase-panel data-promo-code="WELCOME50" data-promo-expires="2027-10-07T02:42:00Z" data-web-only="true" data-trial-days="14" data-product="Quantura Pro Monthly" data-monthly-product="Quantura Pro Monthly" data-yearly-product="Quantura Pro Annual" data-price="199.99" data-monthly-price="199.99" data-yearly-price="1999.92" data-currency="USD" data-iap-plan="pro" data-monthly-iap-plan="pro" data-yearly-iap-plan="annual_pro">
+          <div class="purchase-panel" data-purchase-panel data-metered-plan data-web-only="true" data-trial-days="14" data-product="Quantura Pay as You Go" data-price="0" data-currency="USD">
             <button class="cta" type="button" data-action="purchase" data-label-auth="Start 14-day free trial" data-label-guest="Start 14-day free trial">Start 14-day free trial</button>
             <p class="purchase-note small" role="status">Sign in to start your 14-day free trial.</p>
-            <p class="purchase-success hidden" role="status"></p>
-            <button class="cta secondary" type="button" data-promo-regular-checkout hidden>Continue at the regular price</button>
           </div>
-          <p class="small muted"><span data-trial-billing-copy>14 days free, then 50% off your first paid month or year with WELCOME50 for eligible new subscribers. Renews at $199.99/month or $1,999.92/year. Cancel before the trial ends to avoid a charge.</span> Applicable taxes are shown at checkout.</p>
-          <a href="/forecasting?panel=profile" id="billing-portal-link" class="pro-billing-link">Manage subscription</a>
+          <p class="small muted"><span data-trial-billing-copy>14 days free, then pay for completed forecasts. WELCOME50 gives eligible new members 50% off usage on the first paid monthly invoice. Cancel anytime.</span> Applicable taxes are shown at checkout.</p>
+          <a href="/forecasting?panel=profile" id="billing-portal-link" class="pro-billing-link">Manage billing</a>
         </div>
         <div class="pro-plan-features">
           <h3>The full research loop.</h3>
           <ul>
-            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Unlimited daily forecasts</strong><span>Run multi-model forecasts across supported market and public databases.</span></div></li>
+            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>One forecast, all available models</strong><span>Choose your ensemble and quantiles. Only a successfully completed custom run counts.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Market discovery & screening</strong><span>Stocks, perpetuals, and today's prediction-market games.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Historical data & exports</strong><span>Download supported sources and keep your research portable.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Scout &amp; chart notes</strong><span>Ask about forecast ranges, historical values and model evidence. Keep notes and saved conversations.</span></div></li>
             <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Saved requests</strong><span>Revisit results, share research, and manage your account.</span></div></li>
-            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>API, MCP &amp; SDKs</strong><span>Connect ChatGPT and your research tools. Included with Pro and your 14-day free trial.</span></div></li>
+            <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>API, MCP &amp; SDKs</strong><span>Connect ChatGPT and your research tools. Included with pay as you go and your 14-day free trial.</span></div></li>
           </ul>
 
         </div>
       </div>
     </article>
+    <article class="pro-plan pricing-pro-option" data-pricing-plan-card aria-label="Pro subscription">
+      <div class="pro-plan-banner"><img src="/assets/logo.png" width="24" height="24" alt="" /> Quantura Pro · For regular research</div>
+      <div class="pro-plan-grid"><div class="pro-plan-summary">
+        <span class="pro-label">Pro</span><h2><span data-pricing-price>$199.99/mo</span></h2>
+        <div class="pricing-billing" id="pricing-billing-toggle" role="group" aria-label="Pro billing period"><button type="button" data-billing-cycle="monthly" aria-pressed="true">Monthly</button><button type="button" data-billing-cycle="yearly" aria-pressed="false">Yearly</button></div>
+        <p class="pro-cycle-copy" data-pricing-cycle-copy>Pay yearly for $1,999.92. Save $399.96.</p>
+        <div class="purchase-panel" data-purchase-panel data-pro-plan data-promo-code="WELCOME50" data-promo-expires="2027-10-07T02:42:00Z" data-web-only="true" data-trial-days="14" data-product="Quantura Pro Monthly" data-monthly-product="Quantura Pro Monthly" data-yearly-product="Quantura Pro Annual" data-price="199.99" data-monthly-price="199.99" data-yearly-price="1999.92" data-currency="USD" data-iap-plan="pro" data-monthly-iap-plan="pro" data-yearly-iap-plan="annual_pro">
+          <button class="cta" type="button" data-action="purchase" data-label-auth="Try Pro for 14 days" data-label-guest="Try Pro for 14 days">Try Pro for 14 days</button><p class="purchase-note small" role="status">Sign in before checkout.</p><button class="cta secondary" type="button" data-promo-regular-checkout hidden>Continue without the promotion</button>
+        </div>
+        <p class="small muted">WELCOME50 gives eligible new members 50% off the first paid month or year after the trial. Renews at the displayed regular price. Cancel before the trial ends to avoid a charge.</p>
+      </div><div class="pro-plan-features"><h3>Research as often as you need.</h3><ul>
+        <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>Unlimited daily custom forecasts</strong><span>No per-forecast usage charge. Concurrency and fair-use controls apply.</span></div></li>
+        <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>The complete workflow</strong><span>Screeners, provider history, Scout, chart notes and saved requests.</span></div></li>
+        <li><i class="iconoir-check" aria-hidden="true"></i><div><strong>API, MCP and SDKs</strong><span>Included from the first day of your 14-day free trial.</span></div></li>
+      </ul><p class="small">Pro becomes better value than $0.50 usage pricing at about 400 forecasts per month, before promotions.</p></div></div>
+    </article>
     <aside class="enterprise-contact" id="enterprise"><div><p class="eyebrow">FOR TEAMS</p><h2>Need a custom fit?</h2><p>Tell us about your data, volume, and integration needs. We'll scope a tailored enterprise proposal.</p></div><button type="button" class="cta secondary" id="enterprise-open" aria-haspopup="dialog" aria-controls="enterprise-dialog">Contact enterprise <i class="iconoir-arrow-up-right" aria-hidden="true"></i></button></aside>
   </section>
   <section class="container pricing-faq" aria-labelledby="pricing-faq-title"><h2 id="pricing-faq-title">A few things to know</h2>
-    <div data-clerk-pricing hidden></div>
-    <details data-promo-terms><summary>How does WELCOME50 work?</summary><p>New subscribers get 50% off their first paid monthly or annual Pro billing period, after their eligible 14-day free trial. The code is applied automatically and shown with the discount in checkout. Later renewals are $199.99/month or $1,999.92/year, plus applicable taxes. Valid for accounts that have never subscribed to a paid plan; redeem by October 6, 2027 at 10:42 PM Eastern.</p></details>
-    <details><summary>How does the 14-day free trial work?</summary><p>Try the full Pro plan for 14 days, including API keys, SDKs, and the MCP server. A payment method is required. Your selected monthly or annual plan starts billing when the trial ends. Cancel in Manage subscription before then to avoid a charge. One trial per account.</p></details>
-    <details><summary>How does annual billing work?</summary><p>You pay $1,999.92 once per year. Monthly billing is $199.99 each month, or $2,399.88 over a year. Annual billing saves $399.96. Both include the same Pro features.</p></details>
-    <details><summary>Can I cancel?</summary><p>Yes. Open Manage subscription to cancel renewal. Your access continues through the paid period.</p></details>
+    <details><summary>What gets billed?</summary><p>A new custom ensemble forecast costs $0.50 when it completes successfully, whether requested on the website, through the API, or through MCP. The price includes the available models and Scout questions. Failed forecasts, cached results, status checks, screeners, historical downloads, and trial usage are not billed. 20 forecasts cost $10; 100 cost $50, before discounts and tax.</p></details>
+    <details><summary>How does the 14-day free trial work?</summary><p>Try the full workflow, API keys, SDKs, and MCP server for 14 days. A payment method is required. Usage during the trial is free. Afterward, pay-as-you-go forecasts are billed monthly; Pro renews monthly or yearly at your selected price. One trial per account. Cancel before it ends to avoid charges.</p></details>
+    <details><summary>How does WELCOME50 work?</summary><p>Eligible new subscribers get 50% off their first paid billing period after the free trial: the first monthly usage invoice for pay as you go, or the first paid month or year of Pro. WELCOME50 appears automatically at checkout. Later billing uses the regular price, plus applicable taxes.</p></details>
+    <details><summary>Can I control spending?</summary><p>Your initial usage budget is $50 per billing month, before discounts and tax. Pending forecasts reserve $0.50 each. New paid runs stop when the budget is reached; failed runs release their reservation. Sign in to adjust the budget below.</p></details>
+    <details><summary>Can I choose Pro instead?</summary><p>Existing Pro subscribers keep their agreed monthly or annual pricing and features. Pro remains available to new customers too. No one is automatically switched to metered billing. Manage Pro in Clerk Account settings.</p></details>
+    <details><summary>Can I cancel?</summary><p>Yes. Open Manage billing to cancel. Completed paid usage remains payable; saved results stay available according to your account access.</p></details>
     <details><summary>What can I forecast?</summary><p>Supported stocks, crypto and perpetuals, prediction markets, and uploaded time series. Availability depends on the provider and the genuine history each selected model requires.</p></details>
+  </section>
+  <section class="container metered-account" data-metered-account hidden aria-labelledby="metered-account-title">
+    <h2 id="metered-account-title">Your usage</h2><p data-metered-usage role="status"></p>
+    <form data-metered-budget-form><label for="metered-budget">Monthly usage budget (USD)</label><div class="metered-budget-row"><input id="metered-budget" name="budget" type="number" min="0" max="1000" step="0.50" required/><button class="cta secondary" type="submit">Save budget</button></div><p data-metered-budget-status role="status"></p></form>
   </section>
   <dialog id="enterprise-dialog" class="enterprise-dialog" aria-labelledby="enterprise-title">
     <button class="enterprise-close" id="enterprise-close" type="button" aria-label="Close enterprise contact"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>

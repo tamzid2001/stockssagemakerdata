@@ -17,7 +17,7 @@ test('pricing cycle labels preserve Clerk cents and the exact annual savings',()
   assert.match(w.document.querySelector('[data-pricing-cycle-copy]').textContent,/1999\.92/);
   w.changeCycle('yearly');assert.equal(w.document.querySelector('[data-pricing-price]').textContent,'$1999.92/yr');
   assert.match(w.document.querySelector('[data-pricing-cycle-copy]').textContent,/399\.96/);
-  assert.equal(w.document.querySelector('[data-purchase-panel]').dataset.price,'1999.92');d.window.close();
+  assert.equal(w.document.querySelector('[data-pro-plan]').dataset.price,'1999.92');d.window.close();
 });
 
 test('Normalize weights emits editable two-decimal values that total exactly 1.00', () => {

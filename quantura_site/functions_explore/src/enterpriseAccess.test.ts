@@ -30,3 +30,12 @@ test("Pro API access includes valid trials and cancellation periods, and expires
  for(const extra of [{subscription_status:"trialing"},{subscription_status:"past_due"},{docs_available:false},{access_ends_at:"invalid"},{access_ends_at:"2026-10-08"}])assert.equal(paidApiEntitlement({...paid,...extra},now),false);
  assert.equal(paidApiEntitlement({...trial,trial_ends_at:"invalid"},now),false);
 });
+
+test("metered billing grants the same API access during trial and paid periods, then revokes on expiry",async()=>{
+ const now=Date.now(),ledger:any={billingMode:"metered",subscriptionStatus:"trialing",trialEnd:(now+100000)/1000,periodEnd:(now+100000)/1000};
+ const db:any={collection:(name:string)=>({doc:()=>({get:async()=>({data:()=>name==="billing_accounts"?ledger:{}})})})};
+ await requirePaidApiAccess(db,"metered-owner");ledger.trialEnd=(now-1)/1000;
+ await assert.rejects(requirePaidApiAccess(db,"metered-owner"),/paid_api_required/);
+ ledger.subscriptionStatus="active";await requirePaidApiAccess(db,"metered-owner");
+ ledger.subscriptionStatus="past_due";await assert.rejects(requirePaidApiAccess(db,"metered-owner"),/paid_api_required/);
+});

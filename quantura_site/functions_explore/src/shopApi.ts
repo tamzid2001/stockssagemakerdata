@@ -8,7 +8,9 @@ import { clerkSubscriptionAccess } from "./clerkBilling";
 import { randomUUID } from "node:crypto";
 import { hasApiAccess } from "./enterpriseAccess";
 import documentation from "./apiDocumentation.json";
-import { proSubscriptionPlan, proCheckoutOptions, subscriptionAccess, billingAccess, BILLING_ACCOUNTS } from "./subscriptionBilling";
+import { subscriptionAccess, billingAccess, BILLING_ACCOUNTS } from "./subscriptionBilling";
+import {meteredCatalog,meteredCheckoutOptions,meteredUsageSummary,DEFAULT_BUDGET_CENTS} from "./meteredBilling";
+import billingCatalog from "./meteredCatalog.json";
 import {
   SHOP_SHIPPING_POLICY,
   getCatalogBySku,
@@ -70,7 +72,7 @@ async function billingIdentity(req:Request,res:Response) {
     const user=await createQuanturaAuth(admin.auth()).verifyIdToken(token,true) as QuanturaIdentity;
     if(user.firebase?.sign_in_provider==='anonymous')throw Error();
     return user;
-  }catch{res.status(401).json({error:'sign_in_required',message:'Sign in to manage a Pro subscription.'});return null;}
+  }catch{res.status(401).json({error:'sign_in_required',message:'Sign in to manage billing.'});return null;}
 }
 
 async function syncProSubscription(subscription:Stripe.Subscription) {
@@ -83,6 +85,7 @@ async function syncProSubscription(subscription:Stripe.Subscription) {
     if(data.stripeSubscriptionId!==access.subscriptionId && Number(data.stripeSubscriptionCreatedAt)>access.createdAt)return;
     const update={plan:access.plan,subscriptionTier:access.plan,stripeCustomerId:access.customerId,stripeSubscriptionId:access.subscriptionId,
       subscriptionStatus:access.status,cancelAtPeriodEnd:access.cancelAtPeriodEnd,stripeSubscriptionCreatedAt:access.createdAt,
+      billingMode:access.billingMode,periodStart:access.periodStart,periodEnd:access.periodEnd,
       pendingCheckout:null,trialEnd:access.trialEnd,hasUsedTrial:access.hasUsedTrial || data.hasUsedTrial===true};
     const changed=(existing:Record<string,any>)=>Object.entries(update).some(([key,value])=>JSON.stringify(existing[key])!==JSON.stringify(value));
     if(changed(data))tx.set(ref,{...update,updatedAt:admin.firestore.FieldValue.serverTimestamp()},{merge:true});
@@ -316,94 +319,66 @@ app.get("/api/shop/subscription-access",async (req,res)=>{
   const value=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
   const legacy=billingAccess(value);
   const current=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
-  const access=legacy.docs_available?{...legacy,billing_provider:"stripe"}:current?{...current,can_trial:current.can_trial && legacy.can_trial}:legacy;
+  const access=legacy.docs_available?{...legacy,billing_provider:"stripe"}:current?{...current,can_trial:!current.has_previous_subscription && legacy.can_trial}:legacy;
   const apiAccess=await hasApiAccess(db,principal.uid,principal.clerk_user_id);
   const admin=current?.subscription_status==="admin";
   const effective=admin?current!:access;
   res.json({data:{...effective,admin,pro_available:effective.docs_available,api_keys_available:apiAccess,docs_available:apiAccess}});
 });
 
+app.get("/api/shop/metered-catalog",(_req,res)=>{res.set("Cache-Control","public, max-age=300");res.json({data:meteredCatalog()});});
+app.get("/api/shop/metered-usage",async(req,res)=>{
+  res.set("Cache-Control","private, no-store");const principal=await billingIdentity(req,res);if(!principal)return;
+  const account=(await db.collection(BILLING_ACCOUNTS).doc(principal.uid).get()).data()||{};
+  res.json({data:account.billingMode==="metered"?await meteredUsageSummary(db,principal.uid,account):null});
+});
+app.post("/api/shop/metered-budget",async(req,res)=>{
+  if(!applyCheckoutCors(req,res)){res.status(403).json({error:"origin_not_allowed"});return;}
+  const principal=await billingIdentity(req,res);if(!principal)return;
+  const cents=req.body?.monthly_budget_cents;
+  if(!Number.isSafeInteger(cents)||cents<0||cents>100000){res.status(422).json({error:"invalid_budget",message:"Choose a monthly usage budget from $0 to $1,000."});return;}
+  await db.collection(BILLING_ACCOUNTS).doc(principal.uid).set({monthlyBudgetCents:cents},{merge:true});
+  res.json({data:{monthly_budget_cents:cents}});
+});
+app.post("/api/shop/metered-checkout",async(req,res)=>{
+  if(!applyCheckoutCors(req,res)){res.status(403).json({error:"origin_not_allowed"});return;}
+  const principal=await billingIdentity(req,res);if(!principal)return;
+  if(isRateLimited(getRequestIp(req))){res.status(429).json({error:"rate_limited"});return;}
+  const stripe=await getStripeClient();if(!stripe){res.status(503).json({error:"stripe_not_configured"});return;}
+  try{
+    const current=principal.clerk_user_id?await clerkSubscriptionAccess(principal.clerk_user_id):null;
+    if(current?.docs_available)throw Error("subscription_already_active");
+    const ref=db.collection(BILLING_ACCOUNTS).doc(principal.uid),now=Date.now();
+    const reservation=await db.runTransaction(async tx=>{
+      const value=(await tx.get(ref)).data()||{};
+      if(billingAccess(value).docs_available)throw Error("subscription_already_active");
+      const existing=value.pendingCheckout;
+      if(existing && Number(existing.expiresAt)>now){if(existing.plan!=="metered")throw Error("checkout_in_progress");return existing;}
+      const trial=value.hasUsedTrial!==true && current?.has_previous_subscription!==true;
+      const pending={key:randomUUID(),plan:"metered",trial,promotion:trial && req.body?.with_promotion!==false,
+        customer:value.stripeCustomerId||null,expiresAt:now+23*60*60_000};
+      tx.set(ref,{pendingCheckout:pending,monthlyBudgetCents:value.monthlyBudgetCents??DEFAULT_BUDGET_CENTS},{merge:true});return pending;
+    });
+    const checkout=meteredCheckoutOptions(principal.uid,normalizeEmail(principal.email),PUBLIC_ORIGIN,reservation.trial,reservation.customer,reservation.promotion);
+    checkout.expires_at=Math.floor(reservation.expiresAt/1000);
+    const session=await stripe.checkout.sessions.create(checkout,{idempotencyKey:`quantura-metered-${principal.uid}-${reservation.key}`});
+    if(!session.url)throw Error("missing_checkout_url");res.json({url:session.url,sessionId:session.id});
+  }catch(error:any){
+    const known=["subscription_already_active","checkout_in_progress"].includes(error.message);
+    res.status(known?409:503).json({error:known?error.message:"checkout_unavailable",message:known?"Manage your existing subscription before opening a new checkout.":"Checkout could not start. Please retry."});
+  }
+});
+
 app.get("/api/shop/api-docs",async (req,res)=>{
   if(!applyCheckoutCors(req,res)){res.status(403).json({error:"origin_not_allowed"});return;}
   res.set("Cache-Control","private, no-store");
   const principal=await billingIdentity(req,res);if(!principal)return;
-  if(!await hasApiAccess(db,principal.uid,principal.clerk_user_id)){res.status(403).json({error:"paid_api_required",message:"API documentation requires an active Pro subscription, Pro trial, or enterprise agreement."});return;}
+  if(!await hasApiAccess(db,principal.uid,principal.clerk_user_id)){res.status(403).json({error:"paid_api_required",message:"API documentation requires an active paid plan, 14-day trial, or enterprise agreement."});return;}
   res.json({data:documentation});
 });
 
-app.post("/api/shop/subscription-checkout", async (req, res) => {
-  if (!applyCheckoutCors(req, res)) {
-    res.status(403).json({ error: "origin_not_allowed" });
-    return;
-  }
-
-  const principal=await billingIdentity(req,res);if(!principal)return;
-
-  const stripe = await getStripeClient();
-  if (!stripe) {
-    res.status(503).json({
-      error: "stripe_not_configured",
-      message: "Stripe secret key is missing. Configure STRIPE_SECRET_KEY (or alias) in Secret Manager.",
-    });
-    return;
-  }
-
-  const ip = getRequestIp(req);
-  if (isRateLimited(ip)) {
-    res.status(429).json({ error: "rate_limited", message: "Too many checkout attempts. Please retry shortly." });
-    return;
-  }
-
-  const payload = asRecord(req.body);
-  const email = normalizeEmail(principal.email);
-  const uid = principal.uid;
-  const plan = proSubscriptionPlan(payload);
-  if (!plan) {
-    res.status(400).json({
-      error: "invalid_plan",
-      message: "Choose Pro with monthly or yearly billing.",
-    });
-    return;
-  }
-
-  try {
-    const clerkAccess=principal.clerk_user_id ? await clerkSubscriptionAccess(principal.clerk_user_id) : null;
-    if(clerkAccess?.docs_available)throw new Error("subscription_already_active");
-    if(payload.trial===true && clerkAccess && !clerkAccess.can_trial)throw new Error("trial_already_used");
-    const trial=payload.trial===true,ref=db.collection(BILLING_ACCOUNTS).doc(uid),now=Date.now(),key=randomUUID();
-    // Server-only ledger and a durable idempotency key serialize checkout across
-    // instances. A retry cannot create a second trial, including across cycles.
-    const reservation=await db.runTransaction(async tx=>{
-      const existing=(await tx.get(ref)).data()||{};
-      if(billingAccess(existing).docs_available)throw new Error("subscription_already_active");
-      if(trial && existing.hasUsedTrial===true)throw new Error("trial_already_used");
-      const pending=existing.pendingCheckout;
-      if(pending && Number(pending.expiresAt)>now){
-        if(pending.cycle!==plan.cycle || pending.trial!==trial)throw new Error("checkout_in_progress");
-        return pending;
-      }
-      const pendingCheckout={key,cycle:plan.cycle,trial,expiresAt:now+23*60*60*1000};
-      tx.set(ref,{pendingCheckout},{merge:true});return pendingCheckout;
-    });
-    const checkout=proCheckoutOptions(plan,uid,email,PUBLIC_ORIGIN,trial);
-    checkout.expires_at=Math.floor(reservation.expiresAt/1000);
-    const session = await stripe.checkout.sessions.create(checkout,{idempotencyKey:`quantura-pro-${uid}-${reservation.key}`});
-    const url = asString(session.url).trim();
-    if (!url) {
-      res.status(502).json({ error: "missing_checkout_url" });
-      return;
-    }
-    res.status(200).json({ url, sessionId: sanitizeToken(session.id, 220) });
-  } catch (error: any) {
-    const messages:Record<string,string>={subscription_already_active:"You already have Pro. Use Manage subscription to change your billing.",trial_already_used:"Your account has already used its free trial. Choose a paid Pro subscription.",checkout_in_progress:"A checkout is already open for your account. Finish that checkout or retry after it expires."};
-    if(messages[error?.message]){res.status(409).json({error:error.message,message:messages[error.message]});return;}
-    console.error("[shopApi] subscription checkout session creation failed", error);
-    res.status(500).json({
-      error: "subscription_checkout_failed",
-      detail: sanitizeText(error?.message, 200),
-      message: "Unable to start subscription checkout.",
-    });
-  }
+app.post("/api/shop/subscription-checkout",(_req,res)=>{
+  res.status(410).json({error:"checkout_replaced",message:"Choose Clerk Pro checkout or Stripe pay-as-you-go checkout on the pricing page."});
 });
 
 app.options("/api/shop/portal", (req, res) => {
@@ -447,6 +422,7 @@ app.post("/api/shop/portal", async (req, res) => {
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: returnUrl,
+      ...(profile.data()?.billingMode==="metered"?{configuration:billingCatalog.portal_configuration_id}:{}),
     });
 
     const portalUrl = asString(session.url);
@@ -790,7 +766,7 @@ async function resolveSecretValue(envKeys: string[], secretNames: string[]): Pro
   return "";
 }
 
-async function getStripeClient(): Promise<Stripe | null> {
+export async function getStripeClient(): Promise<Stripe | null> {
   if (stripeClientPromise) return stripeClientPromise;
   stripeClientPromise = (async () => {
     const secret = await resolveSecretValue(STRIPE_SECRET_ENV_KEYS, STRIPE_SECRET_NAMES);

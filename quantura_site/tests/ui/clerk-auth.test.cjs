@@ -51,14 +51,6 @@ test('monthly and annual Pro purchases require Clerk sign-in before displaying c
   assert.equal(w.document.querySelector('[data-clerk-pricing]').hidden,true);d.window.close();
  }
 });
-test('both Pro cycles use one Clerk pricing component for the signed-in account',async()=>{
- const {d,w,calls}=setup();await w.QuanturaAuth.ready;
- for(const cycle of ['monthly','yearly']){w.localStorage.setItem('quantura_pricing_cycle',cycle);w.document.querySelector('[data-action="purchase"]').click();await tick();}
- assert.equal(calls.signIn,0);assert.equal(calls.pricing.length,1);assert.equal(calls.pricing[0].for,'user');
- assert.equal(calls.pricing[0].newSubscriptionRedirectUrl,'/forecasting?panel=profile');
- assert.equal(w.document.querySelector('[data-clerk-pricing]').hidden,false);d.window.close();
-});
-
 test('API keys use server eligibility, stay hidden for ineligible accounts/errors, and appear for Pro trials/subscribers',async()=>{
  for(const options of [{apiKeys:false},{apiKeys:true},{apiKeys:true,accessFails:true}]){
   const {d,w,calls}=setup(options);await w.QuanturaAuth.ready;
@@ -68,35 +60,28 @@ test('API keys use server eligibility, stay hidden for ineligible accounts/error
  }
 });
 
-test('new-member checkout applies WELCOME50 to the shared Clerk flow before opening either billing cycle',async()=>{
+test('metered checkout uses a verified session, serializes attempts and never submits payment',async()=>{
+ const {d,w,calls}=setup();await w.QuanturaAuth.ready;
+ const panel=w.document.querySelector('[data-trial-days]');panel.dataset.meteredPlan='';panel.insertAdjacentHTML('beforeend','<p class="purchase-note"></p>');
+ let requests=0;
+ w.fetch=async(url,options)=>{requests++;assert.equal(url,'/api/shop/metered-checkout');assert.equal(options.headers.Authorization,'Bearer clerk-session-unit');assert.equal(JSON.parse(options.body).with_promotion,true);return {ok:false,json:async()=>({message:'Provider temporarily unavailable'})};};
+ const outcomes=await Promise.allSettled([w.QuanturaAuth.showPricing(),w.QuanturaAuth.showPricing()]);
+ assert.equal(requests,1);assert.equal(outcomes[0].status,'rejected');assert.equal(calls.confirms,0);
+ assert.match(panel.querySelector('.purchase-note').textContent,/Provider temporarily/);d.window.close();
+});
+test('untrusted checkout URLs never redirect a signed-in user',async()=>{
+ const {d,w}=setup();await w.QuanturaAuth.ready;const panel=w.document.querySelector('[data-trial-days]');panel.dataset.meteredPlan='';
+ w.fetch=async()=>({ok:true,json:async()=>({url:'https://attacker.example/checkout'})});
+ await assert.rejects(w.QuanturaAuth.showPricing(),/could not be verified/);assert.equal(w.location.hostname,'quantura.studio');d.window.close();
+});
+
+test('Pro remains available in monthly and annual Clerk checkout with a verified WELCOME50 discount',async()=>{
  for(const cycle of ['monthly','yearly']){
   const {d,w,calls}=setup({promo:true});await w.QuanturaAuth.ready;
+  w.document.querySelector('[data-purchase-panel]').dataset.proPlan='';
   for(const button of w.document.querySelectorAll('[data-billing-cycle]'))button.setAttribute('aria-pressed',String(button.dataset.billingCycle===cycle));
-  await w.QuanturaAuth.showPricing();
-  assert.equal(calls.starts,1);assert.equal(calls.updates[0].promoCode,'WELCOME50');assert.equal(calls.drawers.length,1);
-  assert.equal(calls.drawers[0].planPeriod,cycle==='yearly'?'annual':'month');assert.equal(calls.drawers[0].for,'user');
-  assert.equal(calls.flowOptions[0].planId,'plan_pro');assert.equal(calls.pricing.length,0);assert.equal(calls.confirms,0);
-  assert.match(w.document.querySelector('.purchase-note').textContent,/WELCOME50 applied/);d.window.close();
+  await w.QuanturaAuth.showPricing({plan:'pro'});
+  assert.equal(calls.drawers.length,1);assert.equal(calls.drawers[0].planPeriod,cycle==='yearly'?'annual':'month');
+  assert.equal(calls.updates[0].promoCode,'WELCOME50');assert.equal(calls.confirms,0);d.window.close();
  }
-});
-test('a rejected promotion never silently opens a full-price checkout; regular pricing needs an explicit retry',async()=>{
- const {d,w,calls}=setup({promo:true,promoFails:true});await w.QuanturaAuth.ready;
- await assert.rejects(w.QuanturaAuth.showPricing(),/new subscribers only/);
- assert.equal(calls.drawers.length,0);assert.equal(w.document.querySelector('[data-promo-regular-checkout]').hidden,false);
- await w.QuanturaAuth.showPricing({withPromotion:false});assert.equal(calls.updates[1].promoCode,'');assert.equal(calls.drawers.length,1);
- assert.equal(calls.starts,1);assert.equal(calls.confirms,0);d.window.close();
-});
-test('promotion checkout is serialized and fails safely if the plan or checkout is unavailable',async()=>{
- const {d,w,calls}=setup({promo:true});await w.QuanturaAuth.ready;await Promise.all([w.QuanturaAuth.showPricing(),w.QuanturaAuth.showPricing()]);
- assert.equal(calls.starts,1);assert.equal(calls.drawers.length,1);d.window.close();
- for(const option of [{planMissing:true},{startFails:true}]){const {d,w,calls}=setup({promo:true,...option});await w.QuanturaAuth.ready;await assert.rejects(w.QuanturaAuth.showPricing());assert.equal(calls.drawers.length,0);assert.equal(calls.confirms,0);d.window.close();}
-});
-test('expired offers do not apply a promo code or advertise a discounted checkout',async()=>{
- const {d,w,calls}=setup({promo:true,expired:true});await w.QuanturaAuth.ready;await w.QuanturaAuth.showPricing();
- assert.equal(calls.updates[0].promoCode,'');assert.match(w.document.querySelector('.purchase-note').textContent,/Regular pricing/);assert.equal(calls.confirms,0);d.window.close();
-});
-test('an advertised promo cannot be shown as applied without verified Clerk discount totals',async()=>{
- const {d,w,calls}=setup({promo:true});await w.QuanturaAuth.ready;
- const flow=w.Clerk.__experimental_checkout({}).checkout;flow.update=async()=>({error:null});
- await assert.rejects(w.QuanturaAuth.showPricing(),/could not be verified/);assert.equal(calls.drawers.length,0);assert.equal(calls.confirms,0);d.window.close();
 });

@@ -46,6 +46,6 @@ test("MCP preserves paid-access denial rather than treating it as a sign-in fail
   const server=app.listen(0,"127.0.0.1");await new Promise<void>(resolve=>server.on("listening",resolve));
   try {
     const response=await fetch(`http://127.0.0.1:${(server.address() as any).port}/mcp`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call"})});
-    assert.equal(response.status,403);assert.match((await response.json()).error.message,/Pro trial/);
+    assert.equal(response.status,403);assert.match((await response.json()).error.message,/14-day trial/);
   }finally {await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
