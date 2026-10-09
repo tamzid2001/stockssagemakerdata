@@ -71,4 +71,14 @@ class Tests(unittest.TestCase):
             self.assertEqual(_read(),{"access_token":"fake-test-token"})
             self.assertEqual((Path(directory)/"credentials.json").stat().st_mode & 0o777,0o600)
 
+    def test_proof_download_preserves_committed_bytes(self):
+        original=b'{"nonce":"salt","value":100}'
+        opener=Opener([{"data":{"status":"stamped"}},{"data":{"content_matches":True,"stamp_found":True}},original])
+        client=Quantura("test",opener=opener)
+        client.stamp_forecast("forecast-1")
+        self.assertTrue(client.verify_forecast("forecast-1")["data"]["stamp_found"])
+        self.assertEqual(client.download_forecast_proof("forecast-1"),original)
+        self.assertEqual(opener.calls[0].method,"POST")
+        self.assertTrue(opener.calls[1].full_url.endswith("/proof?verify=true"))
+
 if __name__=="__main__":unittest.main()

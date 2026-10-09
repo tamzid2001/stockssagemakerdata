@@ -96,6 +96,15 @@ class Quantura:
     def download_forecast(self, forecast_id):
         return self.request("ensemble-forecasts/" + quote(forecast_id, safe="") + "/download", raw=True)
 
+    def stamp_forecast(self, forecast_id):
+        return self.request("ensemble-forecasts/" + quote(forecast_id, safe="") + "/proof", method="POST", body={})
+
+    def verify_forecast(self, forecast_id):
+        return self.request("ensemble-forecasts/" + quote(forecast_id, safe="") + "/proof", query={"verify": "true"})
+
+    def download_forecast_proof(self, forecast_id):
+        return self.request("ensemble-forecasts/" + quote(forecast_id, safe="") + "/proof", raw=True)
+
     def history(self, request):
         return self.request("market-data/stocks/history", method="POST", body=request, raw=request.get("format") == "csv")
 

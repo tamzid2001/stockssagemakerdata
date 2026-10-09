@@ -1,0 +1,81 @@
+---
+title: "Forecast timestamp receipts"
+description: "Verify saved forecast content and its actual stamp time with vBase."
+---
+
+Signed-in ensemble forecasts receive a private vBase timestamp receipt when they complete. Saving a guest forecast also attempts a receipt. In Forecast, use **Verify receipt** or **Download proof**. Older saved forecasts have a **Create receipt** action.
+
+## What a receipt confirms
+
+Quantura commits the exact SHA3-256 hash of a canonical UTF-8 manifest containing the forecast values, input cutoff, generation time, model configuration and data hashes. A private random nonce prevents guessing the content from a small set of possible values. Only the content ID is sent to vBase; source CSV contents remain in Quantura.
+
+The receipt's blockchain timestamp is the time the content was stamped. A replay with an old input cutoff is stamped now. A receipt does not prove forecast accuracy, a profitable strategy, or publication before its actual stamp time. Historical validation scores remain separate.
+
+## API and SDKs
+
+Paid Pro, enterprise and administrator API access is required. Workspace permissions still apply.
+
+| Operation | Endpoint | Scope |
+| --- | --- | --- |
+| Create/recover a receipt | `POST /api/v1/ensemble-forecasts/{id}/proof` | `forecasts:write` |
+| Download exact manifest bytes | `GET /api/v1/ensemble-forecasts/{id}/proof` | `forecasts:read` |
+| Verify saved content and stamp | `GET /api/v1/ensemble-forecasts/{id}/proof?verify=true` | `forecasts:read` |
+
+```python
+from pathlib import Path
+from quantura_sdk import Quantura
+
+q = Quantura()  # QUANTURA_API_KEY or an OAuth token provider
+q.stamp_forecast("FORECAST_ID")
+print(q.verify_forecast("FORECAST_ID"))
+Path("forecast-proof.json").write_bytes(q.download_forecast_proof("FORECAST_ID"))
+```
+
+```javascript
+import {writeFile} from 'node:fs/promises';
+import {Quantura} from 'quantura-sdk';
+const q = new Quantura();
+await q.stampForecast('FORECAST_ID');
+console.log(await q.verifyForecast('FORECAST_ID'));
+await writeFile('forecast-proof.json', await q.downloadForecastProof('FORECAST_ID'), 'utf8');
+```
+
+Install the [current SDK release](/docs/sdk-cli) for these methods.
+
+The OAuth MCP tool `quantura_verify_forecast` verifies an existing receipt. It does not create stamps or place orders.
+
+```bash
+quantura stamp FORECAST_ID
+quantura verify FORECAST_ID
+quantura proof FORECAST_ID --output forecast-proof.json
+```
+
+## Independent verification using the official Python client
+
+Install `vbase-api==0.1.3`. Hash the downloaded file's original bytes, including its original whitespace. Reformatting JSON changes the CID.
+
+```python
+import hashlib
+import os
+from pathlib import Path
+from vbase_api import VBaseAPIClient
+
+cid = "0x" + hashlib.sha3_256(Path("forecast-proof.json").read_bytes()).hexdigest()
+client = VBaseAPIClient(api_key=os.environ["VBASE_API_KEY"])
+try:
+    result = client.verify_stamps(cids=[cid], filter_by_user=False)
+    for receipt in result.stamp_list:
+        print(receipt.object_cid, receipt.set_cid, receipt.timestamp, receipt.transaction_hash)
+finally:
+    client.close()
+```
+
+Independent verification uses your own vBase account. `filter_by_user=False` allows lookup of Quantura's stamp; compare the collection, transaction and timestamp with the saved receipt. Quantura's backend uses `filter_by_user=True` and its configured collection CID.
+
+## Deployment and recovery
+
+Set server-only `VBASE_ENABLED=true`, `VBASE_COLLECTION_CID`, and `VBASE_API_KEY` (or the matching Google Secret Manager secret). Create the named private collection once with the official client; request handlers never create collections. The REST integration does not require a private signing key.
+
+Upstream requests time out after 15 seconds. A 90-second lease serializes stamping, and failed attempts have a 60-second retry cooldown. Before creating a stamp, Quantura checks for an existing receipt with the same CID. This recovers lost responses even beyond the API's one-hour idempotency window. A failed receipt attempt leaves the forecast completed. Reads and verification never rewrite the forecast or poll vBase automatically; only the initial claim and receipt result update Firestore.
+
+[vBase Python quickstart](https://docs.vbase.com/get-started/api-py-quickstart) · [Private stamping](https://docs.vbase.com/use-case-how-tos/private-stamping)

@@ -25,9 +25,10 @@ import { loadPerpForecasts } from "./perpScreener";
 import { PLAN_ENTITLEMENTS, type PlanKey } from "./planEntitlements";
 import {analyticsContext,reportGa4ForecastCompletion} from "./ga4";
 import {forecastFrequency,forecastFrequencyCapabilities,frequencyEnd,frequencyTimeframe,predictionPeriods} from "./forecastFrequency";
+import {ForecastProofError, VBaseClient, contentCid, ensureForecastProof, proofEnabled, proofManifest, publicProof} from "./forecastProof";
 
 type JsonRecord = Record<string, unknown>;
-type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string; adminEmails?: readonly string[] };
+type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string; adminEmails?: readonly string[]; vbaseApiKey?: () => Promise<string> };
 type ModelId = "prophet" | "toto" | "granite" | "chronos" | "timesfm";
 type Handler = (req: Request, res: Response, principal: ApiPrincipal, requestId: string) => Promise<void>;
 
@@ -81,6 +82,7 @@ function runtimeMode(): "production" | "development" | "test" {
 function envTrue(name: string): boolean { return /^(1|true|yes|on)$/i.test(text(process.env[name], 20)); }
 
 export function apiError(error: unknown): { status: number; code: string; message: string } {
+  if (error instanceof ForecastProofError) return {status:error.code.endsWith("not_available") ? 409 : 503,code:error.code.toUpperCase(),message:"The timestamp receipt is not available. Your forecast remains available."};
   if (error instanceof AlpacaError || error instanceof PredictionMarketDataError || error instanceof EconomicDataError || error instanceof BigQueryPublicError) return { status: error.status, code: error.code.toUpperCase(), message: error.message };
   const raw = text((error as any)?.message || error, 300).toLowerCase();
   const code = raw.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "INVALID_REQUEST";
@@ -724,6 +726,7 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     reproduces_forecast_id: data.reproduces_forecast_id || null,
     registry_version: data.registry_version,
     evaluation_policy: data.evaluation_policy || null,
+    provenance: publicProof(data.provenance),
   };
   if (result) {
     output.predictions = result.predictions;
@@ -823,6 +826,13 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
     return {...job,...completed};
   });
   await reportGa4ForecastCompletion(options.db,ref);
+  if (proofEnabled() && (completed.guest_session !== true || completed.saved_to_profile === true)) {
+    try {
+      await ensureForecastProof(options.db,ref,options.vbaseApiKey || (async()=>process.env.VBASE_API_KEY || ""));
+    } catch {
+      console.warn(JSON.stringify({event:"forecast_proof_deferred",forecast_id:ref.id}));
+    }
+  }
   return completed;
 }
 
@@ -1330,7 +1340,55 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     });
     res.append("Set-Cookie", "q_forecast_save=; HttpOnly; Secure; SameSite=Lax; Path=/api/v1/ensemble-forecasts; Max-Age=0");
     await indexEnsembleRequest(options, ref.id, job);
+    if (proofEnabled()) {
+      try { await ensureForecastProof(options.db,ref,options.vbaseApiKey || (async()=>process.env.VBASE_API_KEY || "")); }
+      catch { console.warn(JSON.stringify({event:"forecast_proof_deferred",forecast_id:ref.id})); }
+    }
     sendData(res, { forecast_id: ref.id, saved: true }, requestId);
+  }));
+
+  router.post("/v1/ensemble-forecasts/:forecastId/proof", wrap(options, async (req, res, principal, requestId) => {
+    if (principal.guest) throw new Error("workspace_permission_denied");
+    const ref = options.db.collection(JOBS).doc(safeId(req.params.forecastId,220));
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("forecast_job_not_found");
+    const access = await resolveWorkspaceAccess(options.db,principal,snap.data()?.workspace_id);
+    authorizeWorkspaceAction(principal,access,"forecasts:write","write");
+    requireWorkspacePermission(access,"forecast.create",ref.id);
+    const proof = await ensureForecastProof(options.db,ref,options.vbaseApiKey || (async()=>process.env.VBASE_API_KEY || ""));
+    if (proof?.status === "unavailable") throw new ForecastProofError(String(proof.error_code || "forecast_proof_unavailable"));
+    sendData(res,proof,requestId);
+  }));
+
+  router.get("/v1/ensemble-forecasts/:forecastId/proof", wrap(options, async (req, res, principal, requestId) => {
+    const id = safeId(req.params.forecastId,220);
+    const [job,result] = await Promise.all([options.db.collection(JOBS).doc(id).get(),options.db.collection(RESULTS).doc(id).get()]);
+    if (!job.exists || !result.exists) throw new Error("forecast_result_not_found");
+    const data = plain(job.data());
+    const access = await resolveWorkspaceAccess(options.db,principal,data.workspace_id);
+    authorizeWorkspaceAction(principal,access,"forecasts:read","read");
+    requireWorkspacePermission(access,"forecast.read",id);
+    const proof = publicProof(data.provenance);
+    if (proof?.status !== "stamped") throw new ForecastProofError("forecast_proof_not_available");
+    const manifest = proofManifest(id,data,plain(result.data()));
+    const cid = contentCid(manifest);
+    if (cid !== proof.content_cid) throw new ForecastProofError("forecast_proof_content_invalid");
+    if (req.query.verify === "true") {
+      const key = await (options.vbaseApiKey || (async()=>process.env.VBASE_API_KEY || ""))();
+      const receipt = await new VBaseClient(key,String(proof.receipt?.set_cid)).verify(cid);
+      sendData(res,{...proof,content_matches:true,stamp_found:receipt !== null,verified_at:new Date().toISOString()},requestId);
+      return;
+    }
+    res.setHeader("Cache-Control","private, no-store");
+    res.setHeader("X-Request-ID",requestId);
+    if (req.query.format === "envelope") {
+      sendData(res,{manifest_utf8:manifest,provenance:proof},requestId);
+      return;
+    }
+    res.setHeader("X-VBase-Content-CID",cid);
+    res.setHeader("Content-Type","application/json; charset=utf-8");
+    res.setHeader("Content-Disposition",`attachment; filename="quantura-proof-${id}.json"`);
+    res.send(manifest);
   }));
 
   router.get("/v1/ensemble-forecasts/:forecastId/download", wrap(options, async (req, res, principal, requestId) => {

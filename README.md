@@ -1,5 +1,19 @@
 # Quantura
 
+### Forecast timestamp receipts (October 9, 2026)
+
+Saved signed-in ensemble forecasts now support private vBase content and timestamp receipts. The Forecast page offers verification and exact proof downloads; Python/npm SDKs and the OAuth MCP expose verification too. Only a salted SHA3-256 content ID leaves Quantura. The actual stamp time is separate from the historical input cutoff; a receipt is not an accuracy score. [Receipt guide](docs/forecast-receipts.mdx).
+
+```mermaid
+flowchart LR
+    Forecast[Completed saved forecast] --> Manifest[Canonical private manifest with random nonce]
+    Manifest --> CID[SHA3-256 content ID]
+    CID --> vBase[vBase timestamp receipt]
+    vBase --> Account[Receipt in private forecast record]
+    Account --> Verify[Authorized verification and proof download]
+    Manifest --> Verify
+```
+
 ### Canvas library and forecast quality (October 7, 2026)
 
 - **[SageMaker library](https://quantura.studio/sagemaker):** 133 dated Canvas forecasts and 14 historical series, searchable by ticker and filename. Preview source CSVs, view quantiles, annotate chart points, and ask Scout. Original values are preserved; an export without a year remains a file preview.
@@ -123,7 +137,7 @@ curl -H "Authorization: Bearer $QUANTURA_API_KEY" \
 Create an asynchronous forecast with `POST /api/v1/ensemble-forecasts`, a paid API credential and an `Idempotency-Key`; poll its status before using its output.
 
 ```bash
-npm install -g 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.0/quantura-sdk-1.0.0.tgz'
+npm install -g 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.1/quantura-sdk-1.0.1.tgz'
 quantura login
 quantura search AAPL --source alpaca
 quantura models
@@ -131,7 +145,7 @@ quantura models
 
 [The npm package](packages/npm/README.md) includes the CLI and TypeScript declarations; [the Python package](packages/python/README.md) is distributed as a GitHub release wheel. Both use Clerk browser OAuth with PKCE and resource-bound tokens, automatic refresh, private local credentials and unchanged API response envelopes. Mutations are never automatically retried.
 
-The live MCP endpoint **`https://quantura.studio/mcp`** supports Clerk OAuth through client metadata or dynamic registration. Its seven tools cover market search, capabilities, forecast creation/read, provider history, Scout and account access. Each call rechecks paid access and resource permissions. Forecast creation and Scout save account requests; no tool places trades. The separate Mintlify endpoint provides documentation search.
+The live MCP endpoint **`https://quantura.studio/mcp`** supports Clerk OAuth through client metadata or dynamic registration. Its eight tools cover market search, capabilities, forecast creation/read, provider history, Scout, forecast receipt verification and account access. Each call rechecks paid access and resource permissions. Forecast creation and Scout save account requests; no tool places trades. The separate Mintlify endpoint provides documentation search.
 
 ## Strategy research
 

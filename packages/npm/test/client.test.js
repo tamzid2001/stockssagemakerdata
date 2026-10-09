@@ -43,3 +43,11 @@ test('PKCE uses S256 and callback state and issuer are mandatory',()=>{
   assert.equal(validCallback(url,proof.state),true);assert.equal(validCallback(url,'wrong'),false);
   url.searchParams.set('iss','https://untrusted.test');assert.equal(validCallback(url,proof.state),false);
 });
+test('proof exports keep the committed bytes and verification is read-only',async()=>{
+  const bytes='{"nonce":"salt","value":100}',calls=[];
+  const client=new Quantura({token:'test',fetch:async(url,options)=>{
+    calls.push({url,options});return calls.length===3?new Response(bytes):Response.json({data:{status:'stamped',content_matches:true,stamp_found:true}});
+  }});
+  await client.stampForecast('f');await client.verifyForecast('f');assert.equal(await client.downloadForecastProof('f'),bytes);
+  assert.equal(calls[0].options.method,'POST');assert.equal(calls[1].options.method,'GET');assert.equal(calls[1].url.searchParams.get('verify'),'true');
+});

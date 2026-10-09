@@ -33,6 +33,13 @@ test("forecast API documents historical validation scores separately from future
   assert.equal(doc.components.schemas.EnsembleForecastEnvelope.properties.data.properties.historical_validation.$ref,"#/components/schemas/HistoricalForecastValidation");
   assert.equal(schema.example.status,'completed');
 });
+test("forecast proof docs preserve exact bytes and read/write permissions",()=>{
+  const doc=buildOpenApiDocument() as any;
+  const path=doc.paths["/ensemble-forecasts/{forecast_id}/proof"];
+  assert.equal(path.post["x-quantura-scope"],"forecasts:write");assert.equal(path.get["x-quantura-scope"],"forecasts:read");
+  assert.match(path.get.description,/exact canonical UTF-8/);assert.match(path.post.description,/No forecast is backdated/);
+  assert.equal(doc.components.schemas.EnsembleForecastEnvelope.properties.data.properties.provenance.anyOf[0].$ref,"#/components/schemas/ForecastTimestampReceipt");
+});
 
 test("OpenAPI documents workspaces but excludes uploaded CSV discovery", () => {
   const document = buildOpenApiDocument() as any;

@@ -9,7 +9,7 @@ from .oauth import login, logout, access_token
 
 def main():
     parser = argparse.ArgumentParser(prog="quantura", description="Quantura API and OAuth CLI. Paid Pro or administrator API access required.")
-    parser.add_argument("command", choices=["login", "logout", "whoami", "search", "models", "forecast", "get", "download", "history", "scout"])
+    parser.add_argument("command", choices=["login", "logout", "whoami", "search", "models", "forecast", "get", "download", "stamp", "verify", "proof", "history", "scout"])
     parser.add_argument("args", nargs="*")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--no-browser", action="store_true")
@@ -58,6 +58,14 @@ def main():
         elif config.command == "history":
             request = body()
             result = list(client.history_pages(request)) if config.all_pages else client.history(request)
+        elif config.command == "stamp":
+            result = client.stamp_forecast(forecast_id())
+        elif config.command == "verify":
+            result = client.verify_forecast(forecast_id())
+        elif config.command == "proof":
+            if not config.output:
+                parser.error("Provide --output for the exact proof bytes.")
+            result = client.download_forecast_proof(forecast_id())
         else:
             question = body()
             result = client.ask_scout(question["context"], question["question"],

@@ -721,6 +721,7 @@ registerEnsembleForecastRoutes(ROUTES, {
   auth,
   adminEmails: [ADMIN_EMAIL.toLowerCase()],
   publicOrigin: PUBLIC_ORIGIN,
+  vbaseApiKey: () => resolveRuntimeSecretValue("vbase", ["VBASE_API_KEY"], ["VBASE_API_KEY"]),
 });
 // Register concrete dataset routes before the generic catalog
 // `/v1/datasets/:datasetId` route so Express cannot shadow trajectory/release

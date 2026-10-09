@@ -57,6 +57,9 @@ export class Quantura {
   }
   getForecast(id) {return this.request(`ensemble-forecasts/${encodeURIComponent(id)}`);}
   downloadForecast(id) {return this.request(`ensemble-forecasts/${encodeURIComponent(id)}/download`,{raw:true});}
+  stampForecast(id) {return this.request(`ensemble-forecasts/${encodeURIComponent(id)}/proof`,{method:'POST',body:{}});}
+  verifyForecast(id) {return this.request(`ensemble-forecasts/${encodeURIComponent(id)}/proof`,{query:{verify:true}});}
+  downloadForecastProof(id) {return this.request(`ensemble-forecasts/${encodeURIComponent(id)}/proof`,{raw:true});}
   history(request) {return this.request('market-data/stocks/history',{method:'POST',body:request,raw:request.format==='csv'});}
   async *historyPages(request,{maxPages=1000}={}) {
     const seen=new Set(); let cursor=request.cursor;

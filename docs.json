@@ -40,7 +40,8 @@
             "pages": [
               "docs/index",
               "docs/get-started",
-              "docs/sdk-cli"
+              "docs/sdk-cli",
+              "docs/forecast-receipts"
             ]
           },
           {

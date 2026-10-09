@@ -14325,6 +14325,9 @@
       }).join("")}</tr>`).join("");
       ui.ensembleResultTable.innerHTML = `<table class="data-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
     }
+    window.QuanturaForecastProof?.attach(document.getElementById("ensemble-forecast-proof"), {
+      job, request: apiRequestJson, canStamp: Boolean(state.user && !state.user.isAnonymous),
+    });
     const base = `/api/v1/ensemble-forecasts/${encodeURIComponent(job.forecast_id)}/download`;
     if (ui.ensembleDownloadCsv) ui.ensembleDownloadCsv.href = job.sagemaker_item ? job.sagemaker_item.download_url : job.published_screener ? `${screenerForecastEndpoint(job)}&format=csv` : `${base}?format=csv`;
     if (ui.ensembleDownloadJson) ui.ensembleDownloadJson.href = job.sagemaker_item ? `/api/sagemaker/${job.forecast_id}` : job.published_screener ? `${screenerForecastEndpoint(job)}&format=json` : `${base}?format=json`;

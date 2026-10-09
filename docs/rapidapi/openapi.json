@@ -3336,6 +3336,244 @@
           }
         }
       }
+    },
+    "/v1/ensemble-forecasts/{forecast_id}/proof": {
+      "post": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "Create or recover a private forecast timestamp receipt",
+        "operationId": "stampEnsembleForecast",
+        "description": "Automatically attempted when a signed-in user's forecast completes or a guest forecast is saved. This explicit operation stamps older forecasts or retries an unavailable receipt. Sends only a salted SHA3-256 content ID to vBase; no CSV or forecast contents are uploaded. A fenced lease and lookup-before-create prevent duplicate stamps after ambiguous network failures. The receipt records the actual stamp time, including for historical replays. No forecast is backdated. Guests cannot stamp. The caller needs forecasts:write and forecast.create permission for this resource. Completed receipts cause no further database writes.",
+        "parameters": [
+          {
+            "name": "forecast_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Timestamp receipt or current pending status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ForecastTimestampReceipt"
+                    },
+                    "meta": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "provider": "vbase",
+                    "schema_version": "quantura_forecast_proof_v1",
+                    "status": "stamped",
+                    "content_cid": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "receipt": {
+                      "object_cid": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "set_cid": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                      "transaction_hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                      "user_address": "0xdddddddddddddddddddddddddddddddddddddddd",
+                      "chain_id": 8453,
+                      "timestamp": "2026-10-09T14:20:00Z"
+                    },
+                    "error_code": null
+                  },
+                  "meta": {
+                    "api_version": "v1"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Forecast scope, membership or resource permission denied."
+          },
+          "404": {
+            "description": "Forecast not found."
+          },
+          "409": {
+            "description": "Completed timestamp receipt not yet available."
+          },
+          "503": {
+            "description": "Receipt service unavailable. Forecast remains available; retries are bounded."
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Ensemble Forecasts"
+        ],
+        "summary": "Download or verify a forecast timestamp receipt",
+        "operationId": "getEnsembleForecastProof",
+        "description": "Default response is the exact canonical UTF-8 manifest committed by SHA3-256, including a private random nonce, forecast values, input cutoff and generation time. Keep these bytes unchanged when verifying. X-VBase-Content-CID identifies the committed bytes. verify=true recomputes the saved content CID and looks up the stamp in Quantura's vBase collection/account, returning content_matches, stamp_found and verified_at in the data envelope. format=envelope returns manifest_utf8 and provenance for authenticated browser downloads. Receipt verification proves content/time, not accuracy or prospective publication before the stamp time. Reads do not create stamps or write Firestore documents.",
+        "parameters": [
+          {
+            "name": "forecast_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "verify",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "manifest",
+                "envelope"
+              ],
+              "default": "manifest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact manifest attachment, or JSON verification/download envelope.",
+            "headers": {
+              "X-VBase-Content-CID": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^0x[0-9a-f]{64}$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schema_version": {
+                      "enum": [
+                        "quantura_forecast_proof_v1"
+                      ]
+                    },
+                    "nonce": {
+                      "type": "string"
+                    },
+                    "forecast_id": {
+                      "type": "string"
+                    },
+                    "generated_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "input_cutoff_at": {
+                      "type": "string",
+                      "nullable": true,
+                      "format": "date-time"
+                    },
+                    "output": {
+                      "type": "object"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "content_matches": {
+                          "type": "boolean"
+                        },
+                        "stamp_found": {
+                          "type": "boolean"
+                        },
+                        "verified_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "manifest_utf8": {
+                          "type": "string"
+                        },
+                        "provenance": {
+                          "$ref": "#/components/schemas/ForecastTimestampReceipt"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "schema_version": "quantura_forecast_proof_v1",
+                  "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  "forecast_id": "example",
+                  "generated_at": "2026-10-09T14:17:00Z",
+                  "input_cutoff_at": "2026-10-08T20:00:00Z",
+                  "source": {
+                    "type": "ticker",
+                    "provider": "alpaca",
+                    "symbol": "SPY"
+                  },
+                  "configuration": {
+                    "frequency": "1D",
+                    "quantiles": [
+                      0.1,
+                      0.5,
+                      0.9
+                    ]
+                  },
+                  "model_checkpoints": {},
+                  "model_revisions": {},
+                  "output": {
+                    "predictions": [
+                      {
+                        "timestamp": "2026-10-09T20:00:00Z",
+                        "quantiles": {
+                          "0.1": 100,
+                          "0.5": 110,
+                          "0.9": 120
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Forecast scope, membership or resource permission denied."
+          },
+          "404": {
+            "description": "Forecast not found."
+          },
+          "409": {
+            "description": "Completed timestamp receipt not yet available."
+          },
+          "503": {
+            "description": "Receipt service unavailable. Forecast remains available; retries are bounded."
+          }
+        },
+        "security": [
+          {
+            "rapidApiKey": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -3877,7 +4115,7 @@
           "status",
           "metrics"
         ],
-        "description": "Optional legacy historical-validation summary preserved on older results. New forecast requests and reproductions do not run a holdout or delay completion for metrics. These legacy scores describe a separate forecast, not the requested future predictions.",
+        "description": "Forecast jobs include one chronological holdout of up to 30 existing observations when enough history is available. No future observations are needed. These scores describe historical validation of the selected models, separate from the requested future predictions. A failed or insufficient holdout does not fail the forecast.",
         "properties": {
           "policy": {
             "enum": [
@@ -4032,6 +4270,16 @@
               },
               "result_url": {
                 "type": "string"
+              },
+              "provenance": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ForecastTimestampReceipt"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           },
@@ -4347,6 +4595,67 @@
           }
         },
         "description": "Verified Gemini exchange spot symbol. Only completed candles returned by the provider's bounded recent window are available."
+      },
+      "ForecastTimestampReceipt": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "enum": [
+              "vbase"
+            ]
+          },
+          "schema_version": {
+            "enum": [
+              "quantura_forecast_proof_v1"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "stamping",
+              "stamped",
+              "unavailable"
+            ]
+          },
+          "content_cid": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^0x[0-9a-f]{64}$"
+          },
+          "receipt": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "object_cid": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "set_cid": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "transaction_hash": {
+                "type": "string",
+                "pattern": "^0x[0-9a-f]{64}$"
+              },
+              "user_address": {
+                "type": "string"
+              },
+              "chain_id": {
+                "type": "integer"
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "error_code": {
+            "type": "string",
+            "nullable": true
+          }
+        }
       }
     }
   }

@@ -10,6 +10,7 @@ export class Quantura {
   resolve(url:string):Promise<Json>;models():Promise<Json>;access():Promise<Json>;
   createForecast(request:Json,options?:{idempotencyKey?:string}):Promise<Json>;
   getForecast(id:string):Promise<Json>;downloadForecast(id:string):Promise<string>;
+  stampForecast(id:string):Promise<Json>;verifyForecast(id:string):Promise<Json>;downloadForecastProof(id:string):Promise<string>;
   history(request:Json):Promise<Json|string>;
   historyPages(request:Json,options?:{maxPages?:number}):AsyncGenerator<Json>;
   askScout(context:Json,question:string,options?:{conversationId?:string;turnId?:string}):Promise<Json>;
