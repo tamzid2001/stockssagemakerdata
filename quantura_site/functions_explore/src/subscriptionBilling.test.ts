@@ -14,7 +14,7 @@ test("Pro checkout uses authenticated identity and server prices for both cycles
   }
   assert.equal(proSubscriptionPlan({tier:"quant",cycle:"monthly"}),null);
   assert.equal(proSubscriptionPlan({tier:"pro",cycle:"daily"}),null);
-  assert.deepEqual(Object.keys(publicPlanEntitlements().plans as object),["pro"]);
+  assert.deepEqual(Object.keys(publicPlanEntitlements().plans as object),["metered","pro"]);
 });
 test("14-day trial applies only when eligible and expires without trusting editable profile plan",()=>{
   const plan=proSubscriptionPlan({tier:"pro",cycle:"yearly"})!;

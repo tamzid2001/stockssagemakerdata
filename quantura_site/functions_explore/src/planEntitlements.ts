@@ -41,8 +41,8 @@ export function planHasFeature(plan: unknown, feature: string): boolean {
 export function publicPlanEntitlements(): Record<string, unknown> {
   return {
     schemaVersion: PLAN_ENTITLEMENTS_SCHEMA_VERSION,
-    access_model: "pro_subscription_with_free_preview",
-    plans: { pro: { ...PLAN_ENTITLEMENTS.pro, forecastComputePerDay:null,unlimitedForecasts:true,trialDays:14,
-      forecastConcurrentLimit:3,forecastStartsPerMinute:3,monthlyCents:config.plans.pro.monthlyCents, annualCents:config.plans.pro.annualCents } },
+    access_model: "metered_and_pro_with_free_trial",
+    plans: { metered: { ...PLAN_ENTITLEMENTS.pro,label:"Pay as you go",forecastComputePerDay:null,unlimitedForecasts:true,trialDays:14,
+      forecastConcurrentLimit:3,forecastStartsPerMinute:3,monthlyCents:0,annualCents:0,completedForecastCents:50,defaultMonthlyBudgetCents:5000 }, pro:{...PLAN_ENTITLEMENTS.pro,forecastComputePerDay:null,unlimitedForecasts:true,trialDays:14,forecastConcurrentLimit:3,forecastStartsPerMinute:3,monthlyCents:config.plans.pro.monthlyCents,annualCents:config.plans.pro.annualCents} },
   };
 }

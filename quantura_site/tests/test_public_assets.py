@@ -218,14 +218,17 @@ def test_prediction_market_hub_is_capability_driven_and_canvas_ready():
     assert "Preview rows will appear here." in client
 
 
-def test_single_pro_plan_preserves_free_preview_and_server_owned_prices():
+def test_metered_and_pro_plans_preserve_trial_and_server_owned_prices():
     pricing = (PAGES / "pricing.html").read_text().lower()
     assert 'url=/forecasting' not in pricing
     assert 'data-monthly-price="199.99"' in pricing
     assert 'data-yearly-price="1999.92"' in pricing
     assert pricing.count('data-pricing-plan-card') == 1
     home = (PAGES / "index.html").read_text().lower()
-    assert "free to explore" in home
+    assert "14 days free" in home
+    assert 'href="/forecasting"' in home
+    assert pricing.count("data-metered-plan-card") == 1
+    assert "$0.50" in pricing
     assert "are billed by aws to the connected account" in (PAGES / "research.html").read_text().lower()
     assert "$39/mo" not in home
     for removed in ["gpt token", "llm token", "ai model access", "quantura go", "quantura plus", "quantura business", "quantura desk"]:

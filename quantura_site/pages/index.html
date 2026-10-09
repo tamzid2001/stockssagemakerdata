@@ -40,6 +40,7 @@
     <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260926-support"></script>
     <link rel="stylesheet" href="/styles.css?v=20261006-databases" />
+    <link rel="stylesheet" href="/home.css?v=20261009-pro-trial" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -52,7 +53,7 @@
 	    <script defer src="/__/firebase/init.js?useEmulator=false"></script>
 	    <script defer src="/ga4-context.js?v=20260927a"></script>
     <script defer src="/quantura-auth.js?v=20261006-welcome50"></script>
-    <script defer src="/app.js?v=20261006-scout"></script>
+    <script defer src="/app.js?v=20261009-pro-trial"></script>
     <script defer src="/forecasts.js?v=20260908a"></script>
 
     <link rel="stylesheet" href="/screener-buy-preview.css?v=20260926b" />
@@ -101,14 +102,14 @@
         <main id="main-content">
       <section class="q-home-hero container" aria-labelledby="home-intelligence-title">
         <div class="q-home-copy">
-          <p class="eyebrow">Market research, with context</p>
-          <h1 id="home-intelligence-title">Forecast the range.<br /><span>Understand the evidence.</span></h1>
-          <p>Explore markets and public data. Compare forecast ranges, ask Scout what the numbers mean, and keep the evidence behind your research.</p>
-          <div class="hero-actions"><a class="cta" href="/forecasting" data-analytics="home_start_forecast">Start a forecast <i class="iconoir-arrow-right" aria-hidden="true"></i></a><a class="cta secondary" href="/screener" data-analytics="home_open_screener">Explore the screener</a></div>
-          <p class="small muted">Free to explore. Sign in to save your work.</p>
+          <p class="eyebrow q-home-kicker"><span aria-hidden="true"></span> A clearer view of what comes next</p>
+          <h1 id="home-intelligence-title">See the range.<br /><span>Find your edge.</span></h1>
+          <p>Turn market and public data into forecast ranges. Explore the evidence with Scout, then take your research anywhere.</p>
+          <div class="hero-actions"><a class="cta" href="/pricing" data-analytics="home_start_trial">Start your free trial <i class="iconoir-arrow-right" aria-hidden="true"></i></a><a class="cta secondary" href="/forecasting" data-analytics="home_start_forecast">Explore Forecast</a></div>
+          <p class="q-home-trial-note">14 days free · API &amp; MCP included</p>
         </div>
         <div class="q-home-preview" aria-label="Illustrative probability forecast">
-          <div class="q-preview-heading"><span>Forecast</span><span class="task-chip">Illustration</span></div>
+          <div class="q-preview-heading"><span><span class="q-preview-symbol">Q</span> Forecast outlook</span><span class="task-chip">Illustration</span></div>
           <svg viewBox="0 0 560 300" role="img" aria-labelledby="forecast-preview-title forecast-preview-desc">
             <title id="forecast-preview-title">A range of possible outcomes</title><desc id="forecast-preview-desc">Historical observations connect to a median forecast with widening lower and upper probability bounds.</desc>
             <g class="q-preview-grid"><path d="M20 65H540M20 135H540M20 205H540M20 275H540" /></g>
@@ -119,7 +120,15 @@
             <g class="q-preview-label"><text x="20" y="296">Observed</text><text x="270" y="296">Forecast range</text><text x="475" y="94">P50</text></g>
           </svg>
           <div class="q-preview-footer"><span><i class="q-legend-dot"></i> Median + uncertainty</span><a href="/forecasting">Try your own market →</a></div>
+          <div class="q-preview-insight"><i class="iconoir-sparks" aria-hidden="true"></i><div><strong>Ask Scout</strong><span>What changes across the forecast range?</span></div><a href="/forecasting" aria-label="Open Forecast and ask Scout">↗</a></div>
         </div>
+      </section>
+      <section class="q-home-source-strip container" aria-label="Available market data sources">
+        <span>Research starts with real data</span>
+        <div><img src="/assets/providers/alpaca.svg" alt="" width="24" height="24" />Alpaca</div>
+        <div><img src="/assets/logo-kalshi.png" alt="" width="24" height="24" />Kalshi</div>
+        <div><img src="/assets/logo-polymarket.png" alt="" width="24" height="24" />Polymarket US</div>
+        <div><img src="/assets/providers/dukascopy.png" alt="" width="24" height="24" />Dukascopy</div>
       </section>
       <section class="q-home-features container" aria-label="Your research workflow">
         <article><i class="iconoir-search" aria-hidden="true"></i><h2>Find your question</h2><p>Search a market or database, paste a link, or preview your own CSV.</p></article>
@@ -127,22 +136,26 @@
         <article><i class="iconoir-download" aria-hidden="true"></i><h2>Keep the context</h2><p>Save forecasts, conversations and chart notes. Export the data when you need it.</p></article>
       </section>
       <section class="q-database-section container" aria-labelledby="home-databases-title">
-        <div class="q-section-heading"><p class="eyebrow">From markets to the wider world</p><h2 id="home-databases-title">Find the data behind your next question.</h2><p>Discover a series, inspect real observations, and forecast it with the same research tools.</p></div>
+        <div class="q-section-heading"><p class="eyebrow">A wider world of data</p><h2 id="home-databases-title">One workspace.<br />More ways to explore.</h2><p>From prices to public indicators. Find a series, inspect its history, and see what could come next.</p></div>
         <div class="q-database-grid">
-          <a href="/forecasting?search=bigquery%20weather"><span class="q-database-icon" aria-hidden="true">BQ</span><h3>BigQuery public datasets</h3><p>Weather, population and other public tables. Choose dates, values and filters before previewing.</p><span>Explore datasets →</span></a>
-          <a href="/forecasting?search=worldbank%20GDP"><span class="q-database-icon" aria-hidden="true">WB</span><h3>World Bank Data360</h3><p>Economic indicators by country, with native reporting periods and source metadata.</p><span>Find an indicator →</span></a>
-          <a href="/forecasting?search=treasury%20debt"><span class="q-database-icon" aria-hidden="true">US</span><h3>Treasury Fiscal Data</h3><p>U.S. debt, spending and fiscal series with explicit dimensions and units.</p><span>Explore fiscal data →</span></a>
-          <a href="/forecasting?search=gemini%20BTC"><span class="q-database-icon" aria-hidden="true">G</span><h3>Gemini</h3><p>Exchange crypto history and available prediction contracts. Forecast only supported historical series.</p><span>Search Gemini →</span></a>
-          <a href="/forecasting?search=dukascopy%20XAUUSD"><span class="q-database-icon" aria-hidden="true">D</span><h3>Dukascopy</h3><p>FX, metals and index instruments. Download bid or ask history at supported intervals.</p><span>Explore instruments →</span></a>
-          <a href="/forecasting?panel=screener"><span class="q-database-icon" aria-hidden="true">M</span><h3>Stocks &amp; prediction markets</h3><p>Alpaca stocks, Kalshi perpetuals and available Kalshi / Polymarket US game forecasts.</p><span>Open Screener →</span></a>
+          <a href="/forecasting?search=bigquery%20weather"><span class="q-database-icon"><img src="/assets/providers/bigquery.png" alt="" width="32" height="32" loading="lazy" /></span><h3>BigQuery public datasets</h3><p>Weather, population, and public time series.</p><span>Explore datasets →</span></a>
+          <a href="/forecasting?search=worldbank%20GDP"><span class="q-database-icon"><img src="/assets/providers/worldbank.png" alt="" width="32" height="32" loading="lazy" /></span><h3>World Bank Data360</h3><p>Country indicators and economic context.</p><span>Find an indicator →</span></a>
+          <a href="/forecasting?search=treasury%20debt"><span class="q-database-icon"><img src="/assets/providers/treasury.png" alt="" width="32" height="32" loading="lazy" /></span><h3>Treasury Fiscal Data</h3><p>U.S. debt, spending, and fiscal history.</p><span>Explore fiscal data →</span></a>
+          <a href="/forecasting?search=gemini%20BTC"><span class="q-database-icon"><img src="/assets/providers/gemini.png" alt="" width="32" height="32" loading="lazy" /></span><h3>Gemini</h3><p>Crypto history and available prediction contracts.</p><span>Search Gemini →</span></a>
+          <a href="/forecasting?search=dukascopy%20XAUUSD"><span class="q-database-icon"><img src="/assets/providers/dukascopy.png" alt="" width="32" height="32" loading="lazy" /></span><h3>Dukascopy</h3><p>FX, metals, and index price history.</p><span>Explore instruments →</span></a>
+          <a href="/screener"><span class="q-database-icon q-database-markets"><img src="/assets/logo-kalshi.png" alt="" width="24" height="24" loading="lazy" /><img src="/assets/logo-polymarket.png" alt="" width="24" height="24" loading="lazy" /></span><h3>Stocks &amp; prediction markets</h3><p>Stock ranges, perpetuals, and today's games.</p><span>Open Screener →</span></a>
         </div>
+      </section>
+      <section class="q-home-models container" aria-labelledby="home-models-title">
+        <div><p class="eyebrow">Multiple perspectives. One forecast.</p><h2 id="home-models-title">Compare models, not just a number.</h2><p>Inspect individual outputs and ensemble ranges. Choose from the models available for your data.</p></div>
+        <a href="/forecasting" class="q-model-provider"><img src="/assets/providers/huggingface.svg" alt="" width="52" height="52" loading="lazy" /><div><strong>Hugging Face models</strong><span>Chronos, Toto, and supported time-series models</span></div><i class="iconoir-arrow-up-right" aria-hidden="true"></i></a>
       </section>
       <section class="q-home-audiences container" aria-labelledby="home-audiences-title">
         <div class="q-section-heading"><p class="eyebrow">Built around your research</p><h2 id="home-audiences-title">A useful next step for every question.</h2></div>
         <div class="q-audience-grid">
           <article><p class="eyebrow">Investors &amp; traders</p><h3>Find what deserves a closer look.</h3><p>Compare current prices with published forecast ranges. Turn a broad stock screen into a focused research shortlist.</p><a href="/screener" data-analytics="home_investor_screener">Explore stocks →</a></article>
           <article><p class="eyebrow">Analysts &amp; researchers</p><h3>Make assumptions inspectable.</h3><p>Bring a time series, choose models, and inspect quantiles alongside the history. Save a result you can revisit.</p><a href="/forecasting" data-analytics="home_analyst_forecast">Work with your data →</a></article>
-          <article><p class="eyebrow">Developers</p><h3>Carry research into your workflow.</h3><p>Paid Pro users and admins can use API keys, structured forecast Q&A and reproducible exports in their own tools.</p><a href="/forecasting?panel=profile" data-analytics="home_developer_docs">API access in your profile →</a></article>
+          <article><p class="eyebrow">Developers</p><h3>Carry research into your workflow.</h3><p>Use the API, Python and npm SDKs, or connect ChatGPT through MCP. Included with pay as you go and your 14-day trial.</p><a href="/forecasting?panel=profile" data-analytics="home_developer_docs">Connect your tools →</a></article>
         </div>
       </section>
       <section class="q-home-evidence container" aria-labelledby="home-evidence-title">
@@ -158,7 +171,7 @@
         <div><p class="eyebrow">Meet Quantura</p><h2 id="home-video-title">From a question to a forecast.</h2><p>A short tour of market search, probability ranges, and today's games.</p><a class="cta secondary" href="/forecasting">Open Forecast</a></div>
         <figure><video class="hero-video" data-lazy-video="/assets/quantura-intro.mp4?v=20260926-endcard" poster="/assets/quantura-intro-poster.jpg" preload="none" controls playsinline aria-label="Quantura product tour"><track kind="captions" src="/assets/quantura-intro.vtt" srclang="en" label="English" default /></video></figure>
       </section>
-      <section class="q-home-games container" aria-labelledby="home-games-title"><div><p class="eyebrow">Prediction markets</p><h2 id="home-games-title">Today's games, in one place.</h2><p>Browse Kalshi and Polymarket US games and open their latest pregame forecast when you need it.</p></div><a class="cta" href="/screener?source=today_games">View today's games</a></section>
+      <section class="q-home-games container" aria-labelledby="home-games-title"><div><div class="q-home-market-logos" aria-label="Kalshi and Polymarket US"><img src="/assets/logo-kalshi.png" alt="Kalshi" width="32" height="32" loading="lazy" /><img src="/assets/logo-polymarket.png" alt="Polymarket US" width="32" height="32" loading="lazy" /></div><p class="eyebrow">Prediction markets</p><h2 id="home-games-title">Today's games, in one place.</h2><p>Browse Kalshi and Polymarket US games and open their latest pregame forecast.</p></div><a class="cta" href="/screener?source=today_games">View today's games</a></section>
       <section class="q-home-guides container" aria-labelledby="home-guides-title"><div class="q-section-heading"><p class="eyebrow">Research guides</p><h2 id="home-guides-title">Get more from the forecast.</h2><a href="/blog">Browse all guides →</a></div><div class="q-guide-grid">
 <article class="q-guide-card" data-unsplash-photo="JKUTrJ4vK00"><a class="q-guide-link" href="/blog/posts/2026-07-23-forecast-uncertainty-expansion-and-contraction-over-time"><img class="blog-card-photo" src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format" srcset="https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180&amp;auto=format 320w, https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360&amp;auto=format 640w, https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&amp;cs=tinysrgb&amp;fit=crop&amp;fm=jpg&amp;ixid=M3w1NDk1MzR8MHwxfHNlYXJjaHwxfHxkYXRhJTIwYW5hbHlzaXMlMjBsYXB0b3AlMjBkZXNrfGVufDF8MHx8fDE3ODg5ODE2MTZ8MA&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540&amp;auto=format 960w" sizes="(max-width: 768px) calc(100vw - 48px), 360px" alt="graphs of performance analytics on a laptop screen" width="640" height="360" loading="lazy" decoding="async" /><div class="q-guide-copy"><h3>Read a forecast range</h3><p>Understand quantiles and the questions a median cannot answer.</p><span>Read guide →</span></div></a><p class="q-guide-credit">Photo by <a href="https://unsplash.com/@lukechesser?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Luke Chesser</a> on <a href="https://unsplash.com/photos/graphs-of-performance-analytics-on-a-laptop-screen-JKUTrJ4vK00?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>.</p></article>
 <article class="q-guide-card" data-unsplash-photo="klWUhr-wPJ8"><a class="q-guide-link" href="/blog/posts/2025-10-02-data-freshness-slas-for-forecast-credibility"><img class="blog-card-photo" src="https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360" srcset="https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=320&amp;h=180 320w, https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=640&amp;h=360 640w, https://images.unsplash.com/photo-1506399558188-acca6f8cbf41?auto=format&amp;fit=crop&amp;fm=jpg&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;ixlib=rb-4.1.0&amp;q=78&amp;w=960&amp;h=540 960w" sizes="(max-width: 768px) calc(100vw - 48px), 360px" alt="Rows of black server racks in a data center" width="640" height="360" loading="lazy" decoding="async" /><div class="q-guide-copy"><h3>Check the data behind it</h3><p>Review the source, cutoff, gaps, and model coverage.</p><span>Read guide →</span></div></a><p class="q-guide-credit">Photo by <a href="https://unsplash.com/@imgix?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">imgix</a> on <a href="https://unsplash.com/photos/klWUhr-wPJ8?utm_source=quantura&amp;utm_medium=referral" target="_blank" rel="noopener noreferrer">Unsplash</a>.</p></article>

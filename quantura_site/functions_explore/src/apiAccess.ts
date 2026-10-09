@@ -4,6 +4,7 @@ import type admin from "firebase-admin";
 import { normalizePlan, PLAN_ENTITLEMENTS, planHasFeature, type PlanKey } from "./planEntitlements";
 import { clerkClient, getClerkUser, type QuanturaIdentity } from "./clerkAuth";
 import { clerkSubscriptionAccess } from "./clerkBilling";
+import {billingAccess} from "./subscriptionBilling";
 import { rapidApiPrincipal } from "./rapidApiAuth";
 import { requirePaidApiAccess } from "./enterpriseAccess";
 import { isClerkOAuthToken, verifyQuanturaOAuth } from "./clerkOAuth";
@@ -188,7 +189,7 @@ async function userPlan(db: FirebaseFirestore.Firestore, userId: string, clerkUs
   const billing=await db.collection("billing_accounts").doc(userId).get();
   if(billing.exists){
     const value=billing.data()||{};
-    return value.subscriptionStatus==="active" || (value.subscriptionStatus==="trialing" && Number(value.trialEnd)*1000>Date.now())?"pro":"free";
+    return billingAccess(value).docs_available?"pro":"free";
   }
   const snapshot = await db.collection("users").doc(userId).get();
   const value = (snapshot.data() || {}) as Record<string, any>;

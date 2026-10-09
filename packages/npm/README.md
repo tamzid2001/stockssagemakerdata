@@ -1,6 +1,6 @@
 # Quantura SDK and CLI
 
-Market search, probabilistic forecasts, provider history and Scout from the Quantura API. Node.js 20 or newer; no runtime dependencies. API access requires paid Pro, enterprise or verified administrator access. Trial-only accounts do not include API access.
+Market search, probabilistic forecasts, provider history and Scout from the Quantura API. Node.js 20 or newer; no runtime dependencies. API access requires metered or legacy Pro access (including an active 14-day trial), enterprise or verified administrator access. Active 14-day trials include API and MCP access.
 
 ## CLI with browser sign-in
 
@@ -74,6 +74,6 @@ Other commands: Resolve market links with `q.resolve(url)`; `quantura scout --fi
 
 ## MCP
 
-Connect ChatGPT or another OAuth MCP client to **https://quantura.studio/mcp**. This live API server exposes search, capabilities, forecast creation/read, history, Scout and account access. Forecast creation and Scout save requests in your account. It does not place trades. Authentication discovery is public; every tool call rechecks identity, paid access and resource permissions.
+Connect ChatGPT or another OAuth MCP client to **https://quantura.studio/mcp**. This live API server exposes search, capabilities, forecast creation/read, history, Scout and account access. Forecast creation and Scout save requests in your account. It does not place trades. Authentication discovery is public; every tool call rechecks identity, current subscription/trial access and resource permissions.
 
 [API and connection guide](https://quantura.studio/developers/api) · [Source](https://github.com/tamzid2001/stockssagemakerdata/tree/main/packages/npm)

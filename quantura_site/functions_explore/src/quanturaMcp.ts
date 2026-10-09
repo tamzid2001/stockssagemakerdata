@@ -48,7 +48,7 @@ export function registerQuanturaMcpRoutes(router: Router, options: Options) {
     }
     const bearer = String(req.headers.authorization || "").match(/^Bearer\s+(.+)$/i)?.[1] || "";
     // Protocol discovery contains no user data. Every tool call authenticates
-    // and rechecks paid access through the same verifier as the HTTP API.
+    // and rechecks subscription/trial access through the HTTP API verifier.
     if (req.body.method === "tools/call") {
       try {
         const principal = await options.authenticate(req);
@@ -56,7 +56,7 @@ export function registerQuanturaMcpRoutes(router: Router, options: Options) {
       } catch (error) {
         const paid = String((error as Error).message)==="paid_api_required";
         res.status(paid?403:401).set("WWW-Authenticate",CHALLENGE).json({jsonrpc:"2.0",id:req.body.id??null,
-          error:{code:paid?-32003:-32001,message:paid?"Paid Pro or administrator API access is required.":"Sign in with Quantura OAuth."}});
+          error:{code:paid?-32003:-32001,message:paid?"An active paid plan, 14-day trial, or enterprise access is required.":"Sign in with Quantura OAuth."}});
         return;
       }
     }

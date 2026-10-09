@@ -7,7 +7,7 @@ description: "Create a scoped Quantura API key, copy it once, and authenticate r
 
 ## OAuth sign-in
 
-The [Quantura CLI and SDKs](/docs/sdk-cli) and [live MCP server](/docs/mcp) support Clerk authorization-code OAuth with PKCE S256. Run `quantura login` or connect an OAuth MCP client to `https://quantura.studio/mcp`. Tokens are bound to the shared resource `https://quantura.studio`; clients pass this resource in authorization and token requests. Identity scopes are `openid profile email`, with optional `offline_access` for refresh. Current paid Pro, enterprise or administrator access and resource permissions are checked on every call. Website trials do not grant API access. No client secret is required for the public CLI client or supported dynamically registered public MCP clients.
+The [Quantura CLI and SDKs](/docs/sdk-cli) and [live MCP server](/docs/mcp) support Clerk authorization-code OAuth with PKCE S256. Run `quantura login` or connect an OAuth MCP client to `https://quantura.studio/mcp`. Tokens are bound to the shared resource `https://quantura.studio`; clients pass this resource in authorization and token requests. Identity scopes are `openid profile email`, with optional `offline_access` for refresh. Current pay-as-you-go or Pro (including an active 14-day trial), enterprise or administrator access and resource permissions are checked on every call. Active trials include API access until the trial ends. No client secret is required for the public CLI client or supported dynamically registered public MCP clients.
 
 Create personal API keys through Clerk in Quantura Profile. These keys use the `ak_` prefix and are sent as bearer credentials. Existing legacy `qnt_live_` keys remain supported:
 
@@ -20,9 +20,9 @@ Never place API keys in query strings, browser storage, client-side bundles, scr
 ## Get your API key
 
 1. Sign in to Quantura.
-2. Open **Profile → Account settings → API keys**. This tab requires paid Pro, enterprise or verified administrator access; free and trial-only accounts are excluded.
+2. Open **Profile → Account settings → API keys**. This tab requires pay-as-you-go or Pro (including an active 14-day trial), enterprise or verified administrator access; free accounts without an active trial are excluded.
 3. Choose **Add new key**, give it a descriptive name, and set an expiration.
-4. If your integration uses an operator-provisioned scoped key, request only the scopes it needs. A personal Clerk key without explicit scopes uses your full personal API scope set, subject to resource ownership and current paid access.
+4. If your integration uses an operator-provisioned scoped key, request only the scopes it needs. A personal Clerk key without explicit scopes uses your full personal API scope set, subject to resource ownership and current subscription or trial access.
 5. Copy the secret from Clerk and keep it private.
 6. Store the key in a server-side secret manager or environment variable such as `QUANTURA_API_KEY`.
 
@@ -72,8 +72,7 @@ Do not commit a real key to Git, paste it into Codex prompts, or place it in pub
 ## Clerk account API keys
 
 Sign in and open Profile → Account settings → API keys. This tab is available to
-paid Pro and enterprise accounts and verified Quantura administrators. Trial-only
-and free accounts cannot use API keys. Paid cancellation periods retain access
+pay-as-you-go or Pro (including an active 14-day trial) and enterprise accounts and verified Quantura administrators. Free accounts without an active trial cannot use API keys. Paid cancellation periods retain access
 until the entitlement ends. Clerk owns key creation, expiration and revocation.
 Personal `ak_` keys authenticate with `Authorization: Bearer <key>`; the
 backend resolves the original migrated UID and checks current paid access and

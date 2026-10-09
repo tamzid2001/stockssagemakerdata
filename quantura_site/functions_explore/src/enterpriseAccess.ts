@@ -1,5 +1,6 @@
 import { getClerkUser, verifiedQuanturaAdmin } from "./clerkAuth";
 import { clerkSubscriptionAccess } from "./clerkBilling";
+import { billingAccess } from "./subscriptionBilling";
 
 /** Grants are written only by the backend. Editable user profile fields are
  * never accepted as evidence of an enterprise API subscription. */
@@ -19,13 +20,20 @@ export async function hasApiAccess(db: FirebaseFirestore.Firestore, userId: stri
   }
   if(enterpriseGrant((await db.collection("enterprise_api_accounts").doc(userId).get()).data()))return true;
   const ledger=(await db.collection("billing_accounts").doc(userId).get()).data();
-  return ledger?.subscriptionStatus==="active";
+  return paidApiEntitlement(billingAccess(ledger || {}));
 }
 
 export async function requirePaidApiAccess(db: FirebaseFirestore.Firestore, userId: string, clerkUserId?: string) {
   if (!await hasApiAccess(db, userId, clerkUserId)) throw new Error("paid_api_required");
 }
 
-export function paidApiEntitlement(access:{docs_available:boolean;subscription_status:string;trial_ends_at?:string|null}):boolean {
-  return access.docs_available&&["active","canceled","admin"].includes(access.subscription_status)&&!access.trial_ends_at;
+/** Pro includes programmatic access during its valid free trial. The caller
+ * supplies server-verified subscription periods, never browser metadata. */
+export function paidApiEntitlement(access:{docs_available:boolean;subscription_status:string;trial_ends_at?:string|null;access_ends_at?:string|null}, now=Date.now()):boolean {
+  if (!access.docs_available) return false;
+  if (access.access_ends_at && !(Date.parse(access.access_ends_at)>now)) return false;
+  if (access.subscription_status==="trialing") {
+    return Boolean(access.trial_ends_at && Date.parse(access.trial_ends_at)>now);
+  }
+  return ["active","canceled","admin"].includes(access.subscription_status);
 }

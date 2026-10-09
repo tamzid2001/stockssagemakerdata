@@ -12,9 +12,25 @@
     async getToken(fallbackUser){if(native || (fallbackUser?.isAnonymous && !clerk?.session))return fallbackUser?.getIdToken() || "";await api.ready;if(clerk?.session)return clerk.session.getToken();return fallbackUser?.isAnonymous ? fallbackUser.getIdToken() : "";},
     async signIn(redirectUrl="/forecasting?panel=profile"){await api.ready;clerk.openSignIn({afterSignInUrl:redirectUrl,afterSignUpUrl:redirectUrl});},
     async signOut(){await api.ready;await clerk.signOut();},
-    async showPricing(options={}){await api.ready;if(!clerk?.user){await api.signIn("/pricing");return;}const panel=document.querySelector('[data-purchase-panel][data-promo-code]');if(panel)return openProCheckout(panel,options.withPromotion!==false);const host=document.querySelector("[data-clerk-pricing]");if(host){host.hidden=false;component("[data-clerk-pricing]","PricingTable",{for:"user",newSubscriptionRedirectUrl:"/forecasting?panel=profile",checkoutProps:{appearance}});host.scrollIntoView({behavior:"smooth",block:"center"});}else location.assign("/forecasting?panel=profile");},
+    async showPricing(options={}){await api.ready;if(!clerk?.user){await api.signIn("/pricing");return;}const panel=document.querySelector(options.plan==='pro'?'[data-pro-plan]':'[data-metered-plan]');if(panel)return options.plan==='pro'?openProCheckout(panel,options.withPromotion!==false):openMeteredCheckout(panel,options.withPromotion!==false);location.assign("/pricing");},
   };
   window.QuanturaAuth=api;
+  async function openMeteredCheckout(panel,withPromotion) {
+    if(checkoutPending)return;
+    const sessionId=clerk.session?.id;if(!sessionId)throw Error("Sign in before starting checkout.");
+    checkoutPending=true;const button=panel.querySelector('[data-action="purchase"]'),note=panel.querySelector('.purchase-note');
+    if(button)button.disabled=true;
+    try{
+      if(note)note.textContent='Preparing your secure usage-based checkout…';
+      const token=await clerk.session.getToken();
+      const response=await fetch('/api/shop/metered-checkout',{method:'POST',credentials:'same-origin',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({with_promotion:withPromotion})});
+      const data=await response.json();if(!response.ok)throw Error(data.message||'Checkout could not start. Please retry.');
+      if(clerk.session?.id!==sessionId)return;
+      const url=new URL(data.url);if(url.protocol!=='https:'||url.hostname!=='checkout.stripe.com')throw Error('Checkout URL could not be verified.');
+      location.assign(url.href);
+    }catch(error){if(note)note.textContent=error.message;throw error;}
+    finally{checkoutPending=false;if(button)button.disabled=panel.dataset.subscriptionActive==='true';}
+  }
   async function openProCheckout(panel,withPromotion) {
     if(checkoutPending)return;
     const button=panel.querySelector('[data-action="purchase"]'),note=panel.querySelector(".purchase-note"),retry=document.querySelector('[data-promo-regular-checkout]');
@@ -26,6 +42,9 @@
     if(retry)retry.hidden=true;
     if(note)note.textContent="Preparing your secure checkout…";
     try {
+      const accessResponse=await fetch("/api/shop/subscription-access",{headers:{Authorization:`Bearer ${await clerk.session.getToken()}`},cache:"no-store"});
+      if(!accessResponse.ok)throw Error("Your billing status could not be verified. Please retry.");
+      if((await accessResponse.json()).data?.docs_available)throw Error("You already have access. Manage your current billing before starting another plan.");
       const plans=await clerk.billing.getPlans({for:"user",pageSize:100});
       if(clerk.session?.id!==sessionId)return;
       const plan=plans.data?.find(item=>item.slug==="pro");
@@ -132,10 +151,15 @@
     const signout=event.target.closest("#header-signout");
     const purchase=event.target.closest('[data-trial-days] [data-action="purchase"]');
     const billing=document.body.classList.contains("pricing-page") && event.target.closest("#billing-portal-link");
-    if(billing){event.preventDefault();event.stopImmediatePropagation();if(clerk?.user)location.assign("/forecasting?panel=profile");else api.signIn("/forecasting?panel=profile").catch(showError);return;}
+    if(billing){event.preventDefault();event.stopImmediatePropagation();if(!clerk?.user){api.signIn('/pricing').catch(showError);return;}api.ready.then(async()=>{
+      const token=await clerk.session.getToken(),response=await fetch('/api/shop/subscription-access',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'}),{data}=await response.json();
+      if(data?.billing_provider!=='stripe'){location.assign('/forecasting?panel=profile');return;}
+      const portal=await fetch('/api/shop/portal',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({returnUrl:location.origin+'/pricing'})});
+      const result=await portal.json();if(!portal.ok)throw Error('Billing portal could not open. Please retry.');location.assign(result.url);
+    }).catch(showError);return;}
     if(purchase) {
       event.preventDefault();event.stopImmediatePropagation();
-      api.showPricing().catch(showError);return;
+      api.showPricing({plan:purchase.closest("[data-pro-plan]")?"pro":"metered"}).catch(showError);return;
     }
     if(signin){event.preventDefault();event.stopImmediatePropagation();if(clerk?.user)location.assign("/forecasting?panel=profile");else api.signIn().catch(showError);}
     else if(signout){event.preventDefault();event.stopImmediatePropagation();api.signOut().catch(showError);}

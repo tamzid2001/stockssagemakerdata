@@ -3,6 +3,8 @@ import {BigQueryPublicError} from "./bigqueryPublic";
 import {geminiMarketClient} from "./geminiMarketData";
 import crypto from "node:crypto";
 import {reserveForecast,releaseForecast} from "./forecastAdmission";
+import {createMeteredForecast,prepareMeteredSettlement,publishMeteredEvent,flushMeteredEvents} from "./meteredBilling";
+import type Stripe from "stripe";
 import type { Request, Response, Router } from "express";
 import type admin from "firebase-admin";
 import {
@@ -28,7 +30,7 @@ import {forecastFrequency,forecastFrequencyCapabilities,frequencyEnd,frequencyTi
 import {ForecastProofError, VBaseClient, contentCid, ensureForecastProof, proofEnabled, proofManifest, publicProof} from "./forecastProof";
 
 type JsonRecord = Record<string, unknown>;
-type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string; adminEmails?: readonly string[]; vbaseApiKey?: () => Promise<string> };
+type Options = { db: FirebaseFirestore.Firestore; auth: admin.auth.Auth; publicOrigin: string; adminEmails?: readonly string[]; vbaseApiKey?: () => Promise<string>; stripe?:()=>Promise<Stripe|null> };
 type ModelId = "prophet" | "toto" | "granite" | "chronos" | "timesfm";
 type Handler = (req: Request, res: Response, principal: ApiPrincipal, requestId: string) => Promise<void>;
 
@@ -91,6 +93,7 @@ export function apiError(error: unknown): { status: number; code: string; messag
   if (/not_found/.test(raw)) return { status: 404, code, message: "The requested forecast resource was not found." };
   if (/already|idempotency_conflict|claim_conflict/.test(raw)) return { status: 409, code, message: "The request conflicts with the current forecast state." };
   if (/rate_limit|quota|concurrent/.test(raw)) return { status: 429, code, message: "The forecast compute limit has been reached." };
+  if(raw==="monthly_spend_limit_reached")return {status:402,code,message:"Your monthly usage budget is reached. Adjust it on the pricing page to run another forecast."};
   if (/dispatch_not_configured|worker_unavailable/.test(raw)) return { status: 503, code, message: "Forecast workers are temporarily unavailable." };
   if (/unsupported|quantile|weight|prediction_length|context_length|source_|dataset_|transform|failure_policy|models_|history_/.test(raw)) {
     return { status: 422, code, message: "The forecast configuration is not supported." };
@@ -726,6 +729,8 @@ export function publicEnsembleJob(jobId: string, data: JsonRecord, result?: Json
     reproduces_forecast_id: data.reproduces_forecast_id || null,
     registry_version: data.registry_version,
     evaluation_policy: data.evaluation_policy || null,
+    billing: data.billing ? {mode:"metered",amount_cents:plain(data.billing).amount_cents,trial_free:plain(data.billing).trial_free,
+      charge_on:"successful_completion"} : null,
     provenance: publicProof(data.provenance),
   };
   if (result) {
@@ -784,7 +789,9 @@ export async function failEnsembleJob(options: Options, ref: FirebaseFirestore.D
     if (!["queued","running"].includes(String(job.status)) || (onlyQueued && job.status !== "queued") || (expiredOnly && !expiredEnsembleJobCode(job))) return false;
     const usage = admissionRef(options,String(job.workspace_id));
     const usageSnap = await transaction.get(usage);
+    const settle=await prepareMeteredSettlement(options.db,transaction,ref.id,job,false);
     const now = new Date().toISOString();
+    settle();
     transaction.set(ref,{status:"failed",completed_at:now,updated_at:now,lease_expires_at:null,error}, {merge:true});
     if (usageSnap.exists) transaction.update(usage,{leases:releaseForecast(usageSnap.data()||{},ref.id)});
     return true;
@@ -808,6 +815,8 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
     const completedAt = new Date().toISOString();
     const usage = admissionRef(options,String(job.workspace_id));
     const usageSnap = await transaction.get(usage);
+    const settle=await prepareMeteredSettlement(options.db,transaction,ref.id,job,true);
+    settle();
     // Recover an old partial completion too: preserve its immutable result.
     if (!existing.exists) transaction.create(resultRef, {
       forecast_id: ref.id, schema_version: WORKER_SCHEMA_VERSION,
@@ -825,6 +834,10 @@ export async function completeEnsembleJob(options: Options, ref: FirebaseFiresto
     transaction.set(options.db.collection(CACHE).doc(cacheId),{forecast_id:ref.id,request_hash:job.request_hash,completed_at:completedAt});
     return {...job,...completed};
   });
+  if(completed.billing && !plain(completed.billing).trial_free && options.stripe){
+    try{const stripe=await options.stripe();if(stripe)await publishMeteredEvent(options.db,ref.id,stripe);}
+    catch{console.warn(JSON.stringify({event:"metered_billing_deferred",forecast_id:ref.id}));}
+  }
   await reportGa4ForecastCompletion(options.db,ref);
   if (proofEnabled() && (completed.guest_session !== true || completed.saved_to_profile === true)) {
     try {
@@ -1103,6 +1116,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       schema_version: WORKER_SCHEMA_VERSION,
       forecast_id: ref.id,
       user_id: principal.userId,
+      billing_user_id: access.ownerUserId || principal.userId,
       analytics_context: analyticsContext(rawBody.analytics_context),
       guest_session: Boolean(principal.guest),
       workspace_id: workspaceId,
@@ -1132,7 +1146,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       completed_at: null,
     };
     try {
-      await ref.create(job);
+      Object.assign(job,await createMeteredForecast(options.db,ref,job));
       await indexEnsembleRequest(options, ref.id, job);
       await persistInputChunks(ref, materialized.rows);
       if (idempotencyKey) {
@@ -1142,7 +1156,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       await dispatchWorker(ref.id);
       await ref.set({ dispatched_at: new Date().toISOString(), dispatch_backend: text(process.env.QUANTURA_ENSEMBLE_WORKER_MODE || "github_actions", 40) }, { merge: true });
     } catch (error) {
-      await ref.set({ status: "failed", error: { code: "WORKER_DISPATCH_FAILED", retryable: true }, completed_at: new Date().toISOString() }, { merge: true });
+      if((await ref.get()).exists)await failEnsembleJob(options,ref,{code:"WORKER_DISPATCH_FAILED",retryable:true},true);
       await releaseComputeSlot(options, workspaceId,ref.id);
       throw error;
     }
@@ -1197,18 +1211,19 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       warnings: [],
       error: null,
       reproduces_forecast_id: originalId,
+      billing_user_id: access.ownerUserId || principal.userId,
       created_at: now,
       started_at: null,
       completed_at: null,
     };
     try {
-      await ref.create(job);
+      Object.assign(job,await createMeteredForecast(options.db,ref,job));
       await indexEnsembleRequest(options, ref.id, job);
       await persistInputChunks(ref, rows);
       await dispatchWorker(ref.id);
       await ref.set({ dispatched_at: new Date().toISOString(), dispatch_backend: text(process.env.QUANTURA_ENSEMBLE_WORKER_MODE || "github_actions", 40) }, { merge: true });
     } catch (error) {
-      await ref.set({ status: "failed", error: { code: "WORKER_DISPATCH_FAILED", retryable: true }, completed_at: new Date().toISOString() }, { merge: true }).catch(() => undefined);
+      if((await ref.get()).exists)await failEnsembleJob(options,ref,{code:"WORKER_DISPATCH_FAILED",retryable:true},true);
       await releaseComputeSlot(options, workspaceId,ref.id);
       throw error;
     }
@@ -1460,6 +1475,10 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
     sendData(res, { deleted: true, preset_id: snapshot.id }, requestId);
   }));
 
+  router.post("/internal/metered-billing/flush",internal(options,async(_req,res,requestId)=>{
+    const stripe=await options.stripe?.();if(!stripe)throw Error("worker_unavailable");
+    sendData(res,await flushMeteredEvents(options.db,stripe),requestId);
+  }));
   router.post("/internal/ensemble-forecasts/:forecastId/claim", internal(options, async (req, res, requestId) => {
     const ref = options.db.collection(JOBS).doc(safeId(req.params.forecastId, 220));
     const job = await options.db.runTransaction(async (transaction) => {

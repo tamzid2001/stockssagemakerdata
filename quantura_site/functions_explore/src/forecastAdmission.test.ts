@@ -5,7 +5,7 @@ import { PLAN_ENTITLEMENTS,publicPlanEntitlements } from "./planEntitlements";
 
 test("Pro has no daily cap, but concurrent admission and burst controls remain",()=>{
   assert.equal(PLAN_ENTITLEMENTS.pro.forecastComputePerDay,-1);
-  const pro=(publicPlanEntitlements().plans as any).pro;
+  const pro=(publicPlanEntitlements().plans as any).metered;
   assert.equal(pro.forecastComputePerDay,null);assert.equal(pro.unlimitedForecasts,true);
   let state=reserveForecast({},"pro","a",9999,1000);
   state=reserveForecast(state,"pro","b",10000,1000);

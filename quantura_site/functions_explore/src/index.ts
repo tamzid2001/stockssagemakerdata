@@ -94,6 +94,7 @@ import {
   renderForecastAgentMarkdown,
 } from "./forecastAnalysis";
 export { shopApi } from "./shopApi";
+import {getStripeClient} from "./shopApi";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require("adm-zip");
 
@@ -697,7 +698,7 @@ enterpriseDataRoutes.use(["/market-search", "/market-data", "/economic-data"], a
     next();
   } catch {
     res.set("Cache-Control", "private, no-store");
-    res.status(403).json({ error: "paid_api_required", message: "Use a paid Pro or enterprise API credential." });
+    res.status(403).json({ error: "paid_api_required", message: "Use an active Pro subscription, Pro trial, or enterprise API credential." });
   }
 });
 registerMarketDataRoutes(enterpriseDataRoutes);
@@ -722,6 +723,7 @@ registerEnsembleForecastRoutes(ROUTES, {
   adminEmails: [ADMIN_EMAIL.toLowerCase()],
   publicOrigin: PUBLIC_ORIGIN,
   vbaseApiKey: () => resolveRuntimeSecretValue("vbase", ["VBASE_API_KEY"], ["VBASE_API_KEY"]),
+  stripe:getStripeClient,
 });
 // Register concrete dataset routes before the generic catalog
 // `/v1/datasets/:datasetId` route so Express cannot shadow trajectory/release

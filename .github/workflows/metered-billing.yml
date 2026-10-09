@@ -1,0 +1,31 @@
+name: Quantura Metered Billing Delivery
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '13 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: quantura-metered-billing-delivery
+  cancel-in-progress: false
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Deliver pending forecast usage
+        env:
+          WORKER_TOKEN: ${{ secrets.QUANTURA_ENSEMBLE_WORKER_TOKEN }}
+          API_BASE: ${{ vars.QUANTURA_WORKER_API_BASE || 'https://quantura.studio' }}
+        run: |
+          python - <<'PY'
+          import os, json, urllib.request
+          token = os.environ['WORKER_TOKEN']
+          if len(token) < 32:
+              raise SystemExit('Worker credential missing')
+          req = urllib.request.Request(os.environ['API_BASE'].rstrip('/')+'/api/internal/metered-billing/flush',
+              data=b'{}',headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'},method='POST')
+          with urllib.request.urlopen(req, timeout=240) as response:
+              result=json.load(response)
+              print(json.dumps({'usage_delivery':result.get('data',{})}))
+          PY

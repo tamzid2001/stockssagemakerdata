@@ -881,7 +881,7 @@
     sidebar_ask_gpt5: ['[data-panel-target="ticker-query"] span'],
     sidebar_options: ['[data-panel-target="options"] span'],
     sidebar_learn_more: ['[data-panel-target="learn"] span'],
-    sidebar_screener: ['[data-panel-target="screener"] span', 'a[href="/screener"] span'],
+    sidebar_screener: ['[data-panel-target="screener"] span', 'nav a[href="/screener"] span'],
     panel_forecast_title: ['[data-panel="forecast"] > .panel-header h2'],
     panel_forecast_subtitle: ['[data-panel="forecast"] > .panel-header p.small'],
     panel_market_headlines_title: ['[data-panel="market-headlines"] .panel-header h2'],
@@ -6450,6 +6450,7 @@
     const guestSession = isAnonymousUser(user);
     const nativeIapRuntime = isNativeIapRuntime();
     ui.purchasePanels.forEach((panel) => {
+      if (panel.hasAttribute("data-metered-plan")) return;
       const button = panel.querySelector('[data-action="purchase"]');
       const note = panel.querySelector(".purchase-note");
       const success = panel.querySelector(".purchase-success");
@@ -8885,7 +8886,7 @@
           <div><a href="/forecasts">Forecasts</a></div>
           <div><a href="/research">Research</a></div>
           <div><a href="/forecasting?panel=profile">Profile</a></div>
-          <div><a href="/pricing">Pro pricing</a> · Free preview</div>
+          <div><a href="/pricing">Pricing</a> · 14-day trial</div>
         `;
       }
       if (resources instanceof HTMLElement) {
@@ -24109,6 +24110,7 @@
     });
 
     ui.purchasePanels.forEach((panel) => {
+      if (panel.hasAttribute("data-metered-plan")) return;
       if (!panel?.dataset?.monthlyPrice) return;
       const monthlyPrice = Number(panel.dataset.monthlyPrice || panel.dataset.price || 0);
       const yearlyPrice = Number(panel.dataset.yearlyPrice || monthlyPrice * 12 || 0);
@@ -27401,6 +27403,7 @@
     });
 
 		    ui.purchasePanels.forEach((panel) => {
+      if (panel.hasAttribute("data-metered-plan")) return;
 	      const purchaseBtn = panel.querySelector('[data-action="purchase"]');
 	      const stripeBtn = panel.querySelector('[data-action="stripe"]');
 	      purchaseBtn?.addEventListener("click", () => handlePurchase(panel, functions));

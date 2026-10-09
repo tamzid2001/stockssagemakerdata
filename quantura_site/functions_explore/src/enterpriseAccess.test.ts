@@ -18,8 +18,24 @@ test("complimentary administrator Pro access requires the authoritative primary 
  for(const change of [{banned:true},{locked:true},{primaryEmailAddressId:"other"},{externalId:"other"},{emailAddresses:[{...user.emailAddresses[0],verification:{status:"unverified"}}]}])assert.equal(verifiedQuanturaAdmin({...user,...change},"legacy"),false);
 });
 
-test("Pro API access excludes trials, past-due and expired periods, but includes paid cancellation periods",()=>{
+test("Pro API access includes valid trials and cancellation periods, and expires at the server-confirmed boundary",()=>{
+ const now=Date.parse("2026-10-09T00:00:00Z");
  const paid={docs_available:true,subscription_status:"active",trial_ends_at:null};
- assert.equal(paidApiEntitlement(paid),true);assert.equal(paidApiEntitlement({...paid,subscription_status:"canceled"}),true);
- for(const extra of [{subscription_status:"trialing"},{subscription_status:"past_due"},{docs_available:false},{trial_ends_at:"2027-01-01"}])assert.equal(paidApiEntitlement({...paid,...extra}),false);
+ assert.equal(paidApiEntitlement(paid,now),true);assert.equal(paidApiEntitlement({...paid,subscription_status:"canceled"},now),true);
+ // Stripe retains the old trial date after conversion to a paid subscription.
+ assert.equal(paidApiEntitlement({...paid,trial_ends_at:"2026-10-01"},now),true);
+ const trial={...paid,subscription_status:"trialing",trial_ends_at:"2026-10-10",access_ends_at:"2026-10-10"};
+ assert.equal(paidApiEntitlement(trial,now),true);
+ assert.equal(paidApiEntitlement(trial,Date.parse("2026-10-10")),false);
+ for(const extra of [{subscription_status:"trialing"},{subscription_status:"past_due"},{docs_available:false},{access_ends_at:"invalid"},{access_ends_at:"2026-10-08"}])assert.equal(paidApiEntitlement({...paid,...extra},now),false);
+ assert.equal(paidApiEntitlement({...trial,trial_ends_at:"invalid"},now),false);
+});
+
+test("metered billing grants the same API access during trial and paid periods, then revokes on expiry",async()=>{
+ const now=Date.now(),ledger:any={billingMode:"metered",subscriptionStatus:"trialing",trialEnd:(now+100000)/1000,periodEnd:(now+100000)/1000};
+ const db:any={collection:(name:string)=>({doc:()=>({get:async()=>({data:()=>name==="billing_accounts"?ledger:{}})})})};
+ await requirePaidApiAccess(db,"metered-owner");ledger.trialEnd=(now-1)/1000;
+ await assert.rejects(requirePaidApiAccess(db,"metered-owner"),/paid_api_required/);
+ ledger.subscriptionStatus="active";await requirePaidApiAccess(db,"metered-owner");
+ ledger.subscriptionStatus="past_due";await assert.rejects(requirePaidApiAccess(db,"metered-owner"),/paid_api_required/);
 });

@@ -23,14 +23,14 @@ The forecast-capability endpoint and OpenAPI share the supported intervals. MCP 
 flowchart LR
     Web[Website and PWA] --> Clerk[Clerk sign-in]
     Clerk --> API[Verified Node and Python APIs]
-    API --> Grant[Paid Pro / enterprise grant / verified admin]
+    API --> Grant["Active Pro or trial / enterprise grant / verified admin"]
     API --> Bridge[Data SDK compatibility credential]
     Bridge --> Data[Private Firestore and Storage]
     API --> Jobs[GitHub Actions workers]
     Jobs --> API
 ```
 
-Verified paid Clerk/Stripe subscriptions, Clerk private enterprise metadata, backend-only enterprise account records, or the verified administrator identity control API access. Trial-only subscriptions and user-editable metadata cannot grant API access. Public data caches use bounded memory; API-key activity writes are throttled and browser refreshes pause while hidden. Measure actual production usage before reporting savings.
+Verified paid Clerk/Stripe subscriptions, Clerk private enterprise metadata, backend-only enterprise account records, or the verified administrator identity control API access. Active trials grant API access until their verified expiry. User-editable metadata cannot grant access. Public data caches use bounded memory; API-key activity writes are throttled and browser refreshes pause while hidden. Measure actual production usage before reporting savings.
 
 ## Deployment
 
@@ -61,4 +61,4 @@ BigQuery public tables are searchable in Scout/Search and Research. The authenti
 
 Successful API polling reads now use structured platform logs; mutations and failures retain durable audit documents. Key last-used updates coalesce across concurrent requests and persist at five-minute intervals. Identical Stripe subscription events avoid unchanged ledger/profile writes. Billing savings have not yet been measured on an invoice.
 
-Clerk personal API keys are available to paid Pro and enterprise accounts and the verified Quantura administrator. Trials/free accounts do not have programmatic credentials. Native Clerk keys resolve migrated IDs and preserve resource ownership checks.
+Clerk personal API keys are available to pay-as-you-go or Pro (including an active 14-day trial) and enterprise accounts and the verified Quantura administrator. Active trials include programmatic credentials; free accounts without an active trial do not. Native Clerk keys resolve migrated IDs and preserve resource ownership checks.
