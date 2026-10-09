@@ -2,7 +2,7 @@
 
 ### Forecast timestamp receipts (October 9, 2026)
 
-Saved signed-in ensemble forecasts now support private vBase content and timestamp receipts. The Forecast page offers verification and exact proof downloads; Python/npm SDKs and the OAuth MCP expose verification too. Only a salted SHA3-256 content ID leaves Quantura. The actual stamp time is separate from the historical input cutoff; a receipt is not an accuracy score. [Receipt guide](docs/forecast-receipts.mdx).
+Saved signed-in ensemble forecasts now support private vBase content and timestamp receipts. The Forecast page offers verification and exact proof downloads; Python/npm SDKs and the OAuth MCP expose verification too. Only a salted SHA3-256 content ID leaves Quantura. The actual stamp time is separate from the historical input cutoff; a receipt is not an accuracy score. [Receipt guide](docs/forecast-receipts.mdx). Corrected SPY and FTMO research can be exported as holdings or lot signals with fills, costs, equity and private bundle receipts. Historical research and prospective portfolio evidence remain separate. [Portfolio evidence guide](docs/allocator-portfolios.mdx).
 
 ```mermaid
 flowchart LR
