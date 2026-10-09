@@ -6461,8 +6461,8 @@
         ? button.dataset.labelAuth || "Checkout now"
         : button.dataset.labelGuest || "Checkout now";
       if (panel.dataset.webOnly === "true") {
-        if(panel.dataset.subscriptionActive === "true")button.textContent="Pro is active";
-        note.textContent = nativeIapRuntime ? "Subscribe on quantura.studio." : panel.dataset.trialDays === "14" ? "14 days free. Sign in to start your trial." : "Secure checkout with Stripe.";
+        if(panel.dataset.subscriptionActive === "true")button.textContent=button.dataset.labelActive || "Pro is active";
+        note.textContent = panel.dataset.subscriptionActive === "true" ? "Your current plan is active. Manage billing before changing plans." : nativeIapRuntime ? "Subscribe on quantura.studio." : panel.dataset.trialDays === "14" ? accountAuthed ? "14 days free. Continue to secure checkout." : "14 days free. Sign in to start your trial." : "Secure checkout with Stripe.";
       } else if (accountAuthed) {
         note.textContent = "Subscriptions activate in your dashboard after payment confirmation.";
       } else if (nativeIapRuntime) {

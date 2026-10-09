@@ -46,14 +46,18 @@
   });
   if(window.firebase?.auth)firebase.auth().onAuthStateChanged(async user=>{
     const run=++authSequence;currentUser=user;if(!panel||!button)return;
-    panel.dataset.trialDays='14';panel.dataset.subscriptionActive='false';button.dataset.labelAuth=button.dataset.labelGuest='Start 14-day free trial';
+    panel.dataset.trialDays='14';panel.dataset.subscriptionActive='false';button.disabled=false;button.textContent=button.dataset.labelAuth=button.dataset.labelGuest='Start 14-day free trial';
+    const meterNote=panel.querySelector('.purchase-note');if(meterNote)meterNote.textContent='Sign in to start your 14-day free trial.';
+    if(billingCopy)billingCopy.textContent='14 days free, then pay for completed forecasts. Cancel anytime.';
+    const proPanel=document.querySelector('[data-pro-plan]'),proButton=proPanel?.querySelector('[data-action="purchase"]');
+    if(proPanel){proPanel.dataset.trialDays='14';proPanel.dataset.subscriptionActive='false';if(proButton){proButton.disabled=false;proButton.textContent=proButton.dataset.labelAuth=proButton.dataset.labelGuest='Try Pro for 14 days';delete proButton.dataset.labelActive;}proPanel.querySelector('.purchase-note').textContent='Sign in before checkout.';}
     if(accountHost)accountHost.hidden=true;
     if(!user||user.isAnonymous)return;
     try{
       const {data}=await request('/api/shop/subscription-access');if(run!==authSequence)return;
       if(data.docs_available){
-        panel.dataset.subscriptionActive='true';button.disabled=true;const proPanel=document.querySelector('[data-pro-plan]');if(proPanel){proPanel.dataset.subscriptionActive='true';proPanel.querySelector('[data-action="purchase"]').disabled=true;proPanel.querySelector('.purchase-note').textContent='Your current plan is active. Manage billing before changing plans.';}button.textContent=data.plan==='metered'?'Pay as you go is active':'Your access is active';
-        const note=panel.querySelector('.purchase-note');if(note)note.textContent=data.billing_provider==='stripe'?'View your usage below or open Manage billing.':'Your existing plan stays unchanged. Manage it in Clerk Account settings.';
+        panel.dataset.subscriptionActive='true';button.disabled=true;const proPanel=document.querySelector('[data-pro-plan]');if(proPanel){proPanel.dataset.subscriptionActive='true';proPanel.querySelector('[data-action="purchase"]').disabled=true;proPanel.querySelector('[data-action="purchase"]').textContent=proPanel.querySelector('[data-action="purchase"]').dataset.labelActive=data.plan==='metered'?'Your plan is active':'Pro is active';proPanel.querySelector('.purchase-note').textContent='Your current plan is active. Manage billing before changing plans.';}button.textContent=data.plan==='metered'?'Pay as you go is active':'Your access is active';
+        const note=panel.querySelector('.purchase-note');if(note)note.textContent=data.plan==='metered'?'View your usage below or open Manage billing.':data.billing_provider==='stripe'?'Your existing plan stays unchanged. Open Manage billing to review it.':'Your existing plan stays unchanged. Manage it in Clerk Account settings.';
         if(billingCopy)billingCopy.textContent=data.subscription_status==='trialing'?'Your 14-day trial includes API and MCP access. Trial forecast usage is free.':data.plan==='metered'?'Completed custom forecasts cost $0.50 each, billed monthly.':'Your existing subscription retains its agreed pricing.';
       }else if(!data.can_trial){const proPanel=document.querySelector('[data-pro-plan]');if(proPanel){proPanel.dataset.trialDays='0';proPanel.querySelector('[data-action="purchase"]').dataset.labelAuth='Get Pro';}panel.dataset.trialDays='0';button.dataset.labelAuth='Start pay as you go';button.textContent='Start pay as you go';if(billingCopy)billingCopy.textContent='Your trial has been used. New completed forecasts cost $0.50 each, billed monthly.';}
       const usage=await request('/api/shop/metered-usage');if(run===authSequence)renderUsage(usage.data);
