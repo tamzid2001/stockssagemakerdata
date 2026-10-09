@@ -537,3 +537,27 @@ test('games are a lazy screener data source with searchable paginated results an
   fail=true;w.document.getElementById('qs-refresh').click();await tick();assert.equal(w.document.getElementById('qs-error').hidden,false);assert.equal(w.document.getElementById('qs-loading').hidden,true);
   fail=false;w.document.getElementById('qs-retry').click();await tick();assert.equal(w.document.getElementById('qs-error').hidden,true,w.document.getElementById('qs-error-message').textContent);assert.equal(w.document.getElementById('qs-games').hidden,false);w.close();
 });
+
+test('billing-cycle refresh keeps active-plan status and signed-in trial messaging',()=>{
+ const d=new JSDOM(page('pricing.html'),{url:'https://quantura.studio/pricing',runScripts:'outside-only'}),w=d.window;
+ const script=source('app.js'),start=script.indexOf('  const setPurchaseState ='),end=script.indexOf('  const setAuthUi =',start);
+ w.ui={purchasePanels:[...w.document.querySelectorAll('[data-purchase-panel]')]};
+ w.hasFullAccount=user=>Boolean(user);w.hasSessionUser=w.hasFullAccount;w.isAnonymousUser=()=>false;w.isNativeIapRuntime=()=>false;
+ w.eval(script.slice(start,end)+'\nwindow.refreshPurchase=setPurchaseState;');
+ const panel=w.document.querySelector('[data-pro-plan]'),button=panel.querySelector('[data-action="purchase"]'),note=panel.querySelector('.purchase-note');
+ panel.dataset.subscriptionActive='true';button.dataset.labelActive='Your plan is active';w.refreshPurchase({});
+ assert.equal(button.disabled,true);assert.equal(button.textContent,'Your plan is active');assert.match(note.textContent,/current plan is active/);
+ panel.dataset.subscriptionActive='false';w.refreshPurchase({});assert.equal(button.disabled,false);assert.doesNotMatch(note.textContent,/Sign in/);
+ w.refreshPurchase(null);assert.match(note.textContent,/Sign in/);d.window.close();
+});
+
+test('pricing clears a previous subscriber state when the account signs out',async()=>{
+ const d=new JSDOM(page('pricing.html'),{url:'https://quantura.studio/pricing',runScripts:'outside-only'}),w=d.window;let authChanged;
+ w.firebase={auth:()=>({onAuthStateChanged:callback=>{authChanged=callback;}})};
+ w.QuanturaAuth={getToken:async()=> 'test-token'};
+ w.fetch=async path=>({ok:true,json:async()=>({data:path.includes('subscription-access')?{docs_available:true,plan:'metered',billing_provider:'stripe'}:null})});
+ w.eval(source('pricing.js'));await authChanged({uid:'first'});
+ const panel=w.document.querySelector('[data-pro-plan]'),button=panel.querySelector('[data-action="purchase"]');
+ assert.equal(button.disabled,true);assert.equal(button.textContent,'Your plan is active');
+ await authChanged(null);assert.equal(panel.dataset.subscriptionActive,'false');assert.equal(button.disabled,false);assert.equal(button.textContent,'Try Pro for 14 days');assert.equal(w.document.querySelector('[data-metered-plan] [data-action="purchase"]').disabled,false);d.window.close();
+});
