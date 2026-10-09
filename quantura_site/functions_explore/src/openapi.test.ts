@@ -38,7 +38,7 @@ test("forecast proof docs preserve exact bytes and read/write permissions",()=>{
   const path=doc.paths["/ensemble-forecasts/{forecast_id}/proof"];
   assert.equal(path.post["x-quantura-scope"],"forecasts:write");assert.equal(path.get["x-quantura-scope"],"forecasts:read");
   assert.match(path.get.description,/exact canonical UTF-8/);assert.match(path.post.description,/No forecast is backdated/);
-  assert.equal(doc.components.schemas.EnsembleForecastEnvelope.properties.data.properties.provenance.anyOf[0].$ref,"#/components/schemas/ForecastTimestampReceipt");
+  assert.equal(doc.components.schemas.EnsembleForecastEnvelope.properties.data.properties.provenance.$ref,"#/components/schemas/ForecastTimestampReceipt");
 });
 
 test("OpenAPI documents workspaces but excludes uploaded CSV discovery", () => {

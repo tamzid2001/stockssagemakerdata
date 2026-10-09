@@ -1,9 +1,9 @@
 export function addForecastProofOpenapi(doc:any) {
   const cid={type:"string",pattern:"^0x[0-9a-f]{64}$"};
-  doc.components.schemas.ForecastTimestampReceipt={type:"object",properties:{provider:{const:"vbase"},schema_version:{const:"quantura_forecast_proof_v1"},
+  doc.components.schemas.ForecastTimestampReceipt={type:["object","null"],properties:{provider:{const:"vbase"},schema_version:{const:"quantura_forecast_proof_v1"},
     status:{type:"string",enum:["pending","stamping","stamped","unavailable"]},content_cid:{...cid,type:["string","null"]},
     receipt:{type:["object","null"],properties:{object_cid:cid,set_cid:cid,transaction_hash:cid,user_address:{type:"string"},chain_id:{type:"integer"},timestamp:{type:"string",format:"date-time"}}},error_code:{type:["string","null"]}}};
-  doc.components.schemas.EnsembleForecastEnvelope.properties.data.properties.provenance={anyOf:[{$ref:"#/components/schemas/ForecastTimestampReceipt"},{type:"null"}]};
+  doc.components.schemas.EnsembleForecastEnvelope.properties.data.properties.provenance={$ref:"#/components/schemas/ForecastTimestampReceipt"};
   const parameter={name:"forecast_id",in:"path",required:true,schema:{type:"string"}};
   const errors={"401":{description:"Authentication required."},"403":{description:"Forecast scope, membership or resource permission denied."},"404":{description:"Forecast not found."},"409":{description:"Completed timestamp receipt not yet available."},"503":{description:"Receipt service unavailable. Forecast remains available; retries are bounded."}};
   doc.paths["/ensemble-forecasts/{forecast_id}/proof"]={

@@ -4272,14 +4272,7 @@
                 "type": "string"
               },
               "provenance": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/ForecastTimestampReceipt"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "$ref": "#/components/schemas/ForecastTimestampReceipt"
               }
             }
           },
@@ -4598,6 +4591,7 @@
       },
       "ForecastTimestampReceipt": {
         "type": "object",
+        "nullable": true,
         "properties": {
           "provider": {
             "enum": [
