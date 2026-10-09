@@ -372,7 +372,8 @@ def stamp_file(path, collection, verify=False):
         result = {'content_cid': cid, 'collection_cid': collection,
                   'receipt': normalized, 'stamp_found': True,
                   'timestamp_meaning': 'Actual stamp time, never the historical research observation time.'}
-        sidecar = path.parent / ('vbase-verification.json' if verify else 'vbase-receipt.json')
+        suffix = 'vbase-verification.json' if verify else 'vbase-receipt.json'
+        sidecar = path.parent / (suffix if path.name == 'manifest.json' else path.name + '.' + suffix)
         write_json(sidecar, result)
         return result
     finally:

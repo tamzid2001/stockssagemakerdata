@@ -70,7 +70,9 @@ uv run --no-project --with vbase-api==0.1.3 \
   --file /path/to/SPY/manifest.json --collection 0xCOLLECTION_CID
 ```
 
-The tool validates the complete bundle before stamping its exact SHA3-256 manifest CID. It sends only the CID and collection; it does not upload holdings, research files or credentials. Existing receipts are recovered before a new stamp is attempted. Receipt and verification sidecars preserve the actual stamp time separately from historical observation times. For a prospective weights file, use the same commands with `--file portfolio.csv` and a distinct weights collection.
+The tool validates the complete bundle before stamping its exact SHA3-256 manifest CID. It sends only the CID and collection; it does not upload holdings, research files or credentials. Existing receipts are recovered before a new stamp is attempted. Receipt and verification sidecars preserve the actual stamp time separately from historical observation times.
+
+This helper stamps immutable file evidence. Identical bytes in the same collection recover the existing timestamp, even when the file has a different name. It is not a recurring live portfolio publisher. A prospective publisher needs a unique update identity and durable per-update receipts, must distinguish retries from new updates with unchanged weights, and should use vBase's portfolio update workflow. Keep the standard CSV and a timestamped signal manifest together; a recovered old stamp must never be presented as a fresh rebalance.
 
 ## Building allocator-grade prospective evidence
 
