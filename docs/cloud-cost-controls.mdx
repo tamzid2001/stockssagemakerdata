@@ -1,0 +1,42 @@
+---
+title: Cloud cost controls
+description: Quantura storage cleanup, private provider credentials and paused trader recovery.
+---
+
+## October 9, 2026 review
+
+The Quantura Google Cloud project is `quantura-e2e3d`. It has no App Engine application. Its billing report places Cloud Firestore SKUs under **App Engine**; stopping an App Engine server would not address those charges.
+
+The October 1–9 billing report showed $3.33 for Cloud Storage, $1.04 for the Firestore SKUs labelled App Engine, and $0.72 for Secret Manager. The Cloud Storage subtotal included $3.14 in stored bytes and $0.19 in Class A operations. Firestore included 1,562,138 read operations, 113,833 writes and storage. These are billed amounts at review time, with normal reporting latency, rather than projected savings or a route-by-route attribution.
+
+Cloud Monitoring reported approximately 718 GiB of live objects in the Firebase Storage bucket, plus about 1.63 GiB already soft-deleted. The separate function-source bucket held about 89 MiB. Two historical research campaigns contained 505,178,599,993 and 261,030,147,967 bytes, approximately 99.4% of the live storage. The encrypted research transport retains immutable archives and repeated full recovery snapshots unless explicitly retired. Private journals were small but necessary for active trading.
+
+## Owner-authorized purge
+
+The owner chose to pause trading and permanently delete every stored file. Before deleting objects:
+
+- `QUANTURA_KALSHI_DOLLAR_ENABLED` and `QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED` were set to `false`.
+- `QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED` was set to `true`.
+- The five-market trader and recovery workflows were disabled, and all five active trader runs were cancelled.
+- Other continuous cloud research enable flags were already false and all legacy Google Cloud Scheduler jobs were paused.
+- Soft delete and object versioning were disabled for the three project buckets. Generation-specific bulk deletion removes both current and noncurrent objects.
+
+The purge includes research archives, trader journals, uploaded CSV files, prediction uploads, generated report files and old function deployment source ZIPs. It does not delete the buckets, Secret Manager secrets, Firestore user records, GitHub artifacts, repository files or local research reports. Existing exchange positions remain at the exchange; cancelling a GitHub worker does not sell or cancel them. Pending exchange delivery must be reconciled before resuming trading.
+
+Previously soft-deleted copies retain their original hard-delete times. Google does not allow expediting their expiry by changing the bucket policy. See [Google's soft delete documentation](https://docs.cloud.google.com/storage/docs/soft-delete). Removing live stored bytes stops future storage accrual; it does not refund usage already billed, and monitoring/billing charts update later.
+
+## Prevent recurrence
+
+The five-market workflows, successor dispatch and live broker now reject operation while `QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED=true`. The journal refuses to initialize under that flag even in paper mode. External watchdog calls cannot restart a disabled workflow. Do not clear the flag merely to make a run succeed: first reconstruct exchange orders, fills, unsettled positions and fees into a reviewed durable journal, or explicitly establish an isolated new paper lineage.
+
+The BTC paper, Polymarket paper and BTC quote-tape workflows default `QUANTURA_CLOUD_PAPER_CHECKPOINTS` to `false`, using their existing encrypted GitHub artifact transport. Cloud snapshots require a repository-variable opt-in. Existing artifact and size limits still apply; a missing deleted cloud pointer cannot be restored or silently treated as a valid history. Large studies should use bounded incremental artifacts rather than repeatedly retaining a growing whole-database snapshot.
+
+The stock, game and perpetual screeners use GitHub artifact delivery and do not need these deleted historical research files. Keep user forecast records and credentials separate from disposable research archives. Measure the next billing period before claiming savings from Firestore changes; a batch write still bills each document write separately.
+
+## Mozilla Data Collective credential
+
+`MOZILLA_DATA_COLLECTIVE_API_KEY` is stored as a private Google Secret Manager secret, a GitHub repository secret and a production `quantura-api` Secret environment variable. No credential value is in source control or public client configuration. Python compatibility secret loaders know its name without binding it to every function.
+
+The current API base is `https://mozilladatacollective.com/api` and authenticated endpoints use `Authorization: Bearer`. A protected read with the provisioned credential returned the expected missing-resource response; the same request with an invalid control credential returned 401. Public catalog reads do not establish that a key is valid. Downloads still require the dataset's terms, approval and any payment to have been completed in the provider's interface. See [Mozilla's API reference](https://mozilladatacollective.com/api-reference/docs).
+
+This provisions credentials; it does not expose every Mozilla dataset as a Quantura forecastable time series.

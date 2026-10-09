@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   worker:
-    if: github.ref == 'refs/heads/main' && (inputs.mode == 'verify' || inputs.mode == 'readiness' || vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true')
+    if: github.ref == 'refs/heads/main' && (inputs.mode == 'verify' || inputs.mode == 'readiness' || (vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true' && vars.QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 355
     environment: quantura-kalshi-live
@@ -33,6 +33,7 @@ jobs:
       QUANTURA_KALSHI_DOLLAR_APPROVED_SHA: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_SHA }}
       QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG: ${{ vars.QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG }}
       QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED: ${{ vars.QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED || 'false' }}
+      QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED: ${{ vars.QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED || 'false' }}
       PYTHONUNBUFFERED: '1'
       OMP_NUM_THREADS: '2'
       MKL_NUM_THREADS: '2'
@@ -77,7 +78,7 @@ jobs:
           TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
         run: python -m market_research.opposite_dollar_trader --series "$SERIES" --mode "$MODE" --duration-minutes 300
       - name: Queue this series after its durable shutdown
-        if: success() && inputs.continuous && (inputs.mode == 'both' || inputs.mode == 'paper') && vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true'
+        if: success() && inputs.continuous && (inputs.mode == 'both' || inputs.mode == 'paper') && vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true' && vars.QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED != 'true'
         uses: actions/github-script@v8
         with:
           script: |

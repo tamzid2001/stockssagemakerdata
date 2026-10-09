@@ -1,5 +1,7 @@
 # BTC minute forecast research
 
+**Operational status, October 9, 2026:** continuous collection remains disabled. At the owner's request, Cloud Storage research archives and recovery files were permanently deleted. Only separately saved local reports or GitHub artifacts remain available; the cloud-dependent replay commands below cannot recover deleted data. Whole cloud paper snapshots are now an opt-in rather than a workflow default. See [cloud cost controls](cloud-cost-controls.mdx).
+
 The dedicated `kalshi-btc-minute-forecasts.yml` workflow collects **Kalshi KXBTC15M binary-market bid/ask candle closes**, rather than Bitcoin spot prices. Collection runs in a separate thread every 15 seconds. Each completed-minute close is saved with its first actual receipt time; later price revisions are separate records.
 
 For every market, origins 1 through 14 forecast its remaining 14 through 1 minutes. The first origin uses Granite, Chronos, and TimesFM under the explicit single-observation research policy. Later origins add Prophet. Missing history is never filled. Equal ensemble weights are normalized among models that support each requested quantile.

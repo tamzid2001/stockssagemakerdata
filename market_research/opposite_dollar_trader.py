@@ -119,7 +119,8 @@ def shutdown_journal(journal,broker):
 
 def approved(config, env):
     sha=env.get("QUANTURA_CODE_SHA", "")
-    return (env.get("QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED")=="true"
+    return (env.get("QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED")!="true"
+            and env.get("QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED")=="true"
             and re.fullmatch(r"[a-f0-9]{40}",sha) is not None
             and env.get("QUANTURA_KALSHI_DOLLAR_APPROVED_SHA")==sha
             and env.get("QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG")==portfolio_fingerprint(config.subaccount))
@@ -136,6 +137,8 @@ class DollarBroker(KalshiExecution):
 
 class CloudJournal:
     def __init__(self,config,key_id,holder):
+        if os.environ.get("QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED")=="true":
+            raise RuntimeError("TRADER_STORAGE_PURGED_RECONCILIATION_REQUIRED")
         from google.cloud import storage
         from google.oauth2 import service_account
         from .artifact import key_bytes
