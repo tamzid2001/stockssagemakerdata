@@ -1,5 +1,7 @@
 # Five Kalshi opposite-dollar strategies
 
+**Operational status, October 9, 2026:** the owner paused all five traders and their recovery workflow before permanently deleting Cloud Storage files, including journals and archives. Existing exchange positions remain at the exchange. `QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED=true` blocks a restart until exchange reconciliation and durable state recovery are reviewed. The design below describes the strategy; it is not an assertion that a worker or its deleted history is currently available. See [cloud cost controls](cloud-cost-controls.mdx).
+
 The continuous portfolio replaces the BTC strategy with the five selected timings. Each series runs independently, so all five can hold positions simultaneously. The initial stake is $1 of contract notional per 15-minute market, before fees. Quantities are floored to 0.01 contracts. There is no recovery multiplier and no price stop: positions hold until official settlement.
 
 | Series | Genuine opening minutes | Forecast remaining minutes |

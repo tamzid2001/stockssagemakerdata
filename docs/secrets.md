@@ -27,6 +27,7 @@ All secret reads are centralized through `secrets_loader.get_secret(...)` with a
 - `ALPACA_SECRET_KEY`: Alpaca trading/data auth.
 - `FMP_API_KEY`: Financial Modeling Prep earnings calendar auth (server-side only).
 - `UNSPLASH_ACCESS_KEY`: Unsplash API auth.
+- `MOZILLA_DATA_COLLECTIVE_API_KEY`: Mozilla Data Collective authenticated dataset API. Stored in Secret Manager and the production `quantura-api` Secret environment variable. Load lazily on the server; do not add it to every Firebase function's secret bindings. The API uses `Authorization: Bearer` at `https://mozilladatacollective.com/api`. Catalog search and metadata are public; downloads require the dataset's terms/access requirements to have been satisfied. Adding this credential does not itself add a forecasting provider or authorize buying datasets.
 
 Treasury Fiscal Data API does not require authentication.
 

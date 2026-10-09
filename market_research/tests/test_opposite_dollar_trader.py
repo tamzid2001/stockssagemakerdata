@@ -114,6 +114,14 @@ def test_live_gates_pin_entire_five_asset_portfolio_and_exact_code():
          "QUANTURA_KALSHI_DOLLAR_APPROVED_CONFIG":portfolio_fingerprint(),"QUANTURA_KALSHI_DOLLAR_LIVE_ENABLED":"true"}
     assert approved(CONFIG,env)
     assert not approved(CONFIG,{**env,"QUANTURA_CODE_SHA":"b"*40})
+    assert not approved(CONFIG,{**env,"QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED":"true"})
+
+def test_erased_order_history_cannot_initialize_a_new_cloud_journal(monkeypatch):
+    from market_research.opposite_dollar_trader import CloudJournal
+    monkeypatch.setenv("QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED","true")
+    monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT_JSON",raising=False)
+    with pytest.raises(RuntimeError,match="TRADER_STORAGE_PURGED_RECONCILIATION_REQUIRED"):
+        CloudJournal(CONFIG,"key-id","new-worker")
 
 def test_fractional_budget_floor_and_dynamic_market_grid():
     assert quantity_remaining({"cost":"0"},".18")==Decimal("5.55")

@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   recover:
-    if: vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true'
+    if: vars.QUANTURA_KALSHI_DOLLAR_ENABLED == 'true' && vars.QUANTURA_KALSHI_DOLLAR_STORAGE_PURGED != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

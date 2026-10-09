@@ -59,7 +59,7 @@ jobs:
           KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           QUANTURA_RESEARCH_ARTIFACT_KEY: ${{ secrets.QUANTURA_RESEARCH_ARTIFACT_KEY }}
-          QUANTURA_CLOUD_PAPER_CHECKPOINTS: 'true'
+          QUANTURA_CLOUD_PAPER_CHECKPOINTS: ${{ vars.QUANTURA_CLOUD_PAPER_CHECKPOINTS || 'false' }}
           DURATION: ${{ inputs.duration_minutes }}
         with:
           script: |

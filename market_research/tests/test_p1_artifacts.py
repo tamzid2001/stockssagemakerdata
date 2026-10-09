@@ -72,7 +72,10 @@ def test_live_p1_executes_locally_and_cloud_checkpoints_preserve_books():
     assert 'arm_minute(book,quotes,timestamp' in code
     workflow=yaml.safe_load((root/".github/workflows/polymarket-live-paper.yml").read_text())
     p1=next(s for s in workflow["jobs"]["monitor"]["steps"] if s.get("id")=="p1_worker")
-    assert p1['env']['QUANTURA_CLOUD_PAPER_CHECKPOINTS']=='true'
+    # Growing full cloud snapshots must be explicitly enabled; the existing
+    # encrypted GitHub transport is the default after the storage cost review.
+    setting=p1['env']['QUANTURA_CLOUD_PAPER_CHECKPOINTS']
+    assert 'vars.QUANTURA_CLOUD_PAPER_CHECKPOINTS' in setting and "|| 'false'" in setting
     assert 'FIREBASE_SERVICE_ACCOUNT_JSON' in p1['env']
     assert 'QUANTURA_RESEARCH_ARTIFACT_KEY' in p1["env"]
     script=(root/"market_research/node/run.mjs").read_text()
