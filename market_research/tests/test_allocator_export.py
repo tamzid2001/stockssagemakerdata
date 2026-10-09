@@ -10,7 +10,7 @@ import pytest
 
 from market_research.allocator_export import (
     canonical, content_cid, portfolio_csv, validate_bundle, validate_replay,
-    write_replay, seal_bundle, stamp_file,
+    write_replay, seal_bundle, stamp_file, filename_part,
 )
 
 
@@ -145,3 +145,12 @@ def test_same_timestamp_marks_are_disclosed_instead_of_guessed(tmp_path):
     skipped = json.loads((tmp_path / 'variant' / 'weights-skipped-marks.json').read_bytes())
     assert len(skipped) == 1
     assert len(json.loads((tmp_path / 'variant' / 'weights-index.json').read_bytes())) == 1
+
+
+def test_path_components_and_fractional_spy_share_fills_are_rejected():
+    with pytest.raises(ValueError):
+        filename_part('../../outside')
+    r = replay()
+    r['entries'][0]['initial_shares'] = 1.5
+    with pytest.raises(ValueError, match='INVALID_FILL'):
+        validate_replay(r, 'shares')

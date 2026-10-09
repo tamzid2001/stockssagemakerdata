@@ -74,6 +74,12 @@ def identifier(value):
     return value
 
 
+def filename_part(value):
+    if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
+        raise ValueError('INVALID_REPLAY_PATH_COMPONENT')
+    return value
+
+
 def portfolio_csv(positions, equity_usd):
     """Standard vBase Ticker,Weight CSV. Units × quote price × USD conversion / NAV.
 
@@ -118,6 +124,7 @@ def validate_replay(r, unit):
     """Reject incomplete ledgers instead of synthesizing trades from KPIs."""
     if r.get('orders_sent') != 0 or r.get('trailing_rule') != 'extreme_entry_distance':
         raise ValueError('CORRECTED_OFFLINE_REPLAY_REQUIRED')
+    identifier(r['symbol'])
     for key in ('entries', 'baskets', 'open_basket', 'hourly_equity'):
         if not isinstance(r.get(key), list):
             raise ValueError('COMPLETE_TRADE_AND_EQUITY_LEDGER_REQUIRED')
@@ -131,7 +138,8 @@ def validate_replay(r, unit):
         raise ValueError('BASKET_COUNT_MISMATCH')
     for leg in r['entries'] + r['open_basket']:
         quantity = leg['initial_' + unit]
-        if quantity <= 0 or not math.isfinite(quantity) or leg['entry'] <= 0:
+        if (quantity <= 0 or not math.isfinite(quantity) or leg['entry'] <= 0
+                or not math.isfinite(leg['entry']) or (unit == 'shares' and quantity % 1 != 0)):
             raise ValueError('INVALID_FILL')
         remaining = quantity - sum(x[unit] for x in leg['exits'])
         if not math.isclose(remaining, leg[unit], abs_tol=1e-7):
@@ -245,7 +253,9 @@ def spy_bundle(source, root):
     write_json(root / 'source-and-forecast-hashes.json', {'source': d['source'], 'forecast_hashes': d['forecast_hashes']})
     metrics = []
     for r in d['corrected_replays']:
-        name = f"grid-{r['grid']:g}-{r['ordering']}-{r['costs']}"
+        if r['symbol'] != 'SPY' or r['entry_signal_comparison'] != 'above' or r['averaging_gate'] != 'grid':
+            raise ValueError('SPY_RULE_MISMATCH')
+        name = f"grid-{r['grid']:g}-{filename_part(r['ordering'])}-{filename_part(r['costs'])}"
         metrics.append(write_replay(root / 'variants' / name, r, 'shares'))
     write_csv(root / 'summary.csv', metrics, METRICS)
     (root / 'README.md').write_text('''# SPY share research portfolio
@@ -287,14 +297,17 @@ def ftmo_bundle(source, root):
             unavailable.append({'symbol': symbol, 'status': 'no_eligible_configuration', 'performance': 'no_trades'})
             continue
         for r in report['selected_full_year_details']:
-            if r['candidate'] != report['selected_on_development']:
+            if (r['candidate'] != report['selected_on_development'] or r['symbol'] != symbol
+                    or r['entry_signal_comparison'] != 'any' or r['averaging_gate'] != 'grid'):
                 raise ValueError('DEVELOPMENT_SELECTION_MISMATCH')
-            name = r['ordering'] + '-' + r['costs']
+            name = filename_part(r['ordering']) + '-' + filename_part(r['costs'])
             metrics.append(write_replay(root / 'sleeves' / symbol / 'full-year' / name, r, 'lots'))
         for r in report['fresh_flat_holdout']:
-            if r['candidate'] != report['selected_on_development']:
+            if (r['candidate'] != report['selected_on_development'] or r['symbol'] != symbol
+                    or r['entry_signal_comparison'] != 'any' or r['averaging_gate'] != 'grid'):
                 raise ValueError('HOLDOUT_SELECTION_MISMATCH')
-            write_replay(root / 'sleeves' / symbol / 'holdout' / (r['ordering'] + '-' + r['costs']), r, 'lots')
+            name = filename_part(r['ordering']) + '-' + filename_part(r['costs'])
+            write_replay(root / 'sleeves' / symbol / 'holdout' / name, r, 'lots')
         # Preserve all development candidates to expose the selection process.
         write_json(root / 'sleeves' / symbol / 'development-candidates.json', report['development'])
     write_csv(root / 'summary.csv', metrics, METRICS)
