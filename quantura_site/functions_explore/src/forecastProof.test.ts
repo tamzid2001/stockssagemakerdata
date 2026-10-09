@@ -64,6 +64,15 @@ test("wrong content, collection, transaction and malformed responses cannot be c
   await assert.rejects(()=>malformed.stamp(cid),/receipt_invalid/);
 });
 
+test("verification account labels are distinct from chain addresses and recover without restamping",async()=>{
+  const cid=contentCid("existing stamp");let calls=0;
+  const client=new VBaseClient("key",collection,(async()=>{calls++;return Response.json({stamp_list:[{...receipt(cid),user_address:"Quantura"}]});}) as typeof fetch);
+  const recovered=await client.stamp(cid);
+  assert.equal(calls,1);assert.equal(recovered.user_address,null);assert.equal(recovered.user_label,"Quantura");
+  assert.equal(recovered.transaction_hash,receipt(cid).transaction_hash);
+  assert.throws(()=>normalizeReceipt({...receipt(cid),user_address:"Quantura"},cid,collection),/receipt_invalid/);
+});
+
 test("concurrent callbacks stamp once, keep the nonce and avoid subsequent writes",async()=>{
   enable();const s=store(),nonce=s.data.provenance.nonce;let stampCalls=0;
   const transport=(async(url:any,options:any)=>{

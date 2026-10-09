@@ -4634,7 +4634,12 @@
                 "pattern": "^0x[0-9a-f]{64}$"
               },
               "user_address": {
-                "type": "string"
+                "type": "string",
+                "nullable": true
+              },
+              "user_label": {
+                "type": "string",
+                "description": "Account display name returned during recovery, not a blockchain address."
               },
               "chain_id": {
                 "type": "integer"

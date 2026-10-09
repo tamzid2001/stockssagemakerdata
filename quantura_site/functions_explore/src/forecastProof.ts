@@ -38,15 +38,19 @@ export function proofManifest(id: string, job: RecordValue, result: RecordValue)
 
 export const contentCid = (bytes: string | Buffer) => `0x${createHash("sha3-256").update(bytes).digest("hex")}`;
 
-export function normalizeReceipt(value: any, cid: string, collectionCid: string): RecordValue {
+export function normalizeReceipt(value: any, cid: string, collectionCid: string, allowUserLabel = false): RecordValue {
   const r = plain(value);
+  const address = /^0x[0-9a-f]{40}$/i.test(r.user_address || "");
+  // The verification API resolves a wallet to its account display name. Keep
+  // this label separate; never present it as a blockchain address.
+  const label = allowUserLabel && typeof r.user_address === "string" && r.user_address.trim().length > 0 && r.user_address.length <= 200;
   if (!CID.test(cid) || !CID.test(collectionCid) || String(r.object_cid).toLowerCase() !== cid.toLowerCase() ||
       String(r.set_cid).toLowerCase() !== collectionCid.toLowerCase() || !/^0x[0-9a-f]{64}$/i.test(r.transaction_hash || "") ||
-      !/^0x[0-9a-f]{40}$/i.test(r.user_address || "") || !Number.isSafeInteger(r.chain_id) || r.chain_id < 1 ||
+      (!address && !label) || !Number.isSafeInteger(r.chain_id) || r.chain_id < 1 ||
       typeof r.timestamp !== "string" || !Number.isFinite(Date.parse(r.timestamp)))
     throw new ForecastProofError("forecast_proof_receipt_invalid");
   return {object_cid:cid.toLowerCase(),set_cid:collectionCid.toLowerCase(),transaction_hash:r.transaction_hash.toLowerCase(),
-    user_address:r.user_address.toLowerCase(),chain_id:r.chain_id,timestamp:new Date(r.timestamp).toISOString()};
+    user_address:address ? r.user_address.toLowerCase() : null,...(!address ? {user_label:r.user_address} : {}),chain_id:r.chain_id,timestamp:new Date(r.timestamp).toISOString()};
 }
 
 export class VBaseClient {
@@ -74,7 +78,7 @@ export class VBaseClient {
     const value = await this.request("stamps/verify", {cids:[cid],filter_by_user:true});
     if (!Array.isArray(value.stamp_list)) throw new ForecastProofError("forecast_proof_receipt_invalid");
     const matches = value.stamp_list.filter((r:any)=>String(r.object_cid).toLowerCase()===cid.toLowerCase() && String(r.set_cid).toLowerCase()===this.collectionCid.toLowerCase());
-    return matches.length ? normalizeReceipt(matches[0],cid,this.collectionCid) : null;
+    return matches.length ? normalizeReceipt(matches[0],cid,this.collectionCid,true) : null;
   }
   async stamp(cid: string): Promise<RecordValue> {
     // Lookup first also recovers a committed request whose HTTP response was lost,
