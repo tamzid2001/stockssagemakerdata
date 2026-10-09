@@ -41,7 +41,8 @@
               "docs/index",
               "docs/get-started",
               "docs/sdk-cli",
-              "docs/forecast-receipts"
+              "docs/forecast-receipts",
+              "docs/allocator-portfolios"
             ]
           },
           {

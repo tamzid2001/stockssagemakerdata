@@ -1,0 +1,85 @@
+---
+title: "Portfolio and signal evidence"
+description: "Express forecast research as holdings, trade signals and independently timestamped evidence."
+---
+
+Portfolio managers need a tradable rule, position sizing, costs and a reproducible return history. A predicted KPI or a forecast quantile is an input to that rule.
+
+## Two research representations
+
+**SPY shares:** a corrected historical buy ladder with whole-share sizing. The exporter preserves all eight $1/$2 grid, spread and minute-path variants, with simulated fills, reconstructed positions, basket outcomes and account equity. It also derives historical portfolio weights from the remaining entry cost basis and bid-marked equity. These remain historical observations; they are not a prospectively verified track record.
+
+**FTMO asset sleeves:** eight separate CFD/FX $100,000 research accounts, with two inactive assets explicitly retained. Export executable lot quantities, fill ledgers, equity, open baskets, reference/stress costs and fresh-flat final-quarter holdouts. No shared-account return or drawdown is inferred by adding these independent accounts. No historical USD weights are fabricated when the necessary currency-conversion marks are absent.
+
+The two strategies differ: SPY requires the cutoff close above the first predicted P99; the corrected FTMO study starts daily buys when flat. Both average downward without a P90 gate and preserve the triggering forecast's fixed final P01 stop. The 1% budget covers the entire planned ladder, using the final P99−P01 range, modeled stop/cost risk and buying power. A trail activates above the lowest fill by one grid for one leg, or 75% of the filled ladder span for multiple legs, only when the basket is profitable.
+
+## Export an existing audit
+
+From the repository root, use the complete corrected source artifacts:
+
+```bash
+python -m market_research.allocator_export build \
+  --spy /path/to/spy/results.json.gz \
+  --ftmo /path/to/ftmo/results.json.gz \
+  --output /path/to/new-private-export
+```
+
+Each family has an independent manifest committing every exported file. The manifest includes a private nonce, SHA-256 file hashes, source hash, evidence classification and export time. Export fails on inconsistent entry counts, open quantities, equity or basket P&L. No model runs, provider downloads, Firestore writes or orders occur. The pack supports ledger reconciliation; rerunning the forecasts and execution from scratch additionally requires the separately archived, licensed source bars and frozen forecast files. Their hashes do not replace the underlying data.
+
+In SPY's source ledger, the field named `cash` is the **realized account balance**. For long shares:
+
+```text
+bid market value = equity − realized balance + remaining entry cost basis
+settlement cash = realized balance − remaining entry cost basis
+portfolio weight = bid market value / equity
+```
+
+Marks sharing a timestamp with a fill have no sequence identifier; they are recorded in `weights-skipped-marks.json` instead of guessing the position state. All original marks remain in the source replay.
+
+## Standard vBase portfolio weights
+
+vBase accepts a two-column `Ticker,Weight` CSV. Weights are decimal exposure fractions, shorts are negative, cash is implicit, and gross weights may exceed one. A CFD lot must first become actual contract units, and non-USD quotes require a contemporaneous USD conversion. Do not treat lots as percentages.
+
+```json
+{
+  "equity_usd": 100000,
+  "positions": [
+    {"identifier":"SPY","quantity":10,"price":650,"usd_per_quote":1}
+  ]
+}
+```
+
+```bash
+python -m market_research.allocator_export weights \
+  --input positions.json --output portfolio.csv
+```
+
+This example produces `SPY,0.065000000000`. The tool preserves supplied signed exposure and never normalizes away cash or leverage. Preserve the exact output bytes and their production timestamp at each update.
+
+## Stamp and verify
+
+Use the official `vbase-api==0.1.3` Python client with a server-side `VBASE_API_KEY`. A private signing key is unnecessary for this REST workflow. Create separate named collections once for each strategy and representation: historical research bundles, prospective portfolio weights, signals and actual fills.
+
+```bash
+uv run --no-project --with vbase-api==0.1.3 \
+  python -m market_research.allocator_export stamp \
+  --file /path/to/SPY/manifest.json --collection 0xCOLLECTION_CID
+
+uv run --no-project --with vbase-api==0.1.3 \
+  python -m market_research.allocator_export verify \
+  --file /path/to/SPY/manifest.json --collection 0xCOLLECTION_CID
+```
+
+The tool validates the complete bundle before stamping its exact SHA3-256 manifest CID. It sends only the CID and collection; it does not upload holdings, research files or credentials. Existing receipts are recovered before a new stamp is attempted. Receipt and verification sidecars preserve the actual stamp time separately from historical observation times. For a prospective weights file, use the same commands with `--file portfolio.csv` and a distinct weights collection.
+
+## Building allocator-grade prospective evidence
+
+1. Freeze the rule and configuration before the evaluation period; retain unsuccessful variants and holdouts.
+2. Generate signed target holdings or signals using only then-available inputs. Preserve cutoff, generation time, data/model hashes, sizing, stop rules and expiry.
+3. Stamp each update before communicating it for execution, in its appropriate collection. Store exact bytes durably. Keep paper decisions, live instructions and confirmed fills separate.
+4. Reconcile executed quantities, fees, slippage, financing, cash and equity. Report floating losses, capital employed, drawdown, durations and missing marks alongside returns.
+5. Share the complete evidence pack for diligence. A content timestamp confirms existence and integrity; it does not independently certify broker execution or investment performance.
+
+Optional vBase live tearsheets require portfolio weights to be available to vBase and service activation. Their stamped weights take effect at the next applicable market close. The existing intraday ladder replay must not be described as the same return series as that close-based index. Agree the instrument mapping and calculation basis with vBase before activating a CFD strategy. No investor contact, file disclosure or tearsheet activation happens automatically.
+
+[vBase portfolio format](https://docs.vbase.com/use-case-how-tos/verified-track-record/stamping-portfolios) · [Verified track-record workflow](https://docs.vbase.com/use-case-how-tos/verified-track-record) · [Forecast receipt API](/docs/forecast-receipts)
