@@ -52,6 +52,7 @@
     <script defer src="/__/firebase/init.js?useEmulator=false"></script>
     <script defer src="/forecast-controls.js?v=20260928-intervals"></script>
     <script defer src="/forecast-metrics.js?v=20260920-forecast-only"></script>
+    <script defer src="/forecast-proof.js"></script>
     <link rel="stylesheet" href="/market-logos.css?v=20260926-logos" />
     <script defer src="/market-logos.js?v=20260926-logos"></script>
     <script defer src="/ga4-context.js?v=20260927a"></script>
@@ -338,6 +339,7 @@
                         <section id="ensemble-forecast-results" class="ensemble-results" aria-labelledby="ensemble-results-title" hidden>
                           <div class="forecast-section-heading"><div><div class="eyebrow">Final ensemble</div><h3 id="ensemble-results-title">Probabilistic forecast</h3></div><span id="ensemble-result-state" class="status-pill">Queued</span></div>
                           <div id="ensemble-result-meta" class="forecast-date-line small muted"></div>
+                          <section id="ensemble-forecast-proof" class="forecast-date-line" aria-label="Forecast timestamp receipt" hidden></section>
                           <div class="ensemble-chart-toolbar" role="group" aria-label="Forecast chart actions">
                             <div class="ensemble-toolbar-group" role="group" aria-label="Chart and data">
                               <button id="ensemble-chart-refresh" class="task-chip" type="button" aria-describedby="ensemble-observation-status" title="Fetch completed quotes without running models"><i class="iconoir-refresh" aria-hidden="true"></i><span>Refresh quotes</span></button>

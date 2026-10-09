@@ -8,7 +8,7 @@ const {values,positionals}=parseArgs({allowPositionals:true,options:{help:{type:
   'base-url':{type:'string'},file:{type:'string'},output:{type:'string'},source:{type:'string'},limit:{type:'string'},key:{type:'string'},wait:{type:'boolean'},'all-pages':{type:'boolean'}}});
 const [command,...args]=positionals;
 async function main() {
-  if(values.help || !command) {console.log(`Quantura 1.0.0\n\nquantura login [--no-browser]\nquantura logout\nquantura whoami\nquantura search AAPL [--source alpaca]\nquantura models\nquantura forecast --file request.json [--key retry-key]\nquantura get FORECAST_ID [--wait]\nquantura download FORECAST_ID --output forecast.csv\nquantura history --file history.json [--all-pages] [--output data.json]\nquantura scout --file question.json\n\nUse OAuth login or QUANTURA_API_KEY. API access requires paid Pro or administrator access.`);return;}
+  if(values.help || !command) {console.log(`Quantura 1.0.1\n\nquantura login [--no-browser]\nquantura logout\nquantura whoami\nquantura search AAPL [--source alpaca]\nquantura models\nquantura forecast --file request.json [--key retry-key]\nquantura get FORECAST_ID [--wait]\nquantura download FORECAST_ID --output forecast.csv\nquantura stamp FORECAST_ID\nquantura verify FORECAST_ID\nquantura proof FORECAST_ID --output forecast-proof.json\nquantura history --file history.json [--all-pages] [--output data.json]\nquantura scout --file question.json\n\nUse OAuth login or QUANTURA_API_KEY. API access requires paid Pro or administrator access.`);return;}
   if(command==='login'){await login({noBrowser:values['no-browser']});console.log('Signed in to Quantura.');return;}
   if(command==='logout'){const revoked=await logout();console.log(revoked?'Signed out; OAuth grant revoked.':'Local credentials removed. Remote revocation was not confirmed.');return;}
   const client=new Quantura({baseUrl:values['base-url'],token:()=>accessToken(values['base-url'])});
@@ -22,6 +22,9 @@ async function main() {
     case 'get':if(!args[0])throw new Error('Provide a forecast ID.');result=values.wait?await client.waitForForecast(args[0]):await client.getForecast(args[0]);break;
     case 'download':if(!args[0] || !values.output)throw new Error('Provide a forecast ID and --output.');result=await client.downloadForecast(args[0]);break;
     case 'history':{const request=await body();if(values['all-pages']){result=[];for await(const page of client.historyPages(request))result.push(page);}else result=await client.history(request);break;}
+    case 'stamp':if(!args[0])throw new Error('Provide a forecast ID.');result=await client.stampForecast(args[0]);break;
+    case 'verify':if(!args[0])throw new Error('Provide a forecast ID.');result=await client.verifyForecast(args[0]);break;
+    case 'proof':if(!args[0] || !values.output)throw new Error('Provide a forecast ID and --output.');result=await client.downloadForecastProof(args[0]);break;
     case 'scout':{const q=await body();result=await client.askScout(q.context,q.question,{conversationId:q.conversation_id,turnId:q.turn_id});break;}
     default:throw new Error('Unknown command. Run quantura --help.');
   }

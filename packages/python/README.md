@@ -5,7 +5,7 @@ Market search, probabilistic forecasts, provider history and Scout. Python 3.10 
 ## Install
 
 ```sh
-python -m pip install 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.0/quantura_sdk-1.0.0-py3-none-any.whl'
+python -m pip install 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.1/quantura_sdk-1.0.1-py3-none-any.whl'
 quantura login
 quantura whoami
 quantura search AAPL --source alpaca

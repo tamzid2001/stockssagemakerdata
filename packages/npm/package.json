@@ -1,6 +1,6 @@
 {
   "name": "quantura-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Quantura API client and OAuth CLI for forecasts, market history and Scout",
   "type": "module",
   "main": "./src/index.js",

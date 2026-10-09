@@ -5,7 +5,7 @@ Market search, probabilistic forecasts, provider history and Scout from the Quan
 ## CLI with browser sign-in
 
 ```sh
-npm install -g 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.0/quantura-sdk-1.0.0.tgz'
+npm install -g 'https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.1/quantura-sdk-1.0.1.tgz'
 quantura login
 quantura whoami
 quantura search AAPL --source alpaca
@@ -14,7 +14,7 @@ quantura models
 
 `quantura login` opens Clerk sign-in and uses authorization code OAuth with PKCE. Google and email/password use your existing Quantura account. Credentials are stored privately at `~/.config/quantura/credentials.json` and refresh automatically. The loopback callback is `http://127.0.0.1:8766/callback`; `--no-browser` prints the sign-in URL. `quantura logout` revokes the grant and removes local credentials. Alternatively set `QUANTURA_API_KEY` in a server environment; do not put a key in command arguments.
 
-The release tarball is the installation source for this version. To add the SDK to an application, use `npm install https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.0/quantura-sdk-1.0.0.tgz`. Registry publication is pending npm account 2FA setup.
+The release tarball is the installation source for this version. To add the SDK to an application, use `npm install https://github.com/tamzid2001/stockssagemakerdata/releases/download/quantura-sdk-v1.0.1/quantura-sdk-1.0.1.tgz`. Registry publication is pending npm account 2FA setup.
 
 ## JavaScript / TypeScript
 

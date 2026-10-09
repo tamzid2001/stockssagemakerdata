@@ -88,6 +88,8 @@ export function registerQuanturaMcpRoutes(router: Router, options: Options) {
     tool("quantura_forecast_models","Forecast capabilities","Get currently available models, frequencies and minimum history requirements.",{},true,()=>call("forecast/models"));
     tool("quantura_get_forecast","Read a forecast","Read a forecast you have permission to access, including genuine historical context and quantiles.",
       {forecast_id:id},true,({forecast_id}:any)=>call(`ensemble-forecasts/${encodeURIComponent(forecast_id)}`));
+    tool("quantura_verify_forecast","Verify forecast receipt","Verify saved forecast content against its vBase timestamp receipt. This verifies content and time, not accuracy or historical publication before the receipt timestamp.",
+      {forecast_id:id},true,({forecast_id}:any)=>call(`ensemble-forecasts/${encodeURIComponent(forecast_id)}/proof?verify=true`));
     tool("quantura_create_forecast","Request a forecast","Create an asynchronous forecast job. Uses compute and saves a request in your account. Inspect capabilities first, then poll the returned ID. This does not trade.",
       {request:record,idempotency_key:z.string().min(1).max(160)},false,
       ({request,idempotency_key}:any)=>call("ensemble-forecasts","POST",request,idempotency_key));

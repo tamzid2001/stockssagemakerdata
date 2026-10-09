@@ -7,7 +7,7 @@ const included = new Set([
   '/economic-data/search','/economic-data/describe','/economic-data/history','/market-data/gemini/history','/market-data/gemini/prediction-contract',
   '/me/access', '/capabilities', '/forecast/models', '/ensemble-forecasts',
   '/ensemble-forecasts/{forecast_id}', '/ensemble-forecasts/{forecast_id}/download',
-  '/ensemble-forecasts/{forecast_id}/observations', '/ensemble-forecasts/{forecast_id}/reproduce',
+  '/ensemble-forecasts/{forecast_id}/proof', '/ensemble-forecasts/{forecast_id}/observations', '/ensemble-forecasts/{forecast_id}/reproduce',
   '/market-search', '/market-search/resolve', '/market-search/event', '/market-search/capabilities',
   '/market-data/dukascopy/instruments', '/market-data/stocks/history',
   '/market-data/perps/markets', '/market-data/perps/history',

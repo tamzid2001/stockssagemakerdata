@@ -31,6 +31,8 @@ Forecast creation uses compute and saves a request; Scout saves a conversation. 
 
 The CLI's public OAuth client is for its loopback callback only; do not paste its client ID into ChatGPT. ChatGPT registers its own callback through CIMD or dynamic registration. Interface and workspace policy can change; see [OpenAI's current connection guide](https://developers.openai.com/api/docs/guides/custom-mcp-server).
 
+The read-only `quantura_verify_forecast` tool verifies saved forecast content against a vBase timestamp receipt. [Receipt guide](/docs/forecast-receipts).
+
 ## OAuth discovery
 
 Protected-resource metadata:
@@ -63,6 +65,6 @@ Configuration syntax varies by client. Store credentials in the client's secret 
 
 ## Documentation MCP
 
-`https://quantura.mintlifysite.com/mcp` is the separate Mintlify documentation server. It provides documentation search and whichever read-only OpenAPI tools the host enables. Use `/mcp` on `quantura.studio` for the seven live tools above.
+`https://quantura.mintlifysite.com/mcp` is the separate Mintlify documentation server. It provides documentation search and whichever read-only OpenAPI tools the host enables. Use `/mcp` on `quantura.studio` for the eight live tools above.
 
 [CLI and SDKs](/docs/sdk-cli) · [API reference](https://quantura.studio/developers/api) · [Authentication](/docs/authentication)

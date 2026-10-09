@@ -2,6 +2,7 @@ import { DEFAULT_BACKTEST_EXECUTION } from "./backtestEngine";
 import { DEFAULT_QUANTILE_REPLAY, DEFAULT_QUANTILE_STRATEGY, QUANTILE_STRATEGY_SCHEMA } from "./quantileBacktestConfig";
 import {FORECAST_FREQUENCY_INPUTS,forecastFrequencyCapabilities} from "./forecastFrequency";
 import { addEconomicOpenapi } from "./economicOpenapi";
+import {addForecastProofOpenapi} from "./forecastProofOpenapi";
 
 const errorSchema = {
   type: "object",
@@ -802,6 +803,7 @@ export function buildOpenApiDocument(origin = "https://quantura.studio"): Record
   addQSearchOpenapi(document,origin);
   addEconomicOpenapi(document);
   addForecastQuestionOpenapi(document);
+  addForecastProofOpenapi(document);
   // Discovery-only removal: authenticated runtime CSV routes remain compatible.
   for(const path of Object.keys(document.paths))if(path.includes("/uploads/csv"))delete document.paths[path];
   for(const name of ["UploadedCsv","UploadedCsvEnvelope","UploadedCsvListEnvelope","CsvDestination","CsvBulkDestination"])delete document.components.schemas[name];

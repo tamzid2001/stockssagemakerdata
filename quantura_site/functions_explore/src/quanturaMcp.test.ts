@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { registerQuanturaMcpRoutes } from "./quanturaMcp";
 
-test("real MCP client discovers seven OAuth tools and preserves forecast idempotency",async()=>{
+test("real MCP client discovers eight OAuth tools and preserves forecast idempotency",async()=>{
   const calls:any[]=[];
   const app=express();app.use(express.json());
   registerQuanturaMcpRoutes(app,{authenticate:async(req)=>{
@@ -21,7 +21,7 @@ test("real MCP client discovers seven OAuth tools and preserves forecast idempot
     const metadata=await fetch(base+"/.well-known/oauth-protected-resource/mcp").then(r=>r.json());
     assert.equal(metadata.resource,"https://quantura.studio");assert.deepEqual(metadata.authorization_servers,["https://clerk.quantura.studio"]);
     await client.connect(new StreamableHTTPClientTransport(new URL(base+"/mcp"),{requestInit:{headers:{Authorization:"Bearer test-opaque"}}}));
-    const catalog=await client.listTools();assert.equal(catalog.tools.length,7);
+    const catalog=await client.listTools();assert.equal(catalog.tools.length,8);
     assert.equal(catalog.tools.find(x=>x.name==="quantura_create_forecast")?.annotations?.readOnlyHint,false);
     const result=await client.callTool({name:"quantura_create_forecast",arguments:{request:{source:{symbol:"AAPL"},history_lag_minutes:172800},idempotency_key:"same-logical-job"}});
     assert.equal(result.isError,false);
@@ -29,6 +29,10 @@ test("real MCP client discovers seven OAuth tools and preserves forecast idempot
     assert.equal(calls[0].options.headers["Idempotency-Key"],"same-logical-job");
     assert.equal(calls[0].options.headers.Authorization,"Bearer test-opaque");
     assert.equal(JSON.parse(calls[0].options.body).history_lag_minutes,172800);
+    const verification=await client.callTool({name:"quantura_verify_forecast",arguments:{forecast_id:"forecast_test"}});
+    assert.equal(verification.isError,false);
+    assert.equal(calls[1].url,"https://quantura.studio/api/v1/ensemble-forecasts/forecast_test/proof?verify=true");
+    assert.equal(calls[1].options.method,"GET");
     const unauth=await fetch(base+"/mcp",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json, text/event-stream"},
       body:JSON.stringify({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"quantura_my_access",arguments:{}}})});
     assert.equal(unauth.status,401);assert.match(unauth.headers.get("www-authenticate")!,/resource_metadata=.*oauth-protected-resource\/mcp/);
