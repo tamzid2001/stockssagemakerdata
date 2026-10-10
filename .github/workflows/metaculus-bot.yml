@@ -1,0 +1,129 @@
+name: Quantura Metaculus Bot
+
+on:
+  schedule:
+    - cron: '7,27,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Bot testing area or all currently bot-eligible competitions'
+        type: choice
+        options: [test, competitions]
+        default: test
+      submit:
+        description: 'Submit forecasts and their private reasoning notes'
+        type: boolean
+        default: false
+      max_questions:
+        description: 'Maximum new LLM questions and time-series questions per run (1-20)'
+        type: string
+        default: '4'
+  pull_request:
+    paths: ['metaculus_bot/**', '.github/workflows/metaculus-bot.yml']
+
+permissions:
+  contents: read
+
+# One worker at a time. Never cancel a run mid-submission. Metaculus own forecast
+# history and private generation records provide recovery without GCS/Firestore.
+concurrency:
+  group: quantura-metaculus-bot
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: metaculus_bot/requirements.lock
+      - run: python -m pip install --require-hashes -r metaculus_bot/requirements.lock
+      - run: python -m pytest -q metaculus_bot/tests
+
+  discover:
+    needs: validate
+    if: ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_dispatch' || vars.METACULUS_BOT_ENABLED == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      time_series_ids: ${{ steps.worker.outputs.time_series_ids }}
+    env:
+      METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      METACULUS_PARTICIPATION_FORM_CONFIRMED: ${{ vars.METACULUS_PARTICIPATION_FORM_CONFIRMED }}
+      BOT_SCOPE: ${{ inputs.scope || 'competitions' }}
+      BOT_SUBMIT: ${{ github.event_name == 'schedule' || inputs.submit }}
+      BOT_MAX: ${{ inputs.max_questions || '4' }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: metaculus_bot/requirements.lock
+      - run: python -m pip install --require-hashes -r metaculus_bot/requirements.lock
+      - name: Discover questions and run free-only LLM forecasts
+        id: worker
+        run: |
+          args=(--scope "$BOT_SCOPE" --max-questions "$BOT_MAX")
+          if [[ "$BOT_SUBMIT" == 'true' ]]; then args+=(--submit); fi
+          python -m metaculus_bot.runner "${args[@]}"
+      - name: Save operational summary only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaculus-summary-${{ github.run_id }}
+          path: artifacts/metaculus-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  time-series:
+    needs: discover
+    if: ${{ needs.discover.outputs.time_series_ids != '' && needs.discover.outputs.time_series_ids != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    env:
+      METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
+      METACULUS_PARTICIPATION_FORM_CONFIRMED: ${{ vars.METACULUS_PARTICIPATION_FORM_CONFIRMED }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
+      TOKENIZERS_PARALLELISM: 'false'
+      TIMESFM_HF_ACCESS_APPROVED: ${{ vars.TIMESFM_HF_ACCESS_APPROVED || 'false' }}
+      TIMESFM_COMMERCIAL_LICENSED: ${{ vars.TIMESFM_COMMERCIAL_LICENSED || 'false' }}
+      ALLOW_NONCOMMERCIAL_TIMESFM: ${{ vars.ALLOW_NONCOMMERCIAL_TIMESFM || 'false' }}
+      BOT_SCOPE: ${{ inputs.scope || 'competitions' }}
+      BOT_SUBMIT: ${{ github.event_name == 'schedule' || inputs.submit }}
+      BOT_MAX: ${{ inputs.max_questions || '4' }}
+      QUESTION_IDS: ${{ needs.discover.outputs.time_series_ids }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: metaculus_bot/requirements.lock
+      - run: python -m pip install --require-hashes -r metaculus_bot/requirements.lock
+      - name: Install existing locked production inference environment
+        run: |
+          python -m venv .ensemble-env
+          .ensemble-env/bin/python -m pip install --no-cache-dir -r requirements-ensemble-forecast.lock
+      # Never publish gated model weights in a public Actions cache.
+      - name: Forecast verified resolution-source time series
+        run: |
+          args=(--scope "$BOT_SCOPE" --engine time-series --question-ids "$QUESTION_IDS" --max-questions "$BOT_MAX")
+          if [[ "$BOT_SUBMIT" == 'true' ]]; then args+=(--submit); fi
+          python -m metaculus_bot.runner "${args[@]}"
+      - name: Save operational summary only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaculus-time-series-summary-${{ github.run_id }}
+          path: artifacts/metaculus-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
