@@ -156,6 +156,10 @@ function wrap(options: Options, handler: Handler): (req: Request, res: Response)
     const started = Date.now();
     let principal: ApiPrincipal | undefined;
     try {
+      // Rapid's custom Forecasts object is zero unless a NEW job is dispatched.
+      // Cached responses, retries, validation failures and polling are unmetered
+      // for compute; the gateway's separate Requests meter still applies.
+      if (req.headers["x-rapidapi-proxy-secret"] !== undefined) res.setHeader("X-RapidAPI-Billing", "Forecasts=0");
       principal = await authenticatePlatformRequest(req, options);
       if (principal.guest && req.method === "POST" && /\/ensemble-forecasts(?:\/[^/]+\/reproduce)?$/.test(req.path)) {
         await admitGuestCompute(options.db, req);
@@ -1161,6 +1165,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       throw error;
     }
     res.status(202);
+    if (principal.authMethod === "rapidapi") res.setHeader("X-RapidAPI-Billing", "Forecasts=1");
     sendData(res, publicEnsembleJob(ref.id, job), requestId);
   }));
 
@@ -1228,6 +1233,7 @@ export function registerEnsembleForecastRoutes(router: Router, options: Options)
       throw error;
     }
     res.status(202);
+    if (principal.authMethod === "rapidapi") res.setHeader("X-RapidAPI-Billing", "Forecasts=1");
     sendData(res, publicEnsembleJob(ref.id, job), requestId, { reproduced_from: originalId });
   }));
 

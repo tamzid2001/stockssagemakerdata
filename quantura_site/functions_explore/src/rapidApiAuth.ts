@@ -4,8 +4,8 @@ import type { ApiPrincipal, PlatformApiScope } from "./apiAccess";
 
 const SCOPES: PlatformApiScope[] = ["account:read", "forecasts:read", "forecasts:write", "forecasts:history", "market_data:read", "screener:read", "datasets:read"];
 const PATHS = [
-  /^\/v1\/(?:me\/access|capabilities|forecast\/models|market-search(?:\/(?:resolve|event|capabilities))?|market-data\/dukascopy\/instruments|market-data\/stocks\/history|market-data\/perps\/(?:markets|history))\/?$/,
-  /^\/v1\/ensemble-forecasts(?:\/[A-Za-z0-9_-]+(?:\/(?:download|observations|reproduce))?)?\/?$/,
+  /^\/v1\/(?:me\/access|capabilities|forecast\/models|market-search(?:\/(?:resolve|event|capabilities))?|market-data\/dukascopy\/instruments|market-data\/(?:stocks\/)?history|market-data\/perps\/(?:markets|history))\/?$/,
+  /^\/v1\/ensemble-forecasts(?:\/[A-Za-z0-9_-]+(?:\/(?:download|observations|reproduce|proof))?)?\/?$/,
   /^\/v1\/screener\/forecasts\/[A-Za-z0-9._-]+(?:\/observations)?\/?$/,
   /^\/(?:v1\/)?(?:economic-data\/(?:search|describe|history)|market-data\/gemini\/(?:history|prediction-contract))\/?$/,
 ];
@@ -23,11 +23,12 @@ export function rapidApiPrincipal(req: Request): ApiPrincipal | null {
   const username = req.headers["x-rapidapi-user"];
   const subscription = req.headers["x-rapidapi-subscription"];
   if (typeof username !== "string" || !/^[A-Za-z0-9_.-]{1,128}$/.test(username)) throw Error("api_key_invalid");
-  if (subscription !== "CUSTOM" && username !== process.env.RAPIDAPI_PROVIDER_USER) throw Error("paid_api_required");
-  const path = req.path.replace(/^\/api(?=\/)/, "");
+  if (!["BASIC", "PRO", "CUSTOM"].includes(String(subscription)) && username !== process.env.RAPIDAPI_PROVIDER_USER) throw Error("paid_api_required");
+  // originalUrl preserves /v1 inside Express's mounted data router.
+  const path = (req.originalUrl || req.path).split("?")[0].replace(/^\/api(?=\/)/, "");
   if (!["GET", "POST"].includes(req.method) || !PATHS.some(pattern => pattern.test(path))) throw Error("insufficient_scope");
   const apiId = process.env.RAPIDAPI_API_ID;
   if (!apiId || !/^api_[A-Za-z0-9-]+$/.test(apiId)) throw Error("api_key_invalid");
   const userId = "rapid_" + crypto.createHash("sha256").update(`${apiId}\0${username}`).digest("hex");
-  return { userId, tokenId: null, tokenName: "RapidAPI Enterprise", tokenScopes: [...SCOPES], plan: "research", authMethod: "rapidapi", platformAdmin: false, guest: false };
+  return { userId, tokenId: null, tokenName: "RapidAPI " + subscription, tokenScopes: [...SCOPES], plan: "pro", authMethod: "rapidapi", platformAdmin: false, guest: false };
 }

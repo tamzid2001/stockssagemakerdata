@@ -1,0 +1,848 @@
+{
+  "info": {
+    "name": "Quantura",
+    "description": "Probabilistic market forecasts, verified market discovery, observed historical data, and screener quantiles. Forecasts run asynchronously: create a job, poll its status, then download the final ensemble. Subscribe to BASIC pay per use or PRO through RapidAPI. BASIC meters newly accepted forecast jobs separately from HTTP requests; polling, cached results and idempotent replay do not add a Forecasts unit. PRO includes forecast creation within its request quota. Market data remains subject to provider coverage and licensing. Research estimates are not guaranteed returns.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://quantura.studio/api",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Access",
+      "item": [
+        {
+          "name": "Get account access",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/me/access",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "me",
+                "access"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Returns token scopes, personal plan, and current owner/editor/viewer membership. Membership is evaluated on every request."
+          },
+          "response": []
+        },
+        {
+          "name": "Get capabilities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/capabilities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "capabilities"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Get the Authenticated User's Effective Quantura Product Capabilities"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Forecast",
+      "item": [
+        {
+          "name": "Get forecast models",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/forecast/models",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "forecast",
+                "models"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Latest and historical cutoffs (including 120/180-day replays) select data before the N-bar limit, subject to provider retention; inference runs now. Returns supported intervals (1min, 5min, 15min, 30min, 1h, 4h, 1D, 1W-MON, 1MS), completed-bar calendar semantics, plan, runtime, quantile, horizon, device, checkpoint and TimesFM licensing availability. Weeks begin Monday UTC; monthly periods use real calendar months. No secret values are returned."
+          },
+          "response": []
+        },
+        {
+          "name": "Create forecast",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/ensemble-forecasts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "ensemble-forecasts"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Validates the source and immutable configuration, snapshots authorized input data, enqueues a durable worker, and returns HTTP 202. Component-model arrays are not exposed in the standard result.\n\nRequest schema:\n```json\n{\n  \"$ref\": \"#/components/schemas/EnsembleForecastRequest\"\n}\n```",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": {\n    \"type\": \"ticker\",\n    \"provider\": \"alpaca\",\n    \"symbol\": \"AAPL\",\n    \"frequency\": \"1D\",\n    \"limit\": 500\n  },\n  \"prediction_length\": 7,\n  \"horizon_mode\": \"trading_sessions\",\n  \"quantiles\": [\n    0.01,\n    0.25,\n    0.5,\n    0.75,\n    0.9,\n    0.99\n  ],\n  \"models\": {\n    \"prophet\": {\n      \"enabled\": true,\n      \"weight\": 1\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get forecast result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "ensemble-forecasts",
+                ":forecast_id"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "forecast_id",
+                  "value": "YOUR_FORECAST_ID",
+                  "description": "Forecast id or unique slug."
+                }
+              ]
+            },
+            "description": "Get an Ensemble Forecast Job's Progress or Completed Quantile Results"
+          },
+          "response": []
+        },
+        {
+          "name": "Reproduce forecast",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/reproduce",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "ensemble-forecasts",
+                ":forecast_id",
+                "reproduce"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "forecast_id",
+                  "value": "YOUR_FORECAST_ID",
+                  "description": "Forecast id or unique slug."
+                }
+              ]
+            },
+            "description": "Creates a new durable job from the original authorized input snapshot, exact model checkpoints, and stored configuration. Current workspace permissions, plan, and license gates are re-evaluated."
+          },
+          "response": []
+        },
+        {
+          "name": "Download forecast",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "ensemble-forecasts",
+                ":forecast_id",
+                "download"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": [
+                {
+                  "key": "forecast_id",
+                  "value": "YOUR_FORECAST_ID",
+                  "description": "Forecast id or unique slug."
+                }
+              ]
+            },
+            "description": "Download a Completed Ensemble Forecast as CSV or JSON"
+          },
+          "response": []
+        },
+        {
+          "name": "Get forecast observations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/observations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "ensemble-forecasts",
+                ":forecast_id",
+                "observations"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "forecast_id",
+                  "value": "YOUR_FORECAST_ID",
+                  "description": "Forecast id or unique slug."
+                }
+              ]
+            },
+            "description": "Returns genuine selected-side targets (Kalshi closing ask, Polymarket US display quote) or stock closes after the immutable input cutoff. The first prediction-row minute is retained when available, even outside the most recent 500 observations; worker completion does not move this comparison to another minute. A quote preceding publication is retrospective, not a backdated fill. Stock rows include interval and exchange session_date metadata; minute closes are not final daily closes. Does not run models or revise predictions. Poll no faster than once per minute. Stock overlays have no fixed 90-day cutoff-age limit: retained forecast-interval closes support 120/180-day replays, bounded to 2,000 rows; recent stock minutes use a seven-day window. Prediction-market and perpetual live overlays expire 90 days after input cutoff and expose their availability state. Provider retention still applies. Dataset-only jobs return no live observations."
+          },
+          "response": []
+        },
+        {
+          "name": "Create or recover a private forecast timestamp receipt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/proof",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "ensemble-forecasts",
+                ":forecast_id",
+                "proof"
+              ],
+              "query": [],
+              "variable": [
+                {
+                  "key": "forecast_id",
+                  "value": "YOUR_FORECAST_ID",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Automatically attempted when a signed-in user's forecast completes or a guest forecast is saved. This explicit operation stamps older forecasts or retries an unavailable receipt. Sends only a salted SHA3-256 content ID to vBase; no CSV or forecast contents are uploaded. A fenced lease and lookup-before-create prevent duplicate stamps after ambiguous network failures. The receipt records the actual stamp time, including for historical replays. No forecast is backdated. Guests cannot stamp. The caller needs forecasts:write and forecast.create permission for this resource. Completed receipts cause no further database writes."
+          },
+          "response": []
+        },
+        {
+          "name": "Download or verify a forecast timestamp receipt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/proof",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "ensemble-forecasts",
+                ":forecast_id",
+                "proof"
+              ],
+              "query": [
+                {
+                  "key": "verify",
+                  "value": "false",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "format",
+                  "value": "manifest",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": [
+                {
+                  "key": "forecast_id",
+                  "value": "YOUR_FORECAST_ID",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Default response is the exact canonical UTF-8 manifest committed by SHA3-256, including a private random nonce, forecast values, input cutoff and generation time. Keep these bytes unchanged when verifying. X-VBase-Content-CID identifies the committed bytes. verify=true recomputes the saved content CID and looks up the stamp in Quantura's vBase collection/account, returning content_matches, stamp_found and verified_at in the data envelope. format=envelope returns manifest_utf8 and provenance for authenticated browser downloads. Receipt verification proves content/time, not accuracy or prospective publication before the stamp time. Reads do not create stamps or write Firestore documents."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Screener",
+      "item": [
+        {
+          "name": "Get published screener forecast",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/screener/forecasts/:ticker",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "screener",
+                "forecasts",
+                ":ticker"
+              ],
+              "query": [
+                {
+                  "key": "scan_id",
+                  "value": "",
+                  "disabled": false,
+                  "description": "Exact published scan; old scan returns 404, never silently substitutes a new one."
+                },
+                {
+                  "key": "format",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Optional attachment; omit for JSON data envelope."
+                }
+              ],
+              "variable": [
+                {
+                  "key": "ticker",
+                  "value": "AAPL",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Open the exact published weekly forecast for a screener ticker"
+          },
+          "response": []
+        },
+        {
+          "name": "Get screener observations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/screener/forecasts/:ticker/observations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "screener",
+                "forecasts",
+                ":ticker",
+                "observations"
+              ],
+              "query": [
+                {
+                  "key": "scan_id",
+                  "value": "",
+                  "disabled": false,
+                  "description": "Exact published scan; old scan returns 404, never silently substitutes a new one."
+                }
+              ],
+              "variable": [
+                {
+                  "key": "ticker",
+                  "value": "AAPL",
+                  "description": ""
+                }
+              ]
+            },
+            "description": "Retrieve observed stock closes for the published screener forecast chart"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Search markets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "AAPL",
+                  "disabled": false,
+                  "description": ""
+                },
+                {
+                  "key": "source",
+                  "value": "auto",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "mode",
+                  "value": "open",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "8",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "rank",
+                  "value": "false",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": []
+            },
+            "description": "Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Optional ranking orders verified candidates; it cannot invent or select a contract."
+          },
+          "response": []
+        },
+        {
+          "name": "Browse Dukascopy instruments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/dukascopy/instruments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "dukascopy",
+                "instruments"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "100",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": []
+            },
+            "description": "Browse every instrument in the complete Dukascopy catalog"
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve market link",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-search/resolve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-search",
+                "resolve"
+              ],
+              "query": [
+                {
+                  "key": "url",
+                  "value": "https://kalshi.com",
+                  "disabled": false,
+                  "description": ""
+                }
+              ],
+              "variable": []
+            },
+            "description": "Only approved provider links. Choose the returned outcome/side explicitly. Use event browsing to discover related props and other contracts."
+          },
+          "response": []
+        },
+        {
+          "name": "Browse event markets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-search/event",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-search",
+                "event"
+              ],
+              "query": [
+                {
+                  "key": "source",
+                  "value": "auto",
+                  "disabled": false,
+                  "description": ""
+                },
+                {
+                  "key": "event_id",
+                  "value": "",
+                  "disabled": false,
+                  "description": ""
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": []
+            },
+            "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins."
+          },
+          "response": []
+        },
+        {
+          "name": "Get search capabilities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-search/capabilities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-search",
+                "capabilities"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "List provider capabilities before selecting markets or intervals"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Download",
+      "item": [
+        {
+          "name": "Download market history",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "history"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.\n\nRequest schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"symbol\"\n      ],\n      \"properties\": {\n        \"symbol\": {\n          \"type\": \"string\"\n        },\n        \"contractSymbol\": {\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"alpaca\",\n            \"dukascopy\",\n            \"kalshi_perps\"\n          ],\n          \"default\": \"auto\"\n        },\n        \"price_side\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"bid\",\n            \"ask\"\n          ],\n          \"default\": \"bid\"\n        },\n        \"page_mode\": {\n          \"type\": \"boolean\",\n          \"description\": \"Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings.\"\n        },\n        \"cursor\": {\n          \"type\": \"string\"\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"timeframe\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ]\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50000,\n          \"description\": \"Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000).\"\n        },\n        \"adjustment\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"split\",\n            \"all\"\n          ]\n        },\n        \"session\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"regular\",\n            \"extended\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ]\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ],\n          \"description\": \"Alias for timeframe. Perpetuals support the same completed-bar frequencies.\"\n        }\n      }\n    },\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"source\",\n        \"contracts\",\n        \"start\",\n        \"end\"\n      ],\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"kalshi\",\n            \"polymarket_us\"\n          ]\n        },\n        \"contracts\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 25,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\n              \"source\",\n              \"eventId\",\n              \"marketId\",\n              \"contractId\",\n              \"providerSymbol\",\n              \"side\"\n            ],\n            \"properties\": {\n              \"source\": {\n                \"type\": \"string\"\n              },\n              \"eventId\": {\n                \"type\": \"string\"\n              },\n              \"marketId\": {\n                \"type\": \"string\"\n              },\n              \"contractId\": {\n                \"type\": \"string\"\n              },\n              \"providerSymbol\": {\n                \"type\": \"string\"\n              },\n              \"side\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"yes\",\n                  \"no\",\n                  \"long\",\n                  \"short\"\n                ]\n              }\n            }\n          }\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1h\",\n            \"4h\",\n            \"1d\",\n            \"1w\",\n            \"1month\",\n            \"final\"\n          ]\n        },\n        \"history_phase\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"both\",\n            \"pregame\",\n            \"in_game\"\n          ]\n        },\n        \"mode\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"normalized\",\n            \"raw\",\n            \"canvas\"\n          ]\n        },\n        \"target\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"price\",\n            \"bid\",\n            \"ask\",\n            \"midpoint\"\n          ]\n        },\n        \"missing\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"leave\",\n            \"drop\",\n            \"forward_fill\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ],\n          \"default\": \"csv\"\n        }\n      }\n    }\n  ]\n}\n```",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"alpaca\",\n  \"symbol\": \"AAPL\",\n  \"timeframe\": \"1Day\",\n  \"limit\": 500,\n  \"format\": \"json\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Economic data",
+      "item": [
+        {
+          "name": "Search BigQuery public tables, Treasury Fiscal Data or World Bank Data360 indicators",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/economic-data/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "economic-data",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "provider",
+                  "value": "fiscaldata",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "q",
+                  "value": "AAPL",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true,
+                  "description": ""
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "disabled": true,
+                  "description": ""
+                }
+              ],
+              "variable": []
+            },
+            "description": "Search BigQuery public tables, Treasury Fiscal Data or World Bank Data360 indicators"
+          },
+          "response": []
+        },
+        {
+          "name": "Inspect a series's dimensions, values, and units",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/economic-data/describe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "economic-data",
+                "describe"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Inspect a series's dimensions, values, and units\n\nRequest schema:\n```json\n{\n  \"$ref\": \"#/components/schemas/EconomicSeriesSource\"\n}\n```",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Download a single observed economic time series",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/economic-data/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "economic-data",
+                "history"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Download a single observed economic time series\n\nRequest schema:\n```json\n{\n  \"$ref\": \"#/components/schemas/EconomicSeriesSource\"\n}\n```",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Gemini exchange",
+      "item": [
+        {
+          "name": "Download Completed Historical Spot Candles From Gemini Exchange",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/gemini/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "gemini",
+                "history"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Download Completed Historical Spot Candles From Gemini Exchange\n\nRequest schema:\n```json\n{\n  \"type\": \"object\",\n  \"required\": [\n    \"symbol\"\n  ],\n  \"properties\": {\n    \"symbol\": {\n      \"type\": \"string\"\n    },\n    \"frequency\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"1min\",\n        \"5min\",\n        \"15min\",\n        \"30min\",\n        \"1h\",\n        \"4h\",\n        \"1D\",\n        \"1W-MON\",\n        \"1MS\",\n        \"1Min\",\n        \"5Min\",\n        \"15Min\",\n        \"30Min\",\n        \"1Hour\",\n        \"4Hour\",\n        \"1Day\",\n        \"1Week\",\n        \"1Month\",\n        \"1m\",\n        \"5m\",\n        \"15m\",\n        \"30m\",\n        \"1w\"\n      ]\n    },\n    \"limit\": {\n      \"type\": \"integer\",\n      \"minimum\": 2,\n      \"maximum\": 50000\n    },\n    \"start\": {\n      \"type\": \"string\"\n    },\n    \"end\": {\n      \"type\": \"string\"\n    }\n  }\n}\n```",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Verified Gemini Prediction Contract Observations and History Availability",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/market-data/gemini/prediction-contract",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "market-data",
+                "gemini",
+                "prediction-contract"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "description": "Get Verified Gemini Prediction Contract Observations and History Availability\n\nRequest schema:\n```json\n{\n  \"type\": \"object\",\n  \"required\": [\n    \"event_id\",\n    \"contract_id\"\n  ],\n  \"properties\": {\n    \"event_id\": {\n      \"type\": \"string\"\n    },\n    \"contract_id\": {\n      \"type\": \"string\"\n    },\n    \"symbol\": {\n      \"type\": \"string\"\n    }\n  }\n}\n```",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

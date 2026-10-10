@@ -437,3 +437,31 @@ test("versioned API enforces authentication, scopes, revocation and public redac
     delete process.env.QUANTURA_FORECAST_API_KEY_PEPPER;
   }
 });
+
+
+test("RapidAPI forecast metering counts dispatched jobs once and excludes replay, cache, polling and rejection",{skip:!emulatorAvailable},async()=>{
+  const oldEnv={...process.env};
+  process.env.RAPIDAPI_PROXY_SECRET="r".repeat(48);process.env.RAPIDAPI_API_ID="api_metering-test";
+  process.env.QUANTURA_ENSEMBLE_WORKER_MODE="manual";process.env.QUANTURA_ENSEMBLE_ALLOW_MANUAL_CLAIM="true";
+  const firebaseApp=admin.initializeApp({projectId:"quantura-forecast-integration"},`rapid-meter-${Date.now()}`),db=firebaseApp.firestore();
+  const app=express();app.use(express.json());registerEnsembleForecastRoutes(app,{db,auth:{} as any,publicOrigin:"http://localhost"});
+  const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.once("listening",r));
+  const base=`http://127.0.0.1:${(server.address() as any).port}/v1/ensemble-forecasts`;
+  const headers={"Content-Type":"application/json","x-rapidapi-proxy-secret":"r".repeat(48),"x-rapidapi-user":`meter_${Date.now()}`,"x-rapidapi-subscription":"BASIC"};
+  const body={source:{type:"series",frequency:"1min",rows:Array.from({length:40},(_,i)=>({timestamp:new Date(Date.UTC(2026,0,1,0,i)).toISOString(),target:100+i}))},prediction_length:2,horizon_mode:"frequency_periods",quantiles:[.1,.5,.9],models:{prophet:{enabled:true,weight:1}}};
+  const create=(payload=body,key="one")=>fetch(base,{method:"POST",headers:{...headers,"Idempotency-Key":key},body:JSON.stringify(payload)});
+  try {
+    const first=await create();assert.equal(first.status,202,await first.clone().text());assert.equal(first.headers.get("x-rapidapi-billing"),"Forecasts=1");
+    const id=(await first.json()).data.forecast_id,ref=db.collection("ensemble_forecast_jobs").doc(id),job=(await ref.get()).data()!;
+    const replay=await create();assert.equal(replay.status,202);assert.equal(replay.headers.get("x-rapidapi-billing"),"Forecasts=0");assert.equal((await replay.json()).data.forecast_id,id);
+    const poll=await fetch(`${base}/${id}`,{headers});assert.equal(poll.status,200);assert.equal(poll.headers.get("x-rapidapi-billing"),"Forecasts=0");
+    const invalid=await create({...body,prediction_length:0},"invalid");assert.equal(invalid.status,422);assert.equal(invalid.headers.get("x-rapidapi-billing"),"Forecasts=0");
+    await ref.set({status:"completed"},{merge:true});await db.collection("ensemble_forecast_results").doc(id).set({quantiles:[.1,.5,.9],predictions:[]});
+    const cacheId=(await import("node:crypto")).createHash("sha256").update(`${job.workspace_id}:${job.request_hash}`).digest("hex");
+    await db.collection("ensemble_forecast_cache").doc(cacheId).set({forecast_id:id});
+    const cached=await create(body,"two");assert.equal(cached.status,200,await cached.clone().text());assert.equal(cached.headers.get("x-rapidapi-billing"),"Forecasts=0");assert.equal((await cached.json()).meta.cache_hit,true);
+    const reproduced=await fetch(`${base}/${id}/reproduce`,{method:"POST",headers,body:"{}"});assert.equal(reproduced.status,202,await reproduced.clone().text());assert.equal(reproduced.headers.get("x-rapidapi-billing"),"Forecasts=1");
+    process.env.QUANTURA_ENSEMBLE_WORKER_MODE="unsupported_test_mode";
+    const failed=await create({...body,prediction_length:3},"dispatch-failed");assert.ok(failed.status>=400);assert.equal(failed.headers.get("x-rapidapi-billing"),"Forecasts=0");
+  }finally{await new Promise<void>(r=>server.close(()=>r()));await firebaseApp.delete();process.env=oldEnv;}
+});
