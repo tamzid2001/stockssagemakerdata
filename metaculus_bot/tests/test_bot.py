@@ -14,7 +14,7 @@ from metaculus_bot.checkpoint import Checkpoint
 from metaculus_bot.llm import FreeLLM, FreeQuota, answer_schema, select_model, zero_price
 from metaculus_bot.questions import context, payload, unpack
 from metaculus_bot.research import public_get, public_url
-from metaculus_bot.runner import question_hash, record_text, run, saved_record, submit
+from metaculus_bot.runner import question_hash, question_order, record_text, run, saved_record, submit
 from metaculus_bot.time_series import definition, history
 
 
@@ -362,3 +362,54 @@ def test_existing_cooldown_skips_all_metaculus_requests(monkeypatch,tmp_path):
     monkeypatch.setenv('METACULUS_TOKEN','test-token')
     args=SimpleNamespace(checkpoint=str(path))
     with pytest.raises(RateLimited):run(args,SimpleNamespace(identity=lambda:pytest.fail('Must honor restored cooldown')))
+
+
+def test_backlog_balances_tournaments_and_deduplicates_shared_questions():
+    now=datetime(2026,10,10,tzinfo=timezone.utc)
+    questions=[SimpleNamespace(id_of_question=i,close_time=now+timedelta(days=i)) for i in range(1,7)]
+    memberships={1:{'cup'},2:{'cup'},3:{'cup'},4:{'animal'},5:{'ai'},6:{'ai','animal'}}
+    ordered=question_order(questions,memberships,{1,2},set(),now)
+    # The unprocessed tournaments get capacity despite Cup's earlier deadline.
+    assert [q.id_of_question for q in ordered[:3]]==[4,5,6]
+    assert len(ordered)==6 and len({q.id_of_question for q in ordered})==6
+
+
+def test_pending_answers_and_short_bot_deadlines_precede_balanced_backlog():
+    now=datetime(2026,10,10,tzinfo=timezone.utc)
+    questions=[SimpleNamespace(id_of_question=i,close_time=now+timedelta(hours=i)) for i in range(1,5)]
+    memberships={i:{'futureeval' if i<3 else 'cup'} for i in range(1,5)}
+    ordered=question_order(questions,memberships,set(),{2},now)
+    assert [q.id_of_question for q in ordered]==[2,1,3,4]
+
+
+def test_new_forecasts_each_have_private_reasoning_and_tournament_receipts(posts,monkeypatch,tmp_path):
+    original=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary')
+    second=copy.deepcopy(original);second['id']+=1000;second['question']['id']+=1000
+    first_id=original['question']['id'];second_id=second['question']['id']
+    class Api:
+        writes=[]
+        submitted=set()
+        def identity(self):return {'id':1,'username':'test'}
+        def competitions(self):return [{'id':1,'name':'Cup'},{'id':2,'name':'Animal'},{'id':3,'name':'MiniBench'}]
+        def posts(self,project):return {1:[original],2:[original,second],3:[]}[project]
+        def comments(self,*args):return []
+        def own_forecasts(self,ids):return self.submitted & set(ids)
+        def get(self,path):return {original['id']:original,second['id']:second}[int(path.split('/')[1])]
+        def post(self,path,body):
+            self.writes.append((path,body))
+            if path=='questions/forecast/':self.submitted.add(body[0]['question'])
+            return {}
+    class Llm:
+        def __init__(self,key):pass
+        def forecast(self,q,sources):return {'probability_yes':.2,'reasoning':'Test explanation'}
+    from metaculus_bot import runner
+    monkeypatch.setattr(runner,'evidence',lambda q:[])
+    monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    monkeypatch.setenv('OPENROUTER_API_KEY','test')
+    args=SimpleNamespace(scope='competitions',engine='llm',submit=True,max_questions=2,question_ids=[],report=str(tmp_path/'summary.json'))
+    api=Api();result=run(args,api,Llm)
+    assert api.submitted=={first_id,second_id} and result['counts']=={'submitted':2}
+    assert [path for path,_ in api.writes]==['comments/create/','questions/forecast/']*2
+    assert all(body['is_private'] is True for path,body in api.writes if path=='comments/create/')
+    assert [(r['open_questions'],r['submitted_this_run'],r['reasoning_notes_saved_this_run']) for r in result['competitions']]==[(1,1,1),(2,2,2),(0,0,0)]
+    assert sum(r['submitted_this_run'] for r in result['competitions'])>result['counts']['submitted']  # shared question, single API write
