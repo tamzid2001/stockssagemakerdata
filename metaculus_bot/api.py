@@ -11,6 +11,7 @@ import requests
 BASE = "https://www.metaculus.com/api"
 PERMISSIONS = {"forecaster", "curator", "admin", "creator"}
 BOT_FRIENDLY_SLUGS = {"ai-2027"}
+BOT_LEADERBOARD_STATES = {"bots_only", "include", "exclude_and_show", "exclude_and_hide"}
 
 
 class ApiError(RuntimeError):
@@ -119,8 +120,8 @@ class Metaculus:
     def competitions(self, now=None) -> list[dict]:
         now = now or utcnow()
         projects = self.get("projects/tournaments/") + self.get("projects/minibenches/")
-        # Include requires explicit bot inclusion in the leaderboard; exclude/show
-        # human tournaments aren't inferred eligible from ordinary write permission.
+        # Leaderboard/prize exclusion does not revoke forecast permission.
+        # Include live tournaments/indexes and bot-oriented question series.
         unique = {}
         for project in projects:
             if eligible_project(project, now) and project.get("user_permission") in PERMISSIONS:
@@ -163,15 +164,34 @@ def eligible_project(project: dict, now=None) -> bool:
     now = now or utcnow()
     end = date(project.get("forecasting_end_date") or project.get("close_date"))
     start = date(project.get("start_date"))
-    return ((project.get("bot_leaderboard_status") in {"bots_only", "include"}
+    status = project.get("bot_leaderboard_status")
+    return ((status in {"bots_only", "include"}
+             or (status in BOT_LEADERBOARD_STATES and project.get("type") in {"tournament", "index"})
              or project.get("slug") in BOT_FRIENDLY_SLUGS
              or (project.get("slug") or "").startswith("metaculus-cup-"))
             and project.get("is_ongoing") and (not start or start <= now) and (not end or end > now))
 
 
-def eligible_post(post: dict, scope: str) -> bool:
+def post_projects(post: dict) -> list[dict]:
     projects = post.get("projects") or {}
     members = [p for rows in projects.values() for p in (rows if isinstance(rows, list) else [rows]) if isinstance(p, dict)]
+    return list({p["id"]: p for p in members if p.get("id") is not None}.values())
+
+
+def eligible_post(post: dict, scope: str) -> bool:
+    members = post_projects(post)
     if scope == "test":
         return any(p.get("slug") == "bot-testing-area" for p in members)
     return any(eligible_project(p) for p in members)
+
+
+def competition_policy(project: dict) -> dict:
+    """Report leaderboard policy without promising a prize to this account."""
+    status = project.get("bot_leaderboard_status")
+    if status in {"exclude_and_show", "exclude_and_hide"}:
+        prize = "not_eligible"
+    elif status in {"include", "bots_only"}:
+        prize = "subject_to_tournament_rules" if float(project.get("prize_pool") or 0) > 0 else "no_prize_pool"
+    else:
+        prize = "unknown"
+    return {"bot_leaderboard_status": status, "bot_prize_eligibility": prize}

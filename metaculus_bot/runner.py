@@ -9,7 +9,7 @@ from collections import Counter, defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .api import ApiError, Metaculus, RateLimited, eligible_post, utcnow
+from .api import ApiError, Metaculus, RateLimited, competition_policy, eligible_post, eligible_project, post_projects, utcnow
 from .checkpoint import Checkpoint
 from .llm import FreeLLM, FreeQuota
 from .questions import already_submitted, context, payload, unpack
@@ -140,13 +140,15 @@ def run(args, api=None, llm_factory=FreeLLM):
         # tournament eligibility and forecast permissions without scanning all
         # tournaments a second time.
         discovered_posts = [api.get(f"posts/{i}/") for i in sorted(set(post_ids))]
-        discovered_posts = [("selected-posts", p) for p in discovered_posts if eligible_post(p, args.scope)]
-        projects = [{"id": "selected-posts", "name": "Previously discovered eligible posts"}]
+        pairs = [(p["id"], post, p) for post in discovered_posts if eligible_post(post, args.scope)
+                 for p in post_projects(post) if (p.get("slug") == "bot-testing-area" if args.scope == "test" else eligible_project(p))]
+        discovered_posts = [(project_id, post) for project_id, post, _ in pairs]
+        projects = list({p["id"]: {**p, "name": p.get("name") or str(p["id"])} for _, _, p in pairs}.values())
     else:
         projects = ([{"id": "bot-testing-area", "name": "Bot testing area"}] if args.scope == "test" else api.competitions())
         discovered_posts = [(project["id"], post) for project in projects for post in api.posts(project["id"])]
     log("metaculus_discovery", bot=identity["username"], bot_id=identity["id"], engine=args.engine,
-        competitions=[{"id": p["id"], "name": p["name"]} for p in projects], free_only=True)
+        competitions=[{"id": p["id"], "name": p["name"], **competition_policy(p)} for p in projects], free_only=True)
     questions, seen, memberships = [], set(), defaultdict(set)
     counts = Counter()
     for project_id, post in discovered_posts:
@@ -185,7 +187,7 @@ def run(args, api=None, llm_factory=FreeLLM):
     questions = question_order(questions, memberships, handled, replay)
     if args.engine == "llm":
         time_series_ids = [q.id_of_question for q in questions if specs[q.id_of_question] and q.id_of_question not in own]
-    coverage = [{"id": p["id"], "name": p["name"],
+    coverage = [{"id": p["id"], "name": p["name"], **competition_policy(p),
                  "open_questions": sum(p["id"] in memberships[q.id_of_question] for q in questions),
                  "previously_submitted": sum(p["id"] in memberships[i] for i in own),
                  "submitted_this_run": 0, "reasoning_notes_saved_this_run": 0} for p in projects]
@@ -299,9 +301,9 @@ def write_report(args, result):
             for status, count in sorted(result["counts"].items()):
                 summary.write(f"| {status} | {count} |\n")
             if result.get("competitions"):
-                summary.write("\n### Tournament coverage\n\n| Tournament | Open | Previously submitted | New confirmed | New reasoning notes |\n|---|---:|---:|---:|---:|\n")
+                summary.write("\n### Tournament coverage\n\n| Tournament | Bot prize eligibility | Open | Previously submitted | New confirmed | New reasoning notes |\n|---|---|---:|---:|---:|---:|\n")
                 for row in result["competitions"]:
-                    summary.write(f"| {row['name']} | {row['open_questions']} | {row['previously_submitted']} | {row['submitted_this_run']} | {row['reasoning_notes_saved_this_run']} |\n")
+                    summary.write(f"| {row['name']} | {row['bot_prize_eligibility']} | {row['open_questions']} | {row['previously_submitted']} | {row['submitted_this_run']} | {row['reasoning_notes_saved_this_run']} |\n")
     log("metaculus_summary", **{k: v for k, v in result.items() if k != "questions"})
 
 
