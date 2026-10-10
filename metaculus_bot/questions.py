@@ -58,6 +58,8 @@ def payload(question, answer: dict) -> dict:
     # Free-router responses can nest requested fields under `prediction`.
     # Recover exactly those numbers; never generate a different saved answer.
     prediction = answer.get("prediction")
+    if isinstance(prediction, dict) and kind in prediction:
+        prediction = prediction[kind]
     if isinstance(prediction, dict):
         if kind == "multiple_choice" and set(prediction) == set(question.options):
             answer = {**answer, "probabilities": prediction}

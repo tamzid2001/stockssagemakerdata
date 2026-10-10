@@ -22,10 +22,16 @@ Other human tournaments that exclude bots from competition are excluded.
   remain on Metaculus; pausing does not erase them.
 
 Each question receives one forecast. Subsequent runs skip authoritative own
-forecast history. A private reasoning note records the exact generated answer
+forecast history through `questions/bulk-forecast-read/`; feed metadata alone is
+not treated as a submission receipt. A private reasoning note records the exact generated answer
 before submission, allowing a restart to reuse it without regenerating a different
 answer. Uncertain writes are checked against Metaculus; writes aren't blindly
 retried. Notes include engine, model, UTC time, real source links and data hashes.
+Metaculus requests are spaced at least five seconds apart. Read retries honor
+`Retry-After` in seconds or HTTP-date format. Exhausted quotas defer work instead
+of crashing the worker, and a restored cooldown prevents requests before it expires.
+Own comments are read once per job, saved abstentions do not consume new-generation
+capacity, and the time-series job fetches only the posts selected during discovery.
 Metaculus may publish private tournament notes after questions close, as its rules
 require. Actions artifacts contain operational summaries, not private reasoning.
 
@@ -95,7 +101,12 @@ cannot access internal hosts, credentials, metadata endpoints or authenticated
 provider sessions.
 
 No Firestore or Cloud Storage is used. State lives in Metaculus own forecast history
-and private notes, with seven-day GitHub operational artifacts. Existing paused
+and private notes. An encrypted seven-day GitHub recovery artifact preserves
+generations whose private-note write failed and API cooldowns between runs. Its
+encryption key is derived from the secret Metaculus token with a dedicated context;
+token rotation requires draining pending generations before changing the token.
+Restoring or decrypting recovery state must succeed before new work starts.
+Operational summary artifacts contain no private forecast values. Existing paused
 Kalshi traders and storage-purge controls are independent and remain paused.
 
 ## Local tests
