@@ -5,8 +5,8 @@ import hashlib
 import json
 import os
 import re
-from collections import Counter
-from datetime import datetime, timezone
+from collections import Counter, defaultdict, deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .api import ApiError, Metaculus, RateLimited, eligible_post, utcnow
@@ -59,6 +59,44 @@ def record_text(record: dict) -> str:
             f"<!-- {MARKER} {json.dumps(record, sort_keys=True, separators=(',', ':'))} -->")
 
 
+def question_order(questions, memberships, handled, replay, now=None):
+    """Recover exact answers first; protect short deadlines; balance the backlog.
+
+    Selection depends on coverage and closing times, never forecast probabilities
+    or scores. A question shared by multiple tournaments is processed once.
+    """
+    now = now or utcnow()
+    key = lambda q: (q.close_time or datetime.max.replace(tzinfo=timezone.utc), q.id_of_question)
+    ordered = sorted(questions, key=key)
+    first = [q for q in ordered if q.id_of_question in replay]
+    urgent = [q for q in ordered if q.id_of_question not in handled and q.id_of_question not in replay and
+              q.close_time and q.close_time <= now + timedelta(hours=2)]
+    selected = {q.id_of_question for q in first + urgent}
+    queues, coverage = defaultdict(deque), Counter()
+    for q in ordered:
+        members = memberships[q.id_of_question]
+        if q.id_of_question in handled or q.id_of_question in selected:
+            coverage.update(members)
+        else:
+            for member in members:
+                queues[member].append(q)
+    balanced = []
+    while queues:
+        for member in list(queues):
+            while queues[member] and queues[member][0].id_of_question in selected:
+                queues[member].popleft()
+            if not queues[member]:
+                del queues[member]
+        if not queues:
+            break
+        member = min(queues, key=lambda p: (coverage[p], key(queues[p][0]), str(p)))
+        q = queues[member].popleft()
+        selected.add(q.id_of_question)
+        coverage.update(memberships[q.id_of_question])
+        balanced.append(q)
+    return first + urgent + balanced + [q for q in ordered if q.id_of_question not in selected]
+
+
 def submit(api, question, record):
     fresh = find_question(api, question.id_of_post, question.id_of_question)
     if fresh is None:
@@ -102,23 +140,26 @@ def run(args, api=None, llm_factory=FreeLLM):
         # tournament eligibility and forecast permissions without scanning all
         # tournaments a second time.
         discovered_posts = [api.get(f"posts/{i}/") for i in sorted(set(post_ids))]
-        discovered_posts = [p for p in discovered_posts if eligible_post(p, args.scope)]
+        discovered_posts = [("selected-posts", p) for p in discovered_posts if eligible_post(p, args.scope)]
         projects = [{"id": "selected-posts", "name": "Previously discovered eligible posts"}]
     else:
         projects = ([{"id": "bot-testing-area", "name": "Bot testing area"}] if args.scope == "test" else api.competitions())
-        discovered_posts = [post for project in projects for post in api.posts(project["id"])]
+        discovered_posts = [(project["id"], post) for project in projects for post in api.posts(project["id"])]
     log("metaculus_discovery", bot=identity["username"], bot_id=identity["id"], engine=args.engine,
         competitions=[{"id": p["id"], "name": p["name"]} for p in projects], free_only=True)
-    questions, seen = [], set()
+    questions, seen, memberships = [], set(), defaultdict(set)
     counts = Counter()
-    for post in discovered_posts:
+    for project_id, post in discovered_posts:
         try:
             parsed = unpack(post)
         except (ValueError, KeyError, TypeError):
             counts["schema_deferred"] += 1
             continue
         for q in parsed:
-            if q.id_of_question not in seen and (not args.question_ids or q.id_of_question in args.question_ids):
+            if args.question_ids and q.id_of_question not in args.question_ids:
+                continue
+            memberships[q.id_of_question].add(project_id)
+            if q.id_of_question not in seen:
                 seen.add(q.id_of_question)
                 questions.append(q)
     # Forecast short-lived/new questions first, then persistent backlog. All
@@ -137,6 +178,19 @@ def run(args, api=None, llm_factory=FreeLLM):
     # One paginated own-comments read per job, shared by all posts/group children.
     # Saved abstentions do not consume the new-question budget or starve backlog.
     comments = api.comments(None, identity["id"]) if candidates else []
+    records = {q.id_of_question: saved_record(comments, identity["id"], q.id_of_question) for q in candidates}
+    handled = own | {q.id_of_question for q in questions if already_submitted(q)} | {i for i, r in records.items() if r}
+    replay = {q.id_of_question for q in candidates if
+              (record := records[q.id_of_question] or checkpoint.get(q.id_of_question)) and not record["answer"].get("abstain")}
+    questions = question_order(questions, memberships, handled, replay)
+    if args.engine == "llm":
+        time_series_ids = [q.id_of_question for q in questions if specs[q.id_of_question] and q.id_of_question not in own]
+    coverage = [{"id": p["id"], "name": p["name"],
+                 "open_questions": sum(p["id"] in memberships[q.id_of_question] for q in questions),
+                 "previously_submitted": sum(p["id"] in memberships[i] for i in own),
+                 "submitted_this_run": 0, "reasoning_notes_saved_this_run": 0} for p in projects]
+    for row in coverage:
+        log("metaculus_tournament_coverage", **row)
     for q in questions:
         if args.question_ids and q.id_of_question not in args.question_ids:
             continue
@@ -149,7 +203,7 @@ def run(args, api=None, llm_factory=FreeLLM):
             continue
         if args.engine == "time-series" and not spec:
             continue
-        record = saved_record(comments, identity["id"], q.id_of_question)
+        record = records.get(q.id_of_question)
         persisted = record is not None
         if persisted:
             checkpoint.remove(q.id_of_question)
@@ -180,6 +234,9 @@ def run(args, api=None, llm_factory=FreeLLM):
                 api.post("comments/create/", {"text": record_text(record), "on_post": q.id_of_post,
                          "parent": None, "included_forecast": False, "is_private": True})
                 checkpoint.remove(q.id_of_question)
+                for row in coverage:
+                    if row["id"] in memberships[q.id_of_question]:
+                        row["reasoning_notes_saved_this_run"] += 1
             if record["answer"].get("abstain"):
                 status = "abstained"
             else:
@@ -189,6 +246,10 @@ def run(args, api=None, llm_factory=FreeLLM):
                 status = submit(api, q, record) if args.submit else "validated_not_submitted"
                 if status in {"submitted", "submitted_reconciled", "submission_unconfirmed"}:
                     submitted_count += 1
+                if status in {"submitted", "submitted_reconciled"}:
+                    for row in coverage:
+                        if row["id"] in memberships[q.id_of_question]:
+                            row["submitted_this_run"] += 1
         except RateLimited as error:
             checkpoint.defer(error.retry_after)
             counts["api_rate_limit_deferred"] += 1
@@ -211,12 +272,12 @@ def run(args, api=None, llm_factory=FreeLLM):
         counts[status] += 1
         summary = {"question_id": q.id_of_question, "post_id": q.id_of_post, "type": q.question_type,
                    "engine": "quantura_time_series" if spec else "free_llm", "status": status,
-                   "url": q.page_url}
+                   "url": q.page_url, "competition_ids": sorted(memberships[q.id_of_question], key=str)}
         summaries.append(summary)
         log("metaculus_question", **summary)
     result = {"bot": identity["username"], "at": utcnow().isoformat(), "free_only": True,
               "discovered_open_questions": len(questions), "counts": dict(counts), "questions": summaries,
-              "time_series_question_ids": time_series_ids}
+              "time_series_question_ids": time_series_ids, "competitions": coverage}
     time_series_post_ids = sorted({q.id_of_post for q in questions if q.id_of_question in time_series_ids[:args.max_questions]})
     result["time_series_post_ids"] = time_series_post_ids
     checkpoint.save()
@@ -237,6 +298,10 @@ def write_report(args, result):
                           f"Discovered {result['discovered_open_questions']} open questions.\n\n| Status | Count |\n|---|---:|\n")
             for status, count in sorted(result["counts"].items()):
                 summary.write(f"| {status} | {count} |\n")
+            if result.get("competitions"):
+                summary.write("\n### Tournament coverage\n\n| Tournament | Open | Previously submitted | New confirmed | New reasoning notes |\n|---|---:|---:|---:|---:|\n")
+                for row in result["competitions"]:
+                    summary.write(f"| {row['name']} | {row['open_questions']} | {row['previously_submitted']} | {row['submitted_this_run']} | {row['reasoning_notes_saved_this_run']} |\n")
     log("metaculus_summary", **{k: v for k, v in result.items() if k != "questions"})
 
 

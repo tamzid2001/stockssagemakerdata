@@ -32,8 +32,21 @@ Metaculus requests are spaced at least five seconds apart. Read retries honor
 of crashing the worker, and a restored cooldown prevents requests before it expires.
 Own comments are read once per job, saved abstentions do not consume new-generation
 capacity, and the time-series job fetches only the posts selected during discovery.
-Metaculus may publish private tournament notes after questions close, as its rules
-require. Actions artifacts contain operational summaries, not private reasoning.
+Pending exact answers are recovered first, then questions closing within two hours
+take priority. The remaining backlog is balanced across tournaments by processed
+question counts, with the earliest deadline first within each tournament. Questions
+shared by tournaments receive one forecast and count toward each tournament's
+coverage. Selection never depends on forecast probabilities or leaderboard scores.
+Each Actions summary shows open questions, previous submissions, new confirmed
+submissions and new reasoning notes by tournament, including tournaments with no
+open questions. A zero is visible rather than presented as a submission.
+
+Every submitted forecast has an automated private reasoning note. Metaculus
+requires bots to leave private comments and publishes FutureEval notes itself at
+regular intervals; main-site notes remain private unless it grants permission.
+The worker does not publish promotional or duplicate comments. Comments explain
+the forecast; leaderboard scores depend on resolved forecasting performance.
+Actions artifacts contain operational summaries, not private reasoning.
 
 The unscored **bot-testing-area** supports a manual smoke test. Validate there
 before running `scope=competitions, submit=true`. Follow the
