@@ -35,7 +35,40 @@
             },
             "description": "Returns token scopes, personal plan, and current owner/editor/viewer membership. Membership is evaluated on every request."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/me/access",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "me",
+                    "access"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Returns token scopes, personal plan, and current owner/editor/viewer membership. Membership is evaluated on every request."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"user\": {\n      \"id\": \"usr_example\",\n      \"email\": \"developer@example.com\"\n    },\n    \"token_scopes\": [\n      \"account:read\",\n      \"workspaces:read\",\n      \"datasets:read\"\n    ],\n    \"personal_plan\": \"pro\",\n    \"workspaces\": [\n      {\n        \"id\": \"ws_01JEXAMPLE9Y6Z\",\n        \"name\": \"Institutional Research\",\n        \"slug\": \"institutional-research\",\n        \"owner_user_id\": \"usr_example_owner\",\n        \"role\": \"owner\",\n        \"permissions\": [\n          \"workspace.read\",\n          \"csv.list\",\n          \"csv.read\",\n          \"csv.download\"\n        ],\n        \"resource_scope\": {\n          \"csv\": {\n            \"mode\": \"all\",\n            \"ids\": []\n          },\n          \"forecasts\": {\n            \"mode\": \"all\",\n            \"ids\": []\n          }\n        },\n        \"capabilities\": [\n          \"csv.read\",\n          \"forecast.read\"\n        ],\n        \"legacy_personal\": false,\n        \"created_at\": \"2026-09-03T14:30:00.000Z\",\n        \"updated_at\": \"2026-09-03T14:30:00.000Z\"\n      }\n    ]\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get capabilities",
@@ -56,7 +89,39 @@
             },
             "description": "Get the Authenticated User's Effective Quantura Product Capabilities"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/capabilities",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "capabilities"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Get the Authenticated User's Effective Quantura Product Capabilities"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"forecasting\": true,\n    \"screener\": true,\n    \"historical_data\": true,\n    \"options\": true,\n    \"sports\": true,\n    \"dataset_download\": true,\n    \"backtesting\": true,\n    \"collaboration\": true,\n    \"sagemaker\": true\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         }
       ]
     },
@@ -83,7 +148,40 @@
             },
             "description": "Latest and historical cutoffs (including 120/180-day replays) select data before the N-bar limit, subject to provider retention; inference runs now. Returns supported intervals (1min, 5min, 15min, 30min, 1h, 4h, 1D, 1W-MON, 1MS), completed-bar calendar semantics, plan, runtime, quantile, horizon, device, checkpoint and TimesFM licensing availability. Weeks begin Monday UTC; monthly periods use real calendar months. No secret values are returned."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/forecast/models",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "forecast",
+                    "models"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Latest and historical cutoffs (including 120/180-day replays) select data before the N-bar limit, subject to provider retention; inference runs now. Returns supported intervals (1min, 5min, 15min, 30min, 1h, 4h, 1D, 1W-MON, 1MS), completed-bar calendar semantics, plan, runtime, quantile, horizon, device, checkpoint and TimesFM licensing availability. Weeks begin Monday UTC; monthly periods use real calendar months. No secret values are returned."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"frequencies\": [\n      {\n        \"frequency\": \"1min\",\n        \"timeframe\": \"1Min\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": null,\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"5min\",\n        \"timeframe\": \"5Min\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": null,\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"15min\",\n        \"timeframe\": \"15Min\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": null,\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"30min\",\n        \"timeframe\": \"30Min\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": null,\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"1h\",\n        \"timeframe\": \"1Hour\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": null,\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"4h\",\n        \"timeframe\": \"4Hour\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": null,\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"1D\",\n        \"timeframe\": \"1Day\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": null,\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"1W-MON\",\n        \"timeframe\": \"1Week\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": \"week\",\n        \"week_start\": \"Monday\",\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      },\n      {\n        \"frequency\": \"1MS\",\n        \"timeframe\": \"1Month\",\n        \"bucket_timezone\": \"UTC\",\n        \"calendar_period\": \"month\",\n        \"completed_bars_only\": true,\n        \"missing_intervals\": \"not_filled\"\n      }\n    ],\n    \"models\": [\n      {\n        \"id\": \"prophet\",\n        \"name\": \"Meta Prophet\",\n        \"available\": true,\n        \"default_weight\": 0.2,\n        \"quantile_support\": {\n          \"type\": \"requested\"\n        }\n      },\n      {\n        \"id\": \"toto\",\n        \"name\": \"Toto 2.0\",\n        \"available\": true,\n        \"default_weight\": 0.2,\n        \"quantile_support\": {\n          \"min\": 0.1,\n          \"max\": 0.9,\n          \"interpolation_inside_range\": true\n        }\n      }\n    ]\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Create forecast",
@@ -118,7 +216,53 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "202 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/ensemble-forecasts",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "ensemble-forecasts"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Validates the source and immutable configuration, snapshots authorized input data, enqueues a durable worker, and returns HTTP 202. Component-model arrays are not exposed in the standard result.\n\nRequest schema:\n```json\n{\n  \"$ref\": \"#/components/schemas/EnsembleForecastRequest\"\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": {\n    \"type\": \"ticker\",\n    \"provider\": \"alpaca\",\n    \"symbol\": \"AAPL\",\n    \"frequency\": \"1D\",\n    \"limit\": 500\n  },\n  \"prediction_length\": 7,\n  \"horizon_mode\": \"trading_sessions\",\n  \"quantiles\": [\n    0.01,\n    0.25,\n    0.5,\n    0.75,\n    0.9,\n    0.99\n  ],\n  \"models\": {\n    \"prophet\": {\n      \"enabled\": true,\n      \"weight\": 1\n    }\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"forecast_id\": \"ens_01JEXAMPLE7M6N\",\n    \"status\": \"queued\",\n    \"progress\": {\n      \"completed_models\": 0,\n      \"total_models\": 4,\n      \"current_model\": null\n    },\n    \"status_url\": \"/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N\",\n    \"result_url\": \"/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N\"\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get forecast result",
@@ -146,7 +290,46 @@
             },
             "description": "Get an Ensemble Forecast Job's Progress or Completed Quantile Results"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "ensemble-forecasts",
+                    ":forecast_id"
+                  ],
+                  "query": [],
+                  "variable": [
+                    {
+                      "key": "forecast_id",
+                      "value": "YOUR_FORECAST_ID",
+                      "description": "Forecast id or unique slug."
+                    }
+                  ]
+                },
+                "description": "Get an Ensemble Forecast Job's Progress or Completed Quantile Results"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"forecast_id\": \"ens_01JEXAMPLE7M6N\",\n    \"status\": \"completed\",\n    \"progress\": {\n      \"completed_models\": 1,\n      \"total_models\": 1,\n      \"current_model\": null\n    },\n    \"status_url\": \"/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N\",\n    \"result_url\": \"/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N\",\n    \"quantiles\": [\n      0.1,\n      0.5,\n      0.9\n    ],\n    \"predictions\": [\n      {\n        \"timestamp\": \"2026-09-21T00:00:00Z\",\n        \"quantiles\": {\n          \"0.1\": 98,\n          \"0.5\": 100,\n          \"0.9\": 102\n        }\n      }\n    ]\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Reproduce forecast",
@@ -180,7 +363,52 @@
             },
             "description": "Creates a new durable job from the original authorized input snapshot, exact model checkpoints, and stored configuration. Current workspace permissions, plan, and license gates are re-evaluated."
           },
-          "response": []
+          "response": [
+            {
+              "name": "202 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/reproduce",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "ensemble-forecasts",
+                    ":forecast_id",
+                    "reproduce"
+                  ],
+                  "query": [],
+                  "variable": [
+                    {
+                      "key": "forecast_id",
+                      "value": "YOUR_FORECAST_ID",
+                      "description": "Forecast id or unique slug."
+                    }
+                  ]
+                },
+                "description": "Creates a new durable job from the original authorized input snapshot, exact model checkpoints, and stored configuration. Current workspace permissions, plan, and license gates are re-evaluated."
+              },
+              "status": "Accepted",
+              "code": 202,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"forecast_id\": \"ens_01JEXAMPLE7M6N\",\n    \"status\": \"queued\",\n    \"progress\": {\n      \"completed_models\": 0,\n      \"total_models\": 4,\n      \"current_model\": null\n    },\n    \"status_url\": \"/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N\",\n    \"result_url\": \"/api/v1/ensemble-forecasts/ens_01JEXAMPLE7M6N\"\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Download forecast",
@@ -245,7 +473,47 @@
             },
             "description": "Returns genuine selected-side targets (Kalshi closing ask, Polymarket US display quote) or stock closes after the immutable input cutoff. The first prediction-row minute is retained when available, even outside the most recent 500 observations; worker completion does not move this comparison to another minute. A quote preceding publication is retrospective, not a backdated fill. Stock rows include interval and exchange session_date metadata; minute closes are not final daily closes. Does not run models or revise predictions. Poll no faster than once per minute. Stock overlays have no fixed 90-day cutoff-age limit: retained forecast-interval closes support 120/180-day replays, bounded to 2,000 rows; recent stock minutes use a seven-day window. Prediction-market and perpetual live overlays expire 90 days after input cutoff and expose their availability state. Provider retention still applies. Dataset-only jobs return no live observations."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/observations",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "ensemble-forecasts",
+                    ":forecast_id",
+                    "observations"
+                  ],
+                  "query": [],
+                  "variable": [
+                    {
+                      "key": "forecast_id",
+                      "value": "YOUR_FORECAST_ID",
+                      "description": "Forecast id or unique slug."
+                    }
+                  ]
+                },
+                "description": "Returns genuine selected-side targets (Kalshi closing ask, Polymarket US display quote) or stock closes after the immutable input cutoff. The first prediction-row minute is retained when available, even outside the most recent 500 observations; worker completion does not move this comparison to another minute. A quote preceding publication is retrospective, not a backdated fill. Stock rows include interval and exchange session_date metadata; minute closes are not final daily closes. Does not run models or revise predictions. Poll no faster than once per minute. Stock overlays have no fixed 90-day cutoff-age limit: retained forecast-interval closes support 120/180-day replays, bounded to 2,000 rows; recent stock minutes use a seven-day window. Prediction-market and perpetual live overlays expire 90 days after input cutoff and expose their availability state. Provider retention still applies. Dataset-only jobs return no live observations."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"forecast_id\": \"ens_example\",\n    \"rows\": [\n      {\n        \"timestamp\": \"2026-09-11T22:01:00Z\",\n        \"target\": 0.51\n      }\n    ],\n    \"input_cutoff\": \"2026-09-11T22:00:00Z\",\n    \"observed_at\": \"2026-09-11T22:01:10Z\",\n    \"availability\": \"available\",\n    \"refresh_after_seconds\": 60\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Create or recover a private forecast timestamp receipt",
@@ -279,7 +547,52 @@
             },
             "description": "Automatically attempted when a signed-in user's forecast completes or a guest forecast is saved. This explicit operation stamps older forecasts or retries an unavailable receipt. Sends only a salted SHA3-256 content ID to vBase; no CSV or forecast contents are uploaded. A fenced lease and lookup-before-create prevent duplicate stamps after ambiguous network failures. The receipt records the actual stamp time, including for historical replays. No forecast is backdated. Guests cannot stamp. The caller needs forecasts:write and forecast.create permission for this resource. Completed receipts cause no further database writes."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/proof",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "ensemble-forecasts",
+                    ":forecast_id",
+                    "proof"
+                  ],
+                  "query": [],
+                  "variable": [
+                    {
+                      "key": "forecast_id",
+                      "value": "YOUR_FORECAST_ID",
+                      "description": ""
+                    }
+                  ]
+                },
+                "description": "Automatically attempted when a signed-in user's forecast completes or a guest forecast is saved. This explicit operation stamps older forecasts or retries an unavailable receipt. Sends only a salted SHA3-256 content ID to vBase; no CSV or forecast contents are uploaded. A fenced lease and lookup-before-create prevent duplicate stamps after ambiguous network failures. The receipt records the actual stamp time, including for historical replays. No forecast is backdated. Guests cannot stamp. The caller needs forecasts:write and forecast.create permission for this resource. Completed receipts cause no further database writes."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"provider\": \"vbase\",\n    \"schema_version\": \"quantura_forecast_proof_v1\",\n    \"status\": \"stamped\",\n    \"content_cid\": \"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n    \"receipt\": {\n      \"object_cid\": \"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n      \"set_cid\": \"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\n      \"transaction_hash\": \"0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\n      \"user_address\": \"0xdddddddddddddddddddddddddddddddddddddddd\",\n      \"chain_id\": 8453,\n      \"timestamp\": \"2026-10-09T14:20:00Z\"\n    },\n    \"error_code\": null\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Download or verify a forecast timestamp receipt",
@@ -321,7 +634,60 @@
             },
             "description": "Default response is the exact canonical UTF-8 manifest committed by SHA3-256, including a private random nonce, forecast values, input cutoff and generation time. Keep these bytes unchanged when verifying. X-VBase-Content-CID identifies the committed bytes. verify=true recomputes the saved content CID and looks up the stamp in Quantura's vBase collection/account, returning content_matches, stamp_found and verified_at in the data envelope. format=envelope returns manifest_utf8 and provenance for authenticated browser downloads. Receipt verification proves content/time, not accuracy or prospective publication before the stamp time. Reads do not create stamps or write Firestore documents."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/ensemble-forecasts/:forecast_id/proof",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "ensemble-forecasts",
+                    ":forecast_id",
+                    "proof"
+                  ],
+                  "query": [
+                    {
+                      "key": "verify",
+                      "value": "false",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "format",
+                      "value": "manifest",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "forecast_id",
+                      "value": "YOUR_FORECAST_ID",
+                      "description": ""
+                    }
+                  ]
+                },
+                "description": "Default response is the exact canonical UTF-8 manifest committed by SHA3-256, including a private random nonce, forecast values, input cutoff and generation time. Keep these bytes unchanged when verifying. X-VBase-Content-CID identifies the committed bytes. verify=true recomputes the saved content CID and looks up the stamp in Quantura's vBase collection/account, returning content_matches, stamp_found and verified_at in the data envelope. format=envelope returns manifest_utf8 and provenance for authenticated browser downloads. Receipt verification proves content/time, not accuracy or prospective publication before the stamp time. Reads do not create stamps or write Firestore documents."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"schema_version\": \"quantura_forecast_proof_v1\",\n  \"nonce\": \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\n  \"forecast_id\": \"example\",\n  \"generated_at\": \"2026-10-09T14:17:00Z\",\n  \"input_cutoff_at\": \"2026-10-08T20:00:00Z\",\n  \"source\": {\n    \"type\": \"ticker\",\n    \"provider\": \"alpaca\",\n    \"symbol\": \"SPY\"\n  },\n  \"configuration\": {\n    \"frequency\": \"1D\",\n    \"quantiles\": [\n      0.1,\n      0.5,\n      0.9\n    ]\n  },\n  \"model_checkpoints\": {},\n  \"model_revisions\": {},\n  \"output\": {\n    \"predictions\": [\n      {\n        \"timestamp\": \"2026-10-09T20:00:00Z\",\n        \"quantiles\": {\n          \"0.1\": 100,\n          \"0.5\": 110,\n          \"0.9\": 120\n        }\n      }\n    ]\n  }\n}"
+            }
+          ]
         }
       ]
     },
@@ -368,7 +734,60 @@
             },
             "description": "Open the exact published weekly forecast for a screener ticker"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/screener/forecasts/:ticker",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "screener",
+                    "forecasts",
+                    ":ticker"
+                  ],
+                  "query": [
+                    {
+                      "key": "scan_id",
+                      "value": "",
+                      "disabled": false,
+                      "description": "Exact published scan; old scan returns 404, never silently substitutes a new one."
+                    },
+                    {
+                      "key": "format",
+                      "value": "",
+                      "disabled": true,
+                      "description": "Optional attachment; omit for JSON data envelope."
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "ticker",
+                      "value": "AAPL",
+                      "description": ""
+                    }
+                  ]
+                },
+                "description": "Open the exact published weekly forecast for a screener ticker"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"forecast_id\": \"screener-example-TEST\",\n    \"status\": \"completed\",\n    \"prediction_length\": 7,\n    \"horizon_mode\": \"trading_sessions\",\n    \"frequency\": \"1D\",\n    \"published_screener\": {\n      \"ticker\": \"TEST\",\n      \"scan_id\": \"example\"\n    },\n    \"predictions\": [\n      {\n        \"timestamp\": \"2026-09-21T00:00:00Z\",\n        \"quantiles\": {\n          \"0.01\": 80,\n          \"0.1\": 90,\n          \"0.25\": 95,\n          \"0.5\": 100,\n          \"0.75\": 105,\n          \"0.9\": 110,\n          \"0.99\": 120\n        }\n      }\n    ],\n    \"history\": [\n      {\n        \"timestamp\": \"2026-09-17T00:00:00Z\",\n        \"target\": 99\n      }\n    ]\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get screener observations",
@@ -405,7 +824,55 @@
             },
             "description": "Retrieve observed stock closes for the published screener forecast chart"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/screener/forecasts/:ticker/observations",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "screener",
+                    "forecasts",
+                    ":ticker",
+                    "observations"
+                  ],
+                  "query": [
+                    {
+                      "key": "scan_id",
+                      "value": "",
+                      "disabled": false,
+                      "description": "Exact published scan; old scan returns 404, never silently substitutes a new one."
+                    }
+                  ],
+                  "variable": [
+                    {
+                      "key": "ticker",
+                      "value": "AAPL",
+                      "description": ""
+                    }
+                  ]
+                },
+                "description": "Retrieve observed stock closes for the published screener forecast chart"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"rows\": [\n      {\n        \"timestamp\": \"2026-09-18T20:00:00Z\",\n        \"target\": 100,\n        \"interval\": \"1min\",\n        \"provider\": \"alpaca\"\n      }\n    ],\n    \"availability\": \"available\",\n    \"observed_at\": \"2026-09-18T20:01:00Z\"\n  }\n}"
+            }
+          ]
         }
       ]
     },
@@ -462,7 +929,256 @@
             },
             "description": "Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Optional ranking orders verified candidates; it cannot invent or select a contract."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "AAPL",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "mode",
+                      "value": "open",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "limit",
+                      "value": "8",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "rank",
+                      "value": "false",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Optional ranking orders verified candidates; it cannot invent or select a contract."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": true,\n  \"query\": \"AAPL\",\n  \"count\": 1,\n  \"groups\": {\n    \"alpaca\": [\n      {\n        \"resource_type\": \"instrument\",\n        \"resource_id\": \"alpaca:AAPL\",\n        \"symbol\": \"AAPL\",\n        \"name\": \"Apple Inc.\",\n        \"asset_class\": \"equity\",\n        \"source\": \"alpaca\",\n        \"exchange\": \"NASDAQ\",\n        \"history_available\": true,\n        \"forecast_available\": true\n      }\n    ]\n  },\n  \"errors\": {},\n  \"coverage\": \"Bounded provider discovery.\"\n}"
+            },
+            {
+              "name": "400 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "AAPL",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "mode",
+                      "value": "open",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "limit",
+                      "value": "8",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "rank",
+                      "value": "false",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Optional ranking orders verified candidates; it cannot invent or select a contract."
+              },
+              "status": "OK",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "422 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "AAPL",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "mode",
+                      "value": "open",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "limit",
+                      "value": "8",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "rank",
+                      "value": "false",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Optional ranking orders verified candidates; it cannot invent or select a contract."
+              },
+              "status": "OK",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "429 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search"
+                  ],
+                  "query": [
+                    {
+                      "key": "q",
+                      "value": "AAPL",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "mode",
+                      "value": "open",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "limit",
+                      "value": "8",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "rank",
+                      "value": "false",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Bounded provider discovery, not an exhaustive index. Inspect errors and coverage. Optional ranking orders verified candidates; it cannot invent or select a contract."
+              },
+              "status": "OK",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            }
+          ]
         },
         {
           "name": "Browse Dukascopy instruments",
@@ -504,7 +1220,112 @@
             },
             "description": "Browse every instrument in the complete Dukascopy catalog"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/dukascopy/instruments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "dukascopy",
+                    "instruments"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "offset",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "limit",
+                      "value": "100",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Browse every instrument in the complete Dukascopy catalog"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": true,\n  \"provider\": \"dukascopy\",\n  \"instruments\": [],\n  \"total\": 1504,\n  \"next_offset\": 100,\n  \"stale\": false\n}"
+            },
+            {
+              "name": "422 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/dukascopy/instruments",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "dukascopy",
+                    "instruments"
+                  ],
+                  "query": [
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "offset",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "limit",
+                      "value": "100",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Browse every instrument in the complete Dukascopy catalog"
+              },
+              "status": "OK",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            }
+          ]
         },
         {
           "name": "Resolve market link",
@@ -533,7 +1354,164 @@
             },
             "description": "Only approved provider links. Choose the returned outcome/side explicitly. Use event browsing to discover related props and other contracts."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/resolve",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "resolve"
+                  ],
+                  "query": [
+                    {
+                      "key": "url",
+                      "value": "https://kalshi.com",
+                      "disabled": false,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Only approved provider links. Choose the returned outcome/side explicitly. Use event browsing to discover related props and other contracts."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": true,\n  \"count\": 1,\n  \"groups\": {\n    \"kalshi\": [\n      {\n        \"resource_type\": \"prediction_market_contract\",\n        \"resource_id\": \"kalshi:EXAMPLE-GAME-HOME:YES\",\n        \"symbol\": \"EXAMPLE-GAME-HOME\",\n        \"name\": \"Home · Home vs Away\",\n        \"asset_class\": \"prediction_market\",\n        \"source\": \"kalshi\",\n        \"exchange\": \"Kalshi\",\n        \"unit\": \"decimal probability (0–1)\",\n        \"history_available\": true,\n        \"forecast_available\": true,\n        \"event_id\": \"EXAMPLE-GAME\",\n        \"market_id\": \"EXAMPLE-GAME-HOME\",\n        \"contract_id\": \"EXAMPLE-GAME-HOME:YES\",\n        \"side\": \"yes\",\n        \"outcome\": \"Home\",\n        \"contract\": {\n          \"source\": \"kalshi\",\n          \"eventId\": \"EXAMPLE-GAME\",\n          \"marketId\": \"EXAMPLE-GAME-HOME\",\n          \"contractId\": \"EXAMPLE-GAME-HOME:YES\",\n          \"providerSymbol\": \"EXAMPLE-GAME-HOME\",\n          \"side\": \"yes\",\n          \"outcome\": \"Home\",\n          \"eventTitle\": \"Home vs Away\",\n          \"marketTitle\": \"Home to win\"\n        }\n      }\n    ]\n  },\n  \"errors\": {},\n  \"coverage\": \"Provider-verified contracts for this link.\"\n}"
+            },
+            {
+              "name": "404 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/resolve",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "resolve"
+                  ],
+                  "query": [
+                    {
+                      "key": "url",
+                      "value": "https://kalshi.com",
+                      "disabled": false,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Only approved provider links. Choose the returned outcome/side explicitly. Use event browsing to discover related props and other contracts."
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "422 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/resolve",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "resolve"
+                  ],
+                  "query": [
+                    {
+                      "key": "url",
+                      "value": "https://kalshi.com",
+                      "disabled": false,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Only approved provider links. Choose the returned outcome/side explicitly. Use event browsing to discover related props and other contracts."
+              },
+              "status": "OK",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "502 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/resolve",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "resolve"
+                  ],
+                  "query": [
+                    {
+                      "key": "url",
+                      "value": "https://kalshi.com",
+                      "disabled": false,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Only approved provider links. Choose the returned outcome/side explicitly. Use event browsing to discover related props and other contracts."
+              },
+              "status": "OK",
+              "code": 502,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            }
+          ]
         },
         {
           "name": "Browse event markets",
@@ -574,7 +1552,263 @@
             },
             "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins."
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/event",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "event"
+                  ],
+                  "query": [
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "event_id",
+                      "value": "",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": true,\n  \"source\": \"kalshi\",\n  \"event_id\": \"EXAMPLE-GAME\",\n  \"title\": \"Example game\",\n  \"count\": 0,\n  \"groups\": {\n    \"kalshi\": []\n  },\n  \"related_events\": [\n    {\n      \"event_id\": \"EXAMPLE-TOTAL\",\n      \"label\": \"EXAMPLE-TOTAL\",\n      \"group\": \"Totals\"\n    }\n  ],\n  \"related_complete\": true,\n  \"next_cursor\": null,\n  \"total_contracts\": null,\n  \"coverage\": \"Paged live and archived contracts for this event.\"\n}"
+            },
+            {
+              "name": "404 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/event",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "event"
+                  ],
+                  "query": [
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "event_id",
+                      "value": "",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins."
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "422 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/event",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "event"
+                  ],
+                  "query": [
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "event_id",
+                      "value": "",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins."
+              },
+              "status": "OK",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "429 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/event",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "event"
+                  ],
+                  "query": [
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "event_id",
+                      "value": "",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins."
+              },
+              "status": "OK",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "502 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/event",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "event"
+                  ],
+                  "query": [
+                    {
+                      "key": "source",
+                      "value": "auto",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "event_id",
+                      "value": "",
+                      "disabled": false,
+                      "description": ""
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Use the returned Polymarket event_slug or Kalshi event_id. Follow next_cursor unchanged for this same event. Kalshi related_events use official game links; follow each branch independently. No inferred cross-venue joins."
+              },
+              "status": "OK",
+              "code": 502,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            }
+          ]
         },
         {
           "name": "Get search capabilities",
@@ -596,7 +1830,72 @@
             },
             "description": "List provider capabilities before selecting markets or intervals"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/capabilities",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "capabilities"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "List provider capabilities before selecting markets or intervals"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": true,\n  \"providers\": {\n    \"kalshi\": {\n      \"label\": \"Kalshi\",\n      \"assetClasses\": [\n        \"prediction_market\"\n      ],\n      \"search\": true,\n      \"history\": true,\n      \"forecasting\": [\n        \"prediction_market\"\n      ],\n      \"redistributionStatus\": \"review_required\"\n    }\n  }\n}"
+            },
+            {
+              "name": "429 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-search/capabilities",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-search",
+                    "capabilities"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "List provider capabilities before selecting markets or intervals"
+              },
+              "status": "OK",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            }
+          ]
         }
       ]
     },
@@ -637,7 +1936,284 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.\n\nRequest schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"symbol\"\n      ],\n      \"properties\": {\n        \"symbol\": {\n          \"type\": \"string\"\n        },\n        \"contractSymbol\": {\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"alpaca\",\n            \"dukascopy\",\n            \"kalshi_perps\"\n          ],\n          \"default\": \"auto\"\n        },\n        \"price_side\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"bid\",\n            \"ask\"\n          ],\n          \"default\": \"bid\"\n        },\n        \"page_mode\": {\n          \"type\": \"boolean\",\n          \"description\": \"Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings.\"\n        },\n        \"cursor\": {\n          \"type\": \"string\"\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"timeframe\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ]\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50000,\n          \"description\": \"Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000).\"\n        },\n        \"adjustment\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"split\",\n            \"all\"\n          ]\n        },\n        \"session\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"regular\",\n            \"extended\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ]\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ],\n          \"description\": \"Alias for timeframe. Perpetuals support the same completed-bar frequencies.\"\n        }\n      }\n    },\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"source\",\n        \"contracts\",\n        \"start\",\n        \"end\"\n      ],\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"kalshi\",\n            \"polymarket_us\"\n          ]\n        },\n        \"contracts\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 25,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\n              \"source\",\n              \"eventId\",\n              \"marketId\",\n              \"contractId\",\n              \"providerSymbol\",\n              \"side\"\n            ],\n            \"properties\": {\n              \"source\": {\n                \"type\": \"string\"\n              },\n              \"eventId\": {\n                \"type\": \"string\"\n              },\n              \"marketId\": {\n                \"type\": \"string\"\n              },\n              \"contractId\": {\n                \"type\": \"string\"\n              },\n              \"providerSymbol\": {\n                \"type\": \"string\"\n              },\n              \"side\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"yes\",\n                  \"no\",\n                  \"long\",\n                  \"short\"\n                ]\n              }\n            }\n          }\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1h\",\n            \"4h\",\n            \"1d\",\n            \"1w\",\n            \"1month\",\n            \"final\"\n          ]\n        },\n        \"history_phase\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"both\",\n            \"pregame\",\n            \"in_game\"\n          ]\n        },\n        \"mode\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"normalized\",\n            \"raw\",\n            \"canvas\"\n          ]\n        },\n        \"target\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"price\",\n            \"bid\",\n            \"ask\",\n            \"midpoint\"\n          ]\n        },\n        \"missing\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"leave\",\n            \"drop\",\n            \"forward_fill\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ],\n          \"default\": \"csv\"\n        }\n      }\n    }\n  ]\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": \"alpaca\",\n  \"symbol\": \"AAPL\",\n  \"timeframe\": \"1Day\",\n  \"limit\": 500,\n  \"format\": \"json\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": true,\n  \"count\": 0,\n  \"rows\": []\n}"
+            },
+            {
+              "name": "404 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.\n\nRequest schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"symbol\"\n      ],\n      \"properties\": {\n        \"symbol\": {\n          \"type\": \"string\"\n        },\n        \"contractSymbol\": {\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"alpaca\",\n            \"dukascopy\",\n            \"kalshi_perps\"\n          ],\n          \"default\": \"auto\"\n        },\n        \"price_side\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"bid\",\n            \"ask\"\n          ],\n          \"default\": \"bid\"\n        },\n        \"page_mode\": {\n          \"type\": \"boolean\",\n          \"description\": \"Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings.\"\n        },\n        \"cursor\": {\n          \"type\": \"string\"\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"timeframe\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ]\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50000,\n          \"description\": \"Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000).\"\n        },\n        \"adjustment\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"split\",\n            \"all\"\n          ]\n        },\n        \"session\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"regular\",\n            \"extended\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ]\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ],\n          \"description\": \"Alias for timeframe. Perpetuals support the same completed-bar frequencies.\"\n        }\n      }\n    },\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"source\",\n        \"contracts\",\n        \"start\",\n        \"end\"\n      ],\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"kalshi\",\n            \"polymarket_us\"\n          ]\n        },\n        \"contracts\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 25,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\n              \"source\",\n              \"eventId\",\n              \"marketId\",\n              \"contractId\",\n              \"providerSymbol\",\n              \"side\"\n            ],\n            \"properties\": {\n              \"source\": {\n                \"type\": \"string\"\n              },\n              \"eventId\": {\n                \"type\": \"string\"\n              },\n              \"marketId\": {\n                \"type\": \"string\"\n              },\n              \"contractId\": {\n                \"type\": \"string\"\n              },\n              \"providerSymbol\": {\n                \"type\": \"string\"\n              },\n              \"side\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"yes\",\n                  \"no\",\n                  \"long\",\n                  \"short\"\n                ]\n              }\n            }\n          }\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1h\",\n            \"4h\",\n            \"1d\",\n            \"1w\",\n            \"1month\",\n            \"final\"\n          ]\n        },\n        \"history_phase\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"both\",\n            \"pregame\",\n            \"in_game\"\n          ]\n        },\n        \"mode\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"normalized\",\n            \"raw\",\n            \"canvas\"\n          ]\n        },\n        \"target\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"price\",\n            \"bid\",\n            \"ask\",\n            \"midpoint\"\n          ]\n        },\n        \"missing\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"leave\",\n            \"drop\",\n            \"forward_fill\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ],\n          \"default\": \"csv\"\n        }\n      }\n    }\n  ]\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": \"alpaca\",\n  \"symbol\": \"AAPL\",\n  \"timeframe\": \"1Day\",\n  \"limit\": 500,\n  \"format\": \"json\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "422 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.\n\nRequest schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"symbol\"\n      ],\n      \"properties\": {\n        \"symbol\": {\n          \"type\": \"string\"\n        },\n        \"contractSymbol\": {\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"alpaca\",\n            \"dukascopy\",\n            \"kalshi_perps\"\n          ],\n          \"default\": \"auto\"\n        },\n        \"price_side\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"bid\",\n            \"ask\"\n          ],\n          \"default\": \"bid\"\n        },\n        \"page_mode\": {\n          \"type\": \"boolean\",\n          \"description\": \"Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings.\"\n        },\n        \"cursor\": {\n          \"type\": \"string\"\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"timeframe\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ]\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50000,\n          \"description\": \"Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000).\"\n        },\n        \"adjustment\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"split\",\n            \"all\"\n          ]\n        },\n        \"session\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"regular\",\n            \"extended\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ]\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ],\n          \"description\": \"Alias for timeframe. Perpetuals support the same completed-bar frequencies.\"\n        }\n      }\n    },\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"source\",\n        \"contracts\",\n        \"start\",\n        \"end\"\n      ],\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"kalshi\",\n            \"polymarket_us\"\n          ]\n        },\n        \"contracts\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 25,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\n              \"source\",\n              \"eventId\",\n              \"marketId\",\n              \"contractId\",\n              \"providerSymbol\",\n              \"side\"\n            ],\n            \"properties\": {\n              \"source\": {\n                \"type\": \"string\"\n              },\n              \"eventId\": {\n                \"type\": \"string\"\n              },\n              \"marketId\": {\n                \"type\": \"string\"\n              },\n              \"contractId\": {\n                \"type\": \"string\"\n              },\n              \"providerSymbol\": {\n                \"type\": \"string\"\n              },\n              \"side\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"yes\",\n                  \"no\",\n                  \"long\",\n                  \"short\"\n                ]\n              }\n            }\n          }\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1h\",\n            \"4h\",\n            \"1d\",\n            \"1w\",\n            \"1month\",\n            \"final\"\n          ]\n        },\n        \"history_phase\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"both\",\n            \"pregame\",\n            \"in_game\"\n          ]\n        },\n        \"mode\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"normalized\",\n            \"raw\",\n            \"canvas\"\n          ]\n        },\n        \"target\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"price\",\n            \"bid\",\n            \"ask\",\n            \"midpoint\"\n          ]\n        },\n        \"missing\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"leave\",\n            \"drop\",\n            \"forward_fill\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ],\n          \"default\": \"csv\"\n        }\n      }\n    }\n  ]\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": \"alpaca\",\n  \"symbol\": \"AAPL\",\n  \"timeframe\": \"1Day\",\n  \"limit\": 500,\n  \"format\": \"json\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 422,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "429 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.\n\nRequest schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"symbol\"\n      ],\n      \"properties\": {\n        \"symbol\": {\n          \"type\": \"string\"\n        },\n        \"contractSymbol\": {\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"alpaca\",\n            \"dukascopy\",\n            \"kalshi_perps\"\n          ],\n          \"default\": \"auto\"\n        },\n        \"price_side\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"bid\",\n            \"ask\"\n          ],\n          \"default\": \"bid\"\n        },\n        \"page_mode\": {\n          \"type\": \"boolean\",\n          \"description\": \"Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings.\"\n        },\n        \"cursor\": {\n          \"type\": \"string\"\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"timeframe\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ]\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50000,\n          \"description\": \"Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000).\"\n        },\n        \"adjustment\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"split\",\n            \"all\"\n          ]\n        },\n        \"session\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"regular\",\n            \"extended\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ]\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ],\n          \"description\": \"Alias for timeframe. Perpetuals support the same completed-bar frequencies.\"\n        }\n      }\n    },\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"source\",\n        \"contracts\",\n        \"start\",\n        \"end\"\n      ],\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"kalshi\",\n            \"polymarket_us\"\n          ]\n        },\n        \"contracts\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 25,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\n              \"source\",\n              \"eventId\",\n              \"marketId\",\n              \"contractId\",\n              \"providerSymbol\",\n              \"side\"\n            ],\n            \"properties\": {\n              \"source\": {\n                \"type\": \"string\"\n              },\n              \"eventId\": {\n                \"type\": \"string\"\n              },\n              \"marketId\": {\n                \"type\": \"string\"\n              },\n              \"contractId\": {\n                \"type\": \"string\"\n              },\n              \"providerSymbol\": {\n                \"type\": \"string\"\n              },\n              \"side\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"yes\",\n                  \"no\",\n                  \"long\",\n                  \"short\"\n                ]\n              }\n            }\n          }\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1h\",\n            \"4h\",\n            \"1d\",\n            \"1w\",\n            \"1month\",\n            \"final\"\n          ]\n        },\n        \"history_phase\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"both\",\n            \"pregame\",\n            \"in_game\"\n          ]\n        },\n        \"mode\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"normalized\",\n            \"raw\",\n            \"canvas\"\n          ]\n        },\n        \"target\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"price\",\n            \"bid\",\n            \"ask\",\n            \"midpoint\"\n          ]\n        },\n        \"missing\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"leave\",\n            \"drop\",\n            \"forward_fill\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ],\n          \"default\": \"csv\"\n        }\n      }\n    }\n  ]\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": \"alpaca\",\n  \"symbol\": \"AAPL\",\n  \"timeframe\": \"1Day\",\n  \"limit\": 500,\n  \"format\": \"json\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "502 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.\n\nRequest schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"symbol\"\n      ],\n      \"properties\": {\n        \"symbol\": {\n          \"type\": \"string\"\n        },\n        \"contractSymbol\": {\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"alpaca\",\n            \"dukascopy\",\n            \"kalshi_perps\"\n          ],\n          \"default\": \"auto\"\n        },\n        \"price_side\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"bid\",\n            \"ask\"\n          ],\n          \"default\": \"bid\"\n        },\n        \"page_mode\": {\n          \"type\": \"boolean\",\n          \"description\": \"Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings.\"\n        },\n        \"cursor\": {\n          \"type\": \"string\"\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"timeframe\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ]\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50000,\n          \"description\": \"Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000).\"\n        },\n        \"adjustment\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"split\",\n            \"all\"\n          ]\n        },\n        \"session\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"regular\",\n            \"extended\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ]\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ],\n          \"description\": \"Alias for timeframe. Perpetuals support the same completed-bar frequencies.\"\n        }\n      }\n    },\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"source\",\n        \"contracts\",\n        \"start\",\n        \"end\"\n      ],\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"kalshi\",\n            \"polymarket_us\"\n          ]\n        },\n        \"contracts\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 25,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\n              \"source\",\n              \"eventId\",\n              \"marketId\",\n              \"contractId\",\n              \"providerSymbol\",\n              \"side\"\n            ],\n            \"properties\": {\n              \"source\": {\n                \"type\": \"string\"\n              },\n              \"eventId\": {\n                \"type\": \"string\"\n              },\n              \"marketId\": {\n                \"type\": \"string\"\n              },\n              \"contractId\": {\n                \"type\": \"string\"\n              },\n              \"providerSymbol\": {\n                \"type\": \"string\"\n              },\n              \"side\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"yes\",\n                  \"no\",\n                  \"long\",\n                  \"short\"\n                ]\n              }\n            }\n          }\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1h\",\n            \"4h\",\n            \"1d\",\n            \"1w\",\n            \"1month\",\n            \"final\"\n          ]\n        },\n        \"history_phase\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"both\",\n            \"pregame\",\n            \"in_game\"\n          ]\n        },\n        \"mode\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"normalized\",\n            \"raw\",\n            \"canvas\"\n          ]\n        },\n        \"target\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"price\",\n            \"bid\",\n            \"ask\",\n            \"midpoint\"\n          ]\n        },\n        \"missing\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"leave\",\n            \"drop\",\n            \"forward_fill\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ],\n          \"default\": \"csv\"\n        }\n      }\n    }\n  ]\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": \"alpaca\",\n  \"symbol\": \"AAPL\",\n  \"timeframe\": \"1Day\",\n  \"limit\": 500,\n  \"format\": \"json\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 502,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            },
+            {
+              "name": "503 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.\n\nRequest schema:\n```json\n{\n  \"oneOf\": [\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"symbol\"\n      ],\n      \"properties\": {\n        \"symbol\": {\n          \"type\": \"string\"\n        },\n        \"contractSymbol\": {\n          \"type\": \"string\"\n        },\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"alpaca\",\n            \"dukascopy\",\n            \"kalshi_perps\"\n          ],\n          \"default\": \"auto\"\n        },\n        \"price_side\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"bid\",\n            \"ask\"\n          ],\n          \"default\": \"bid\"\n        },\n        \"page_mode\": {\n          \"type\": \"boolean\",\n          \"description\": \"Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings.\"\n        },\n        \"cursor\": {\n          \"type\": \"string\"\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"timeframe\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ]\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50000,\n          \"description\": \"Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000).\"\n        },\n        \"adjustment\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"split\",\n            \"all\"\n          ]\n        },\n        \"session\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"regular\",\n            \"extended\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ]\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"1min\",\n            \"5min\",\n            \"15min\",\n            \"30min\",\n            \"1h\",\n            \"4h\",\n            \"1D\",\n            \"1W-MON\",\n            \"1MS\",\n            \"1Min\",\n            \"5Min\",\n            \"15Min\",\n            \"30Min\",\n            \"1Hour\",\n            \"4Hour\",\n            \"1Day\",\n            \"1Week\",\n            \"1Month\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1w\"\n          ],\n          \"description\": \"Alias for timeframe. Perpetuals support the same completed-bar frequencies.\"\n        }\n      }\n    },\n    {\n      \"type\": \"object\",\n      \"required\": [\n        \"source\",\n        \"contracts\",\n        \"start\",\n        \"end\"\n      ],\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"kalshi\",\n            \"polymarket_us\"\n          ]\n        },\n        \"contracts\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"maxItems\": 25,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\n              \"source\",\n              \"eventId\",\n              \"marketId\",\n              \"contractId\",\n              \"providerSymbol\",\n              \"side\"\n            ],\n            \"properties\": {\n              \"source\": {\n                \"type\": \"string\"\n              },\n              \"eventId\": {\n                \"type\": \"string\"\n              },\n              \"marketId\": {\n                \"type\": \"string\"\n              },\n              \"contractId\": {\n                \"type\": \"string\"\n              },\n              \"providerSymbol\": {\n                \"type\": \"string\"\n              },\n              \"side\": {\n                \"type\": \"string\",\n                \"enum\": [\n                  \"yes\",\n                  \"no\",\n                  \"long\",\n                  \"short\"\n                ]\n              }\n            }\n          }\n        },\n        \"start\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"end\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"frequency\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"raw\",\n            \"1m\",\n            \"5m\",\n            \"15m\",\n            \"30m\",\n            \"1h\",\n            \"4h\",\n            \"1d\",\n            \"1w\",\n            \"1month\",\n            \"final\"\n          ]\n        },\n        \"history_phase\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"auto\",\n            \"both\",\n            \"pregame\",\n            \"in_game\"\n          ]\n        },\n        \"mode\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"normalized\",\n            \"raw\",\n            \"canvas\"\n          ]\n        },\n        \"target\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"price\",\n            \"bid\",\n            \"ask\",\n            \"midpoint\"\n          ]\n        },\n        \"missing\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"leave\",\n            \"drop\",\n            \"forward_fill\"\n          ]\n        },\n        \"format\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"json\",\n            \"csv\"\n          ],\n          \"default\": \"csv\"\n        }\n      }\n    }\n  ]\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"source\": \"alpaca\",\n  \"symbol\": \"AAPL\",\n  \"timeframe\": \"1Day\",\n  \"limit\": 500,\n  \"format\": \"json\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 503,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ok\": false,\n  \"error\": \"event_query_invalid\",\n  \"message\": \"Choose a provider event and a valid continuation cursor.\"\n}"
+            }
+          ]
         }
       ]
     },
@@ -689,7 +2265,65 @@
             },
             "description": "Search BigQuery public tables, Treasury Fiscal Data or World Bank Data360 indicators"
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/economic-data/search",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "economic-data",
+                    "search"
+                  ],
+                  "query": [
+                    {
+                      "key": "provider",
+                      "value": "fiscaldata",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "q",
+                      "value": "AAPL",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "limit",
+                      "value": "10",
+                      "disabled": true,
+                      "description": ""
+                    },
+                    {
+                      "key": "offset",
+                      "value": "0",
+                      "disabled": true,
+                      "description": ""
+                    }
+                  ],
+                  "variable": []
+                },
+                "description": "Search BigQuery public tables, Treasury Fiscal Data or World Bank Data360 indicators"
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"success\": true\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Inspect a series's dimensions, values, and units",
@@ -725,7 +2359,54 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/economic-data/describe",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "economic-data",
+                    "describe"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Inspect a series's dimensions, values, and units\n\nRequest schema:\n```json\n{\n  \"$ref\": \"#/components/schemas/EconomicSeriesSource\"\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"success\": true\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Download a single observed economic time series",
@@ -761,7 +2442,54 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/economic-data/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "economic-data",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Download a single observed economic time series\n\nRequest schema:\n```json\n{\n  \"$ref\": \"#/components/schemas/EconomicSeriesSource\"\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"success\": true\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         }
       ]
     },
@@ -803,7 +2531,55 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/gemini/history",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "gemini",
+                    "history"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Download Completed Historical Spot Candles From Gemini Exchange\n\nRequest schema:\n```json\n{\n  \"type\": \"object\",\n  \"required\": [\n    \"symbol\"\n  ],\n  \"properties\": {\n    \"symbol\": {\n      \"type\": \"string\"\n    },\n    \"frequency\": {\n      \"type\": \"string\",\n      \"enum\": [\n        \"1min\",\n        \"5min\",\n        \"15min\",\n        \"30min\",\n        \"1h\",\n        \"4h\",\n        \"1D\",\n        \"1W-MON\",\n        \"1MS\",\n        \"1Min\",\n        \"5Min\",\n        \"15Min\",\n        \"30Min\",\n        \"1Hour\",\n        \"4Hour\",\n        \"1Day\",\n        \"1Week\",\n        \"1Month\",\n        \"1m\",\n        \"5m\",\n        \"15m\",\n        \"30m\",\n        \"1w\"\n      ]\n    },\n    \"limit\": {\n      \"type\": \"integer\",\n      \"minimum\": 2,\n      \"maximum\": 50000\n    },\n    \"start\": {\n      \"type\": \"string\"\n    },\n    \"end\": {\n      \"type\": \"string\"\n    }\n  }\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"success\": true\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get Verified Gemini Prediction Contract Observations and History Availability",
@@ -840,7 +2616,55 @@
               }
             }
           },
-          "response": []
+          "response": [
+            {
+              "name": "200 (illustrative example)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/v1/market-data/gemini/prediction-contract",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "v1",
+                    "market-data",
+                    "gemini",
+                    "prediction-contract"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "description": "Get Verified Gemini Prediction Contract Observations and History Availability\n\nRequest schema:\n```json\n{\n  \"type\": \"object\",\n  \"required\": [\n    \"event_id\",\n    \"contract_id\"\n  ],\n  \"properties\": {\n    \"event_id\": {\n      \"type\": \"string\"\n    },\n    \"contract_id\": {\n      \"type\": \"string\"\n    },\n    \"symbol\": {\n      \"type\": \"string\"\n    }\n  }\n}\n```",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"success\": true\n  },\n  \"meta\": {\n    \"api_version\": \"v1\"\n  }\n}"
+            }
+          ]
         }
       ]
     }

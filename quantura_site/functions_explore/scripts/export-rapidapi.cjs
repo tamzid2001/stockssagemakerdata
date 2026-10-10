@@ -83,7 +83,13 @@ for(const [route,methods] of Object.entries(document.paths))for(const [method,op
   const url={raw:'{{baseUrl}}/'+pathSegments.join('/'),host:['{{baseUrl}}'],path:pathSegments,query,variable:(operation.parameters||[]).filter(p=>p.in==='path').map(p=>({key:p.name,value:p.name==='ticker'?'AAPL':'YOUR_FORECAST_ID',description:p.description||''}))};
   const request={method:method.toUpperCase(),header:method==='post'?[{key:'Content-Type',value:'application/json'}]:[],url,description:[operation.description||operation.summary,body?.schema?'Request schema:\n```json\n'+JSON.stringify(body.schema,null,2)+'\n```':''].filter(Boolean).join('\n\n')};
   if(body)request.body={mode:'raw',raw:JSON.stringify(example||{},null,2),options:{raw:{language:'json'}}};
-  groups.get(group).push({name:summaries[operation.operationId]||operation.summary,request,response:[]});
+  const responses=Object.entries(operation.responses||{}).flatMap(([code,response])=>{
+    const content=response.content?.['application/json'];
+    const value=content?.example||Object.values(content?.examples||{})[0]?.value;
+    if(!value)return [];
+    return [{name:`${code} (illustrative example)`,originalRequest:request,status:Number(code)===202?'Accepted':'OK',code:Number(code),_postman_previewlanguage:'json',header:[{key:'Content-Type',value:'application/json'}],cookie:[],body:JSON.stringify(value,null,2)}];
+  });
+  groups.get(group).push({name:summaries[operation.operationId]||operation.summary,request,response:responses});
 }
 const collection={info:{name:'Quantura',description:document.info.description,schema:'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'},variable:[{key:'baseUrl',value:'https://quantura.studio/api',type:'string'}],item:[...groups].map(([name,item])=>({name,item}))};
 const collectionPath=path.resolve(__dirname,'../../..','docs/rapidapi/postman.json');

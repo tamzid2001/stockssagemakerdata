@@ -19,17 +19,17 @@ RapidAPI subscriptions provide the published endpoints using RapidAPI applicatio
 
 Use the base URL and host shown in the Hub code examples, with `X-RapidAPI-Key` and `X-RapidAPI-Host`. Never send a RapidAPI application key directly to quantura.studio as an origin credential. The gateway authenticates the application and subscription before supplying its private origin credential. Each marketplace user has isolated forecast ownership.
 
-All paths below are relative to the RapidAPI base URL. Responses from forecast endpoints use `{ "data": ..., "meta": ... }`; data downloads use `{ "ok": true, "rows": ... }`.
+The current Hub version uses the `/api/v1` prefix. All paths below are relative to the RapidAPI base URL. Responses from forecast endpoints use `{ "data": ..., "meta": ... }`; data downloads use `{ "ok": true, "rows": ... }`.
 
 ## 1. Find a market
 
-`GET /v1/market-search?q=bitcoin&source=kalshi_perps&limit=8`
+`GET /api/v1/market-search?q=bitcoin&source=kalshi_perps&limit=8`
 
-Search stocks, Dukascopy instruments, Kalshi perpetuals and Kalshi/Polymarket US events. For a market URL use `/v1/market-search/resolve?url=...`; select an explicit returned contract and side. Use `/v1/market-search/capabilities` for provider coverage. Search results are bounded, not an exhaustive index.
+Search stocks, Dukascopy instruments, Kalshi perpetuals and Kalshi/Polymarket US events. For a market URL use `/api/v1/market-search/resolve?url=...`; select an explicit returned contract and side. Use `/api/v1/market-search/capabilities` for provider coverage. Search results are bounded, not an exhaustive index.
 
 ## 2. Download observed history
 
-`POST /v1/market-data/history`
+`POST /api/v1/market-data/history`
 
 ```json
 {"source":"kalshi_perps","symbol":"KXBTCPERP","frequency":"1h","limit":500,"format":"json"}
@@ -41,9 +41,9 @@ Event history uses `source=kalshi` or `polymarket_us`, full verified `contracts`
 
 ## 3. Create a forecast
 
-First call `GET /v1/forecast/models`. It returns current model availability, minimum history and supported quantiles. Enable only eligible models; requesting unsupported quantiles or insufficient history returns a validation error.
+First call `GET /api/v1/forecast/models`. It returns current model availability, minimum history and supported quantiles. Enable only eligible models; requesting unsupported quantiles or insufficient history returns a validation error.
 
-`POST /v1/ensemble-forecasts` with an `Idempotency-Key` header:
+`POST /api/v1/ensemble-forecasts` with an `Idempotency-Key` header:
 
 ```json
 {
@@ -63,11 +63,11 @@ Supported intervals: 1m, 5m, 15m, 30m, 1h, 4h, daily, weekly and monthly. Read c
 
 ## 4. Read the result
 
-Creation returns HTTP 202 and `data.forecast_id`. Poll `GET /v1/ensemble-forecasts/{forecast_id}` every 10–30 seconds with backoff until `completed` or `failed`. Do not poll more aggressively after 429; honor Retry-After when supplied.
+Creation returns HTTP 202 and `data.forecast_id`. Poll `GET /api/v1/ensemble-forecasts/{forecast_id}` every 10–30 seconds with backoff until `completed` or `failed`. Do not poll more aggressively after 429; honor Retry-After when supplied.
 
-Download with `GET /v1/ensemble-forecasts/{forecast_id}/download?format=csv` or `format=json`. Use `/observations` for actual outcomes, and `/proof` for available provenance. Historical-validation metrics are separate from later realized forecast error. Research forecasts are not guaranteed returns.
+Download with `GET /api/v1/ensemble-forecasts/{forecast_id}/download?format=csv` or `format=json`. Use `/observations` for actual outcomes, and `/proof` for available provenance. Historical-validation metrics are separate from later realized forecast error. Research forecasts are not guaranteed returns.
 
-Published screener ranges are available at `GET /v1/screener/forecasts/{ticker}`. Opening a published result does not create a custom model job.
+Published screener ranges are available at `GET /api/v1/screener/forecasts/{ticker}`. Opening a published result does not create a custom model job.
 
 ## Integration notes
 

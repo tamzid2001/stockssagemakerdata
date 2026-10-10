@@ -39,7 +39,7 @@ test('every published RapidAPI operation passes the scoped origin allowlist; per
     for(const [route,methods] of Object.entries(doc.paths))for(const [method,operation] of Object.entries(methods as any)){
       if(!(operation as any).operationId)continue;
       const pathname=route.replace(/\{[^}]+\}/g,'fixture');
-      assert.ok(rapidApiPrincipal({headers:{'x-rapidapi-proxy-secret':'z'.repeat(48),'x-rapidapi-user':'subscriber','x-rapidapi-subscription':'PRO'},path:pathname,method:method.toUpperCase()} as Request),`${method} ${route}`);
+      assert.ok(rapidApiPrincipal({headers:{'x-rapidapi-proxy-secret':'z'.repeat(48),'x-rapidapi-user':'subscriber','x-rapidapi-subscription':'PRO'},path:pathname,method:method.toUpperCase()} as unknown as Request),`${method} ${route}`);
     }
     assert.ok(doc.paths['/v1/market-data/history']);assert.ok(doc.paths['/v1/ensemble-forecasts']);
     assert.ok(!Object.keys(doc.paths).some(p=>p.includes('/perps/')));
