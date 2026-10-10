@@ -8,6 +8,7 @@ import requests
 
 BASE = "https://www.metaculus.com/api"
 PERMISSIONS = {"forecaster", "curator", "admin", "creator"}
+BOT_FRIENDLY_SLUGS = {"ai-2027"}
 
 
 class ApiError(RuntimeError):
@@ -76,7 +77,10 @@ class Metaculus:
         for project in projects:
             end = date(project.get("forecasting_end_date") or project.get("close_date"))
             start = date(project.get("start_date"))
-            if (project.get("bot_leaderboard_status") in {"bots_only", "include"}
+            explicitly_bot_friendly = (project.get("bot_leaderboard_status") in {"bots_only", "include"}
+                                       or project.get("slug") in BOT_FRIENDLY_SLUGS
+                                       or (project.get("slug") or "").startswith("metaculus-cup-"))
+            if (explicitly_bot_friendly
                     and project.get("user_permission") in PERMISSIONS
                     and project.get("is_ongoing")
                     and (not start or start <= now) and (not end or end > now)):

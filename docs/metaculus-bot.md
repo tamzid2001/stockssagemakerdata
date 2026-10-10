@@ -4,7 +4,9 @@ The Quantura bot discovers open questions in active competitions where Metaculus
 explicitly includes bots and the account has forecast permission. It scans every
 page, unpacks group questions, handles conditional outcomes separately, and checks
 each question's own opening/closing times. Newly eligible competitions are picked
-up automatically. Human tournaments that exclude bots from competition are excluded.
+up automatically. The officially documented bot-friendly Metaculus Cup and AI 2027
+tournaments are included too; bots can forecast there but do not qualify for prizes.
+Other human tournaments that exclude bots from competition are excluded.
 
 ## Operation
 

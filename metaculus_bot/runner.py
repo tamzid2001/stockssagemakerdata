@@ -130,6 +130,7 @@ def run(args, api=None, llm_factory=FreeLLM):
             continue
         attempted += 1
         status = "deferred"
+        stage = "comments_read"
         try:
             comments = api.comments(q.id_of_post, identity["id"])
             record = saved_record(comments, identity["id"], q.id_of_question)
@@ -137,12 +138,14 @@ def run(args, api=None, llm_factory=FreeLLM):
                 if args.engine == "time-series":
                     answer = forecast(q, spec, args.ensemble_python)
                 else:
+                    stage = "free_llm_generation"
                     if llm is None:
                         llm = llm_factory(os.environ["OPENROUTER_API_KEY"])
                     answer = llm.forecast(q, evidence(q))
                 record = {"question_id": q.id_of_question, "generated_at": utcnow().isoformat(), "answer": answer,
                           "question_sha256": question_hash(q)}
                 if args.submit:
+                    stage = "reasoning_write"
                     # Persist the exact generation before forecasting; this also
                     # ensures every submitted forecast has its required reasoning.
                     api.post("comments/create/", {"text": record_text(record), "on_post": q.id_of_post,
@@ -150,7 +153,9 @@ def run(args, api=None, llm_factory=FreeLLM):
             if record["answer"].get("abstain"):
                 status = "abstained"
             else:
+                stage = "distribution_validation"
                 payload(q, record["answer"])
+                stage = "forecast_submission"
                 status = submit(api, q, record) if args.submit else "validated_not_submitted"
         except FreeQuota as error:
             counts["free_quota_deferred"] += 1
@@ -161,6 +166,8 @@ def run(args, api=None, llm_factory=FreeLLM):
             # generated distributions in public Actions logs/artifacts.
             status = "deferred_error"
             log("metaculus_question_error", question_id=q.id_of_question, error_type=type(error).__name__,
+                stage=stage, error_code=error.service if isinstance(error, ApiError) else
+                str(error.args[0]) if error.args and re.fullmatch(r'[A-Za-z0-9_]{1,80}',str(error.args[0])) else None,
                 upstream_status=error.status if isinstance(error, ApiError) else None)
         counts[status] += 1
         summary = {"question_id": q.id_of_question, "post_id": q.id_of_post, "type": q.question_type,

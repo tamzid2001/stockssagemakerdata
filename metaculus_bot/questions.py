@@ -55,6 +55,16 @@ def context(question) -> dict:
 
 def payload(question, answer: dict) -> dict:
     kind = question.question_type
+    # Free-router responses can nest requested fields under `prediction`.
+    # Recover exactly those numbers; never generate a different saved answer.
+    prediction = answer.get("prediction")
+    if isinstance(prediction, dict):
+        if kind == "multiple_choice" and set(prediction) == set(question.options):
+            answer = {**answer, "probabilities": prediction}
+        else:
+            answer = {**answer, **prediction}
+    elif kind == "binary" and isinstance(prediction, (float, int)) and not isinstance(prediction, bool):
+        answer = {**answer, "probability_yes": prediction}
     base = {"question": question.id_of_question, "source": "api", "probability_yes": None,
             "probability_yes_per_category": None, "continuous_cdf": None}
     if kind == "binary":

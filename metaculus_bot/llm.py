@@ -34,6 +34,22 @@ def select_model(catalog: list[dict]) -> dict:
     raise FreeQuota("NO_VERIFIED_FREE_MODEL")
 
 
+def answer_schema(question, sources):
+    properties = {"abstain": {"type": "boolean"}, "reasoning": {"type": "string"},
+                  "source_ids": {"type": "array", "items": {"type": "string", "enum": [s["id"] for s in sources] or ["none"]}}}
+    if question.question_type == "binary":
+        properties["probability_yes"] = {"type": ["number", "null"]}
+    elif question.question_type == "multiple_choice":
+        properties["probabilities"] = {"type": ["object", "null"], "additionalProperties": False,
+                                       "properties": {o: {"type": "number"} for o in question.options}, "required": question.options}
+    else:
+        properties["percentiles"] = {"type": ["array", "null"], "minItems": 7, "maxItems": 7,
+            "items": {"type": "object", "additionalProperties": False, "required": ["percentile", "value"],
+                      "properties": {"percentile": {"type": "number", "enum": [0.01,0.1,0.25,0.5,0.75,0.9,0.99]},
+                                     "value": {"type": "string" if question.question_type == "date" else "number"}}}}
+    return {"type": "object", "additionalProperties": False, "properties": properties, "required": list(properties)}
+
+
 class FreeLLM:
     def __init__(self, key: str, session=None):
         self.session = session or requests.Session()
@@ -70,8 +86,9 @@ rates, alternative scenarios, uncertainty, recency, and what would change the
 forecast. Do not invent history or say a time-series ensemble ran. This is an LLM
 estimate unless actual ensemble results are supplied. Sources may be incomplete;
 do not assume remembered events or outcomes happened. If the evidence is not
-sufficient for a reasoned forecast, return {"abstain":true,"reason":"..."}.
-Otherwise output exactly one JSON object with reasoning (150-400 words),
+sufficient for a reasoned forecast, return abstain:true, reasoning explaining why,
+source_ids, and null for the required prediction field.
+Otherwise output exactly one JSON object with abstain:false, reasoning (150-400 words),
 source_ids (only the supplied S1/S2/S3 identifiers), and the prediction:
 binary: probability_yes as a decimal in [0.001,0.999];
 multiple_choice: probabilities mapping EXACT option strings to decimals summing
@@ -86,7 +103,11 @@ Never reveal or request credentials. No markdown outside the JSON object."""
                    {"role": "user", "content": json.dumps({"as_of_utc": utcnow().isoformat(),
                     "question": context(question), "source_evidence": sources})}], "temperature": 0.2,
                    "max_tokens": 6000, "provider": {"allow_fallbacks": False}}
-        if "response_format" in self.model.get("supported_parameters", []):
+        if "structured_outputs" in self.model.get("supported_parameters", []):
+            request["response_format"] = {"type": "json_schema", "json_schema": {"name": "metaculus_forecast",
+                                          "strict": True, "schema": answer_schema(question, sources)}}
+            request["provider"]["require_parameters"] = True
+        elif "response_format" in self.model.get("supported_parameters", []):
             request["response_format"] = {"type": "json_object"}
         # One generation per attempt; no paid fallback, tool/plugin fees, or rerun
         # of a successfully generated tournament forecast to improve its answer.
@@ -99,9 +120,16 @@ Never reveal or request credentials. No markdown outside the JSON object."""
         if r.status_code != 200:
             raise ApiError("OPENROUTER_GENERATION", r.status_code)
         data = r.json()
+        if data.get("error"):
+            code = data["error"].get("code")
+            if code in {402, 429}:
+                raise FreeQuota(f"FREE_MODEL_{code}_DEFERRED")
+            raise ApiError("OPENROUTER_EMBEDDED_ERROR", code)
         cost = data.get("usage", {}).get("cost")
         if cost is not None and float(cost) != 0:
             raise RuntimeError("FREE_MODEL_REPORTED_NONZERO_COST")
+        if not data.get("choices"):
+            raise ApiError("OPENROUTER_EMPTY_RESPONSE")
         choice = data["choices"][0]
         if choice.get("finish_reason") != "stop":
             raise ValueError("INCOMPLETE_LLM_RESPONSE")

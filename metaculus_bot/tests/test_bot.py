@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from metaculus_bot.api import ApiError, Metaculus
-from metaculus_bot.llm import FreeLLM, FreeQuota, select_model, zero_price
+from metaculus_bot.llm import FreeLLM, FreeQuota, answer_schema, select_model, zero_price
 from metaculus_bot.questions import context, payload, unpack
 from metaculus_bot.research import public_get, public_url
 from metaculus_bot.runner import question_hash, record_text, run, saved_record, submit
@@ -102,6 +102,13 @@ def test_free_pool_preferred_to_single_busy_provider():
     assert select_model(catalog)['id']=='openrouter/free'
 
 
+def test_structured_output_preserves_exact_options(posts):
+    q=one(posts,'multiple_choice');schema=answer_schema(q,[])
+    assert set(schema['properties']['probabilities']['properties'])==set(q.options)
+    assert set(schema['required'])=={'abstain','reasoning','source_ids','probabilities'}
+    assert not schema['additionalProperties']
+
+
 class Response:
     def __init__(self, data=None, status=200):self.data=data;self.status_code=status
     def json(self):return self.data
@@ -132,6 +139,13 @@ def test_429_defers_without_paid_fallback(posts):
 def test_no_community_predictions_in_prompt(posts):
     q=one(posts,'binary');q.api_json['question']['aggregations']={'probability_yes':0.9}
     assert 'aggregations' not in json.dumps(context(q))
+
+
+def test_recover_nested_prediction_without_regeneration(posts):
+    q=one(posts,'binary')
+    assert payload(q,{'prediction':{'probability_yes':.17}})['probability_yes']==.17
+    q=one(posts,'multiple_choice');probs={o:1/len(q.options) for o in q.options}
+    assert payload(q,{'prediction':probs})['probability_yes_per_category']==probs
 
 
 def test_all_competitions_permission_and_deadline_filter():
