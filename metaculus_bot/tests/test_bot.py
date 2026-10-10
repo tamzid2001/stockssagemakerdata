@@ -10,11 +10,11 @@ from types import SimpleNamespace
 import pytest
 
 from metaculus_bot.api import ApiError, Metaculus, RateLimited, competition_policy, eligible_post, eligible_project, retry_seconds
-from metaculus_bot.checkpoint import Checkpoint
+from metaculus_bot.checkpoint import Checkpoint, PrivateNoteLimit, artifact_prefix, restore
 from metaculus_bot.llm import FreeLLM, FreeQuota, answer_schema, select_model, zero_price
 from metaculus_bot.questions import context, payload, unpack
 from metaculus_bot.research import public_get, public_url
-from metaculus_bot.runner import question_hash, question_order, record_text, run, saved_record, submit
+from metaculus_bot.runner import MARKER, answer_hash, question_hash, question_order, record_text, run, saved_note, saved_record, submit
 from metaculus_bot.time_series import definition, history
 
 
@@ -169,12 +169,17 @@ def test_posts_are_paginated():
     assert len(api.posts(123))==102 and calls==[0,100]
 
 
-def test_records_are_owned_and_recover_exact_answer(posts):
+def test_notes_are_concise_owned_and_do_not_publish_recovery_payload(posts):
     q=one(posts,'binary');answer={'probability_yes':.15,'reasoning':'Reasoning','engine':'free_llm','model':'openrouter/free'}
     record={'question_id':q.id_of_question,'generated_at':'2026-10-10T00:00:00Z','answer':answer,'question_sha256':question_hash(q)}
+    record['answer']['reasoning']='Evidence and a relevant uncertainty. '*200
     text=record_text(record)
-    assert saved_record([{'author':{'id':3},'text':text}],3,q.id_of_question)==record
-    assert saved_record([{'author':{'id':2},'text':text}],3,q.id_of_question) is None
+    assert len(text)<2500 and len(text.split('<!--')[0].split())<120
+    assert 'probability_yes' not in text and 'generated_at' not in text and 'question_sha256' not in text
+    assert saved_note([{'author':{'id':3},'text':text}],3,q.id_of_question)=={'question_id':q.id_of_question,'answer_sha256':answer_hash(record)}
+    assert saved_note([{'author':{'id':2},'text':text}],3,q.id_of_question) is None
+    legacy=f'<!-- {MARKER} {json.dumps(record)} -->'
+    assert saved_record([{'author':{'id':3},'text':legacy}],3,q.id_of_question)==record
 
 
 def test_lost_forecast_response_reconciles_without_repost(posts):
@@ -297,7 +302,7 @@ def test_saved_abstentions_do_not_starve_new_questions(posts,monkeypatch,tmp_pat
         def comments(self,post,author):
             self.comment_calls+=1
             assert post is None
-            return [{'author':{'id':1},'text':record_text(saved)}]
+            return [{'author':{'id':1},'text':f'<!-- {MARKER} {json.dumps(saved)} -->'}]
     class Llm:
         calls=0
         def __init__(self,key):pass
@@ -349,6 +354,7 @@ def test_pending_generation_does_not_rerun_model(posts,monkeypatch,tmp_path):
     Checkpoint(path,'test-token').put(record)
     monkeypatch.setenv('METACULUS_TOKEN','test-token')
     monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
     class Api:
         writes=[]
         def identity(self):return {'id':1,'username':'test'}
@@ -411,14 +417,185 @@ def test_new_forecasts_each_have_private_reasoning_and_tournament_receipts(posts
     from metaculus_bot import runner
     monkeypatch.setattr(runner,'evidence',lambda q:[])
     monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
     monkeypatch.setenv('OPENROUTER_API_KEY','test')
-    args=SimpleNamespace(scope='competitions',engine='llm',submit=True,max_questions=2,question_ids=[],report=str(tmp_path/'summary.json'))
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    args=SimpleNamespace(scope='competitions',engine='llm',submit=True,max_questions=2,question_ids=[],checkpoint=str(tmp_path/'checkpoint.enc'),report=str(tmp_path/'summary.json'))
     api=Api();result=run(args,api,Llm)
     assert api.submitted=={first_id,second_id} and result['counts']=={'submitted':2}
     assert [path for path,_ in api.writes]==['comments/create/','questions/forecast/']*2
     assert all(body['is_private'] is True for path,body in api.writes if path=='comments/create/')
     assert [(r['open_questions'],r['submitted_this_run'],r['reasoning_notes_saved_this_run']) for r in result['competitions']]==[(1,1,1),(2,2,2),(0,0,0)]
     assert sum(r['submitted_this_run'] for r in result['competitions'])>result['counts']['submitted']  # shared question, single API write
+
+
+def test_moderation_pause_blocks_requests_even_for_manual_submission(monkeypatch,tmp_path):
+    monkeypatch.delenv('METACULUS_SUBMISSIONS_APPROVED',raising=False)
+    args=SimpleNamespace(submit=True,checkpoint=str(tmp_path/'checkpoint.enc'))
+    api=SimpleNamespace(identity=lambda:pytest.fail('No request while submissions lack approval'))
+    with pytest.raises(RuntimeError,match='METACULUS_SUBMISSIONS_NOT_APPROVED'):
+        run(args,api)
+
+
+def test_approved_submission_requires_durable_recovery(monkeypatch):
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
+    args=SimpleNamespace(submit=True,checkpoint=None)
+    with pytest.raises(RuntimeError,match='SUBMISSION_CHECKPOINT_REQUIRED'):
+        run(args,SimpleNamespace(identity=lambda:pytest.fail('No request without durable state')))
+
+
+@pytest.mark.parametrize('answer,expected',[({'abstain':True,'reasoning':'Not enough evidence'},'abstained'),
+                                           ({'probability_yes':2,'reasoning':'Invalid distribution'},'deferred_error')])
+def test_abstentions_and_invalid_forecasts_never_write_comments(posts,monkeypatch,tmp_path,answer,expected):
+    from metaculus_bot import runner
+    sample=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary')
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
+    monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    monkeypatch.setenv('OPENROUTER_API_KEY','test')
+    monkeypatch.setattr(runner,'evidence',lambda q:[])
+    api=SimpleNamespace(identity=lambda:{'id':1,'username':'test'},posts=lambda p:[sample],comments=lambda *a:[],own_forecasts=lambda ids:set(),
+                        post=lambda *a:pytest.fail('Abstentions and invalid distributions must not write notes'))
+    class Llm:
+        def __init__(self,key):pass
+        def forecast(self,q,sources):return answer
+    args=SimpleNamespace(scope='test',engine='llm',submit=True,max_questions=1,question_ids=[],checkpoint=str(tmp_path/'checkpoint.enc'),report=str(tmp_path/'summary.json'))
+    assert run(args,api,Llm)['counts']=={expected:1}
+    assert run(args,api,lambda key:pytest.fail('Reuse saved abstention/invalid answer'))['counts']=={expected:1}
+
+
+def test_lost_note_response_recovers_original_answer_without_duplicate_note(posts,monkeypatch,tmp_path):
+    sample=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary')
+    q=unpack(sample)[0];path=tmp_path/'checkpoint.enc'
+    record={'question_id':q.id_of_question,'answer':{'probability_yes':.2,'reasoning':'Original private explanation'},'question_sha256':question_hash(q),'generated_at':'2026-10-10T00:00:00Z'}
+    Checkpoint(path,'test-token').put(record)
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
+    class Api:
+        writes=[];notes=[];submitted=set()
+        def identity(self):return {'id':1,'username':'test'}
+        def posts(self,project):return [sample]
+        def comments(self,*args):return self.notes
+        def get(self,path):return sample
+        def own_forecasts(self,ids):return self.submitted & set(ids)
+        def post(self,path,body):
+            self.writes.append(path)
+            if path=='comments/create/':
+                self.notes.append({'author':{'id':1},'text':body['text']})
+                raise ApiError('METACULUS_WRITE_UNCERTAIN')
+            self.submitted.add(body[0]['question'])
+    api=Api();args=SimpleNamespace(scope='test',engine='llm',submit=True,max_questions=1,question_ids=[],checkpoint=str(path),report=str(tmp_path/'summary.json'))
+    no_llm=lambda key:pytest.fail('Never regenerate a saved answer')
+    assert run(args,api,no_llm)['counts']=={'deferred_error':1}
+    assert Checkpoint(path,'test-token').get(q.id_of_question)=={**record,'note_write_state':'uncertain'}
+    assert run(args,api,no_llm)['counts']=={'submitted':1}
+    assert api.writes==['comments/create/','questions/forecast/']
+    assert Checkpoint(path,'test-token').get(q.id_of_question) is None
+
+
+def test_note_without_checkpoint_never_regenerates_or_recomments(posts,monkeypatch,tmp_path):
+    sample=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary');q=unpack(sample)[0]
+    record={'question_id':q.id_of_question,'answer':{'probability_yes':.2,'reasoning':'Prior explanation'},'question_sha256':question_hash(q)}
+    api=SimpleNamespace(identity=lambda:{'id':1,'username':'test'},posts=lambda p:[sample],own_forecasts=lambda ids:set(),
+                        comments=lambda *a:[{'author':{'id':1},'text':record_text(record)}])
+    args=SimpleNamespace(scope='test',engine='llm',submit=False,max_questions=1,question_ids=[],report=str(tmp_path/'summary.json'))
+    assert run(args,api,lambda key:pytest.fail('Missing exact recovery must fail closed'))['counts']=={'note_without_exact_recovery_deferred':1}
+
+
+def test_checkpoint_restore_cannot_load_another_bot_artifact(monkeypatch,tmp_path):
+    from metaculus_bot import checkpoint
+    monkeypatch.setenv('GITHUB_REPOSITORY','owner/repo')
+    monkeypatch.setenv('METACULUS_CHECKPOINT_NAMESPACE','bot-310227')
+    assert artifact_prefix()=='metaculus-checkpoint-bot-310227-'
+    def fake_run(args,**kwargs):
+        assert '/zip' not in args[-1]
+        return SimpleNamespace(stdout=json.dumps({'artifacts':[{'id':9,'name':'metaculus-checkpoint-bot-310211-1-discover','expired':False}]}).encode())
+    monkeypatch.setattr(checkpoint.subprocess,'run',fake_run)
+    restore(tmp_path/'checkpoint.enc')
+    assert not (tmp_path/'checkpoint.enc').exists()
+
+
+def test_private_note_daily_budget_survives_restart_and_resets_only_next_utc_day(tmp_path):
+    path=tmp_path/'checkpoint.enc';now=datetime(2026,10,10,23,59,tzinfo=timezone.utc)
+    state=Checkpoint(path,'test-token')
+    for _ in range(12):state.reserve_note_attempt(now)
+    restored=Checkpoint(path,'test-token')
+    with pytest.raises(PrivateNoteLimit,match='PRIVATE_NOTE_DAILY_LIMIT'):restored.reserve_note_attempt(now)
+    restored.reserve_note_attempt(now+timedelta(minutes=1))
+    assert Checkpoint(path,'test-token').state['private_notes']=={'day':'2026-10-11','attempts':1}
+
+
+def test_batch_comment_cap_saves_next_answer_without_writing_it(posts,monkeypatch,tmp_path):
+    from metaculus_bot import runner
+    original=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary')
+    samples=[]
+    for i in range(3):
+        p=copy.deepcopy(original);p['id']+=1000*i;p['question']['id']+=1000*i;samples.append(p)
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
+    monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    monkeypatch.setenv('OPENROUTER_API_KEY','test')
+    monkeypatch.setattr(runner,'evidence',lambda q:[])
+    class Api:
+        submitted=set();writes=[]
+        def identity(self):return {'id':1,'username':'test'}
+        def posts(self,project):return samples
+        def comments(self,*args):return []
+        def get(self,path):return next(p for p in samples if p['id']==int(path.split('/')[1]))
+        def own_forecasts(self,ids):return self.submitted & set(ids)
+        def post(self,path,body):
+            self.writes.append(path)
+            if path=='questions/forecast/':self.submitted.add(body[0]['question'])
+    class Llm:
+        def __init__(self,key):pass
+        def forecast(self,q,sources):return {'probability_yes':.2,'reasoning':'Relevant evidence and a material uncertainty.'}
+    path=tmp_path/'checkpoint.enc';args=SimpleNamespace(scope='test',engine='llm',submit=True,max_questions=3,question_ids=[],checkpoint=str(path),report=str(tmp_path/'summary.json'))
+    api=Api();assert run(args,api,Llm)['counts']=={'submitted':2,'private_note_limit_deferred':1}
+    assert api.writes==['comments/create/','questions/forecast/']*2
+    assert Checkpoint(path,'test-token').get(samples[-1]['question']['id'])['answer']['probability_yes']==.2
+
+
+@pytest.mark.parametrize('status',[401,403])
+def test_permission_denial_stops_batch_after_one_write(posts,monkeypatch,tmp_path,status):
+    from metaculus_bot import runner
+    sample=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary')
+    another=copy.deepcopy(sample);another['id']+=1000;another['question']['id']+=1000
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
+    monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    monkeypatch.setenv('OPENROUTER_API_KEY','test')
+    monkeypatch.setattr(runner,'evidence',lambda q:[])
+    writes=[]
+    def denied(*args):
+        writes.append(args[0]);raise ApiError('METACULUS_WRITE',status)
+    api=SimpleNamespace(identity=lambda:{'id':1,'username':'test'},posts=lambda p:[sample,another],comments=lambda *a:[],own_forecasts=lambda ids:set(),post=denied)
+    class Llm:
+        def __init__(self,key):pass
+        def forecast(self,q,sources):return {'probability_yes':.2,'reasoning':'Original explanation.'}
+    args=SimpleNamespace(scope='test',engine='llm',submit=True,max_questions=2,question_ids=[],checkpoint=str(tmp_path/'checkpoint.enc'),report=str(tmp_path/'summary.json'))
+    with pytest.raises(ApiError) as error:run(args,api,Llm)
+    assert error.value.status==status and writes==['comments/create/']
+
+
+def test_ambiguous_note_without_visible_receipt_is_not_reposted(posts,monkeypatch,tmp_path):
+    sample=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary');q=unpack(sample)[0]
+    record={'question_id':q.id_of_question,'answer':{'probability_yes':.2,'reasoning':'Exact prior generation'},'question_sha256':question_hash(q),'note_write_state':'uncertain'}
+    path=tmp_path/'checkpoint.enc';Checkpoint(path,'test-token').put(record)
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    monkeypatch.setenv('METACULUS_SUBMISSIONS_APPROVED','true')
+    monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    api=SimpleNamespace(identity=lambda:{'id':1,'username':'test'},posts=lambda p:[sample],comments=lambda *a:[],own_forecasts=lambda ids:set(),
+                        post=lambda *a:pytest.fail('No blind note retry after an ambiguous response'))
+    args=SimpleNamespace(scope='test',engine='llm',submit=True,max_questions=1,question_ids=[],checkpoint=str(path),report=str(tmp_path/'summary.json'))
+    assert run(args,api,lambda key:pytest.fail('No new generation'))['counts']=={'deferred_error':1}
+
+
+def test_account_binding_rejects_wrong_bot_before_discovery(monkeypatch,tmp_path):
+    monkeypatch.setenv('METACULUS_BOT_ID','310227')
+    api=SimpleNamespace(identity=lambda:{'id':310211,'username':'previous-bot'})
+    args=SimpleNamespace(submit=False,checkpoint=None)
+    with pytest.raises(RuntimeError,match='METACULUS_BOT_ID_MISMATCH'):run(args,api)
 
 
 @pytest.mark.parametrize('kind',['tournament','index'])

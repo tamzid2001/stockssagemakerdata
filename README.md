@@ -2,13 +2,16 @@
 
 ### Metaculus forecasting bot (October 10, 2026)
 
-Quantura discovers active public tournaments, indexes and bot question series
-every 20 minutes, including competitions where bots can forecast without prize
+The workflow is configured to discover active public tournaments, indexes and bot
+question series every 20 minutes, including competitions where bots can forecast without prize
 eligibility. Reports distinguish forecast permission, bot leaderboard visibility
 and prize eligibility. Verified time-series questions use the production ensemble; general event
 questions use zero-priced OpenRouter models with daily quota checks. Forecasts
-include private reasoning notes and recover from interrupted submissions using
-Metaculus history, without Firestore or Cloud Storage. See the
+include concise private reasoning notes and recover exact pending answers from
+encrypted GitHub artifacts, without Firestore or Cloud Storage. Notes contain no
+raw forecast JSON; abstentions and invalid forecasts create no comments. Posting
+is limited to two new notes per job and twelve attempts per UTC day. **Submissions
+are paused following reported spam restrictions, pending Metaculus approval.** See the
 [setup, limits and operating guide](docs/metaculus-bot.md).
 
 ### Forecast timestamp receipts (October 9, 2026)
