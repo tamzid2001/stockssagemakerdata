@@ -3,7 +3,7 @@ export function addPerpsSupportOpenapi(document:any, origin:string) {
   const servers=[{url:`${origin}/api`}];
   const success=(example:unknown)=>({description:"Successful response (example)",content:{"application/json":{schema:{type:"object"},example}}});
   const error={description:"Provider unavailable or request invalid",content:{"application/json":{schema:{type:"object"},example:{error:"perps_provider_unavailable",message:"Perpetual history is unavailable. No substitute prices were returned."}}}};
-  const common={servers,security:[],tags:["Kalshi Perpetuals"]};
+  const common={servers,security:[],tags:["Download"]};
   const parameters=[
     {name:"symbol",in:"query",required:true,schema:{type:"string",pattern:"^KX[A-Z0-9]{1,36}PERP$"},example:"KXBTCPERP"},
     {name:"frequency",in:"query",schema:{type:"string",enum:["1min","5min","15min","30min","1h","4h","1D","1W-MON","1MS"],default:"1h"}},

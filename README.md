@@ -56,7 +56,7 @@ Rebuild the sanitized archive catalog with `python scripts/import_sagemaker_arch
 
 Quantura connects stocks, FX, metals, indices, perpetual contracts and prediction markets in one research workspace. Search an instrument, inspect genuine observations, forecast a range of outcomes, and retain the evidence behind a decision.
 
-[Website](https://quantura.studio) · [API docs](https://quantura.studio/developers/api) · [Wiki](https://github.com/tamzid2001/stockssagemakerdata/wiki) · [Releases](https://github.com/tamzid2001/stockssagemakerdata/releases)
+[Website](https://quantura.studio) · [RapidAPI](https://rapidapi.com/tamzid2001/api/quantura2) · [API docs](https://quantura.studio/developers/api) · [Wiki](https://github.com/tamzid2001/stockssagemakerdata/wiki) · [Releases](https://github.com/tamzid2001/stockssagemakerdata/releases)
 
 ## What's new in v2.2.0
 
@@ -133,6 +133,8 @@ The ensemble registry includes Prophet, Toto, IBM Granite, Chronos and TimesFM. 
 The checked-in Dukascopy snapshot contains 1,504 instruments; the service refreshes the provider catalog and identifies stale snapshots. Candle archives avoid the multi-year hourly tick-download loop. Available history, request bounds, rate limits and redistribution rights still depend on the provider.
 
 ## API and MCP
+
+[RapidAPI subscriptions](https://rapidapi.com/tamzid2001/api/quantura2/pricing) are also available for the published API: BASIC pay per use charges $0.0001 per request plus $0.67 per newly accepted forecast job; PRO remains $200/month with 3,000,000 requests and included forecast creation. RapidAPI billing and keys are separate from website subscriptions, trials and MCP OAuth. Search, shared history download and ensemble forecast endpoints include Kalshi perpetuals. [Marketplace integration guide](docs/rapidapi/README.md) · [OpenAPI](docs/rapidapi/openapi.json) · [Postman collection](docs/rapidapi/postman.json).
 
 Programmatic API access is available to pay-as-you-go or Pro (including an active 14-day trial), enterprise and verified administrator accounts. The 14-day trial includes the website, API keys, API calls, and MCP server until its verified expiry. Enterprise grants are maintained in backend-only account records or Clerk private metadata; user-editable plan fields cannot grant access.
 

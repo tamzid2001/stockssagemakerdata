@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Quantura",
-    "version": "1.0.0",
-    "description": "Probabilistic market forecasts, verified market discovery, observed historical data, and screener quantiles. Forecasts run asynchronously: create a job, poll its status, then download the final ensemble. Enterprise agreements define compute admission and API quotas. Market data remains subject to provider coverage and licensing. Research estimates are not guaranteed returns.",
+    "version": "1.1.0",
+    "description": "Probabilistic market forecasts, verified market discovery, observed historical data, and screener quantiles. Forecasts run asynchronously: create a job, poll its status, then download the final ensemble. Subscribe to BASIC pay per use or PRO through RapidAPI. BASIC meters newly accepted forecast jobs separately from HTTP requests; polling, cached results and idempotent replay do not add a Forecasts unit. PRO includes forecast creation within its request quota. Market data remains subject to provider coverage and licensing. Research estimates are not guaranteed returns.",
     "contact": {
       "name": "Quantura",
       "url": "https://quantura.studio/contact"
@@ -24,19 +24,31 @@
   "tags": [
     {
       "name": "Access",
-      "description": "Identity, token scopes, plans, and effective workspace access."
+      "description": "Account access and provider/model capabilities"
     },
     {
-      "name": "Ensemble Forecasts",
-      "description": "Asynchronous probabilistic time-series ensemble jobs and reproducible presets."
+      "name": "Forecast",
+      "description": "Create, poll and export asynchronous ensemble forecasts"
+    },
+    {
+      "name": "Screener",
+      "description": "Published stock and perpetual forecast ranges"
+    },
+    {
+      "name": "Search",
+      "description": "Find instruments, events and provider-verified contracts"
+    },
+    {
+      "name": "Download",
+      "description": "Observed price history and CSV exports, including perpetuals"
     },
     {
       "name": "Economic data",
-      "description": "Native reporting periods and explicit dimensions."
+      "description": "Economic data"
     },
     {
       "name": "Gemini exchange",
-      "description": "Exchange market data, separate from Google Gemini AI models."
+      "description": "Gemini exchange"
     }
   ],
   "paths": {
@@ -371,7 +383,7 @@
     "/v1/forecast/models": {
       "get": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "List Available Ensemble Models, Quantile Support, and License Constraints",
         "operationId": "getEnsembleModelCapabilities",
@@ -608,7 +620,7 @@
     "/v1/ensemble-forecasts": {
       "post": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "Create an Asynchronous Multi-Model Quantura Forecast Job",
         "operationId": "createEnsembleForecast",
@@ -813,7 +825,7 @@
     "/v1/ensemble-forecasts/{forecast_id}": {
       "get": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "Get an Ensemble Forecast Job's Progress or Completed Quantile Results",
         "operationId": "getEnsembleForecast",
@@ -989,7 +1001,7 @@
     "/v1/ensemble-forecasts/{forecast_id}/reproduce": {
       "post": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "Create a New Forecast Job from an Immutable Historical Configuration",
         "operationId": "reproduceEnsembleForecast",
@@ -1151,7 +1163,7 @@
     "/v1/ensemble-forecasts/{forecast_id}/download": {
       "get": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "Download a Completed Ensemble Forecast as CSV or JSON",
         "operationId": "downloadEnsembleForecast",
@@ -1311,7 +1323,7 @@
     "/v1/ensemble-forecasts/{forecast_id}/observations": {
       "get": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "Read newly observed prices to overlay a saved forecast",
         "operationId": "getEnsembleForecastObservations",
@@ -1705,427 +1717,6 @@
         }
       }
     },
-    "/v1/market-data/perps/markets": {
-      "get": {
-        "servers": [
-          {
-            "url": "https://quantura.studio/api"
-          }
-        ],
-        "security": [
-          {
-            "rapidApiKey": []
-          }
-        ],
-        "tags": [
-          "Kalshi Perpetuals"
-        ],
-        "operationId": "listKalshiPerpetualContracts",
-        "summary": "List all available Kalshi perpetual contracts and normalized spot-scale prices",
-        "responses": {
-          "200": {
-            "description": "Successful response (example)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "provider": "kalshi_perps",
-                  "markets": [
-                    {
-                      "resource_type": "perpetual_contract",
-                      "symbol": "KXBTCPERP",
-                      "name": "Bitcoin perpetual",
-                      "asset_class": "perpetual",
-                      "status": "active",
-                      "contract_size": 0.0001,
-                      "underlying_multiplier": 1,
-                      "underlying_units_per_contract": 0.0001,
-                      "unit": "USD per underlying unit",
-                      "spot_reference_price": 81000,
-                      "reference_contract_price": 8.1,
-                      "available_granularities": [
-                        "1min",
-                        "5min",
-                        "15min",
-                        "30min",
-                        "1h",
-                        "4h",
-                        "1D",
-                        "1W-MON",
-                        "1MS"
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Provider unavailable or request invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "error": "perps_provider_unavailable",
-                  "message": "Perpetual history is unavailable. No substitute prices were returned."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/market-data/perps/history": {
-      "get": {
-        "servers": [
-          {
-            "url": "https://quantura.studio/api"
-          }
-        ],
-        "security": [
-          {
-            "rapidApiKey": []
-          }
-        ],
-        "tags": [
-          "Kalshi Perpetuals"
-        ],
-        "operationId": "getKalshiPerpetualTradeCloses",
-        "summary": "Download completed Kalshi perpetual trade closes as CSV or JSON",
-        "description": "Completed traded-price OHLC normalized to USD per underlying unit by dividing Kalshi's per-contract prices by contract_size × underlying_multiplier. Raw scaling metadata is returned for auditability. Null closes and missing bars are not filled. Bounded backward time-window retrieval; maximum 20,000 intervals per date range and 5,000 returned rows. Market data is public; forecast execution still uses authenticated workspace authorization.",
-        "parameters": [
-          {
-            "name": "symbol",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^KX[A-Z0-9]{1,36}PERP$"
-            },
-            "example": "KXBTCPERP"
-          },
-          {
-            "name": "frequency",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "1min",
-                "5min",
-                "15min",
-                "30min",
-                "1h",
-                "4h",
-                "1D",
-                "1W-MON",
-                "1MS"
-              ],
-              "default": "1h"
-            }
-          },
-          {
-            "name": "start",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "end",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 5000,
-              "default": 500
-            }
-          },
-          {
-            "name": "format",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "json",
-                "csv"
-              ],
-              "default": "json"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful response (example)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "ok": true,
-                  "provider": "kalshi_perps",
-                  "symbol": "KXBTCPERP",
-                  "frequency": "1min",
-                  "rows": [
-                    {
-                      "timestamp": "2026-09-20T12:01:00Z",
-                      "open": 81000,
-                      "high": 82000,
-                      "low": 80500,
-                      "close": 81500,
-                      "volume": 100
-                    }
-                  ],
-                  "count": 1,
-                  "metadata": {
-                    "field": "price.close / (contract_size * underlying_multiplier)",
-                    "provider_field": "price.close",
-                    "units": "USD per underlying unit",
-                    "contract_size": 0.0001,
-                    "underlying_multiplier": 1,
-                    "timezone": "UTC",
-                    "timestamp_convention": "end_period_ts",
-                    "missing_intervals": "not_filled",
-                    "redistribution_status": "review_required"
-                  },
-                  "warnings": []
-                }
-              },
-              "text/csv": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "timestamp,open,high,low,close,volume\r\n2026-09-20T12:01:00Z,81000,82000,80500,81500,100"
-              }
-            }
-          },
-          "422": {
-            "description": "Provider unavailable or request invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "error": "perps_provider_unavailable",
-                  "message": "Perpetual history is unavailable. No substitute prices were returned."
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Provider unavailable or request invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "error": "perps_provider_unavailable",
-                  "message": "Perpetual history is unavailable. No substitute prices were returned."
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Provider unavailable or request invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "error": "perps_provider_unavailable",
-                  "message": "Perpetual history is unavailable. No substitute prices were returned."
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "servers": [
-          {
-            "url": "https://quantura.studio/api"
-          }
-        ],
-        "security": [
-          {
-            "rapidApiKey": []
-          }
-        ],
-        "tags": [
-          "Kalshi Perpetuals"
-        ],
-        "operationId": "downloadKalshiPerpetualTradeCloses",
-        "summary": "Request a bounded Kalshi perpetual historical download by date range",
-        "description": "Completed traded-price OHLC normalized to USD per underlying unit by dividing Kalshi's per-contract prices by contract_size × underlying_multiplier. Raw scaling metadata is returned for auditability. Null closes and missing bars are not filled. Bounded backward time-window retrieval; maximum 20,000 intervals per date range and 5,000 returned rows. Market data is public; forecast execution still uses authenticated workspace authorization.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "symbol"
-                ],
-                "properties": {
-                  "symbol": {
-                    "type": "string",
-                    "pattern": "^KX[A-Z0-9]{1,36}PERP$"
-                  },
-                  "frequency": {
-                    "type": "string",
-                    "enum": [
-                      "1min",
-                      "5min",
-                      "15min",
-                      "30min",
-                      "1h",
-                      "4h",
-                      "1D",
-                      "1W-MON",
-                      "1MS"
-                    ],
-                    "default": "1h"
-                  },
-                  "start": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "end": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 5000,
-                    "default": 500
-                  },
-                  "format": {
-                    "type": "string",
-                    "enum": [
-                      "json",
-                      "csv"
-                    ],
-                    "default": "json"
-                  }
-                }
-              },
-              "example": {
-                "symbol": "KXBTCPERP",
-                "frequency": "1h",
-                "limit": 500,
-                "format": "json"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful response (example)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "ok": true,
-                  "provider": "kalshi_perps",
-                  "symbol": "KXBTCPERP",
-                  "frequency": "1min",
-                  "rows": [
-                    {
-                      "timestamp": "2026-09-20T12:01:00Z",
-                      "open": 81000,
-                      "high": 82000,
-                      "low": 80500,
-                      "close": 81500,
-                      "volume": 100
-                    }
-                  ],
-                  "count": 1,
-                  "metadata": {
-                    "field": "price.close / (contract_size * underlying_multiplier)",
-                    "provider_field": "price.close",
-                    "units": "USD per underlying unit",
-                    "contract_size": 0.0001,
-                    "underlying_multiplier": 1,
-                    "timezone": "UTC",
-                    "timestamp_convention": "end_period_ts",
-                    "missing_intervals": "not_filled",
-                    "redistribution_status": "review_required"
-                  },
-                  "warnings": []
-                }
-              },
-              "text/csv": {
-                "schema": {
-                  "type": "string"
-                },
-                "example": "timestamp,open,high,low,close,volume\r\n2026-09-20T12:01:00Z,81000,82000,80500,81500,100"
-              }
-            }
-          },
-          "422": {
-            "description": "Provider unavailable or request invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "error": "perps_provider_unavailable",
-                  "message": "Perpetual history is unavailable. No substitute prices were returned."
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Provider unavailable or request invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "error": "perps_provider_unavailable",
-                  "message": "Perpetual history is unavailable. No substitute prices were returned."
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Provider unavailable or request invalid",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                },
-                "example": {
-                  "error": "perps_provider_unavailable",
-                  "message": "Perpetual history is unavailable. No substitute prices were returned."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/market-search": {
       "servers": [
         {
@@ -2134,7 +1725,7 @@
       ],
       "get": {
         "tags": [
-          "Q Search"
+          "Search"
         ],
         "security": [
           {
@@ -2222,14 +1813,14 @@
                   "query": "AAPL",
                   "count": 1,
                   "groups": {
-                    "yahoo": [
+                    "alpaca": [
                       {
                         "resource_type": "instrument",
-                        "resource_id": "yahoo:AAPL",
+                        "resource_id": "alpaca:AAPL",
                         "symbol": "AAPL",
                         "name": "Apple Inc.",
                         "asset_class": "equity",
-                        "source": "yahoo",
+                        "source": "alpaca",
                         "exchange": "NASDAQ",
                         "history_available": true,
                         "forecast_available": true
@@ -2298,7 +1889,7 @@
       ],
       "get": {
         "tags": [
-          "Q Search"
+          "Search"
         ],
         "security": [
           {
@@ -2382,7 +1973,7 @@
       ],
       "get": {
         "tags": [
-          "Q Search"
+          "Search"
         ],
         "security": [
           {
@@ -2507,7 +2098,7 @@
       ],
       "get": {
         "tags": [
-          "Q Search"
+          "Search"
         ],
         "security": [
           {
@@ -2650,7 +2241,7 @@
       ],
       "get": {
         "tags": [
-          "Q Search"
+          "Search"
         ],
         "security": [
           {
@@ -2705,7 +2296,7 @@
         }
       }
     },
-    "/v1/market-data/stocks/history": {
+    "/v1/market-data/history": {
       "servers": [
         {
           "url": "https://quantura.studio/api"
@@ -2713,140 +2304,318 @@
       ],
       "post": {
         "tags": [
-          "Q Download"
+          "Download"
         ],
         "security": [
           {
             "rapidApiKey": []
           }
         ],
-        "operationId": "downloadQuanturaStockHistory",
-        "summary": "Download split-adjusted stock history with automatic provider routing",
-        "description": "Q Download previews JSON and exports that exact snapshot as CSV/JSON. Provider coverage varies; missing bars are not fabricated. format=csv returns a CSV attachment. No uploaded workspace files are exposed here.",
+        "operationId": "downloadQuanturaMarketHistory",
+        "summary": "Download observed market history as CSV or JSON",
+        "description": "One endpoint for stocks (auto/alpaca), Dukascopy instruments, Kalshi perpetuals (kalshi_perps), and Kalshi/Polymarket US event contracts. Use source and symbol for instruments; use source, contracts, start and end for events. Perpetual prices are normalized to USD per underlying unit using provider contract scaling. No missing bars are filled. Perpetuals allow at most 5000 rows and 20000 intervals per date range. Follow Dukascopy next_cursor with page_mode=true and identical settings. CSV export requires a completed unpaged range. Provider licensing and available history still apply.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "required": [
-                  "symbol"
-                ],
-                "properties": {
-                  "symbol": {
-                    "type": "string"
-                  },
-                  "contractSymbol": {
-                    "type": "string"
-                  },
-                  "source": {
-                    "type": "string",
-                    "enum": [
-                      "auto",
-                      "alpaca",
-                      "dukascopy"
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "symbol"
                     ],
-                    "default": "auto"
+                    "properties": {
+                      "symbol": {
+                        "type": "string"
+                      },
+                      "contractSymbol": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "alpaca",
+                          "dukascopy",
+                          "kalshi_perps"
+                        ],
+                        "default": "auto"
+                      },
+                      "price_side": {
+                        "type": "string",
+                        "enum": [
+                          "bid",
+                          "ask"
+                        ],
+                        "default": "bid"
+                      },
+                      "page_mode": {
+                        "type": "boolean",
+                        "description": "Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings."
+                      },
+                      "cursor": {
+                        "type": "string"
+                      },
+                      "start": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "timeframe": {
+                        "type": "string",
+                        "enum": [
+                          "1min",
+                          "5min",
+                          "15min",
+                          "30min",
+                          "1h",
+                          "4h",
+                          "1D",
+                          "1W-MON",
+                          "1MS",
+                          "1Min",
+                          "5Min",
+                          "15Min",
+                          "30Min",
+                          "1Hour",
+                          "4Hour",
+                          "1Day",
+                          "1Week",
+                          "1Month",
+                          "1m",
+                          "5m",
+                          "15m",
+                          "30m",
+                          "1w"
+                        ]
+                      },
+                      "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50000,
+                        "description": "Kalshi perpetuals: 1–5000; stocks/Dukascopy: 500, 1000, 1500, 2000, 50000 (default 2000)."
+                      },
+                      "adjustment": {
+                        "type": "string",
+                        "enum": [
+                          "raw",
+                          "split",
+                          "all"
+                        ]
+                      },
+                      "session": {
+                        "type": "string",
+                        "enum": [
+                          "regular",
+                          "extended"
+                        ]
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "json",
+                          "csv"
+                        ]
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "1min",
+                          "5min",
+                          "15min",
+                          "30min",
+                          "1h",
+                          "4h",
+                          "1D",
+                          "1W-MON",
+                          "1MS",
+                          "1Min",
+                          "5Min",
+                          "15Min",
+                          "30Min",
+                          "1Hour",
+                          "4Hour",
+                          "1Day",
+                          "1Week",
+                          "1Month",
+                          "1m",
+                          "5m",
+                          "15m",
+                          "30m",
+                          "1w"
+                        ],
+                        "description": "Alias for timeframe. Perpetuals support the same completed-bar frequencies."
+                      }
+                    }
                   },
-                  "price_side": {
-                    "type": "string",
-                    "enum": [
-                      "bid",
-                      "ask"
+                  {
+                    "type": "object",
+                    "required": [
+                      "source",
+                      "contracts",
+                      "start",
+                      "end"
                     ],
-                    "default": "bid"
-                  },
-                  "page_mode": {
-                    "type": "boolean",
-                    "description": "Dukascopy: retrieve bounded candle file pages; follow next_cursor using the same settings."
-                  },
-                  "cursor": {
-                    "type": "string"
-                  },
-                  "start": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "end": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "timeframe": {
-                    "type": "string",
-                    "enum": [
-                      "1min",
-                      "5min",
-                      "15min",
-                      "30min",
-                      "1h",
-                      "4h",
-                      "1D",
-                      "1W-MON",
-                      "1MS",
-                      "1Min",
-                      "5Min",
-                      "15Min",
-                      "30Min",
-                      "1Hour",
-                      "4Hour",
-                      "1Day",
-                      "1Week",
-                      "1Month",
-                      "1m",
-                      "5m",
-                      "15m",
-                      "30m",
-                      "1w"
-                    ]
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "enum": [
-                      500,
-                      1000,
-                      1500,
-                      2000,
-                      50000
-                    ]
-                  },
-                  "adjustment": {
-                    "type": "string",
-                    "enum": [
-                      "raw",
-                      "split",
-                      "all"
-                    ]
-                  },
-                  "session": {
-                    "type": "string",
-                    "enum": [
-                      "regular",
-                      "extended"
-                    ]
-                  },
-                  "format": {
-                    "type": "string",
-                    "enum": [
-                      "json",
-                      "csv"
-                    ]
+                    "properties": {
+                      "source": {
+                        "type": "string",
+                        "enum": [
+                          "kalshi",
+                          "polymarket_us"
+                        ]
+                      },
+                      "contracts": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 25,
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "source",
+                            "eventId",
+                            "marketId",
+                            "contractId",
+                            "providerSymbol",
+                            "side"
+                          ],
+                          "properties": {
+                            "source": {
+                              "type": "string"
+                            },
+                            "eventId": {
+                              "type": "string"
+                            },
+                            "marketId": {
+                              "type": "string"
+                            },
+                            "contractId": {
+                              "type": "string"
+                            },
+                            "providerSymbol": {
+                              "type": "string"
+                            },
+                            "side": {
+                              "type": "string",
+                              "enum": [
+                                "yes",
+                                "no",
+                                "long",
+                                "short"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "start": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "end": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "frequency": {
+                        "type": "string",
+                        "enum": [
+                          "raw",
+                          "1m",
+                          "5m",
+                          "15m",
+                          "30m",
+                          "1h",
+                          "4h",
+                          "1d",
+                          "1w",
+                          "1month",
+                          "final"
+                        ]
+                      },
+                      "history_phase": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "both",
+                          "pregame",
+                          "in_game"
+                        ]
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "normalized",
+                          "raw",
+                          "canvas"
+                        ]
+                      },
+                      "target": {
+                        "type": "string",
+                        "enum": [
+                          "price",
+                          "bid",
+                          "ask",
+                          "midpoint"
+                        ]
+                      },
+                      "missing": {
+                        "type": "string",
+                        "enum": [
+                          "leave",
+                          "drop",
+                          "forward_fill"
+                        ]
+                      },
+                      "format": {
+                        "type": "string",
+                        "enum": [
+                          "json",
+                          "csv"
+                        ],
+                        "default": "csv"
+                      }
+                    }
+                  }
+                ]
+              },
+              "examples": {
+                "stock": {
+                  "value": {
+                    "source": "alpaca",
+                    "symbol": "AAPL",
+                    "timeframe": "1Day",
+                    "limit": 500,
+                    "format": "json"
+                  }
+                },
+                "perpetual": {
+                  "value": {
+                    "source": "kalshi_perps",
+                    "symbol": "KXBTCPERP",
+                    "frequency": "1h",
+                    "limit": 500,
+                    "format": "json"
+                  }
+                },
+                "dukascopy": {
+                  "value": {
+                    "source": "dukascopy",
+                    "symbol": "XAUUSD",
+                    "timeframe": "1h",
+                    "limit": 500,
+                    "price_side": "bid",
+                    "format": "json"
                   }
                 }
-              },
-              "example": {
-                "symbol": "AAPL",
-                "source": "auto",
-                "timeframe": "1Day",
-                "limit": 500,
-                "adjustment": "split",
-                "format": "json"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "JSON rows or CSV attachment",
+            "description": "Successful response (illustrative example)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2854,27 +2623,19 @@
                 },
                 "example": {
                   "ok": true,
-                  "provider": "alpaca",
-                  "sourceRequested": "auto",
-                  "fallbackUsed": false,
-                  "symbol": "AAPL",
-                  "timeframe": "1Day",
-                  "count": 1,
-                  "rows": [
-                    {
-                      "timestamp": "2026-09-18T04:00:00Z",
-                      "open": 100,
-                      "high": 102,
-                      "low": 99,
-                      "close": 101,
-                      "volume": 1000
-                    }
-                  ]
+                  "count": 0,
+                  "rows": []
                 }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "timestamp,close\r\n2026-09-20T12:00:00Z,81500"
               }
             }
           },
-          "400": {
+          "404": {
             "description": "Invalid request or provider unavailable",
             "content": {
               "application/json": {
@@ -2905,6 +2666,21 @@
             }
           },
           "429": {
+            "description": "Invalid request or provider unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "ok": false,
+                  "error": "event_query_invalid",
+                  "message": "Choose a provider event and a valid continuation cursor."
+                }
+              }
+            }
+          },
+          "502": {
             "description": "Invalid request or provider unavailable",
             "content": {
               "application/json": {
@@ -3020,7 +2796,7 @@
             }
           },
           "403": {
-            "description": "Active paid Pro, enterprise or administrator API credential required."
+            "description": "Active metered or legacy Pro access (including an active 14-day trial), enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3081,7 +2857,7 @@
             }
           },
           "403": {
-            "description": "Active paid Pro, enterprise or administrator API credential required."
+            "description": "Active metered or legacy Pro access (including an active 14-day trial), enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3142,7 +2918,7 @@
             }
           },
           "403": {
-            "description": "Active paid Pro, enterprise or administrator API credential required."
+            "description": "Active metered or legacy Pro access (including an active 14-day trial), enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3250,7 +3026,7 @@
             }
           },
           "403": {
-            "description": "Active paid Pro, enterprise or administrator API credential required."
+            "description": "Active metered or legacy Pro access (including an active 14-day trial), enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3326,7 +3102,7 @@
             }
           },
           "403": {
-            "description": "Active paid Pro, enterprise or administrator API credential required."
+            "description": "Active metered or legacy Pro access (including an active 14-day trial), enterprise or administrator API credential required."
           },
           "422": {
             "description": "Invalid source, dimensions, dates, or history selection."
@@ -3340,7 +3116,7 @@
     "/v1/ensemble-forecasts/{forecast_id}/proof": {
       "post": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "Create or recover a private forecast timestamp receipt",
         "operationId": "stampEnsembleForecast",
@@ -3418,7 +3194,7 @@
       },
       "get": {
         "tags": [
-          "Ensemble Forecasts"
+          "Forecast"
         ],
         "summary": "Download or verify a forecast timestamp receipt",
         "operationId": "getEnsembleForecastProof",
@@ -3582,7 +3358,7 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-RapidAPI-Key",
-        "description": "Your RapidAPI application key. RapidAPI supplies the API-specific gateway credential privately. A private enterprise CUSTOM subscription is required."
+        "description": "Your RapidAPI application key. RapidAPI supplies the API-specific gateway credential privately. An active BASIC pay-per-use, PRO, or private enterprise subscription is required. Send X-RapidAPI-Host as shown in the Hub examples."
       }
     },
     "schemas": {

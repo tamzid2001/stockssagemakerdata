@@ -3,6 +3,8 @@ import {aggregateObservedBars,forecastFrequency,frequencyMinutes,frequencyTimefr
 import { AlpacaClient, AlpacaError, barsToCsv, publicAlpacaError, type AlpacaBar } from "./alpacaClient";
 import { dukascopy } from "./dukascopyClient";
 import { registerCompanyLogoRoutes } from "./companyLogos";
+import { kalshiPerps } from "./kalshiPerps";
+import { PredictionMarketDataError, prepareDataset, predictionDatasetCsv } from "./predictionMarketData";
 
 function filePart(value: unknown): string {
   return String(value || "data").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "data";
@@ -88,7 +90,7 @@ export async function fetchStockHistoryData(body: Record<string, unknown>, clien
   return { provider: "alpaca", sourceRequested: source, fallbackUsed: false, exchangeTimezone: "America/New_York", ...result };
 }
 
-export function registerMarketDataRoutes(router: Router): void {
+export function registerMarketDataRoutes(router: Router, clients: { perps?: Pick<typeof kalshiPerps, "history">; stocks?: typeof fetchStockHistoryData } = {}): void {
   registerCompanyLogoRoutes(router);
   router.get("/market-data/history/status", (_req, res) => {
     const alpaca = new AlpacaClient();
@@ -121,7 +123,7 @@ export function registerMarketDataRoutes(router: Router): void {
     try {
       const body = req.method === "GET" ? req.query : req.body || {};
       const { provider, sourceRequested, fallbackUsed, ...result } = String(body.source || body.provider).toLowerCase()==="dukascopy" && body.page_mode===true
-        ? await dukascopy.history(body,true) : await fetchStockHistoryData(body);
+        ? await dukascopy.history(body,true) : await (clients.stocks || fetchStockHistoryData)(body);
       if (String(body.format || req.query?.format || "").toLowerCase() === "csv") {
         if((result as any).next_cursor)throw new AlpacaError("invalid_request","Finish all paged JSON requests before exporting CSV, or request an unpaged range.",422);
         const filename = `${filePart(result.symbol)}-${provider}-${filePart(result.timeframe)}-${filePart(body.end || "latest")}.csv`;
@@ -145,6 +147,40 @@ export function registerMarketDataRoutes(router: Router): void {
   };
   router.get("/ticker/history", stockHistory);
   router.post("/market-data/stocks/history", stockHistory);
+
+  // One download endpoint for instruments and provider-verified event contracts.
+  // Existing provider-specific routes remain compatible with saved clients.
+  router.post("/market-data/history", async (req, res) => {
+    const body = req.body || {};
+    const source = String(body.source || body.provider || "auto").trim().toLowerCase();
+    const format = String(body.format || "json").toLowerCase();
+    try {
+      if (!["json", "csv"].includes(format)) throw new PredictionMarketDataError("invalid_download_format", "Choose CSV or JSON.", 422);
+      if (["kalshi", "polymarket_us"].includes(source)) {
+        const dataset = await prepareDataset({...body,source});
+        res.set("Cache-Control", "private, no-store");
+        if (format === "csv") res.type("text/csv").attachment(`${source}-history.csv`).send(predictionDatasetCsv(dataset));
+        else res.json({ok:true,...dataset});
+        return;
+      }
+      if (source === "kalshi_perps") {
+        const result = await (clients.perps || kalshiPerps).history({symbol:body.symbol,frequency:body.frequency || body.timeframe,start:body.start,end:body.end,limit:body.limit});
+        res.set({"Cache-Control":"private, no-store","X-Data-Provider":"kalshi_perps","X-Price-Unit":"USD per underlying unit","X-Data-Timezone":"UTC"});
+        if (format === "csv") {
+          const keys = ["timestamp","open","high","low","close","volume"] as const;
+          res.type("text/csv").attachment(`${result.symbol}-${result.frequency}-history.csv`).send([keys.join(","),...result.rows.map(row=>keys.map(key=>row[key]??"").join(","))].join("\r\n"));
+        } else res.json({ok:true,...result});
+        return;
+      }
+      if (!["auto","alpaca","dukascopy"].includes(source)) throw new PredictionMarketDataError("source_invalid", "Choose auto, alpaca, dukascopy, kalshi, polymarket_us, or kalshi_perps.", 422);
+      // Use the same stock/Dukascopy handler, including bounded pagination.
+      req.body = {...body,source,timeframe:body.timeframe || body.frequency};
+      await stockHistory(req,res);
+    } catch (error) {
+      if (error instanceof PredictionMarketDataError) res.status(error.status).json({ok:false,error:error.code,message:error.message});
+      else { const safe=publicAlpacaError(error); res.status(safe.status).json(safe.body); }
+    }
+  });
 
   router.get("/market-data/dukascopy/instruments", async (req,res) => {
     const catalog=await dukascopy.catalog(),query=String(req.query.search || "").trim();
