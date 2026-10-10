@@ -1,12 +1,26 @@
 # Quantura Metaculus bot
 
-The Quantura bot discovers open questions in active competitions where Metaculus
-explicitly includes bots and the account has forecast permission. It scans every
+The Quantura bot discovers open questions in active public tournaments and indexes
+where the account has forecast permission, plus bot-oriented question series such
+as MiniBench and AI 2027. It scans every
 page, unpacks group questions, handles conditional outcomes separately, and checks
 each question's own opening/closing times. Newly eligible competitions are picked
-up automatically. The officially documented bot-friendly Metaculus Cup and AI 2027
-tournaments are included too; bots can forecast there but do not qualify for prizes.
-Other human tournaments that exclude bots from competition are excluded.
+up automatically. Coverage includes Labor Automation, Global Health, US Midterms,
+POTUS, Democracy Threat, Horizon Scanning, Respiratory Outlook, AI Pathways, Sagan,
+ACX, Cultured Meat, Chinese AI Chips and Climate Tipping Points when active.
+
+Forecast permission and prize eligibility are separate. Metaculus's
+[`bot_leaderboard_status` definition](https://github.com/Metaculus/metaculus/blob/main/projects/models.py)
+describes `exclude_and_show` as allowing a leaderboard display while excluding
+bots from ranks, prizes and medals. It does not revoke forecast permission.
+`exclude_and_hide` also affects visibility rather than forecast permission.
+The worker retains its registered bot identity and reports both the leaderboard
+status and prize eligibility. `include` or `bots_only` with a prize pool is labeled
+`subject_to_tournament_rules`, rather than promising eligibility for this account;
+other competition-specific entry restrictions still apply. Under the general
+[tournament rules](https://www.metaculus.com/tournament-rules/), bots are ineligible
+for prizes unless a competition explicitly permits them. Unknown policy states,
+closed/future competitions, and accounts without forecast permission are excluded.
 
 ## Operation
 

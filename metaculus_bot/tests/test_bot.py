@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from metaculus_bot.api import ApiError, Metaculus, RateLimited, eligible_post, retry_seconds
+from metaculus_bot.api import ApiError, Metaculus, RateLimited, competition_policy, eligible_post, eligible_project, retry_seconds
 from metaculus_bot.checkpoint import Checkpoint
 from metaculus_bot.llm import FreeLLM, FreeQuota, answer_schema, select_model, zero_price
 from metaculus_bot.questions import context, payload, unpack
@@ -155,10 +155,10 @@ def test_all_competitions_permission_and_deadline_filter():
     api=Metaculus('test');now=datetime(2026,10,10,tzinfo=timezone.utc)
     base={'id':1,'is_ongoing':True,'bot_leaderboard_status':'bots_only','user_permission':'forecaster',
           'start_date':'2026-09-01T00:00:00Z','forecasting_end_date':'2027-01-01T00:00:00Z'}
-    rows=[base,{**base,'id':2,'bot_leaderboard_status':'exclude_and_show'},
+    rows=[base,{**base,'id':2,'type':'tournament','bot_leaderboard_status':'exclude_and_show'},
           {**base,'id':3,'user_permission':'viewer'},{**base,'id':4,'forecasting_end_date':'2026-09-01T00:00:00Z'}]
     api.get=lambda path:rows if path=='projects/tournaments/' else [base]
-    assert [p['id'] for p in api.competitions(now)]==[1]
+    assert [p['id'] for p in api.competitions(now)]==[1,2]
 
 
 def test_posts_are_paginated():
@@ -319,7 +319,13 @@ def test_selected_posts_recheck_eligibility_without_discovery(posts,monkeypatch,
     args=SimpleNamespace(scope='test',engine='time-series',submit=False,max_questions=1,question_ids=[q.id_of_question],
                          post_ids=[sample['id']],report=str(tmp_path/'summary.json'))
     assert run(args,api)['counts']=={'already_submitted':1}
-    sample['projects']={'default_project':{'slug':'human-cup','is_ongoing':True,'bot_leaderboard_status':'exclude_and_show'}}
+    sample['projects']={'default_project':{'id':123,'name':'Human cup','type':'tournament','slug':'human-cup',
+                                          'is_ongoing':True,'bot_leaderboard_status':'exclude_and_show'}}
+    assert eligible_post(sample,'competitions')
+    args.scope='competitions'
+    result=run(args,api)
+    assert result['competitions'][0]['id']==123 and result['competitions'][0]['bot_prize_eligibility']=='not_eligible'
+    sample['projects']['default_project']['is_ongoing']=False
     assert not eligible_post(sample,'competitions')
 
 
@@ -413,3 +419,21 @@ def test_new_forecasts_each_have_private_reasoning_and_tournament_receipts(posts
     assert all(body['is_private'] is True for path,body in api.writes if path=='comments/create/')
     assert [(r['open_questions'],r['submitted_this_run'],r['reasoning_notes_saved_this_run']) for r in result['competitions']]==[(1,1,1),(2,2,2),(0,0,0)]
     assert sum(r['submitted_this_run'] for r in result['competitions'])>result['counts']['submitted']  # shared question, single API write
+
+
+@pytest.mark.parametrize('kind',['tournament','index'])
+def test_new_public_competitions_are_forecastable_without_bot_prize_eligibility(kind):
+    project={'id':123,'name':'New competition','type':kind,'is_ongoing':True,'bot_leaderboard_status':'exclude_and_show',
+             'prize_pool':'35000.00','start_date':'2026-01-01T00:00:00Z','forecasting_end_date':'2036-01-01T00:00:00Z'}
+    assert eligible_project(project,datetime(2026,10,10,tzinfo=timezone.utc))
+    assert competition_policy(project)=={'bot_leaderboard_status':'exclude_and_show','bot_prize_eligibility':'not_eligible'}
+
+
+def test_hidden_ranking_preserves_forecast_permission_and_unknown_policy_fails_closed():
+    project={'type':'tournament','is_ongoing':True,'bot_leaderboard_status':'exclude_and_hide'}
+    assert eligible_project(project) and competition_policy(project)['bot_prize_eligibility']=='not_eligible'
+    assert not eligible_project({**project,'bot_leaderboard_status':'unknown'})
+    assert not eligible_project({**project,'type':'question_series'})
+    assert eligible_project({**project,'type':'question_series','bot_leaderboard_status':'include'})
+    assert competition_policy({'bot_leaderboard_status':'include','prize_pool':'7500.00'})['bot_prize_eligibility']=='subject_to_tournament_rules'
+    assert competition_policy({'bot_leaderboard_status':'include','prize_pool':None})['bot_prize_eligibility']=='no_prize_pool'
