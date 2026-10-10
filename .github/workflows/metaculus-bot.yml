@@ -26,13 +26,14 @@ permissions:
   actions: read
 
 # One worker at a time. Never cancel a run mid-submission. Metaculus own forecast
-# history and private generation records provide recovery without GCS/Firestore.
+# history and encrypted artifacts provide recovery without GCS/Firestore.
 concurrency:
   group: ${{ github.event_name == 'pull_request' && format('quantura-metaculus-pr-{0}', github.event.pull_request.number) || 'quantura-metaculus-bot' }}
   cancel-in-progress: false
 
 jobs:
   validate:
+    if: ${{ github.event_name != 'schedule' || vars.METACULUS_BOT_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -57,6 +58,9 @@ jobs:
       METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       METACULUS_PARTICIPATION_FORM_CONFIRMED: ${{ vars.METACULUS_PARTICIPATION_FORM_CONFIRMED }}
+      METACULUS_SUBMISSIONS_APPROVED: ${{ vars.METACULUS_SUBMISSIONS_APPROVED || 'false' }}
+      METACULUS_BOT_ID: ${{ vars.METACULUS_BOT_ID }}
+      METACULUS_CHECKPOINT_NAMESPACE: bot-${{ vars.METACULUS_BOT_ID }}
       BOT_SCOPE: ${{ inputs.scope || 'competitions' }}
       BOT_SUBMIT: ${{ github.event_name == 'schedule' || inputs.submit }}
       BOT_MAX: ${{ inputs.max_questions || '4' }}
@@ -90,7 +94,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: metaculus-checkpoint-${{ github.run_id }}-${{ github.job }}
+          name: metaculus-checkpoint-bot-${{ vars.METACULUS_BOT_ID }}-${{ github.run_id }}-${{ github.job }}
           path: artifacts/metaculus-checkpoint.enc
           retention-days: 7
           if-no-files-found: ignore
@@ -103,6 +107,9 @@ jobs:
     env:
       METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
       METACULUS_PARTICIPATION_FORM_CONFIRMED: ${{ vars.METACULUS_PARTICIPATION_FORM_CONFIRMED }}
+      METACULUS_SUBMISSIONS_APPROVED: ${{ vars.METACULUS_SUBMISSIONS_APPROVED || 'false' }}
+      METACULUS_BOT_ID: ${{ vars.METACULUS_BOT_ID }}
+      METACULUS_CHECKPOINT_NAMESPACE: bot-${{ vars.METACULUS_BOT_ID }}
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       HF_HOME: ${{ github.workspace }}/.cache/huggingface
       TOKENIZERS_PARALLELISM: 'false'
@@ -150,7 +157,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: metaculus-checkpoint-${{ github.run_id }}-${{ github.job }}
+          name: metaculus-checkpoint-bot-${{ vars.METACULUS_BOT_ID }}-${{ github.run_id }}-${{ github.job }}
           path: artifacts/metaculus-checkpoint.enc
           retention-days: 7
           if-no-files-found: ignore

@@ -88,7 +88,9 @@ estimate unless actual ensemble results are supplied. Sources may be incomplete;
 do not assume remembered events or outcomes happened. If the evidence is not
 sufficient for a reasoned forecast, return abstain:true, reasoning explaining why,
 source_ids, and null for the required prediction field.
-Otherwise output exactly one JSON object with abstain:false, reasoning (150-400 words),
+Otherwise output exactly one JSON object with abstain:false, reasoning (60-100 words),
+focused on the decisive evidence, key assumption, and main uncertainty. No repeated
+question text, marketing, generic disclaimers, or exhaustive narrative. Include
 source_ids (only the supplied S1/S2/S3 identifiers), and the prediction:
 binary: probability_yes as a decimal in [0.001,0.999];
 multiple_choice: probabilities mapping EXACT option strings to decimals summing

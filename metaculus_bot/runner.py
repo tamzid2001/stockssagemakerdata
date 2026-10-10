@@ -10,13 +10,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .api import ApiError, Metaculus, RateLimited, competition_policy, eligible_post, eligible_project, post_projects, utcnow
-from .checkpoint import Checkpoint
+from .checkpoint import Checkpoint, PrivateNoteLimit
 from .llm import FreeLLM, FreeQuota
 from .questions import already_submitted, context, payload, unpack
 from .research import evidence
 from .time_series import definition, forecast
 
 MARKER = "QUANTURA_BOT_RECORD_V1"
+NOTE_MARKER = "QUANTURA_BOT_NOTE_V2"
 
 
 def question_hash(question):
@@ -47,16 +48,45 @@ def saved_record(comments: list[dict], user_id: int, question_id: int) -> dict |
     return None
 
 
+def answer_hash(record):
+    return hashlib.sha256(json.dumps(record["answer"], sort_keys=True, allow_nan=False).encode()).hexdigest()
+
+
+def saved_note(comments, user_id, question_id):
+    for comment in reversed(comments):
+        if (comment.get("author") or {}).get("id") != user_id:
+            continue
+        match = re.search(r'<!-- ' + NOTE_MARKER + r' (\{[^\n]*\}) -->', comment.get("text") or "")
+        if match:
+            try:
+                note = json.loads(match[1])
+                if note.get("question_id") == question_id:
+                    return note
+            except (json.JSONDecodeError, TypeError):
+                continue
+    return None
+
+
+def concise_reasoning(text):
+    # Bound the posted explanation, including legacy pending generations. Do
+    # not regenerate or adjust a forecast just to shorten its private note.
+    original = " ".join(str(text).split())
+    short = " ".join(original.split()[:100])[:1000]
+    if len(short) < len(original):
+        endings = [m.end() for m in re.finditer(r'[.!?](?:\s|$)', short)]
+        short = short[:endings[-1]].strip() if endings and endings[-1] > len(short) / 2 else short[:999].rsplit(" ", 1)[0] + "…"
+    return short
+
+
 def record_text(record: dict) -> str:
     answer = record["answer"]
-    sources = "\n".join(f"- {s['url']} (SHA256 {s['sha256']})" for s in answer.get("sources", []))
-    return (f"## Quantura autonomous forecast\n\nQuestion ID: {record['question_id']}\n\n"
-            f"Generated UTC: {record['generated_at']}\n\nEngine: {answer.get('engine', 'free_llm')}\n\n"
-            f"Model(s): {answer.get('model') or ', '.join(answer.get('models', []))}\n\n"
-            f"{answer.get('reasoning') or answer.get('reason', 'Abstained')}\n\n"
-            f"Sources actually retrieved:\n{sources or 'Question background and resolution criteria only; no external source retrieved.'}\n\n"
-            "This is an automated research estimate, with uncertainty and no human adjustment.\n\n"
-            f"<!-- {MARKER} {json.dumps(record, sort_keys=True, separators=(',', ':'))} -->")
+    models = str(answer.get("model") or ", ".join(answer.get("models", [])) or answer.get("engine", "free_llm"))[:120]
+    urls = list(dict.fromkeys(s["url"] for s in answer.get("sources", []) if isinstance(s.get("url"), str) and len(s["url"]) <= 300))[:3]
+    sources = "\n\nSources: " + "; ".join(urls) if urls else ""
+    note = {"question_id": record["question_id"], "answer_sha256": answer_hash(record)}
+    return (f"Automated forecast ({models}).\n\n"
+            f"{concise_reasoning(answer.get('reasoning') or answer.get('reason', ''))}{sources}\n\n"
+            f"<!-- {NOTE_MARKER} {json.dumps(note, sort_keys=True, separators=(',', ':'))} -->")
 
 
 def question_order(questions, memberships, handled, replay, now=None):
@@ -126,11 +156,18 @@ def submit(api, question, record):
 
 
 def run(args, api=None, llm_factory=FreeLLM):
+    if getattr(args, "submit", False) and os.environ.get("METACULUS_SUBMISSIONS_APPROVED") != "true":
+        raise RuntimeError("METACULUS_SUBMISSIONS_NOT_APPROVED")
     checkpoint = Checkpoint(getattr(args, "checkpoint", None), os.environ.get("METACULUS_TOKEN"))
+    if getattr(args, "submit", False) and not checkpoint.path:
+        raise RuntimeError("SUBMISSION_CHECKPOINT_REQUIRED")
     if checkpoint.remaining():
         raise RateLimited(checkpoint.remaining())
     api = api or Metaculus(os.environ["METACULUS_TOKEN"])
     identity = api.identity()
+    expected_bot = os.environ.get("METACULUS_BOT_ID")
+    if expected_bot and str(identity["id"]) != expected_bot:
+        raise RuntimeError("METACULUS_BOT_ID_MISMATCH")
     if args.submit and os.environ.get("METACULUS_PARTICIPATION_FORM_CONFIRMED") != "true":
         raise RuntimeError("PARTICIPATION_FORM_CONFIRMATION_REQUIRED")
     registry = json.loads(Path(__file__).with_name("series_registry.json").read_text())
@@ -172,7 +209,7 @@ def run(args, api=None, llm_factory=FreeLLM):
         if checkpoint.get(question_id):
             checkpoint.remove(question_id)
     specs = {q.id_of_question: definition(q, registry) for q in questions}
-    llm, time_series_ids, attempted, submitted_count, summaries = None, [], 0, 0, []
+    llm, time_series_ids, attempted, submitted_count, note_attempts, summaries = None, [], 0, 0, 0, []
     if args.engine == "llm":
         time_series_ids = [q.id_of_question for q in questions if specs[q.id_of_question] and q.id_of_question not in own]
     candidates = [q for q in questions if q.id_of_question not in own and not already_submitted(q)
@@ -181,7 +218,8 @@ def run(args, api=None, llm_factory=FreeLLM):
     # Saved abstentions do not consume the new-question budget or starve backlog.
     comments = api.comments(None, identity["id"]) if candidates else []
     records = {q.id_of_question: saved_record(comments, identity["id"], q.id_of_question) for q in candidates}
-    handled = own | {q.id_of_question for q in questions if already_submitted(q)} | {i for i, r in records.items() if r}
+    notes = {q.id_of_question: saved_note(comments, identity["id"], q.id_of_question) for q in candidates}
+    handled = own | {q.id_of_question for q in questions if already_submitted(q)} | {i for i, r in records.items() if r or checkpoint.get(i) or notes[i]}
     replay = {q.id_of_question for q in candidates if
               (record := records[q.id_of_question] or checkpoint.get(q.id_of_question)) and not record["answer"].get("abstain")}
     questions = question_order(questions, memberships, handled, replay)
@@ -210,6 +248,10 @@ def run(args, api=None, llm_factory=FreeLLM):
         if persisted:
             checkpoint.remove(q.id_of_question)
         record = record or checkpoint.get(q.id_of_question)
+        note = notes.get(q.id_of_question)
+        if note and not record:
+            counts["note_without_exact_recovery_deferred"] += 1
+            continue
         if submitted_count >= args.max_questions or (not record and attempted >= args.max_questions):
             counts["batch_deferred"] += 1
             continue
@@ -229,26 +271,50 @@ def run(args, api=None, llm_factory=FreeLLM):
                 record = {"question_id": q.id_of_question, "generated_at": utcnow().isoformat(), "answer": answer,
                           "question_sha256": question_hash(q)}
                 checkpoint.put(record)
-            if args.submit and not persisted:
-                stage = "reasoning_write"
-                # An encrypted checkpoint preserves this exact answer even if
-                # the private-note request is throttled or its response is lost.
-                api.post("comments/create/", {"text": record_text(record), "on_post": q.id_of_post,
-                         "parent": None, "included_forecast": False, "is_private": True})
-                checkpoint.remove(q.id_of_question)
-                for row in coverage:
-                    if row["id"] in memberships[q.id_of_question]:
-                        row["reasoning_notes_saved_this_run"] += 1
             if record["answer"].get("abstain"):
                 status = "abstained"
+                # Preserve the decision privately; no comment or repeated model
+                # call is needed for an abstention.
             else:
                 stage = "distribution_validation"
                 payload(q, record["answer"])
+                if note and note.get("answer_sha256") != answer_hash(record):
+                    raise RuntimeError("PRIVATE_NOTE_RECOVERY_MISMATCH")
+            if args.submit and not record["answer"].get("abstain") and not persisted and not note:
+                stage = "reasoning_write"
+                if record.get("note_write_state"):
+                    raise RuntimeError("PRIVATE_NOTE_CONFIRMATION_PENDING")
+                if note_attempts >= 2:
+                    raise PrivateNoteLimit("PRIVATE_NOTE_BATCH_LIMIT")
+                text = record_text(record)
+                checkpoint.reserve_note_attempt()
+                note_attempts += 1
+                record["note_write_state"] = "uncertain"
+                checkpoint.put(record)
+                # An encrypted checkpoint preserves this exact answer even if
+                # the private-note request is throttled or its response is lost.
+                try:
+                    api.post("comments/create/", {"text": text, "on_post": q.id_of_post,
+                             "parent": None, "included_forecast": False, "is_private": True})
+                except ApiError as error:
+                    if error.status in {400, 401, 403, 404, 429}:
+                        record.pop("note_write_state", None)
+                        checkpoint.put(record)
+                    raise
+                record["note_write_state"] = "confirmed"
+                checkpoint.put(record)
+                # Keep the exact answer in the encrypted checkpoint until the
+                # forecast is confirmed. Posted notes contain no recovery JSON.
+                for row in coverage:
+                    if row["id"] in memberships[q.id_of_question]:
+                        row["reasoning_notes_saved_this_run"] += 1
+            if not record["answer"].get("abstain"):
                 stage = "forecast_submission"
                 status = submit(api, q, record) if args.submit else "validated_not_submitted"
                 if status in {"submitted", "submitted_reconciled", "submission_unconfirmed"}:
                     submitted_count += 1
                 if status in {"submitted", "submitted_reconciled"}:
+                    checkpoint.remove(q.id_of_question)
                     for row in coverage:
                         if row["id"] in memberships[q.id_of_question]:
                             row["submitted_this_run"] += 1
@@ -263,7 +329,17 @@ def run(args, api=None, llm_factory=FreeLLM):
             counts["free_quota_deferred"] += 1
             log("metaculus_free_capacity", status=str(error), question_id=q.id_of_question, paid_fallback=False)
             break
+        except PrivateNoteLimit as error:
+            counts["private_note_limit_deferred"] += 1
+            log("metaculus_private_note_capacity", error_code=str(error), question_id=q.id_of_question,
+                status="deferred_until_next_capacity_window")
+            time_series_ids = []
+            break
         except (ApiError, ValueError, KeyError, TypeError, RuntimeError) as error:
+            if isinstance(error, ApiError) and error.status in {401, 403}:
+                # A permission denial stops the entire batch, not just this
+                # question. Repeated writes to a restricted account add no value.
+                raise
             # Never log response bodies, prompts, headers, credentials, or private
             # generated distributions in public Actions logs/artifacts.
             status = "deferred_error"
@@ -336,7 +412,10 @@ def main():
                             "questions": [], "retry_after_seconds": round(error.retry_after, 1)})
     except (ApiError, FreeQuota, RuntimeError, KeyError) as error:
         log("metaculus_worker_failed", error_type=type(error).__name__,
-            upstream_status=error.status if isinstance(error, ApiError) else None)
+            upstream_status=error.status if isinstance(error, ApiError) else None,
+            error_code=error.service if isinstance(error, ApiError) else
+            str(error.args[0]) if error.args and re.fullmatch(r'[A-Za-z0-9_]{1,80}', str(error.args[0])) else None,
+            recovery="operator_review_required" if isinstance(error, ApiError) and error.status in {401, 403} else None)
         raise SystemExit(1)
 
 

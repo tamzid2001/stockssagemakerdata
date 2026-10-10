@@ -7,12 +7,18 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import time
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from cryptography.fernet import Fernet
+
+
+class PrivateNoteLimit(RuntimeError):
+    pass
 
 
 class Checkpoint:
@@ -52,16 +58,37 @@ class Checkpoint:
     def remaining(self):
         return max(0, self.state["not_before"] - time.time())
 
+    def reserve_note_attempt(self, now=None):
+        day = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).date().isoformat()
+        budget = self.state.get("private_notes", {})
+        count = budget.get("attempts", 0) if budget.get("day") == day else 0
+        if count >= 12:
+            raise PrivateNoteLimit("PRIVATE_NOTE_DAILY_LIMIT")
+        # Reserve before the network call. An ambiguous response still consumes
+        # capacity; retries cannot cause a burst after a worker restart.
+        self.state["private_notes"] = {"day": day, "attempts": count + 1}
+        self.save()
+
+
+def artifact_prefix():
+    namespace = os.environ.get("METACULUS_CHECKPOINT_NAMESPACE")
+    if namespace:
+        if not re.fullmatch(r"bot-[1-9][0-9]*", namespace):
+            raise RuntimeError("INVALID_CHECKPOINT_NAMESPACE")
+        return f"metaculus-checkpoint-{namespace}-"
+    return "metaculus-checkpoint-"
+
 
 def restore(path: Path):
     # gh handles the authenticated archive download and its storage redirect.
     # Never extract arbitrary artifact paths or print archive/private contents.
     repo = os.environ["GITHUB_REPOSITORY"]
+    prefix = artifact_prefix()
     for page in range(1, 11):
         result = subprocess.run(["gh", "api", f"repos/{repo}/actions/artifacts?per_page=100&page={page}"],
                                 capture_output=True, check=True)
         artifacts = json.loads(result.stdout)["artifacts"]
-        candidates = [a for a in artifacts if a["name"].startswith("metaculus-checkpoint-") and not a["expired"]]
+        candidates = [a for a in artifacts if a["name"].startswith(prefix) and not a["expired"]]
         if candidates:
             latest = max(candidates, key=lambda a: a["id"])
             archive = subprocess.run(["gh", "api", f"repos/{repo}/actions/artifacts/{latest['id']}/zip"],

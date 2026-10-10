@@ -31,16 +31,24 @@ closed/future competitions, and accounts without forecast permission are exclude
 - Secrets: `METACULUS_TOKEN` and `OPENROUTER_API_KEY` in GitHub Actions. Never put
   either in source files, browser code, inputs, or artifacts.
 - Enable: repository variable `METACULUS_BOT_ENABLED=true`.
+- Submission approval: `METACULUS_SUBMISSIONS_APPROVED=true` only for an account
+  permitted by Metaculus to submit. It defaults to false, including manual runs.
+- Account binding: `METACULUS_BOT_ID` must match the authenticated bot. Recovery
+  artifacts are namespaced as `metaculus-checkpoint-bot-<id>-...`; another bot's
+  generations and comments are never imported.
 - Participation form: `METACULUS_PARTICIPATION_FORM_CONFIRMED=true` after submission.
 - Pause: set `METACULUS_BOT_ENABLED=false` or disable the workflow. Existing forecasts
   remain on Metaculus; pausing does not erase them.
 
 Each question receives one forecast. Subsequent runs skip authoritative own
 forecast history through `questions/bulk-forecast-read/`; feed metadata alone is
-not treated as a submission receipt. A private reasoning note records the exact generated answer
-before submission, allowing a restart to reuse it without regenerating a different
-answer. Uncertain writes are checked against Metaculus; writes aren't blindly
-retried. Notes include engine, model, UTC time, real source links and data hashes.
+not treated as a submission receipt. An encrypted recovery artifact preserves the
+exact generated answer before submission. The private reasoning note contains a
+brief explanation, model attribution, real source links and a compact answer hash;
+it contains no raw answer JSON, data hashes or duplicated recovery payload.
+Uncertain writes are checked against Metaculus; writes aren't blindly retried.
+If a note exists without its exact recovery answer, the worker defers rather than
+generating a different prediction or posting another comment.
 Metaculus requests are spaced at least five seconds apart. Read retries honor
 `Retry-After` in seconds or HTTP-date format. Exhausted quotas defer work instead
 of crashing the worker, and a restored cooldown prevents requests before it expires.
@@ -58,9 +66,34 @@ open questions. A zero is visible rather than presented as a submission.
 Every submitted forecast has an automated private reasoning note. Metaculus
 requires bots to leave private comments and publishes FutureEval notes itself at
 regular intervals; main-site notes remain private unless it grants permission.
-The worker does not publish promotional or duplicate comments. Comments explain
+New LLM explanations target 60–100 words. Posted reasoning is capped at 100 words
+and 1,000 characters, including old pending generations. Source links are limited
+to three retrieved URLs. Distribution validation happens before any comment;
+abstentions and invalid forecasts produce no comments. The worker does not publish
+promotional or duplicate comments. Comments explain
 the forecast; leaderboard scores depend on resolved forecasting performance.
 Actions artifacts contain operational summaries, not private reasoning.
+
+As a conservative restart policy, at most **two new private-note attempts per job**
+and **twelve attempts per UTC day** are permitted. The encrypted checkpoint reserves
+capacity before each network request, including ambiguous writes. These are
+Quantura's own limits, not a claim about Metaculus's permitted posting volume.
+Unconfirmed note writes are not repeated: if their receipt is still missing after
+a restart, the original answer is held for review. A 401/403 during any question
+stops the entire batch immediately.
+
+### Moderation restrictions
+
+As of October 10, 2026, submissions are paused after the owner reported that the
+accounts were labeled spam. A new token returned HTTP 403; the latest replacement
+key authenticates bot `quantura3` (310227), but technical API access does not establish
+permission to bypass a moderation restriction. Metaculus must restore access or
+explicitly approve a replacement before submission approval and automation are
+enabled. Register the approved bot through the participation process; the previous
+account's form confirmation is not reused. Do not rotate accounts to evade a block.
+The [community guidelines](https://www.metaculus.com/help/guidelines/) prohibit spam
+and describe temporary suspensions and permanent bans. A 401/403 is reported as
+requiring operator review, with no immediate request retry.
 
 The unscored **bot-testing-area** supports a manual smoke test. Validate there
 before running `scope=competitions, submit=true`. Follow the
@@ -127,9 +160,11 @@ earnings, opinion polls, or any unrelated KPI. Arbitrary untrusted question URLs
 cannot access internal hosts, credentials, metadata endpoints or authenticated
 provider sessions.
 
-No Firestore or Cloud Storage is used. State lives in Metaculus own forecast history
-and private notes. An encrypted seven-day GitHub recovery artifact preserves
-generations whose private-note write failed and API cooldowns between runs. Its
+No Firestore or Cloud Storage is used. Confirmed submission history lives in
+Metaculus. An encrypted seven-day GitHub recovery artifact preserves pending
+generations, abstentions and API cooldowns between runs. Exact answers remain in
+recovery state until their forecasts are confirmed; private notes only identify
+their answer hashes. Its
 encryption key is derived from the secret Metaculus token with a dedicated context;
 token rotation requires draining pending generations before changing the token.
 Restoring or decrypting recovery state must succeed before new work starts.
@@ -143,7 +178,7 @@ python -m pip install --require-hashes -r metaculus_bot/requirements.lock
 python -m pytest -q metaculus_bot/tests
 python -m metaculus_bot.runner --scope test --max-questions 1
 # Explicitly submit to the unscored testing area:
-python -m metaculus_bot.runner --scope test --submit --max-questions 1
+python -m metaculus_bot.runner --scope test --submit --max-questions 1 --checkpoint artifacts/metaculus-checkpoint.enc
 ```
 
 Time-series inference uses a separate virtual environment with the existing
