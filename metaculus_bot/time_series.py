@@ -101,8 +101,11 @@ def forecast(question, spec: dict, python_executable: str) -> dict:
         input_file, output_file = Path(temp, "input.json"), Path(temp, "output.json")
         input_file.write_text(json.dumps(job))
         # Separate inference environment keeps the production model lock intact.
-        result = subprocess.run([python_executable, "-m", "metaculus_bot.ensemble_job", str(input_file), str(output_file)],
-                                timeout=1800, check=False)
+        try:
+            result = subprocess.run([python_executable, "-m", "metaculus_bot.ensemble_job", str(input_file), str(output_file)],
+                                    timeout=1800, check=False)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("ENSEMBLE_INFERENCE_TIMEOUT") from None
         if result.returncode != 0 or not output_file.exists():
             raise RuntimeError("ENSEMBLE_INFERENCE_FAILED")
         data = json.loads(output_file.read_text())

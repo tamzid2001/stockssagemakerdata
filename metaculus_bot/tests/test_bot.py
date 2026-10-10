@@ -9,7 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from metaculus_bot.api import ApiError, Metaculus
+from metaculus_bot.api import ApiError, Metaculus, RateLimited, eligible_post, retry_seconds
+from metaculus_bot.checkpoint import Checkpoint
 from metaculus_bot.llm import FreeLLM, FreeQuota, answer_schema, select_model, zero_price
 from metaculus_bot.questions import context, payload, unpack
 from metaculus_bot.research import public_get, public_url
@@ -110,7 +111,8 @@ def test_structured_output_preserves_exact_options(posts):
 
 
 class Response:
-    def __init__(self, data=None, status=200):self.data=data;self.status_code=status
+    def __init__(self, data=None, status=200, headers=None):
+        self.data=data;self.status_code=status;self.headers=headers or {};self.content=b'{}'
     def json(self):return self.data
 
 
@@ -144,6 +146,7 @@ def test_no_community_predictions_in_prompt(posts):
 def test_recover_nested_prediction_without_regeneration(posts):
     q=one(posts,'binary')
     assert payload(q,{'prediction':{'probability_yes':.17}})['probability_yes']==.17
+    assert payload(q,{'prediction':{'binary':.17}})['probability_yes']==.17
     q=one(posts,'multiple_choice');probs={o:1/len(q.options) for o in q.options}
     assert payload(q,{'prediction':probs})['probability_yes_per_category']==probs
 
@@ -184,6 +187,7 @@ def test_lost_forecast_response_reconciles_without_repost(posts):
             if self.writes:p['question']['my_forecasts']={'history':[{'start_time':1780000000}],'latest':{'start_time':1780000000}}
             return p
         def post(self,path,body):self.writes+=1;raise ApiError('METACULUS_WRITE_UNCERTAIN')
+        def own_forecasts(self,ids):return set(ids) if self.writes else set()
     api=Api();assert submit(api,q,record)=='submitted_reconciled';assert api.writes==1
 
 
@@ -221,3 +225,140 @@ def test_time_series_preserves_real_rows_and_rejects_future_data(monkeypatch):
     rows,source=history({'kind':'silver_bulletin','value_column':'net','unit':'percentage points'})
     assert len(rows)==46 and rows[-1]['timestamp']==now.isoformat() and rows[-1]['target']==-10
     assert source['observed_rows']==46
+
+
+class Timer:
+    now=0
+    def clock(self):return self.now
+    def sleep(self,seconds):self.now+=seconds
+
+
+class MetaculusSession:
+    def __init__(self, timer, responses):self.headers={};self.timer=timer;self.responses=iter(responses);self.calls=[]
+    def get(self,url,**kwargs):self.calls.append(self.timer.now);return next(self.responses)
+    def post(self,url,**kwargs):return self.get(url,**kwargs)
+
+
+def test_metaculus_throttle_and_retry_after():
+    timer=Timer();session=MetaculusSession(timer,[Response(status=429,headers={'Retry-After':'45'}),Response({'ok':True}),Response({'ok':True})])
+    api=Metaculus('test',session,clock=timer.clock,sleep=timer.sleep)
+    assert api.get('posts/')=={'ok':True}
+    api.get('posts/')
+    assert session.calls==[0,45,50]
+    now=datetime(2026,10,10,12,0,tzinfo=timezone.utc)
+    assert retry_seconds('Sat, 10 Oct 2026 12:01:30 GMT',now)==90
+    assert retry_seconds('not a date',now) is None
+
+
+def test_429_write_not_reposted_and_long_cooldown_not_ignored():
+    timer=Timer();session=MetaculusSession(timer,[Response(status=429,headers={'Retry-After':'600'})])
+    api=Metaculus('test',session,clock=timer.clock,sleep=timer.sleep)
+    with pytest.raises(RateLimited) as error:api.post('questions/forecast/',[])
+    assert error.value.retry_after==600
+    with pytest.raises(RateLimited):api.get('posts/')
+    assert session.calls==[0]
+
+
+def test_api_forecasting_disabled_enum_is_rejected():
+    api=Metaculus('test');api.get=lambda path:{'id':1,'username':'bot','is_bot':True,'is_active':True,'api_forecasting_access':'disabled'}
+    with pytest.raises(RuntimeError,match='BOT_API_FORECASTING_ACCESS_REQUIRED'):api.identity()
+
+
+def test_authoritative_bulk_own_forecasts():
+    api=Metaculus('test');calls=[]
+    def get(path,**params):
+        calls.append(params['question_ids'])
+        return {'results':[{'question_id':i,'forecasts':[{}] if i%2 else []} for i in params['question_ids']]}
+    api.get=get
+    assert api.own_forecasts(list(range(1,103)))==set(range(1,103,2))
+    assert len(calls)==2 and len(calls[0])==100
+
+
+def test_confirmed_receipt_required(posts):
+    q=one(posts,'binary');record={'answer':{'probability_yes':.2},'question_sha256':question_hash(q)}
+    post=next(p for p in posts if p.get('question',{}).get('id')==q.id_of_question)
+    api=SimpleNamespace(get=lambda path:post,post=lambda *args:{},own_forecasts=lambda ids:set())
+    assert submit(api,q,record)=='submission_unconfirmed'
+    api.own_forecasts=lambda ids:set(ids)
+    assert submit(api,q,record)=='submitted'
+
+
+def test_saved_abstentions_do_not_starve_new_questions(posts,monkeypatch,tmp_path):
+    sample=[copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary']
+    first=unpack(sample[0])[0]
+    # One persisted abstention precedes a new question, with a one-generation budget.
+    sample.append(copy.deepcopy(sample[0]));sample[1]['id']+=1000;sample[1]['question']['id']+=1000
+    saved={'question_id':first.id_of_question,'answer':{'abstain':True},'question_sha256':question_hash(first),'generated_at':'2026-10-10T00:00:00Z'}
+    class Api:
+        comment_calls=0
+        def identity(self):return {'id':1,'username':'test'}
+        def posts(self,project):return sample
+        def own_forecasts(self,ids):return set()
+        def comments(self,post,author):
+            self.comment_calls+=1
+            assert post is None
+            return [{'author':{'id':1},'text':record_text(saved)}]
+    class Llm:
+        calls=0
+        def __init__(self,key):pass
+        def forecast(self,q,sources):self.calls+=1;return {'probability_yes':.2}
+    from metaculus_bot import runner
+    monkeypatch.setattr(runner,'evidence',lambda q:[])
+    monkeypatch.setenv('OPENROUTER_API_KEY','test')
+    args=SimpleNamespace(scope='test',engine='llm',submit=False,max_questions=1,question_ids=[],report=str(tmp_path/'summary.json'))
+    api=Api();result=run(args,api,Llm)
+    assert result['counts']=={'abstained':1,'validated_not_submitted':1} and api.comment_calls==1
+
+
+def test_selected_posts_recheck_eligibility_without_discovery(posts,monkeypatch,tmp_path):
+    sample=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary')
+    sample['projects']={'default_project':{'id':32977,'slug':'bot-testing-area'}}
+    q=unpack(sample)[0]
+    api=SimpleNamespace(identity=lambda:{'id':1,'username':'test'},get=lambda path:sample,
+                        own_forecasts=lambda ids:set(ids),competitions=lambda:pytest.fail('No second discovery scan'))
+    args=SimpleNamespace(scope='test',engine='time-series',submit=False,max_questions=1,question_ids=[q.id_of_question],
+                         post_ids=[sample['id']],report=str(tmp_path/'summary.json'))
+    assert run(args,api)['counts']=={'already_submitted':1}
+    sample['projects']={'default_project':{'slug':'human-cup','is_ongoing':True,'bot_leaderboard_status':'exclude_and_show'}}
+    assert not eligible_post(sample,'competitions')
+
+
+def test_checkpoint_encrypted_and_exact_generation_recovered(tmp_path):
+    from cryptography.fernet import InvalidToken
+    path=tmp_path/'checkpoint.enc';record={'question_id':1,'answer':{'probability_yes':.123,'reasoning':'private reasoning'}}
+    state=Checkpoint(path,'test-token');state.put(record);state.defer(90)
+    assert b'private reasoning' not in path.read_bytes()
+    restored=Checkpoint(path,'test-token')
+    assert restored.get(1)==record and 89<restored.remaining()<=90
+    with pytest.raises(InvalidToken):Checkpoint(path,'different-token')
+    restored.remove(1)
+    assert Checkpoint(path,'test-token').get(1) is None
+
+
+def test_pending_generation_does_not_rerun_model(posts,monkeypatch,tmp_path):
+    sample=next(copy.deepcopy(p) for p in posts if p.get('question',{}).get('type')=='binary')
+    q=unpack(sample)[0]
+    path=tmp_path/'checkpoint.enc'
+    record={'question_id':q.id_of_question,'answer':{'probability_yes':.2},'question_sha256':question_hash(q),'generated_at':'2026-10-10T00:00:00Z'}
+    Checkpoint(path,'test-token').put(record)
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    monkeypatch.setenv('METACULUS_PARTICIPATION_FORM_CONFIRMED','true')
+    class Api:
+        writes=[]
+        def identity(self):return {'id':1,'username':'test'}
+        def posts(self,project):return [sample]
+        def comments(self,*args):return []
+        def get(self,path):return sample
+        def own_forecasts(self,ids):return set(ids) if 'questions/forecast/' in self.writes else set()
+        def post(self,path,body):self.writes.append(path);return {}
+    args=SimpleNamespace(scope='test',engine='llm',submit=True,max_questions=1,question_ids=[],checkpoint=str(path),report=str(tmp_path/'summary.json'))
+    api=Api()
+    assert run(args,api,lambda key:pytest.fail('Must reuse original generation'))['counts']=={'submitted':1}
+    assert api.writes==['comments/create/','questions/forecast/'] and Checkpoint(path,'test-token').get(q.id_of_question) is None
+
+
+def test_existing_cooldown_skips_all_metaculus_requests(monkeypatch,tmp_path):
+    path=tmp_path/'checkpoint.enc';Checkpoint(path,'test-token').defer(600)
+    monkeypatch.setenv('METACULUS_TOKEN','test-token')
+    args=SimpleNamespace(checkpoint=str(path))
+    with pytest.raises(RateLimited):run(args,SimpleNamespace(identity=lambda:pytest.fail('Must honor restored cooldown')))

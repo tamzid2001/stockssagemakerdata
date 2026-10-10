@@ -23,11 +23,12 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 # One worker at a time. Never cancel a run mid-submission. Metaculus own forecast
 # history and private generation records provide recovery without GCS/Firestore.
 concurrency:
-  group: quantura-metaculus-bot
+  group: ${{ github.event_name == 'pull_request' && format('quantura-metaculus-pr-{0}', github.event.pull_request.number) || 'quantura-metaculus-bot' }}
   cancel-in-progress: false
 
 jobs:
@@ -51,6 +52,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       time_series_ids: ${{ steps.worker.outputs.time_series_ids }}
+      time_series_post_ids: ${{ steps.worker.outputs.time_series_post_ids }}
     env:
       METACULUS_TOKEN: ${{ secrets.METACULUS_TOKEN }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -59,6 +61,7 @@ jobs:
       BOT_SUBMIT: ${{ github.event_name == 'schedule' || inputs.submit }}
       BOT_MAX: ${{ inputs.max_questions || '4' }}
       PYTHONUNBUFFERED: '1'
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -67,10 +70,12 @@ jobs:
           cache: pip
           cache-dependency-path: metaculus_bot/requirements.lock
       - run: python -m pip install --require-hashes -r metaculus_bot/requirements.lock
+      - name: Restore encrypted pending generations and API cooldown
+        run: python -m metaculus_bot.checkpoint --restore artifacts/metaculus-checkpoint.enc
       - name: Discover questions and run free-only LLM forecasts
         id: worker
         run: |
-          args=(--scope "$BOT_SCOPE" --max-questions "$BOT_MAX")
+          args=(--scope "$BOT_SCOPE" --max-questions "$BOT_MAX" --checkpoint artifacts/metaculus-checkpoint.enc)
           if [[ "$BOT_SUBMIT" == 'true' ]]; then args+=(--submit); fi
           python -m metaculus_bot.runner "${args[@]}"
       - name: Save operational summary only
@@ -79,6 +84,14 @@ jobs:
         with:
           name: metaculus-summary-${{ github.run_id }}
           path: artifacts/metaculus-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Save encrypted recovery state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaculus-checkpoint-${{ github.run_id }}-${{ github.job }}
+          path: artifacts/metaculus-checkpoint.enc
           retention-days: 7
           if-no-files-found: ignore
 
@@ -100,7 +113,9 @@ jobs:
       BOT_SUBMIT: ${{ github.event_name == 'schedule' || inputs.submit }}
       BOT_MAX: ${{ inputs.max_questions || '4' }}
       QUESTION_IDS: ${{ needs.discover.outputs.time_series_ids }}
+      POST_IDS: ${{ needs.discover.outputs.time_series_post_ids }}
       PYTHONUNBUFFERED: '1'
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -109,6 +124,8 @@ jobs:
           cache: pip
           cache-dependency-path: metaculus_bot/requirements.lock
       - run: python -m pip install --require-hashes -r metaculus_bot/requirements.lock
+      - name: Restore encrypted pending generations and API cooldown
+        run: python -m metaculus_bot.checkpoint --restore artifacts/metaculus-checkpoint.enc
       - name: Install existing locked production inference environment
         run: |
           python -m venv .ensemble-env
@@ -116,7 +133,7 @@ jobs:
       # Never publish gated model weights in a public Actions cache.
       - name: Forecast verified resolution-source time series
         run: |
-          args=(--scope "$BOT_SCOPE" --engine time-series --question-ids "$QUESTION_IDS" --max-questions "$BOT_MAX")
+          args=(--scope "$BOT_SCOPE" --engine time-series --question-ids "$QUESTION_IDS" --post-ids "$POST_IDS" --max-questions "$BOT_MAX" --checkpoint artifacts/metaculus-checkpoint.enc)
           if [[ "$BOT_SUBMIT" == 'true' ]]; then args+=(--submit); fi
           python -m metaculus_bot.runner "${args[@]}"
       - name: Save operational summary only
@@ -125,5 +142,13 @@ jobs:
         with:
           name: metaculus-time-series-summary-${{ github.run_id }}
           path: artifacts/metaculus-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Save encrypted recovery state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metaculus-checkpoint-${{ github.run_id }}-${{ github.job }}
+          path: artifacts/metaculus-checkpoint.enc
           retention-days: 7
           if-no-files-found: ignore
