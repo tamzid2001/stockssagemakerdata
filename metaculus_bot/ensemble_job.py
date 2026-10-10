@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-def run(job: dict) -> dict:
+def run(job: dict, *, mock=False) -> dict:
     import numpy as np
     from ensemble_forecasting.worker import execute_job
     from market_research.forecast import default_research_models
@@ -21,15 +21,20 @@ def run(job: dict) -> dict:
                "transform": "none", "quantiles": QUANTILES, "failure_policy": "renormalize",
                "models": {m: {"enabled": True, "weight": 1} for m in models}}
     result = execute_job({"request": request, "input": {"rows": job["rows"], "frequency": job["frequency"]},
-                          "runtime_mode": "production"})
-    completed = [m["model"] for m in result["models"] if m["status"] == "completed"]
+                          "runtime_mode": "production"}, mock=mock)
+    # The public model summaries use `id`; detailed model_runs use `model` and
+    # contain quantile provenance. Read the actual production worker contract.
+    completed = [m["model"] for m in result["model_runs"] if m["status"] == "completed"]
     if len(completed) < 2:
         raise RuntimeError("MULTIMODEL_ENSEMBLE_REQUIRED")
     matching = [r for r in result["predictions"] if r["timestamp"][:10] == job["target_date"]]
     if len(matching) != 1:
         raise ValueError("EXACT_RESOLUTION_TARGET_NOT_FORECASTED")
+    print(json.dumps({"event": "metaculus_ensemble_complete", "models": completed,
+                      "observed_rows": len(job["rows"]), "target_date": job["target_date"],
+                      "quantile_count": len(matching[0]["quantiles"])}), flush=True)
     return {"quantiles": matching[0]["quantiles"], "models": completed,
-            "provenance": {m["model"]: m.get("quantile_provenance") for m in result["models"] if m["status"] == "completed"}}
+            "provenance": {m["model"]: m.get("quantile_provenance") for m in result["model_runs"] if m["status"] == "completed"}}
 
 
 if __name__ == "__main__":

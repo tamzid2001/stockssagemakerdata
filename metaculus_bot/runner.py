@@ -163,6 +163,7 @@ def run(args, api=None, llm_factory=FreeLLM):
             if not record:
                 attempted += 1
                 if args.engine == "time-series":
+                    stage = "time_series_inference"
                     answer = forecast(q, spec, args.ensemble_python)
                 else:
                     stage = "free_llm_generation"
