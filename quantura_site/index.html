@@ -40,6 +40,7 @@
     <script src="/theme-init.js?v=20260926a"></script>
     <script defer src="/ui-runtime.js?v=20260926-support"></script>
     <link rel="stylesheet" href="/styles.css?v=20261006-databases" />
+    <link rel="stylesheet" href="/home.css?v=20261010-backtest" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
 
     <script defer src="https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js"></script>
@@ -148,6 +149,11 @@
       <section class="q-home-evidence container" aria-labelledby="home-evidence-title">
         <div><p class="eyebrow">A forecast you can examine</p><h2 id="home-evidence-title">See what went into the result.</h2><p>Check the provider, observation window, model choices, and quantile output before using a forecast in your research.</p></div>
         <ul><li>Source and data cutoff</li><li>Genuine observations</li><li>Model and range details</li><li>Scout questions, chart notes and saved research</li></ul>
+      </section>
+      <section id="home-backtest" class="q-home-backtest container" aria-labelledby="home-backtest-title">
+        <div class="q-backtest-heading"><div><p class="eyebrow">Strategy research</p><h2 id="home-backtest-title">Explore the backtest.</h2><p>Interactive equity, drawdown, and strategy details from QuantConnect.</p></div><a class="cta secondary" href="https://www.quantconnect.cloud/backtest/a90b29b86fcac72394e8318ce6958828/?theme=chrome" target="_blank" rel="noopener noreferrer" data-analytics="home_quantconnect_backtest">Open full report <i class="iconoir-arrow-up-right" aria-hidden="true"></i></a></div>
+        <div class="q-backtest-frame"><iframe src="https://www.quantconnect.cloud/backtest/a90b29b86fcac72394e8318ce6958828/?theme=chrome" title="QuantConnect strategy backtest: equity, drawdown, and code" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" style="width: 100%; min-height: 600px; border: none;"></iframe></div>
+        <p class="small muted">Simulated historical performance. Past results do not guarantee future returns.</p>
       </section>
       <section id="home-buy-signals" class="section section-compact container" aria-labelledby="home-buy-title">
         <div class="home-buy-heading"><h2 id="home-buy-title">Latest mega-cap forecasts</h2><a class="cta secondary small" href="/screener?marketCap=mega&amp;sort=marketCap&amp;direction=desc">Open screener</a></div>
